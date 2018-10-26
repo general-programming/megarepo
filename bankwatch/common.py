@@ -17,6 +17,7 @@ plaid_client = PlaidClient(
 def get_transactions(item_id, access_token, redis, get_inserted=False):
     transactions_key = "bank:transactions:" + item_id
     done = False
+    accounts_loaded = False
 
     date_from = (datetime.datetime.now() - datetime.timedelta(weeks=4)).strftime("%Y-%m-%d")
     date_to = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -32,6 +33,11 @@ def get_transactions(item_id, access_token, redis, get_inserted=False):
             offset=len(transactions),
             count=500
         )
+
+        if not accounts_loaded:
+            load_accounts(response.get("accounts", {}), g.redis)
+            accounts_loaded = True
+
         if offset == 0:
             offset = response['total_transactions']
 
@@ -47,8 +53,8 @@ def get_transactions(item_id, access_token, redis, get_inserted=False):
 
     return transactions
 
-def load_accounts(access_token, redis):
-    for account in plaid_client.Identity.get(access_token)["accounts"]:
+def load_accounts(accounts, redis):
+    for account in accounts:
         redis.hset("bank:accounts", account["account_id"], account["name"])
 
 def push_transactions(transactions, redis):

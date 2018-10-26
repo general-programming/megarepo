@@ -84,7 +84,6 @@ def add_bank_post():
     access_token = exchange_response["access_token"]
 
     g.redis.hset("bank:tokens", item_id, access_token)
-    load_accounts(access_token, g.redis)
 
     return jsonify({"result": "Success"})
 
