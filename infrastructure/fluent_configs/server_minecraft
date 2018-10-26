@@ -1,0 +1,29 @@
+<source>
+  @type tail
+  path /home/lowtier/mc_spigot/server/logs/*.log
+  pos_file /var/log/td-agent/minecraft-vanilla.pos
+  tag minecraft-vanilla
+  format /^\[(?<time>[^\]]*)\] \[(?<ident>[^\]]*)\/(?<level>[^\]]*)\]:[\s]*(?<message>.*)$/
+  time_format %H:%M:%S
+</source>
+
+<filter minecraft-vanilla>
+  @type record_transformer
+  <record>
+    host ${hostname}
+    ident Minecraft/${record["ident"]}
+  </record>
+</filter>
+
+<match *.**>
+  @type copy
+  <store>
+    @type forward
+    <server>
+      name fluentmain
+      host 192.168.10.1
+      port 24224
+      weight 60
+    </server>
+  </store>
+</match>

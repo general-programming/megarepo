@@ -1,0 +1,12 @@
+---
+
+# - src: tersmitten.limits
+#   path: roles/
+# - src: debops-contrib.etckeeper
+#   path: roles/
+- src: elastic.elasticsearch
+  path: roles/
+# - src: geerlingguy.nfs
+#   path: roles/
+# - src: savagegus.ansible-consul
+#   path: roles/

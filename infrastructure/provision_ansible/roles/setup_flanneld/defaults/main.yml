@@ -1,0 +1,4 @@
+---
+flanneld_version: v0.7.1
+kube_root: false
+etcd_hosts: null

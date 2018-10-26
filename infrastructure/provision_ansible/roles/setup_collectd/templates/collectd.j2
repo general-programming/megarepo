@@ -1,0 +1,42 @@
+FQDNLookup true
+Interval 10
+
+LoadPlugin syslog
+<Plugin syslog>
+    LogLevel info
+</Plugin>
+
+LoadPlugin cpu
+LoadPlugin df
+LoadPlugin disk
+LoadPlugin entropy
+LoadPlugin interface
+LoadPlugin irq
+LoadPlugin load
+LoadPlugin memory
+LoadPlugin network
+LoadPlugin processes
+LoadPlugin swap
+LoadPlugin users
+
+<Plugin df>
+    # ignore the usual virtual / temporary file-systems
+    FSType sysfs
+    FSType proc
+    FSType devtmpfs
+    FSType devpts
+    FSType tmpfs
+    FSType fusectl
+    FSType cgroup
+    FSType shm
+    FSType none
+    IgnoreSelected true
+</Plugin>
+
+<Plugin network>
+    Server "{{ influx_host }}" "25826"
+</Plugin>
+
+<Include "/etc/collectd/collectd.conf.d">
+        Filter "*.conf"
+</Include>

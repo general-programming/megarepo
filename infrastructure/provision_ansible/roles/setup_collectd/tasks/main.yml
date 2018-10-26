@@ -1,0 +1,47 @@
+---
+- name: "collectd - Configure repo keys"
+  apt_key:
+    url: "https://pkg.ci.collectd.org/pubkey.asc"
+    state: present
+
+- name: "collectd - Configure repo"
+  apt_repository:
+    repo: "deb http://pkg.ci.collectd.org/deb/ {{ ansible_distribution_release }} collectd-5.8"
+    state: present
+  when: ansible_distribution == "Ubuntu"
+
+- name: "collectd - Cleanup old repos"
+  apt_repository:
+    repo: "{{item}}"
+    state: absent
+  with_items:
+    - ppa:collectd/collectd-5.5
+    - deb http://pkg.ci.collectd.org/deb/ {{ ansible_distribution_release }} collectd-5.6
+    - deb http://pkg.ci.collectd.org/deb/ {{ ansible_distribution_release }} collectd-5.7
+
+- name: "collectd - Install"
+  apt:
+    name: collectd
+    state: latest
+
+- name: "collectd-core - Install"
+  apt:
+    name: collectd-core
+    state: latest
+
+- name: "collectd - Update config"
+  template:
+    src: collectd.j2
+    dest: /etc/collectd/collectd.conf
+    mode: 0644
+    owner: 'root'
+    group: 'root'
+  register: config_rsync
+
+- name: "collectd - Update systemd daemon configuration and restart daemon"
+  systemd:
+    name: collectd
+    enabled: true
+    state: restarted
+    daemon_reload: yes
+  when: config_rsync.changed

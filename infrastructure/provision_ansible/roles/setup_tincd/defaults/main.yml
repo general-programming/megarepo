@@ -1,0 +1,4 @@
+---
+tinc_gitignore: [ "rsa_key.priv" ]
+tincd_netname: defaultnet
+tinc_ip: null

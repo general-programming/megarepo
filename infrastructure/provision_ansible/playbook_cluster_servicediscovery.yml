@@ -1,0 +1,24 @@
+- hosts: service_discovery
+  become: true
+  roles:
+    - role: savagegus.ansible-consul
+      consul_version: 1.0.2
+      consul_config_file: /etc/consul.json
+      consul_is_server: true
+      consul_is_ui: true
+      consul_datacenter: "memecenter"
+      consul_install_consul_cli: false
+      consul_install_nginx: false
+      consul_install_nginx_config: false
+      consul_enable_nginx_config: false
+      consul_advertise_address: "{{ ansible_eth0['ipv4']['address'] or ansible_vpn0['ipv4']['address'] }}"
+      consul_use_systemd: true
+    - role: setup_dnsmasq
+      dns_servers:
+        consul: "192.168.2.2#8600"
+        "consul.": "192.168.2.2#8600"
+
+# - hosts: all_hosts
+#   become: true
+#   roles:
+#     - role: update_dns

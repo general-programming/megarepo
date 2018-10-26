@@ -1,0 +1,32 @@
+# Install k8s tools
+curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
+cat <<EOF >/etc/apt/sources.list.d/kubernetes.list
+deb http://apt.kubernetes.io/ kubernetes-xenial main
+EOF
+apt-get update
+apt-get install -y kubelet kubeadm kubectl
+
+# Initalize k8s
+kubeadm init --apiserver-advertise-address=<VPN_IP> --pod-network-cidr=10.244.0.0/16
+
+# Link k8s config
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+
+# Install flannel
+kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/v0.10.0/Documentation/kube-flannel.yml
+
+# Allow pods on master
+kubectl taint nodes --all node-role.kubernetes.io/master-
+
+# Install ingress controller
+curl -fsSL https://raw.githubusercontent.com/appscode/voyager/6.0.0/hack/deploy/voyager.sh | bash -s -- --provider=baremetal --run-on-master
+
+# Install Helm
+kubectl create serviceaccount tiller --namespace kube-system
+helm init --service-account tiller
+
+# Install cert-manager
+kubectl create -f cert-manager-issuer.yml
+helm install --name cert-manager --namespace kube-system --set ingressShim.extraArgs='{--default-issuer-name=letsencrypt-prod,--default-issuer-kind=ClusterIssuer}' stable/cert-manager

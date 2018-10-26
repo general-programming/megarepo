@@ -1,0 +1,68 @@
+{
+    "version": 1,
+    "index_patterns": [
+        {
+            "es": {
+                "default_index": "logstash-*"
+            },
+            "tail_interval_in_seconds": 10,
+            "es_index_time_offset_in_seconds": 0,
+            "display_timezone": "local",
+            "display_timestamp_format": "MMM DD HH:mm:ss",
+            "max_buckets": 500,
+            "default_time_range_in_days": 0,
+            "max_hosts": 100,
+            "max_events_to_keep_in_viewer": 5000,
+            "fields": {
+                "mapping": {
+                    "timestamp": "@timestamp",
+                    "hostname": "host",
+                    "program": "ident",
+                    "message": "message"
+                },
+                "message_format": "{{{message}}}"
+            },
+            "color_mapping": {
+                "field": "level",
+                "mapping": {
+                    "emerg": "#ff0000",
+                    "alert": "#ff3232",
+                    "crit": "#ff4c4c",
+                    "err": "#ff7f24",
+                    "warn": "#ffb90f",
+                    "notice": "#a2cd5a",
+                    "debug": "#cfe0e8"
+                }
+            }
+        },
+        {
+            "es": {
+                "default_index": "kubernetes-*"
+            },
+            "tail_interval_in_seconds": 10,
+            "es_index_time_offset_in_seconds": 0,
+            "display_timezone": "local",
+            "display_timestamp_format": "MMM DD HH:mm:ss",
+            "max_buckets": 500,
+            "default_time_range_in_days": 0,
+            "max_hosts": 100,
+            "max_events_to_keep_in_viewer": 5000,
+            "fields": {
+                "mapping": {
+                    "timestamp": "@timestamp",
+                    "hostname": "kubernetes.host",
+                    "program": "kubernetes.pod_name",
+                    "message": "log"
+                },
+                "message_format": "{{{kubernetes.namespace_name}}} - {{{log}}}"
+            },
+            "color_mapping": {
+                "field": "stream",
+                "mapping": {
+                    "stderr": "#ff7f24",
+                    "stdout": "#a2cd5a"
+                }
+            }
+        }
+    ]
+}

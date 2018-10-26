@@ -1,0 +1,37 @@
+defaultEntryPoints = ["http", "https"]
+logLevel = "DEBUG"
+
+[entryPoints]
+    [entryPoints.http]
+        address = ":80"
+        [entryPoints.http.redirect]
+            entryPoint = "https"
+    [entryPoints.https]
+        address = ":443"
+        [entryPoints.https.tls]
+
+[acme]
+    email = "nepeat@gmail.com"
+    storage = "acme/certs.json"
+    entryPoint = "https"
+    onHostRule = true
+    onDemand = false
+    acmelogging = true
+
+    [acme.dnsChallenge]
+        provider = "cloudflare"
+
+    [acme.httpChallenge]
+        entryPoint = "http"
+
+    [[acme.domains]]
+        main = "*.nepeat.com"
+        sans = ["nepeat.com"]
+    [[acme.domains]]
+        main = "*.fucking.soy"
+        sans = ["fucking.soy"]
+
+[docker]
+    swarmMode = true
+    domain = "docker.localhost"
+    watch = true

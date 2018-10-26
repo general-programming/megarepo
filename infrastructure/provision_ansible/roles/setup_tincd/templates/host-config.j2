@@ -1,0 +1,5 @@
+# {{ ansible_managed }}
+
+Address = {{ipify_public_ip}}
+Subnet = {{tinc_ip.rsplit(".", 1)[0] + ".0"}}/24
+Subnet = 192.168.128.0/17

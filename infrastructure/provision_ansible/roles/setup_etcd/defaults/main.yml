@@ -1,0 +1,4 @@
+---
+etcd_version: v3.0.17
+etcd_name: null
+etcd_init_hosts: null

@@ -1,0 +1,55 @@
+version: "3.6"
+services:
+  redis:
+    image: redis:4.0.11-alpine
+    env_file: .env
+    command: 'redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru --save ""'
+    networks:
+      - sentry
+    deploy:
+      restart_policy:
+        condition: any
+
+  worker:
+    image: registry.nepeat.com/sentry:v6
+    env_file: .env
+    command: sentry run worker
+    networks:
+      - sentry
+    deploy:
+      restart_policy:
+        condition: any
+
+  cron:
+    image: registry.nepeat.com/sentry:v6
+    env_file: .env
+    command: sentry run cron
+    networks:
+      - sentry
+    deploy:
+      restart_policy:
+        condition: any
+
+  web:
+    image: registry.nepeat.com/sentry:v6
+    env_file: .env
+    command: sentry run web
+    networks:
+      - sentry
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=9000
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:sentry.nepeat.com
+      restart_policy:
+        condition: any
+
+networks:
+  sentry:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true

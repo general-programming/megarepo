@@ -1,0 +1,29 @@
+---
+- name: "Influx - Apt repo"
+  apt_repository:
+    repo: '{{ item }}'
+    state: present
+  with_items:
+    - 'deb https://repos.influxdata.com/ubuntu {{ ansible_distribution_release }} stable'
+
+- name: "Influx - install"
+  package:
+    name: influxdb
+    state: latest
+
+- name: "Influx - config influxdb"
+  template:
+    src: "influxdb.j2"
+    dest: "/etc/influxdb/influxdb.conf"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: influxdb_config
+
+- name: "Influx - Update systemd daemons configuration and restart daemons"
+  systemd:
+    name: influxdb
+    enabled: true
+    state: restarted
+    daemon_reload: yes
+  when: influxdb_config.changed

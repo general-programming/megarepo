@@ -1,0 +1,5 @@
+#
+# Ensure that sensitive files are excluded from version control.
+# {{ ansible_managed }}
+# 
+{{tinc_gitignore | unique | sort | join("\n")}}

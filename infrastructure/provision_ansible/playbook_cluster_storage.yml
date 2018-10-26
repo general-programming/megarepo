@@ -1,0 +1,21 @@
+- hosts: all_hosts
+  become: true
+  roles:
+    - role: geerlingguy.nfs
+      when: nfs_exports
+  tasks:
+    - name: Create NFS mountpoint
+      file:
+        path: /mnt/nfs
+        state: directory
+        mode: 0000
+      ignore_errors: yes
+      when: ansible_virtualization_type != "lxc"
+    - name: Mount and update fstab for NFS.
+      mount:
+        path: /mnt/nfs
+        src: 192.168.2.1:/
+        fstype: nfs4
+        opts: _netdev,auto,nosuid
+        state: mounted
+      when: ansible_virtualization_type != "lxc"

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Config
+users:
+- name: {{ kube_config_user }}
+  user:
+    token: {{ kube_config_token }}
+clusters:
+- name: local
+  cluster:
+    certificate-authority: {{ kube_ssl_location }}/ca.crt
+contexts:
+- context:
+    cluster: local
+    user: {{ kube_config_user }}
+  name: service-account-context
+current-context: service-account-context

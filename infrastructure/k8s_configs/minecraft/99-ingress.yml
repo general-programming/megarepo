@@ -1,0 +1,43 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    # ingress
+    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/tls-acme: 'true'
+  name: ingress
+  namespace: minecraft
+spec:
+  tls:
+  - hosts:
+    - ftbinfdynmap.nepeat.com
+    secretName: registry-tls
+  rules:
+  - host: ftbinfdynmap.nepeat.com
+    http:
+      paths:
+      - backend:
+          serviceName: gameserver
+          servicePort: 8123
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  annotations:
+    # ingress
+    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/tls-acme: 'true'
+  name: gay-space-communism-ingress
+  namespace: minecraft
+spec:
+  tls:
+  - hosts:
+    - gaysovietmaps.nepeat.com
+    secretName: gay-space-communism-tls
+  rules:
+  - host: gaysovietmaps.nepeat.com
+    http:
+      paths:
+      - backend:
+          serviceName: gay-space-communism
+          servicePort: 8123

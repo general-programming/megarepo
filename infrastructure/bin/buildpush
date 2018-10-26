@@ -1,0 +1,44 @@
+#!/bin/sh
+
+# Usage message
+usage="$(basename "$0") <build context>"
+
+case "$#" in
+    0) echo "$usage"
+       exit
+       ;;
+    1) ;;
+    *) printf "are you drunk? $usage\n" >&2
+       printf "it is not $(basename "$0") " >&2
+       while test $# -gt 0; do
+           shift
+           printf "$1 " >&2
+       done
+       printf "\n" >&2
+       exit 1
+       ;;
+esac
+
+# Build ID incrementor
+FILE="$1/.build"
+if [ -f $FILE ]; then
+    FILECONTENTS=`cat $FILE`
+    if ! [[ $FILECONTENTS =~ ^[0-9]+$ ]] ; then
+        echo "Bad build ID, double check $1/.build and see if it is a number."
+        exit 1
+    fi
+
+    BUILD=$((FILECONTENTS + 1))
+    printf $BUILD > $FILE
+else
+   BUILD=0
+   printf 0 > $FILE
+fi
+
+# Builder
+IMAGE_NAME="$1:v$BUILD"
+
+docker login -u nepeat -p anus registry.nepeat.com
+docker build --no-cache --force-rm --pull -t "$IMAGE_NAME" "$1"
+pushimage "$IMAGE_NAME"
+

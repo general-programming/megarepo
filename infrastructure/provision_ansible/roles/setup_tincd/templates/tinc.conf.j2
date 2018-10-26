@@ -1,0 +1,15 @@
+# {{ ansible_managed }}
+
+Name = {{ ansible_hostname | replace("-", "_") }}
+AddressFamily = ipv4
+Cipher = none
+Compression = 10
+Digest = none
+ReplayWindow = 32
+Mode = switch
+
+{% for host in groups["all"] %}
+{% if "tinc_seed" in hostvars[host] %}
+ConnectTo = {{ hostvars[host]["ansible_nodename"] | replace("-", "_") }}
+{% endif %}
+{% endfor %}

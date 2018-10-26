@@ -1,0 +1,77 @@
+- name: "K8S - Create directories"
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  with_items:
+    - /etc/kubernetes/manifests
+    - /etc/kubernetes/ssl/tokens
+    - /var/lib/kube-proxy
+    - /var/lib/kubelet
+    - /etc/systemd/system/docker.service.d
+
+- name: "K8S - Download tar binaries"
+  get_url:
+    url: 'https://github.com/kubernetes/kubernetes/releases/download/{{ kube_version }}/kubernetes.tar.gz'
+    dest: /tmp/kubernetes.tar.gz
+
+- name: "K8S - Untar binaries"
+  unarchive:
+    src: /tmp/kubernetes.tar.gz
+    dest: /tmp/
+    remote_src: true
+
+- name: "K8S - Download binaries"
+  shell: "KUBERNETES_SKIP_CONFIRM=1 ./get-kube-binaries.sh"
+  args:
+    chdir: /tmp/kubernetes/cluster
+    creates: /tmp/kubernetes/server/kubernetes-server-linux-amd64.tar.gz
+
+- name: "K8S - Untar server binaries"
+  unarchive:
+    src: /tmp/kubernetes/server/kubernetes-server-linux-amd64.tar.gz
+    dest: /opt/
+    remote_src: true
+    creates: /opt/kubernetes
+
+- name: "K8S - Link server binaries"
+  shell: "ln -sv /opt/kubernetes/server/bin/* /usr/bin/"
+  args:
+    chdir: /opt/kubernetes/server/bin/
+    creates: /usr/bin/kubectl
+
+- name: "K8S - Delete nat table"
+  iptables:
+    table: nat
+    flush: yes
+
+- name: "K8S - Down docker0"
+  command: "ip link set docker0 down"
+  args:
+    warn: false
+  ignore_errors: yes
+
+- name: "K8S - Delete docker0"
+  command: "ip link delete docker0"
+  args:
+    warn: false
+  ignore_errors: yes
+
+- name: "K8S - Docker daemon config"
+  template:
+    src: "systemd-docker.j2"
+    dest: "/etc/systemd/system/docker.service.d/k8s.conf"
+    owner: "root"
+    group: "root"
+    mode: "0755"
+  register: k8s_docker_config
+
+- name: "K8S - Restart docker"
+  systemd:
+    name: docker
+    enabled: true
+    state: restarted
+    daemon_reload: yes
+  when: k8s_docker_config.changed

@@ -1,0 +1,70 @@
+---
+- name: "K8S - Create temp SAN conf"
+  template:
+    src: "openssl_sans.j2"
+    dest: "/tmp/ssl-sans-k8.cnf"
+    owner: "root"
+    group: "root"
+    mode: "0600"
+  when: kube_root
+
+- name: "K8S - Create ca.key"
+  shell: "openssl genrsa -out {{ kube_ssl_location }}/ca.key 2048"
+  args:
+    creates: "{{ kube_ssl_location }}/ca.key"
+  when: kube_root
+
+- name: "K8S - Create ca.crt"
+  shell: 'openssl req -x509 -new -nodes -key {{ kube_ssl_location }}/ca.key -subj "/CN={{ kube_master_ip }}" -days 10000 -out {{ kube_ssl_location }}/ca.crt'
+  args:
+    creates: "{{ kube_ssl_location }}/ca.crt"
+  when: kube_root
+
+- name: "K8S - Create keys"
+  shell: 'openssl genrsa -out {{ kube_ssl_location }}/{{ item }}.key 2048'
+  args:
+    creates: "{{ kube_ssl_location }}/{{ item }}.key"
+  with_items:
+    - server
+    - kubectl
+  when: kube_root
+
+- name: "K8S - Create csrs"
+  shell: 'openssl req -new -key {{ kube_ssl_location }}/{{ item }}.key -subj "/CN={{ kube_master_ip }}" -out {{ kube_ssl_location }}/{{ item }}.csr -extensions v3_req -config /tmp/ssl-sans-k8.cnf'
+  args:
+    creates: "{{ kube_ssl_location }}/{{ item }}.csr"
+  with_items:
+    - server
+    - kubectl
+  when: kube_root
+
+- name: "K8S - Create CRTs"
+  shell: 'openssl x509 -req -in {{ kube_ssl_location }}/{{ item }}.csr -CA {{ kube_ssl_location }}/ca.crt -CAkey {{ kube_ssl_location }}/ca.key -CAcreateserial -out {{ kube_ssl_location }}/{{ item }}.crt -days 10000 -extensions v3_req -extfile /tmp/ssl-sans-k8.cnf'
+  args:
+    creates: "{{ kube_ssl_location }}/{{ item }}.crt"
+  with_items:
+    - server
+    - kubectl
+  when: kube_root
+
+- name: "K8S - Download certificates"
+  fetch:
+    src: "{{ kube_ssl_location }}/{{ item }}"
+    dest: "/tmp/k8s/{{ item }}"
+    flat: True
+  with_items:
+    - ca.crt
+    - kubectl.crt
+    - kubectl.key
+
+- name: "K8S - Install certificates"
+  copy:
+    src: "/tmp/k8s/{{ item }}"
+    dest: "/etc/kubernetes/ssl/"
+    owner: "root"
+    group: "root"
+    mode: "0600"
+  with_items:
+    - ca.crt
+    - kubectl.crt
+    - kubectl.key

@@ -1,0 +1,26 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: sentry-ingress
+  namespace: sentry
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    kubernetes.io/tls-acme: "true"
+spec:
+  tls:
+    - hosts:
+      - sentry.nepeat.com
+      secretName: tls-sentry
+  rules:
+  - host: sentry.nepeat.com
+    http:
+      paths:
+      - backend:
+          serviceName: web
+          servicePort: 9000
+  - host: nekoj4n2voubgdm77ymc2weivsr5prqpvzfbsfaaienhwuu57wdwcwyd.onion
+    http:
+      paths:
+      - backend:
+          serviceName: web
+          servicePort: 9000

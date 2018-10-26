@@ -1,0 +1,9 @@
+version: '2'
+services:
+  gitlab_runner:
+    image: gitlab/gitlab-runner:latest
+    restart: always
+    volumes:
+      - /srv/gitlab-runner/etc:/etc/gitlab-runner
+      - /srv/gitlab-runner/builds:/builds
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -1,0 +1,18 @@
+# One time setup provisoning.
+- import_playbook: playbook_bootstrap_servers.yml
+
+# Repeatable provisioning/updating for cluster backbone.
+# tinc VPN, admin user, central stats collection.
+- import_playbook: playbook_cluster_backbone.yml
+
+# Database server setup
+- import_playbook: playbook_database_server.yml
+
+# Docker servers setup.
+- import_playbook: playbook_docker_server.yml
+
+# Server auditing setup
+- import_playbook: playbook_auditing.yml
+
+# Kubernetes servers setup.
+- import_playbook: playbook_k8s_server.yml

@@ -1,0 +1,23 @@
+---
+etcd_hosts: null
+
+kube_version: v1.6.4
+kube_hyperkube_image: gcr.io/google_containers/hyperkube:v1.6.4
+
+kube_root: false
+kube_master: false
+kube_worker: false
+
+kube_users:
+  - admin
+  - kubelet
+  - kube_proxy
+kube_master_ip: 192.168.10.1
+kube_cluster_name: skaiacluster
+kube_client_context: skaia
+kube_admin_user: admin
+kube_ssl_location: /etc/kubernetes/ssl
+
+# Plugins
+kube_dns_domain: cluster.local
+kube_dns_ip: 10.0.0.2

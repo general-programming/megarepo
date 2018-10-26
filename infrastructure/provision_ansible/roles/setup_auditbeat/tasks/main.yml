@@ -1,0 +1,40 @@
+---
+- name: "auditbeat - Install GPG key"
+  apt_key:
+    url: '{{ item.key }}'
+    id: '{{ item.value }}'
+    state: present
+  with_dict:
+      "https://artifacts.elastic.co/GPG-KEY-elasticsearch": "D88E42B4"
+
+- name: "auditbeat - Configure repo"
+  apt_repository:
+    repo: "deb https://artifacts.elastic.co/packages/6.x/apt stable main"
+    state: present
+  when: ansible_virtualization_type != "lxc"
+
+- name: "auditbeat - Install"
+  apt:
+    name: auditbeat
+    state: latest
+    update_cache: yes
+    cache_valid_time: 172800
+  when: ansible_virtualization_type != "lxc"
+
+- name: "auditbeat - Update config"
+  template:
+    src: auditbeat.j2
+    dest: /etc/auditbeat/auditbeat.yml
+    mode: 0600
+    owner: 'root'
+    group: 'root'
+  register: config_rsync
+  when: ansible_virtualization_type != "lxc"
+
+- name: "auditbeat - Update systemd daemon configuration and restart daemon"
+  systemd:
+    name: auditbeat
+    enabled: true
+    state: restarted
+    daemon_reload: yes
+  when: ansible_virtualization_type != "lxc" and config_rsync.changed

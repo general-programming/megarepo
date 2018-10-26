@@ -1,0 +1,24 @@
+# {{ ansible_managed }}
+
+[meta]
+  # Where the metadata/raft database is stored
+  dir = "/var/lib/influxdb/meta"
+
+[data]
+  # The directory where the TSM storage engine stores TSM files.
+  dir = "/var/lib/influxdb/data"
+
+  # The directory where the TSM storage engine stores WAL files.
+  wal-dir = "/var/lib/influxdb/wal"
+
+[http]
+  # Determines whether HTTP endpoint is enabled.
+  enabled = true
+
+  # The bind address used by the HTTP service.
+  bind-address = "{{ influx_host }}:8086"
+
+[[collectd]]
+  enabled = true
+  bind-address = "{{ influx_host }}:25826"
+  database = "collectd"

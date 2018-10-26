@@ -1,0 +1,3 @@
+---
+postgres_version: 10
+postgres_hba_hosts: null

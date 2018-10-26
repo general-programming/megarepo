@@ -1,0 +1,6 @@
+#!/bin/sh
+
+# {{ ansible_managed }}
+
+ifconfig $INTERFACE {{tinc_ip}} netmask 255.255.0.0
+ifconfig $INTERFACE up

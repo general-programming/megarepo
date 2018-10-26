@@ -1,0 +1,135 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: redis
+  name: redis
+  namespace: sentry
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:4.0.10-alpine
+        args:
+        - redis-server
+        - --maxmemory
+        - 1gb
+        - --maxmemory-policy
+        - allkeys-lru
+        - --save
+        - ""
+        ports:
+        - containerPort: 6379
+      restartPolicy: Always
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: service
+  name: service
+  namespace: sentry
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: service
+    spec:
+      containers:
+      - name: service 
+        image: registry.nepeat.com/sentry:v3
+        command:
+        - /bin/bash
+        - -c 
+        - "trap : TERM INT; sleep infinity & wait"
+        envFrom:
+        - secretRef:
+            name: sentry-secrets
+        ports:
+        - containerPort: 9000
+      imagePullSecrets:
+      - name: regcred
+      restartPolicy: Always
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: web
+  name: web
+  namespace: sentry
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: web
+    spec:
+      containers:
+      - name: web
+        image: registry.nepeat.com/sentry:v3
+        args: ["sentry", "run", "web"]
+        envFrom:
+        - secretRef:
+            name: sentry-secrets
+        ports:
+        - containerPort: 9000
+      imagePullSecrets:
+      - name: regcred
+      restartPolicy: Always
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: worker
+  name: worker
+  namespace: sentry
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: registry.nepeat.com/sentry:v3
+        args: ["sentry", "run", "worker"]
+        envFrom:
+        - secretRef:
+            name: sentry-secrets
+      imagePullSecrets:
+      - name: regcred
+      restartPolicy: Always
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: beat
+  name: beat
+  namespace: sentry
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: beat
+    spec:
+      containers:
+      - name: beat
+        image: registry.nepeat.com/sentry:v3
+        args: ["sentry", "run", "cron"]
+        envFrom:
+        - secretRef:
+            name: sentry-secrets
+      imagePullSecrets:
+      - name: regcred
+      restartPolicy: Always

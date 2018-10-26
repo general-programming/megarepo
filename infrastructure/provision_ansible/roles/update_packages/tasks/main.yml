@@ -1,0 +1,50 @@
+---
+
+- name: "Packages - apt-get upgrade"
+  apt:
+    upgrade: yes
+    cache_valid_time: 172800
+
+- name: "Packages - Admin convienence packages"
+  package:
+    name: '{{ item }}'
+    state: latest
+  with_items:
+    - mosh
+    - zsh
+    - byobu
+    - htop
+    - apt-transport-https
+    - ca-certificates
+    - curl
+    - software-properties-common
+    - bridge-utils
+    - aptitude
+    - fail2ban
+    - nfs-common
+
+- name: "Packages - GPG keys"
+  apt_key:
+    url: '{{ item.key }}'
+    id: '{{ item.value }}'
+    state: present
+  with_dict:
+      "https://download.docker.com/linux/ubuntu/gpg": "0EBFCD88"
+      "https://repos.influxdata.com/influxdb.key": "2582E0C5"
+      "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
+
+- name: "Packages - App server repos"
+  apt_repository:
+    repo: '{{ item }}'
+    state: present
+  with_items:
+    - 'deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable edge test'
+  when: appserver_packages
+
+- name: "Packages - App server support packages"
+  package:
+    name: '{{ item }}'
+    state: latest
+  with_items:
+    - docker-ce
+  when: appserver_packages

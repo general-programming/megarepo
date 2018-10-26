@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: ftb-infinity-evolved
+  namespace: minecraft
+spec:
+  clusterIP: None
+  ports:
+  - name: minecraft
+    port: 25565
+    targetPort: 25565
+  - name: dynmap
+    port: 8123
+    targetPort: 8123
+  - name: ssh
+    port: 22
+    targetPort: 22
+  selector:
+    app: gameserver
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  labels:
+    app: ftb-infinity-evolved
+  name: ftb-infinity-evolved
+  namespace: minecraft
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ftb-infinity-evolved
+    spec:
+      containers:
+      - name: ftb-infinity-evolved
+        image: registry.nepeat.com/minecraft-base:v2
+        volumeMounts:
+        - mountPath: /data
+          name: data
+        - mountPath: /root
+          name: root
+        - mountPath: /etc/ssh
+          name: ssh
+        ports:
+        - name: ssh
+          containerPort: 22
+          hostPort: 2222
+        - name: minecraft
+          containerPort: 25565
+          hostPort: 25567
+        - name: dynmap
+          containerPort: 8123
+      restartPolicy: Always
+      imagePullSecrets:
+      - name: regcred
+      volumes:
+        - name: data
+          hostPath:
+            path: /mnt/nfs/var/minecraft/ftb-infinity-evolved/data
+            type: Directory
+        - name: root
+          hostPath:
+            path: /mnt/nfs/var/minecraft/globalroot
+            type: Directory
+        - name: ssh
+          hostPath:
+            path: /mnt/nfs/var/minecraft/ftb-infinity-evolved/ssh
+            type: Directory

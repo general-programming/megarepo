@@ -1,0 +1,38 @@
+# Rule name, must be unique
+name: Alert on failed sudos
+
+# Index to search, wildcard supported
+use_strftime_index: true
+index: "logstash-%Y.%m.%d"
+
+# Type of alert.
+type: any
+realert: 
+  seconds: 0
+
+# A list of elasticsearch filters used for find events
+# These filters are joined with AND and nested in a filtered query
+# For more info: http://www.elasticsearch.org/guide/en/elasticsearch/reference/current/query-dsl.html
+filter: 
+- query:
+    query_string:
+      query: "ident:sudo AND level:alert"
+
+include:
+  - host
+  - message
+
+alert_subject: ":no_entry_sign: Failed sudo on {}"
+alert_subject_args:
+  - host
+
+alert_text_type: alert_text_only
+alert_text: "{}"
+alert_text_args:
+  - message
+
+# The alert is use when a match is found
+alert:
+  - slack
+slack_webhook_url: "https://discordapp.com/api/webhooks/418653362456887296/57VYst3vVXtXIYoKIl9AftrZTTN0yh8TK3ouhxm90_4pvztnps32VyNu7tuAKFfL08jL/slack"
+slack_username_override: "NSAHook - sudo"

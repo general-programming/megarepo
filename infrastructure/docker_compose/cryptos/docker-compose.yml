@@ -1,0 +1,10 @@
+version: '2'
+services:
+  # coinds
+  dogecoin:
+    image: gxgow/dogenode
+    restart: always
+    ports:
+      - 10.0.0.101:9001:8332
+    volumes:
+      - /coins/dogecoin:/root/.dogecoin

@@ -1,0 +1,22 @@
+---
+- name: "Bootstrap - Install python"
+  raw: "test -e /usr/bin/python || (apt-get -y update && apt-get -y install python)"
+
+- name: "Bootstrap - Install other essential python packages"
+  apt:
+    name: '{{ item }}'
+    state: present
+    update_cache: yes
+    cache_valid_time: 172800
+  with_items:
+    - python-apt
+    - python-pip
+    - sudo
+
+- name: "Bootstrap - Check initial provision status"
+  stat:
+    path: /etc/.ansible-provisioned
+  register: provisioned
+
+- name: "Bootstrap - Gather facts."
+  setup:

@@ -1,0 +1,31 @@
+[Unit]
+Description=etcd key-value store
+Documentation=https://github.com/coreos/etcd
+After=network.target
+After=network-online.target
+Wants=network-online.target
+Before=docker.service
+
+[Service]
+Type=notify
+Restart=always
+RestartSec=10s
+LimitNOFILE=40000
+
+ExecStart=/opt/etcd/{{ etcd_version }}/bin/etcd \
+    --name {{ etcd_name }} \
+    --advertise-client-urls http://{{ ansible_vpn0['ipv4']['address'] }}:2379 \
+    --listen-client-urls http://{{ ansible_vpn0['ipv4']['address'] }}:2379,http://localhost:2379,http://localhost:4001 \
+    --listen-peer-urls http://{{ ansible_vpn0['ipv4']['address'] }}:2380,http://localhost:2380,http://localhost:7001 \
+    --data-dir /var/lib/etcd/data \
+    --wal-dir /var/lib/etcd/wal \
+    --snapshot-count 10000 \
+    --max-snapshots 5 \
+    --max-wals 5 \
+    --initial-advertise-peer-urls http://{{ ansible_vpn0['ipv4']['address'] }}:2380 \
+    --initial-cluster {{ etcd_init_hosts }} \
+    --initial-cluster-state new \
+    --initial-cluster-token cluster0
+
+[Install]
+WantedBy=multi-user.target

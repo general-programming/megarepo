@@ -1,0 +1,15 @@
+- name: "K8S - Read admin token"
+  local_action: slurp src=/tmp/k8s/admin_token
+  register: admin_token
+
+- name: "K8S - Setup cluster"
+  shell: 'kubectl config set-cluster {{ kube_cluster_name }} --certificate-authority={{ kube_ssl_location }}/ca.crt --embed-certs=true --server=https://{{ kube_master_ip }}'
+
+- name: "K8S - Setup creds"
+  shell: 'kubectl config set-credentials {{ kube_admin_user }} --client-certificate={{ kube_ssl_location }}/kubectl.crt --client-key={{ kube_ssl_location }}/kubectl.key --embed-certs=true --token={{ admin_token["content"] | b64decode }}'
+
+- name: "K8S - Create context"
+  shell: 'kubectl config set-context {{ kube_client_context }} --cluster={{ kube_cluster_name }} --user={{ kube_admin_user }}'
+
+- name: "K8S - Use context"
+  shell: 'kubectl config use-context {{ kube_client_context }}'
