@@ -1,6 +1,7 @@
 *.retry
 *.pyc
 .gitsecret/keys/random_seed
+.env
 infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
 infrastructure/k8s_configs/other/bot-secrets.yml
@@ -11,7 +12,5 @@ infrastructure/other/gitlab_runner_ssh_key
 infrastructure/dockerfiles/sentry/.secret_env
 infrastructure/dockersetup2/logging/docker-swarm.yml
 infrastructure/dockersetup2/registry/docker-swarm.yml
-infrastructure/dockersetup2/sentry/.env
-infrastructure/dockersetup2/traefik/.env
 infrastructure/k8s_configs/discourse/secrets.yml
 infrastructure/k8s_configs/minecraft/00-namespace.yml

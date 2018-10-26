@@ -1,0 +1,7 @@
+gunicorn
+flask
+plaid-python
+requests[security]
+redis
+hiredis
+

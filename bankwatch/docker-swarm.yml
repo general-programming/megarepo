@@ -1,0 +1,39 @@
+# Production Compose
+version: "3.6"
+services:
+  redis:
+    image: redis:alpine
+    command: 'redis-server --save 0'
+    networks:
+      - bankwatch
+    deploy:
+      restart_policy:
+        condition: always
+
+  webhooks:
+    build: webhooks
+    image: registry.nepeat.com/mailapi_webhooks
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    env_file: .env
+    command: python3 api.py
+    networks:
+      - bankwatch
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=8080
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:bankwatch.api.nepeat.com
+      restart_policy:
+        condition: always
+
+networks:
+  bankwatch:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true

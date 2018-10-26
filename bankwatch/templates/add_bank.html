@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <title>Page Title</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" media="screen" href="main.css" />
+    <script src="main.js"></script>
+</head>
+<body>
+    <input id="addkey" placeholder="Add key">
+    <button id="link-button">Link Bank</button>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.2.3/jquery.min.js"></script>
+    <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+    <script type="text/javascript">
+    (function($) {
+      var handler = Plaid.create({
+        clientName: 'Plaid Quickstart',
+        env: '{{ plaid_environment }}',
+        key: '{{ plaid_public_key }}',
+        product: ['transactions'],
+        // Optional – use webhooks to get transaction and error updates
+        webhook: '{{ webhook_url }}',
+        onLoad: function() {
+          // Optional, called when Link loads
+        },
+        onSuccess: function(public_token, metadata) {
+          // Send the public_token to your app server.
+          // The metadata object contains info about the institution the
+          // user selected and the account ID or IDs, if the
+          // Select Account view is enabled.
+          $.post('/add_bank', {
+            public_token: public_token,
+            addkey: $("#addkey").val()
+          }, function(data) {
+              if (data.result) {
+                  alert(data.result);
+                  console.log(data.result);
+              } else if (data.error) {
+                  alert(data.result);
+                  console.error(data.error);
+              }
+          });
+        },
+        onExit: function(err, metadata) {
+          // The user exited the Link flow.
+          if (err != null) {
+            // The user encountered a Plaid API error prior to exiting.
+          }
+          // metadata contains information about the institution
+          // that the user selected and the most recent API request IDs.
+          // Storing this information can be helpful for support.
+        },
+        onEvent: function(eventName, metadata) {
+          // Optionally capture Link flow events, streamed through
+          // this callback as your users connect an Item to Plaid.
+          // For example:
+          // eventName = "TRANSITION_VIEW"
+          // metadata  = {
+          //   link_session_id: "123-abc",
+          //   mfa_type:        "questions",
+          //   timestamp:       "2017-09-14T14:42:19.350Z",
+          //   view_name:       "MFA",
+          // }
+        }
+      });
+    
+      $('#link-button').on('click', function(e) {
+        handler.open();
+      });
+    })(jQuery);
+    </script>
+</body>
+</html>
