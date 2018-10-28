@@ -34,8 +34,12 @@ def get_transactions(item_id, access_token, redis, get_inserted=False):
             count=500
         )
 
+        # Asssume no transactions means we've gone through it all.
+        if len(response['transactions']) == 0:
+            break
+
         if not accounts_loaded:
-            load_accounts(response.get("accounts", {}), g.redis)
+            load_accounts(response.get("accounts", {}), redis)
             accounts_loaded = True
 
         if offset == 0:

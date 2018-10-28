@@ -101,9 +101,14 @@ def inbound_post():
     # Get transactions.
     transactions = get_transactions(item_id, access_token, g.redis, get_inserted=False)
 
+    # Drop request if there are no transactions.
+    if not transactions:
+        return jsonify("ok")
+
     # Push to Discord
     push_status, push_response = push_transactions(
-        transactions
+        transactions,
+        g.redis
     )
 
     if push_status != 204:
