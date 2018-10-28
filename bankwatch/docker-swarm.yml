@@ -11,8 +11,8 @@ services:
         condition: always
 
   webhooks:
-    build: webhooks
-    image: registry.nepeat.com/mailapi_webhooks
+    build: .
+    image: registry.nepeat.com/bankwatch
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
