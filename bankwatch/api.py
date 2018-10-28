@@ -32,6 +32,17 @@ redis_pool = ConnectionPool(
 def connect_redis():
     g.redis = StrictRedis(connection_pool=redis_pool)
 
+@app.before_request
+def add_bank_key():
+    g.add_bank_key = g.redis.get("bank:addkey")
+
+    if g.add_bank_key:
+        return
+
+    g.add_bank_key = str(uuid.uuid4())
+    g.redis.setex("bank:addkey", 60 * 60 * 24, g.add_bank_key)
+    print("Bank key has been set to", g.add_bank_key)
+
 @app.teardown_request
 def disconnect_redis(result=None):
     if hasattr(g, "redis"):
@@ -40,8 +51,6 @@ def disconnect_redis(result=None):
     return result
 
 # Randomize this key on every run to ensure we are the only ones adding banks.
-add_bank_key = str(uuid.uuid4())
-print("Add bank key:", add_bank_key)
 
 @app.route('/')
 def rootpage():
@@ -70,7 +79,7 @@ def add_bank_post():
     if not request.form:
         return jsonify({"error": "What are you doing here?"}), 400
 
-    if request.form["addkey"] != add_bank_key:
+    if request.form["addkey"] != g.add_bank_key:
         return jsonify({"error": "Bad add bank key?"}), 400
 
     public_token = request.form["public_token"]
