@@ -6,9 +6,11 @@ services:
     command: 'redis-server --save 0'
     networks:
       - bankwatch
+    volumes:
+      - /srv/bankwatch/redis:/data
     deploy:
       restart_policy:
-        condition: always
+        condition: any
 
   webhooks:
     build: .
@@ -17,19 +19,19 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
     env_file: .env
-    command: python3 api.py
+    command: gunicorn -b 0.0.0.0:5000 -k gevent -w 4 api:app
     networks:
       - bankwatch
       - publicweb
     deploy:
       labels:
         - traefik.enable=true
-        - traefik.port=8080
+        - traefik.port=5000
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:bankwatch.api.nepeat.com
       restart_policy:
-        condition: always
+        condition: any
 
 networks:
   bankwatch:

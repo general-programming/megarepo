@@ -52,7 +52,7 @@ def add_bank():
     return render_template("add_bank.html",
         plaid_environment=os.environ["PLAID_ENV"],
         plaid_public_key=os.environ["PLAID_PUBLIC_KEY"],
-        webhook_url="https://requestbin.nepeat.com/1lcl78j1"
+        webhook_url=os.environ["WEBHOOK_URL"]
     )
 
 def format_error(e):
