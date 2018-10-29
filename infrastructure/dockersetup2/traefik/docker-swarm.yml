@@ -6,6 +6,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/traefik/traefik.toml:/traefik.toml
+      - /srv/traefik/rules.toml:/rules.toml
       - /srv/traefik/certs:/acme
     networks:
       - publicweb
