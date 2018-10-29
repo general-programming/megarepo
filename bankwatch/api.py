@@ -5,6 +5,7 @@ import uuid
 from redis import ConnectionPool, StrictRedis
 from flask import Flask, jsonify, request, render_template, g
 
+import stripe
 from plaid.errors import PlaidError
 
 from common import plaid_client, get_transactions, load_accounts, push_transactions
@@ -15,8 +16,10 @@ if "DEBUG_FLOOD" in os.environ:
 else:
     logging.basicConfig(level=logging.INFO)
 
+# Setup
 logging.getLogger("asyncio").setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
+stripe.api_key = os.environ["STRIPE_APIKEY"]
 
 # App
 app = Flask(__name__)
@@ -124,5 +127,45 @@ def inbound_post():
         log.error("Error from Discord: %s", push_response)
 
     return jsonify("ok")
+
+@app.route('/stripe', methods=['POST'])
+def stripe_post():
+    # Boilerplate event parsing
+    payload = request.data.decode('utf-8')
+    received_sig = request.headers.get('Stripe-Signature', None)
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            received_sig,
+            os.environ["STRIPE_WEBHOOK_SECRET"]
+        )
+    except ValueError:
+        print("Error while decoding event!")
+        return 'Bad payload', 400
+    except stripe.error.SignatureVerificationError:
+        print("Invalid signature!")
+        return 'Bad signature', 400
+
+    data_object = event.data["object"]
+
+    # Charge events.
+    if event.data["object"] == "charge":
+        status = event.data["object"]["status"]
+
+        if status in ("succeeded", "failed", "refunded"):
+            amount = data_object["amount"]
+            amount_refunded = data_object["amount_refunded"]
+            currency = data_object["currency"]
+            failure_message = data_object["failure_message"]
+            description = data_object["description"]
+            # Do something with the data.
+
+    print("Received event: id={id}, type={type}".format(
+        id=event.id,
+        type=event.type
+    ))
+
+    return "", 200
 
 log.info("Webhook API started!")

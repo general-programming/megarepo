@@ -5,3 +5,4 @@ plaid-python
 requests[security]
 redis
 hiredis
+stripe
