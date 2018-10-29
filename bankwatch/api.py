@@ -8,7 +8,7 @@ from flask import Flask, jsonify, request, render_template, g
 import stripe
 from plaid.errors import PlaidError
 
-from common import plaid_client, get_transactions, load_accounts, push_transactions
+from common import plaid_client, get_transactions, load_accounts, push_plaid_transactions, push_discord_embed
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:
@@ -118,7 +118,7 @@ def inbound_post():
         return jsonify("ok")
 
     # Push to Discord
-    push_status, push_response = push_transactions(
+    push_status, push_response = push_plaid_transactions(
         transactions,
         g.redis
     )

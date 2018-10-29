@@ -61,7 +61,7 @@ def load_accounts(accounts, redis):
     for account in accounts:
         redis.hset("bank:accounts", account["account_id"], account["name"])
 
-def push_transactions(transactions, redis):
+def push_plaid_transactions(transactions, redis):
     total_cash = 0
     desctext = ""
 
@@ -92,18 +92,34 @@ def push_transactions(transactions, redis):
             "value": account_data.rstrip()
         })
 
+    return push_discord_embed(
+        title="New transactions",
+        description=desctext,
+        fields=account_fields,
+        footer_text=f"${total_cash:.2f} transacted total. Check Waves for a more complete view."
+    )
+
+def push_discord_embed(title, description=None, fields=None, footer_text=None):
+    embed_to_push = {
+        # Ass bleach pink
+        "color": 0xffb9ec,
+        "title": title,
+    }
+
+    if description:
+        embed_to_push["description"] = description
+
+    if fields:
+        embed_to_push["fields"] = fields
+
+    if footer_text:
+        embed_to_push["footer"] = {
+            "text": footer_text
+        }
+
     r = requests.post(os.environ["DISCORD_WEBHOOK"], json={
         "embeds": [
-            {
-                # Ass bleach pink
-                "color": 0xffb9ec,
-                "title": "New transactions",
-                "description": desctext,
-                "fields": account_fields,
-                "footer": {
-                    "text": f"${total_cash:.2f} transacted total. Check Waves for a more complete view."
-                }
-            }
+            embed_to_push
         ]
     })
 
