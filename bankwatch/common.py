@@ -1,3 +1,4 @@
+import logging
 import re
 import hashlib
 import os
@@ -5,6 +6,9 @@ import datetime
 import requests
 
 from plaid import Client as PlaidClient
+
+# Logging
+log = logging.getLogger(__name__)
 
 # Plaid
 plaid_client = PlaidClient(
@@ -122,5 +126,8 @@ def push_discord_embed(title, description=None, fields=None, footer_text=None):
             embed_to_push
         ]
     })
+
+    if r.push_status != 204:
+        log.error("Error from Discord: %s", r.text)
 
     return r.status_code, r.text

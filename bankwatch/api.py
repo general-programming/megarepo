@@ -44,7 +44,7 @@ def add_bank_key():
 
     g.add_bank_key = str(uuid.uuid4())
     g.redis.setex("bank:addkey", 60 * 60 * 24, g.add_bank_key)
-    print("Bank key has been set to", g.add_bank_key)
+    log.info("Bank key has been set to %s", g.add_bank_key)
 
 @app.teardown_request
 def disconnect_redis(result=None):
@@ -123,9 +123,6 @@ def inbound_post():
         g.redis
     )
 
-    if push_status != 204:
-        log.error("Error from Discord: %s", push_response)
-
     return jsonify("ok")
 
 @app.route('/stripe', methods=['POST'])
@@ -141,16 +138,16 @@ def stripe_post():
             os.environ["STRIPE_WEBHOOK_SECRET"]
         )
     except ValueError:
-        print("Error while decoding event!")
+        log.info("Error while decoding event!")
         return 'Bad payload', 400
     except stripe.error.SignatureVerificationError:
-        print("Invalid signature!")
+        log.info("Invalid signature!")
         return 'Bad signature', 400
 
     data_object = event.data["object"]
 
     # Charge events.
-    if event.data["object"] == "charge":
+    if data_object["object"] == "charge":
         status = event.data["object"]["status"]
 
         if status in ("succeeded", "failed", "refunded"):
@@ -158,10 +155,42 @@ def stripe_post():
             amount_refunded = data_object["amount_refunded"]
             currency = data_object["currency"]
             failure_message = data_object["failure_message"]
-            description = data_object["description"]
-            # Do something with the data.
+            charge_description = data_object["description"]
+            fields = []
 
-    print("Received event: id={id}, type={type}".format(
+            # Basic description text
+            if status != "refunded":
+                desc_text = f"A {amount} {currency.upper()} charge has {status}."
+            else:
+                desc_text = f"A {amount} {currency.upper()} charge has been refunded."
+
+            # Add transaction description field
+            if charge_description:
+                fields.append({
+                    "name": "Description",
+                    "value": charge_description
+                })
+
+            # Add fields for failures/refunds
+            if amount_refunded:
+                fields.append({
+                    "name": "Amount refunded",
+                    "value": f"{amount_refunded} {currency.upper()}"
+                })
+
+            if failure_message:
+                fields.append({
+                    "name": "Failure message",
+                    "value": failure_message
+                })
+
+            push_discord_embed(
+                title=f"{status.capitalize()} Stripe charge.",
+                description=desc_text,
+                fields=fields
+            )
+
+    log.info("Received event: id={id}, type={type}".format(
         id=event.id,
         type=event.type
     ))
