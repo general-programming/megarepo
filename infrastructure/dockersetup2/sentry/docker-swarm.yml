@@ -1,7 +1,7 @@
 version: "3.6"
 services:
   redis:
-    image: redis:4.0.11-alpine
+    image: redis:alpine
     env_file: .env
     command: 'redis-server --maxmemory 1gb --maxmemory-policy allkeys-lru --save ""'
     networks:
@@ -11,7 +11,7 @@ services:
         condition: any
 
   worker:
-    image: registry.nepeat.com/sentry:v6
+    image: registry.nepeat.com/sentry:v7
     env_file: .env
     command: sentry run worker
     networks:
@@ -21,7 +21,7 @@ services:
         condition: any
 
   cron:
-    image: registry.nepeat.com/sentry:v6
+    image: registry.nepeat.com/sentry:v7
     env_file: .env
     command: sentry run cron
     networks:
@@ -31,7 +31,7 @@ services:
         condition: any
 
   web:
-    image: registry.nepeat.com/sentry:v6
+    image: registry.nepeat.com/sentry:v7
     env_file: .env
     command: sentry run web
     networks:
