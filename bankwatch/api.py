@@ -208,7 +208,8 @@ def handle_stripe(is_test=False):
             testing=is_test
         )
 
-    log.info("Received event: id={id}, type={type}".format(
+    log.info("Received {environ} event: id={id}, type={type}".format(
+        environ="test" if is_test else "live"
         id=event.id,
         type=event.type
     ))
