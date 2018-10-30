@@ -159,8 +159,8 @@ def handle_stripe(is_test=False):
         status = event.data["object"]["status"]
 
         if status in ("succeeded", "failed", "refunded"):
-            amount = data_object["amount"]
-            amount_refunded = data_object["amount_refunded"]
+            amount = data_object["amount"] / 100
+            amount_refunded = (data_object["amount_refunded"] or 0) / 100
             currency = data_object["currency"]
             failure_message = data_object["failure_message"]
             charge_description = data_object["description"]
