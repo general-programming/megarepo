@@ -105,7 +105,7 @@ def push_plaid_transactions(transactions, redis):
 
 def push_discord_embed(title, description=None, fields=None, footer_text=None, testing=False):
     embed_to_push = {
-        "name": "Bankwatch",
+        "username": "Bankwatch",
         # Ass bleach pink
         "color": 0xffb9ec,
         "title": title,

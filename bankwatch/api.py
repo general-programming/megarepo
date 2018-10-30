@@ -8,6 +8,7 @@ from flask import Flask, jsonify, request, render_template, g
 import stripe
 from plaid.errors import PlaidError
 
+from constants import CHARGE_TYPES
 from common import plaid_client, get_transactions, load_accounts, push_plaid_transactions, push_discord_embed
 
 # Logging configuration
@@ -147,7 +148,7 @@ def stripe_post():
     data_object = event.data["object"]
 
     # Charge events.
-    if data_object["object"] == "charge":
+    if event.type in CHARGE_TYPES:
         status = event.data["object"]["status"]
 
         if status in ("succeeded", "failed", "refunded"):
@@ -193,6 +194,12 @@ def stripe_post():
                 fields=fields,
                 testing=True
             )
+    elif event.type == "charge.dispute.created":
+        push_discord_embed(
+            title=f"New Stripe dispute.",
+            description=f"A dispute for {data_object['amount']} {data_object['currency'].upper()} has been opened.",
+            testing=True
+        )
 
     log.info("Received event: id={id}, type={type}".format(
         id=event.id,
