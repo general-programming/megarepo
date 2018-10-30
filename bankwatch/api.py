@@ -159,7 +159,7 @@ def stripe_post():
             fields = []
 
             # Basic description text
-            if status != "refunded":
+            if not amount_refunded:
                 desc_text = f"A {amount} {currency.upper()} charge has {status}."
             else:
                 desc_text = f"A {amount} {currency.upper()} charge has been refunded."
@@ -168,26 +168,30 @@ def stripe_post():
             if charge_description:
                 fields.append({
                     "name": "Description",
-                    "value": charge_description
+                    "value": charge_description,
+                    "inline": True
                 })
 
             # Add fields for failures/refunds
             if amount_refunded:
                 fields.append({
                     "name": "Amount refunded",
-                    "value": f"{amount_refunded} {currency.upper()}"
+                    "value": f"{amount_refunded} {currency.upper()}",
+                    "inline": True
                 })
 
             if failure_message:
                 fields.append({
                     "name": "Failure message",
-                    "value": failure_message
+                    "value": failure_message,
+                    "inline": True
                 })
 
             push_discord_embed(
                 title=f"{status.capitalize()} Stripe charge.",
                 description=desc_text,
-                fields=fields
+                fields=fields,
+                testing=True
             )
 
     log.info("Received event: id={id}, type={type}".format(
