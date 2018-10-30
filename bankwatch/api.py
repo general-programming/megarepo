@@ -20,7 +20,6 @@ else:
 # Setup
 logging.getLogger("asyncio").setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
-stripe.api_key = os.environ["STRIPE_APIKEY"]
 
 # App
 app = Flask(__name__)
@@ -126,8 +125,15 @@ def inbound_post():
 
     return jsonify("ok")
 
+@app.route('/stripe_test', methods=['POST'])
+def stripe_test_post():
+    return handle_stripe(True)
+
 @app.route('/stripe', methods=['POST'])
-def stripe_post():
+def stripe_live_post():
+    return handle_stripe()
+
+def handle_stripe(is_test=False):
     # Boilerplate event parsing
     payload = request.data.decode('utf-8')
     received_sig = request.headers.get('Stripe-Signature', None)
@@ -136,7 +142,8 @@ def stripe_post():
         event = stripe.Webhook.construct_event(
             payload,
             received_sig,
-            os.environ["STRIPE_WEBHOOK_SECRET"]
+            os.environ["STRIPE_TEST_WEBHOOK_SECRET"] if is_test else os.environ["STRIPE_WEBHOOK_SECRET"],
+            api_key=os.environ["STRIPE_TEST_APIKEY"] if is_test else os.environ["STRIPE_APIKEY"]
         )
     except ValueError:
         log.info("Error while decoding event!")
@@ -192,13 +199,13 @@ def stripe_post():
                 title=f"{status.capitalize()} Stripe charge.",
                 description=desc_text,
                 fields=fields,
-                testing=True
+                testing=is_test
             )
     elif event.type == "charge.dispute.created":
         push_discord_embed(
             title=f"New Stripe dispute.",
             description=f"A dispute for {data_object['amount']} {data_object['currency'].upper()} has been opened.",
-            testing=True
+            testing=is_test
         )
 
     log.info("Received event: id={id}, type={type}".format(
