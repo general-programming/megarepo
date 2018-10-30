@@ -103,8 +103,9 @@ def push_plaid_transactions(transactions, redis):
         footer_text=f"${total_cash:.2f} transacted total. Check Waves for a more complete view."
     )
 
-def push_discord_embed(title, description=None, fields=None, footer_text=None):
+def push_discord_embed(title, description=None, fields=None, footer_text=None, testing=False):
     embed_to_push = {
+        "name": "Bankwatch",
         # Ass bleach pink
         "color": 0xffb9ec,
         "title": title,
@@ -121,13 +122,18 @@ def push_discord_embed(title, description=None, fields=None, footer_text=None):
             "text": footer_text
         }
 
-    r = requests.post(os.environ["DISCORD_WEBHOOK"], json={
+    if testing:
+        webhook_url = os.environ["DISCORD_TEST_WEBHOOK"]
+    else:
+        webhook_url = os.environ["DISCORD_WEBHOOK"]
+
+    r = requests.post(webhook_url, json={
         "embeds": [
             embed_to_push
         ]
     })
 
-    if r.push_status != 204:
+    if r.status_code != 204:
         log.error("Error from Discord: %s", r.text)
 
     return r.status_code, r.text
