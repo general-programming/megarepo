@@ -202,9 +202,12 @@ def handle_stripe(is_test=False):
                 testing=is_test
             )
     elif event.type == "charge.dispute.created":
+        dispute_amount = data_object["amount"] / 100
+        dispute_currency = data_object["currency"].upper()
+
         push_discord_embed(
             title=f"New Stripe dispute.",
-            description=f"A dispute for {data_object['amount']} {data_object['currency'].upper()} has been opened.",
+            description=f"A dispute for {dispute_amount} {dispute_currency} has been opened.",
             testing=is_test
         )
 
