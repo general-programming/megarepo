@@ -5,9 +5,11 @@ import uuid
 from redis import ConnectionPool, StrictRedis
 from flask import Flask, jsonify, request, render_template, g
 
+import stripe
 from plaid.errors import PlaidError
 
-from common import plaid_client, get_transactions, load_accounts, push_transactions
+from constants import CHARGE_TYPES
+from common import plaid_client, get_transactions, load_accounts, push_plaid_transactions, push_discord_embed
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:
@@ -15,6 +17,7 @@ if "DEBUG_FLOOD" in os.environ:
 else:
     logging.basicConfig(level=logging.INFO)
 
+# Setup
 logging.getLogger("asyncio").setLevel(logging.DEBUG)
 log = logging.getLogger(__name__)
 
@@ -41,7 +44,7 @@ def add_bank_key():
 
     g.add_bank_key = str(uuid.uuid4())
     g.redis.setex("bank:addkey", 60 * 60 * 24, g.add_bank_key)
-    print("Bank key has been set to", g.add_bank_key)
+    log.info("Bank key has been set to %s", g.add_bank_key)
 
 @app.teardown_request
 def disconnect_redis(result=None):
@@ -115,14 +118,105 @@ def inbound_post():
         return jsonify("ok")
 
     # Push to Discord
-    push_status, push_response = push_transactions(
+    push_status, push_response = push_plaid_transactions(
         transactions,
         g.redis
     )
 
-    if push_status != 204:
-        log.error("Error from Discord: %s", push_response)
-
     return jsonify("ok")
+
+@app.route('/stripe_test', methods=['POST'])
+def stripe_test_post():
+    return handle_stripe(True)
+
+@app.route('/stripe', methods=['POST'])
+def stripe_live_post():
+    return handle_stripe()
+
+def handle_stripe(is_test=False):
+    # Boilerplate event parsing
+    payload = request.data.decode('utf-8')
+    received_sig = request.headers.get('Stripe-Signature', None)
+
+    try:
+        event = stripe.Webhook.construct_event(
+            payload,
+            received_sig,
+            os.environ["STRIPE_TEST_WEBHOOK_SECRET"] if is_test else os.environ["STRIPE_WEBHOOK_SECRET"],
+            api_key=os.environ["STRIPE_TEST_APIKEY"] if is_test else os.environ["STRIPE_APIKEY"]
+        )
+    except ValueError:
+        log.info("Error while decoding event!")
+        return 'Bad payload', 400
+    except stripe.error.SignatureVerificationError:
+        log.info("Invalid signature!")
+        return 'Bad signature', 400
+
+    data_object = event.data["object"]
+
+    # Charge events.
+    if event.type in CHARGE_TYPES:
+        status = event.data["object"]["status"]
+
+        if status in ("succeeded", "failed", "refunded"):
+            amount = data_object["amount"] / 100
+            amount_refunded = (data_object["amount_refunded"] or 0) / 100
+            currency = data_object["currency"]
+            failure_message = data_object["failure_message"]
+            charge_description = data_object["description"]
+            fields = []
+
+            # Basic description text
+            if not amount_refunded:
+                desc_text = f"A {amount} {currency.upper()} charge has {status}."
+            else:
+                desc_text = f"A {amount} {currency.upper()} charge has been refunded."
+
+            # Add transaction description field
+            if charge_description:
+                fields.append({
+                    "name": "Description",
+                    "value": charge_description,
+                    "inline": True
+                })
+
+            # Add fields for failures/refunds
+            if amount_refunded:
+                fields.append({
+                    "name": "Amount refunded",
+                    "value": f"{amount_refunded} {currency.upper()}",
+                    "inline": True
+                })
+
+            if failure_message:
+                fields.append({
+                    "name": "Failure message",
+                    "value": failure_message,
+                    "inline": True
+                })
+
+            push_discord_embed(
+                title=f"{status.capitalize()} Stripe charge.",
+                description=desc_text,
+                fields=fields,
+                testing=is_test
+            )
+    elif event.type == "charge.dispute.created":
+        dispute_amount = data_object["amount"] / 100
+        dispute_currency = data_object["currency"].upper()
+
+        push_discord_embed(
+            title=f"New Stripe dispute.",
+            description=f"A dispute for {dispute_amount} {dispute_currency} has been opened.",
+            testing=is_test
+        )
+
+    log.info("Received {environ} event: id={id}, type={type}".format(
+        environ="test" if is_test else "live",
+        id=event.id,
+        type=event.type
+    ))
+
+    return "", 200
 
 log.info("Webhook API started!")

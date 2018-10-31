@@ -1,3 +1,4 @@
+import logging
 import re
 import hashlib
 import os
@@ -5,6 +6,9 @@ import datetime
 import requests
 
 from plaid import Client as PlaidClient
+
+# Logging
+log = logging.getLogger(__name__)
 
 # Plaid
 plaid_client = PlaidClient(
@@ -61,7 +65,7 @@ def load_accounts(accounts, redis):
     for account in accounts:
         redis.hset("bank:accounts", account["account_id"], account["name"])
 
-def push_transactions(transactions, redis):
+def push_plaid_transactions(transactions, redis):
     total_cash = 0
     desctext = ""
 
@@ -92,19 +96,44 @@ def push_transactions(transactions, redis):
             "value": account_data.rstrip()
         })
 
-    r = requests.post(os.environ["DISCORD_WEBHOOK"], json={
+    return push_discord_embed(
+        title="New transactions",
+        description=desctext,
+        fields=account_fields,
+        footer_text=f"${total_cash:.2f} transacted total. Check Waves for a more complete view."
+    )
+
+def push_discord_embed(title, description=None, fields=None, footer_text=None, testing=False):
+    embed_to_push = {
+        "username": "Bankwatch",
+        # Ass bleach pink
+        "color": 0xffb9ec,
+        "title": title,
+    }
+
+    if description:
+        embed_to_push["description"] = description
+
+    if fields:
+        embed_to_push["fields"] = fields
+
+    if footer_text:
+        embed_to_push["footer"] = {
+            "text": footer_text
+        }
+
+    if testing:
+        webhook_url = os.environ["DISCORD_TEST_WEBHOOK"]
+    else:
+        webhook_url = os.environ["DISCORD_WEBHOOK"]
+
+    r = requests.post(webhook_url, json={
         "embeds": [
-            {
-                # Ass bleach pink
-                "color": 0xffb9ec,
-                "title": "New transactions",
-                "description": desctext,
-                "fields": account_fields,
-                "footer": {
-                    "text": f"${total_cash:.2f} transacted total. Check Waves for a more complete view."
-                }
-            }
+            embed_to_push
         ]
     })
+
+    if r.status_code != 204:
+        log.error("Error from Discord: %s", r.text)
 
     return r.status_code, r.text
