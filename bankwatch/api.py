@@ -115,6 +115,7 @@ def inbound_post():
 
     # Drop request if there are no transactions.
     if not transactions:
+        log.warning("Found no transactions for item %s, despite getting a hook request.", item_id)
         return jsonify("ok")
 
     # Push to Discord
