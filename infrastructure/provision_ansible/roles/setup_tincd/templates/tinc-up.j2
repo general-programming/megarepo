@@ -2,5 +2,13 @@
 
 # {{ ansible_managed }}
 
-ifconfig $INTERFACE {{tinc_ip}} netmask 255.255.0.0
-ifconfig $INTERFACE up
+VPN_VMBR_FOUND=`grep "vmbr1:" /proc/net/dev`
+
+if  [ -n "$VPN_VMBR_FOUND" ] ; then
+    ifconfig $INTERFACE up
+    brctl addif vmbr1 $INTERFACE
+    ifconfig vmbr1 {{tinc_ip}} netmask 255.255.0.0
+else
+    ifconfig $INTERFACE {{tinc_ip}} netmask 255.255.0.0
+    ifconfig $INTERFACE up
+fi

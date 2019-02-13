@@ -51,8 +51,8 @@
     group: "root"
     mode: "0644"
 
-- name: "tincd - Generate keypairs"
-  shell: "tincd -n {{ tincd_netname }} -K 4096"
+- name: "tincd - Generate keys"
+  shell: "tinc -n {{ tincd_netname }} generate-keys 4096"
   args:
     creates: "/etc/tinc/{{ tincd_netname }}/rsa_key.priv"
 
@@ -102,7 +102,7 @@
 # systemd
 - name: "tincd - Update systemd daemon configuration and restart daemon"
   systemd:
-    name: tinc
+    name: "tinc@{{ tincd_netname }}"
     enabled: true
     state: restarted
   when: tinc_conf.changed or host_config.changed or tinc_keys.changed

@@ -2,4 +2,11 @@
 
 # {{ ansible_managed }}
 
-ifconfig $INTERFACE down
+VPN_VMBR_FOUND=`grep "vmbr1:" /proc/net/dev`
+
+if  [ -n "$VPN_VMBR_FOUND" ] ; then
+    brctl delif vmbr1 $INTERFACE
+    ifconfig $INTERFACE down
+else
+    ifconfig $INTERFACE down
+fi
