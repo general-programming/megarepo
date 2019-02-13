@@ -1,0 +1,24 @@
+version: "3.6"
+services:
+  registry:
+    image: dorowu/ubuntu-desktop-lxde-vnc
+    volumes:
+      - /srv/registry:/var/lib/registry
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=80
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:ubuntu.nepeat.com
+        # Auth
+        - "traefik.frontend.auth.basic=nepeat:$$apr1$$9c8sSrSP$$wxIA8Q8Yr9fYDHwBXY.s5/"
+      restart_policy:
+        condition: any
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true

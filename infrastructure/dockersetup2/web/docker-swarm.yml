@@ -1,7 +1,7 @@
 version: "3.6"
 services:
   staticweb:
-    image: registry.nepeat.com/nginx-web:v3
+    image: registry.nepeat.com/nginx-web:v5
     volumes:
       - /srv/www:/var/www
     networks:
@@ -14,6 +14,7 @@ services:
         - traefik.backend=nginx
         # Routes
         - traefik.main.frontend.rule=Host:www.nepeat.com,nepeat.com
+        - traefik.portfolio.frontend.rule=Host:portfolio.nepeat.com
         # - traefik.soy.frontend.rule=Host:www.fucking.soy,fucking.soy
       restart_policy:
         condition: any
