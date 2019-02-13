@@ -6,16 +6,16 @@
   tasks:
     - name: Create NFS mountpoint
       file:
-        path: /mnt/nfs
+        path: /srv
         state: directory
         mode: 0000
       ignore_errors: yes
-      when: ansible_virtualization_type != "lxc"
+      when: (ansible_virtualization_type != "lxc" and not nfs_exports)
     - name: Mount and update fstab for NFS.
       mount:
-        path: /mnt/nfs
-        src: 192.168.2.1:/
+        path: /srv
+        src: 192.168.3.1:/
         fstype: nfs4
         opts: _netdev,auto,nosuid
         state: mounted
-      when: ansible_virtualization_type != "lxc"
+      when: (ansible_virtualization_type != "lxc" and not nfs_exports)

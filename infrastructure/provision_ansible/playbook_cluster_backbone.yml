@@ -1,10 +1,10 @@
 - hosts: all_hosts
   become: true
   roles:
-    # - role: update_packages
-    # - role: setup_tincd
-    #   when: tinc_ip is defined and tinc_ip
-    # - role: update_configs
+    - role: update_packages
+    - role: setup_tincd
+      when: tinc_ip is defined and tinc_ip
+    - role: update_configs
     # - role: create_admin_user
     - role: setup_influxdb
       when: is_influx_host
@@ -12,6 +12,6 @@
       when: is_influx_host
     # - role: setup_collectd
   vars:
-    influx_host: 192.168.3.1
-    syslog_server: 192.168.3.1
+    influx_host: 192.168.3.2
+    syslog_server: 192.168.3.2
     syslog_port: '5140'

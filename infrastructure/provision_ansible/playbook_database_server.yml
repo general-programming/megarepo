@@ -5,9 +5,9 @@
        postgres_hba_hosts:
          - "host    all             all             172.16.0.0/12           md5"
          - "host    all             all             192.168.0.0/16          md5"
-    - role: elastic.elasticsearch
+    - role: ansible-elasticsearch
       es_major_version: "6.x"
-      es_version: 6.4.2
+      es_version: 6.5.4
       es_instance_name: 'elklog_{{ ansible_hostname | replace("-", "_") }}'
       es_data_dirs: "/var/lib/elasticsearch"
       es_log_dir: "/var/log/elasticsearch"
