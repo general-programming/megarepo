@@ -1,3 +1,5 @@
 # {{ ansible_managed }}
 listen_addresses = '127.0.0.1{{ "," + ansible_vpn0["ipv4"]["address"] if ansible_vpn0 else "" }}'
 max_connections = 2048
+shared_buffers = 1024MB
+maintenance_work_mem = 256MB
