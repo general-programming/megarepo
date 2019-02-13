@@ -7,9 +7,9 @@
     - role: update_configs
     # - role: create_admin_user
     - role: setup_influxdb
-      when: is_influx_host
+      when: influx_listen_ip is defined and influx_listen_ip
     - role: setup_telegraf
-      when: is_influx_host
+      when: influx_listen_ip is defined and influx_listen_ip
     # - role: setup_collectd
   vars:
     influx_host: 192.168.3.2

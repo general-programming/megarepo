@@ -14,7 +14,7 @@
     - name: Mount and update fstab for NFS.
       mount:
         path: /srv
-        src: 192.168.3.1:/
+        src: 192.168.3.1:/srv
         fstype: nfs4
         opts: _netdev,auto,nosuid
         state: mounted

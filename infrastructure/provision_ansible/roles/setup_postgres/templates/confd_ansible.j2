@@ -1,5 +1,11 @@
 # {{ ansible_managed }}
-listen_addresses = '127.0.0.1{{ "," + ansible_vpn0["ipv4"]["address"] if ansible_vpn0 else "" }}'
+{% if postgres_listen_ip %}
+listen_addresses = '127.0.0.1{{ "," + postgres_listen_ip }}'
+{% elif ansible_vpn0 %}
+listen_addresses = '127.0.0.1{{ "," + ansible_vpn0["ipv4"]["address"] }}'
+{% else %}
+listen_addresses = '127.0.0.1'
+{% endif %}
 max_connections = 2048
 shared_buffers = 1024MB
 maintenance_work_mem = 256MB

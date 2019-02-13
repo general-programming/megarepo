@@ -11,7 +11,7 @@
   apt_repository:
     repo: "deb https://artifacts.elastic.co/packages/6.x/apt stable main"
     state: present
-  when: ansible_virtualization_type != "lxc"
+  when: not (ansible_virtualization_type == "lxc" and ansible_virtualization_role == "guest")
 
 - name: "auditbeat - Install"
   apt:
@@ -19,7 +19,7 @@
     state: latest
     update_cache: yes
     cache_valid_time: 172800
-  when: ansible_virtualization_type != "lxc"
+  when: not (ansible_virtualization_type == "lxc" and ansible_virtualization_role == "guest")
 
 - name: "auditbeat - Update config"
   template:
@@ -29,7 +29,7 @@
     owner: 'root'
     group: 'root'
   register: config_rsync
-  when: ansible_virtualization_type != "lxc"
+  when: not (ansible_virtualization_type == "lxc" and ansible_virtualization_role == "guest")
 
 - name: "auditbeat - Update systemd daemon configuration and restart daemon"
   systemd:
@@ -37,4 +37,4 @@
     enabled: true
     state: restarted
     daemon_reload: yes
-  when: ansible_virtualization_type != "lxc" and config_rsync.changed
+  when: not (ansible_virtualization_type == "lxc" and ansible_virtualization_role == "guest") and config_rsync.changed

@@ -14,8 +14,8 @@ auditbeat.modules:
     ## Create file watches (-w) or syscall audits (-a or -A).
 
     ## Executions.
-    -a exit,always -F arch=b64 -S execve -k exec
-    -a exit,always -F arch=b32 -S execve -k exec
+    # -a exit,always -F arch=b64 -S execve -k exec
+    # -a exit,always -F arch=b32 -S execve -k exec
 
     ## Socket listens.
     -a exit,always -S listen
@@ -41,6 +41,12 @@ auditbeat.modules:
     -w /etc/crontab -p wa -k cron
     -w /etc/anacrontab -p wa -k cron
     -w /var/spool/cron/crontabs/ -k cron
+
+    # Unauthorized access attempts to files (unsuccessful).
+    -a always,exit -F arch=b32 -S open,creat,truncate,ftruncate,openat,open_by_handle_at -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -F key=access
+    -a always,exit -F arch=b32 -S open,creat,truncate,ftruncate,openat,open_by_handle_at -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -F key=access
+    -a always,exit -F arch=b64 -S open,truncate,ftruncate,creat,openat,open_by_handle_at -F exit=-EACCES -F auid>=1000 -F auid!=4294967295 -F key=access
+    -a always,exit -F arch=b64 -S open,truncate,ftruncate,creat,openat,open_by_handle_at -F exit=-EPERM -F auid>=1000 -F auid!=4294967295 -F key=access
 
 - module: file_integrity
   paths:
@@ -118,6 +124,11 @@ tags: {{ tags | default([]) | to_json }}
 output.elasticsearch:
   # Array of hosts to connect to.
   hosts: ["{{ elastic_host }}:9200"]
+
+  # Index lifecycle managment
+  ilm.enabled: true
+  ilm.rollover_alias: "auditbeat"
+  ilm.pattern: "{now/d}-000001"
 
   # Optional protocol and basic auth credentials.
   #protocol: "https"

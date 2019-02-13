@@ -3,4 +3,4 @@
   roles:
     - role: setup_auditbeat
   vars:
-    elastic_host: 192.168.11.1
+    elastic_host: 192.168.3.2

@@ -1,10 +1,10 @@
 - hosts: database
   become: true
   roles:
-     - role: setup_postgres
-       postgres_hba_hosts:
-         - "host    all             all             172.16.0.0/12           md5"
-         - "host    all             all             192.168.0.0/16          md5"
+    - role: setup_postgres
+      postgres_hba_hosts:
+        - "host    all             all             172.16.0.0/12           md5"
+        - "host    all             all             192.168.0.0/16          md5"
     - role: ansible-elasticsearch
       es_major_version: "6.x"
       es_version: 6.6.0
@@ -14,16 +14,17 @@
       es_config: {
         node.name: 'elklog_{{ ansible_hostname | replace("-", "_") }}',
         cluster.name: "elklog",
-        network.host: "192.168.3.2",
+        network.host: "{{ elastic_listen_ip }}",
         http.port: 9200,
         bootstrap.memory_lock: true
       }
+      es_api_host: "{{ elastic_listen_ip }}"
       es_enable_xpack: true
       es_xpack_features:
         - alerting
         - monitoring
         - graph
-      when: is_elastic_host
+      when: elastic_listen_ip is defined and elastic_listen_ip
   vars:
     es_scripts: false
     es_templates: false
