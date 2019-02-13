@@ -7,14 +7,14 @@
          - "host    all             all             192.168.0.0/16          md5"
     - role: ansible-elasticsearch
       es_major_version: "6.x"
-      es_version: 6.5.4
+      es_version: 6.6.0
       es_instance_name: 'elklog_{{ ansible_hostname | replace("-", "_") }}'
       es_data_dirs: "/var/lib/elasticsearch"
       es_log_dir: "/var/log/elasticsearch"
       es_config: {
         node.name: 'elklog_{{ ansible_hostname | replace("-", "_") }}',
         cluster.name: "elklog",
-        network.host: "192.168.3.1",
+        network.host: "192.168.3.2",
         http.port: 9200,
         bootstrap.memory_lock: true
       }
