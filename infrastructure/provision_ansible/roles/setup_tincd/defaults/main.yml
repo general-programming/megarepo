@@ -3,3 +3,4 @@ tinc_gitignore: [ "rsa_key.priv" ]
 tincd_netname: defaultnet
 tinc_ip: null
 tinc_single: false
+tinc_is_internal: false

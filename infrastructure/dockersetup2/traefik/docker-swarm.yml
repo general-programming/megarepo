@@ -1,13 +1,12 @@
 version: "3.4"
 services:
   traefik:
-    image: traefik:v1.7.5
+    image: traefik:v1.7.9
     env_file: .env
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/traefik/traefik.toml:/traefik.toml
       - /srv/traefik/rules.toml:/rules.toml
-      - /srv/traefik/certs:/acme
     networks:
       - publicweb
       - traefik
@@ -26,6 +25,8 @@ services:
       placement:
         constraints:
           - node.role == manager
+        preferences:
+          - spread: node.id
       update_config:
         parallelism: 1
         delay: 10s

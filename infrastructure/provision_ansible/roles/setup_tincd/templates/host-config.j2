@@ -1,11 +1,11 @@
 # {{ ansible_managed }}
 
+{% if not tinc_is_internal %}
+Address = {{ipify_public_ip}}
+{% endif %}
+
 {% if tinc_single %}
 Subnet = {{tinc_ip.rsplit(".", 1)[0] + ".0"}}/32
 {% else %}
 Subnet = {{tinc_ip.rsplit(".", 1)[0] + ".0"}}/24
 {% endif %}
-
-Address = {{ipify_public_ip}}
-Subnet = {{tinc_ip.rsplit(".", 1)[0] + ".0"}}/24
-Subnet = 192.168.128.0/17

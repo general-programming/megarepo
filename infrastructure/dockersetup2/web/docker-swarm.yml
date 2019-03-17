@@ -1,7 +1,8 @@
 version: "3.6"
 services:
   staticweb:
-    image: registry.nepeat.com/nginx-web:v5
+    build: .
+    image: registry.nepeat.com/nginx-web
     volumes:
       - /srv/www:/var/www
     networks:
