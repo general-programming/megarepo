@@ -1,3 +1,6 @@
 [submodule "requestbin"]
 	path = requestbin
 	url = git@github.com:general-programming/requestbin.git
+[submodule "mailapis"]
+	path = mailapis
+	url = git@github.com:general-programming/mailapis.git
