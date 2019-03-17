@@ -9,8 +9,8 @@ infrastructure/k8s_configs/registry/auth
 infrastructure/k8s_configs/logging/01-secrets.yml
 infrastructure/k8s_configs/sentry/02-secrets.yml
 infrastructure/other/gitlab_runner_ssh_key
-infrastructure/dockerfiles/sentry/.secret_env
 infrastructure/dockersetup2/logging/docker-swarm.yml
 infrastructure/dockersetup2/registry/docker-swarm.yml
 infrastructure/k8s_configs/discourse/secrets.yml
 infrastructure/k8s_configs/minecraft/00-namespace.yml
+infrastructure/dockersetup2/sentry/.secret_env
