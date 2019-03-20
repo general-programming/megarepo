@@ -1,14 +1,21 @@
 import React, { Component } from 'react';
 
 import { BrowserRouter as Router, Route, Link } from 'react-router-dom';
-import {StripeProvider, Elements} from 'react-stripe-elements';
+import { StripeProvider, Elements } from 'react-stripe-elements';
 
-import logo from './logo.svg';
+import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
+
 import './App.css';
 
-import Header from './components/Header';
-import Home from './components/Home';
-import Payment from './components/Payment';
+import HomeView from './views/HomeView';
+import LoginView from './views/LoginView';
+
+import {
+  COLOR_LIGHT, 
+  COLOR_DARK, 
+  COLOR_PRIMARY, 
+  COLOR_TEXT
+} from './utils/constants';
 
 const stripeBetas = ['checkout_beta_4'];
 let stripeKey = "";
@@ -19,21 +26,30 @@ if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
   stripeKey = "pk_live_jMaLiRMATTwNk89wb7p4OgUT";
 }
 
+const theme = createMuiTheme({
+  palette: {
+    primary: {
+      main: '#FFCC4D',
+    },
+    secondary: {
+      main: '#F4900C',
+    }
+  },
+});
+
 class App extends Component {
   render() {
     return (
-      <div className="App">
+      <MuiThemeProvider theme={theme}>
         <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
           <Elements>
             <Router>
-              <Header />
-              { /* "XXX: Handle stripe/success, stripe/canceled" */ }
-              <Route path="/" exact component={Home} />
-              <Route path="/pay" exact component={Payment} />
+              <Route path="/" exact component={ HomeView } />
+              <Route path="/login" exact component={ LoginView } />
             </Router>
           </Elements>
         </StripeProvider>
-      </div>
+      </MuiThemeProvider>
     );
   }
 }
