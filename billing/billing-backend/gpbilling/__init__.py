@@ -5,7 +5,6 @@ import os
 from flask import Flask
 from raven.contrib.flask import Sentry
 
-from gpbilling.model.auth import discord
 from gpbilling.model.handlers import (before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
                                       disconnect_sql)
 from gpbilling.views import api
@@ -42,5 +41,4 @@ app.teardown_request(disconnect_redis)
 
 # Routes
 
-app.register_blueprint(discord, url_prefix="/auth")
-app.register_blueprint(api.blueprint, url_prefix="/api")
+app.register_blueprint(api.blueprint)
