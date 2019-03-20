@@ -1,7 +1,25 @@
-*.retry
-*.pyc
-.gitsecret/keys/random_seed
+# Python
+env/
+venv/
 .env
+__pycache__/
+*.pyc
+*.egg-info/
+
+# Node
+node_modules/
+web/
+
+# Misc / env
+.idea/
+.vscode/
+.direnv/
+.envrc
+.env
+*.retry
+
+# Gitsecret
+.gitsecret/keys/random_seed
 infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
 infrastructure/k8s_configs/other/bot-secrets.yml

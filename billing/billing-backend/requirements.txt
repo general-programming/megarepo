@@ -1,0 +1,13 @@
+redis
+hiredis
+raven
+sqlalchemy
+psycopg2
+flask
+gunicorn
+gevent
+alembic
+blinker
+Flask-Dance
+dogpile.cache
+flask_restplus
