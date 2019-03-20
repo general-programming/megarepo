@@ -2,6 +2,10 @@
   margin: 15px;
 }
 
+header {
+  border-bottom: 1px solid #eee;
+}
+
 .button {
   display: inline-block;
   font-weight: 400;

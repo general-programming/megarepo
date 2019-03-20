@@ -1,0 +1,25 @@
+version: "3.6"
+services:
+  frontend:
+    build: billing-frontend
+    image: registry.nepeat.com/billing-frontend
+    env_file: .env
+    networks:
+      - billing
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=80
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:pay.generalprogramming.org
+      restart_policy:
+        condition: on-failure
+
+networks:
+  billing:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true
