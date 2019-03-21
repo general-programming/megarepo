@@ -1,6 +1,6 @@
 import rootReducer from "../reducers/index";
 // import the ability to modify browser history within our router
-import createHistory from "history/createBrowserHistory";
+import { createBrowserHistory } from "history" ;
 
 // import our logger for redux
 import { createLogger } from "redux-logger";
@@ -15,7 +15,7 @@ import { createStore, applyMiddleware, compose } from "redux";
 import { routerMiddleware } from "react-router-redux";
 
 // create and export history for router
-export const history = createHistory();
+export const history = createBrowserHistory();
 
 // combine the middlewares we're using into a constant so that it can be used by our store
 const middleware = [thunk, routerMiddleware(history)];

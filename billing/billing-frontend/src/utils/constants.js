@@ -1,4 +1,4 @@
-export const URL_SERVER = "http://localhost:5000/api/v1";
+export const URL_SERVER = "http://localhost:5000/api/";
 
 /* BRANDINGS */
 export const COLOR_LIGHT = "#FFCC4D";
