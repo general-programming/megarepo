@@ -1,22 +1,17 @@
 import React, { Component } from 'react';
 
-import { BrowserRouter as Router, Route, Link } from 'react-router-dom';
+import { BrowserRouter as Router, Route } from 'react-router-dom';
 import { StripeProvider, Elements } from 'react-stripe-elements';
 
 import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
 
 import './App.css';
 
-import AppHeader from './components/AppHeader';
-import HomeView from './views/HomeView';
-import LoginView from './views/LoginView';
+import PrivateRoute from "./components/PrivateRoute";
 
-import {
-  COLOR_LIGHT, 
-  COLOR_DARK, 
-  COLOR_PRIMARY, 
-  COLOR_TEXT
-} from './utils/constants';
+import HomePage from './components/Home/HomePage';
+import LoginPage from './components/Login/LoginPage';
+import RegisterPage from './components/Register/RegisterPage';
 
 const stripeBetas = ['checkout_beta_4'];
 let stripeKey = "";
@@ -38,6 +33,8 @@ const theme = createMuiTheme({
   },
 });
 
+
+
 class App extends Component {
   render() {
     return (
@@ -45,9 +42,10 @@ class App extends Component {
         <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
           <Elements>
             <Router>
-              <AppHeader />
-              <Route path="/" exact component={ HomeView } />
-              <Route path="/login" exact component={ LoginView } />
+              <PrivateRoute path="/" exact component={ HomePage } />
+              
+              <Route path="/login" exact component={ LoginPage } />
+              <Route path="/register" exact component={ RegisterPage } />
             </Router>
           </Elements>
         </StripeProvider>

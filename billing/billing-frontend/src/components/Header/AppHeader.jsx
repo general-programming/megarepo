@@ -5,10 +5,12 @@ import AppBar from '@material-ui/core/AppBar';
 import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography';
 import Button from '@material-ui/core/Button';
-
 import { Link } from "react-router-dom";
+import { connect } from 'react-redux';
 
-import { COLOR_LIGHT, COLOR_TEXT } from '../utils/constants';
+import { COLOR_LIGHT, COLOR_TEXT } from '../../utils/constants';
+
+import { logout } from '../../actions/user.action'
 
 const styles = {
   root: {
@@ -29,7 +31,7 @@ const styles = {
 };
 
 function AppHeader(props) {
-  const { classes } = props;
+  const { classes, loggedIn } = props;
   return (
     <div className={classes.root}>
       <AppBar className={classes.appBar} position="static">
@@ -37,7 +39,22 @@ function AppHeader(props) {
           <Typography variant="h6" color="inherit" className={classes.grow}>
             General Programming's Store
           </Typography>
-          <Button color="inherit"><Link to="/login">Login</Link></Button>
+          {loggedIn ? 
+            <Button 
+                color="inherit"
+                onClick={logout}
+            >
+                Logout
+            </Button> 
+            : 
+            <Button 
+            color="inherit"
+            component={ Link } 
+            to="/login"
+          >
+            Login
+          </Button>
+        }
         </Toolbar>
       </AppBar>
     </div>
@@ -48,4 +65,12 @@ AppHeader.propTypes = {
   classes: PropTypes.object.isRequired,
 };
 
-export default withStyles(styles)(AppHeader);
+const mapStateToProps = state => {
+    const { user, loggedIn } = state.authentication;
+    return {
+        user,
+        loggedIn
+    };
+};
+
+export default connect(mapStateToProps)(withStyles(styles)(AppHeader));
