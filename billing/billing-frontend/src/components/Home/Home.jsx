@@ -1,12 +1,11 @@
 import React from 'react';
-import classNames from 'classnames';
 import PropTypes from 'prop-types';
 import CssBaseline from '@material-ui/core/CssBaseline';
 import Typography from '@material-ui/core/Typography';
 import { withStyles } from '@material-ui/core/styles';
 import Pricing from './Pricing';
 
-import { connect } from "react-redux";
+import { connect } from 'react-redux';
 
 const styles = theme => ({
     '@global': {
@@ -55,7 +54,7 @@ function Home(props) {
                     * acts of god, misconfigured wireguard, unplugging wrong extension cord excluded 
                 </Typography>
                 <Typography variant="caption" align="left" gutterBottom>
-                    ** if VNC is left unlocked, we can't guarantee someone won't wireguard your VN
+                    ** if VNC is left unlocked, we can't guarantee someone won't wireguard your VM
                 </Typography>
             </main>
         </React.Fragment>
@@ -67,9 +66,9 @@ Home.propTypes = {
 };
 
 const mapStateToProps = state => {
+    const { user } = state.authentication;
     return {
-        user: state.auth.user,
-        ads: state.ads
+        user,
     };
 };
 

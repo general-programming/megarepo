@@ -1,4 +1,4 @@
-export const URL_SERVER = "http://localhost:5000/api/v1";
+export const BASE_URL = "https://payapi.catgirls.dev";
 
 /* BRANDINGS */
 export const COLOR_LIGHT = "#FFCC4D";
