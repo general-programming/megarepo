@@ -3,7 +3,6 @@ services:
   frontend:
     build: billing-frontend
     image: registry.nepeat.com/billing-frontend
-    env_file: .env
     networks:
       - billing
       - publicweb
@@ -15,7 +14,24 @@ services:
         # Routes
         - traefik.frontend.rule=Host:pay.generalprogramming.org
       restart_policy:
-        condition: on-failure
+        condition: any
+
+  backend:
+    build: billing-backend
+    image: registry.nepeat.com/billing-backend
+    networks:
+      - billing
+      - publicweb
+    env_file: .env
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=5000
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:payapi.catgirls.dev
+      restart_policy:
+        condition: any
 
 networks:
   billing:
