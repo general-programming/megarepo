@@ -1,5 +1,6 @@
 # This Python file uses the following encoding: utf-8
 import os
+import stripe
 
 from functools import wraps
 
@@ -16,6 +17,38 @@ redis_pool = ConnectionPool(
     db=int(os.environ.get('REDIS_DB', 0)),
     decode_responses=True
 )
+
+def init_stripe():
+    plans = {
+        "email": {
+            "amount": 1000,
+            "interval": "month",
+            "product": {
+                "name": "Email service"
+            },
+            "nickname": "Email service",
+            "currency": "usd",
+        },
+        "infra10": {
+            "amount": 1000,
+            "interval": "month",
+            "product": {
+                "name": "Infrastructure 10"
+            },
+            "nickname": "Infrastructure",
+            "currency": "usd",
+        }
+    }
+
+    existing_plans = stripe.Plan.list(limit=100)
+    existing_ids = [x["id"] for x in existing_plans["data"]]
+
+    for plan_id, plan_meta in plans.items():
+        if plan_id not in existing_ids:
+            stripe.Plan.create(
+                id=plan_id,
+                **plan_meta
+            )
 
 
 def connect_sql():

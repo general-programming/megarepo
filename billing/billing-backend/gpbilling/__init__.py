@@ -9,7 +9,7 @@ import stripe
 
 from raven.contrib.flask import Sentry
 
-from gpbilling.model.handlers import (before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
+from gpbilling.model.handlers import (init_stripe, before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
                                       disconnect_sql)
 
 app = Flask(__name__)
@@ -47,6 +47,7 @@ sentry = Sentry(
 
 # Handlers
 
+app.before_first_request(init_stripe)
 app.before_request(connect_redis)
 app.before_request(connect_sql)
 app.before_request(before_request)
