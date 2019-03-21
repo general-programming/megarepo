@@ -7,6 +7,7 @@ import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
 
 import './App.css';
 
+import AppHeader from './components/AppHeader';
 import HomeView from './views/HomeView';
 import LoginView from './views/LoginView';
 
@@ -44,6 +45,7 @@ class App extends Component {
         <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
           <Elements>
             <Router>
+              <AppHeader />
               <Route path="/" exact component={ HomeView } />
               <Route path="/login" exact component={ LoginView } />
             </Router>
