@@ -4,7 +4,7 @@ import { GET_ERRORS, SET_CURRENT_USER, CLEAR_CURRENT_USER } from "./types";
 
 // Login - Get User Token
 export const loginUser = userData => dispatch => {
-    var url = URL_SERVER + "/users/login"; // URL
+    var url = URL_SERVER + "/account/login"; // URL
     fetch(url, {
         method: "POST",
         body: JSON.stringify(userData),
