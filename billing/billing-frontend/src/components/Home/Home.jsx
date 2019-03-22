@@ -10,7 +10,7 @@ import { connect } from 'react-redux';
 const styles = theme => ({
     '@global': {
         body: {
-        backgroundColor: theme.palette.common.white,
+            backgroundColor: theme.palette.common.white,
         },
     },
     layout: {
@@ -41,20 +41,20 @@ function Home(props) {
             <main className={classes.layout}>
                 {/* Hero unit */}
                 <div className={classes.heroContent}>
-                <Typography component="h1" variant="h2" align="center" color="textPrimary" gutterBottom>
-                    Hewwo!
-                </Typography>
-                <Typography variant="h6" align="center" color="textSecondary" component="p">
-                    if you're here, you know what you are doing. if you don't, ask your friendly furry
-                </Typography>
+                    <Typography component='h1' variant='h2' align='center' color='textPrimary' gutterBottom>
+                        Hewwo!
+                    </Typography>
+                    <Typography variant='h6' align='center' color='textSecondary' component='p'>
+                        if you&#39;re here, you know what you are doing. if you don&#39;t, ask your friendly furry
+                    </Typography>
                 </div>
                 {/* End hero unit */}
                 <Pricing />
-                <Typography variant="caption" align="left" gutterBottom> 
+                <Typography variant='caption' align='left' gutterBottom> 
                     * acts of god, misconfigured wireguard, unplugging wrong extension cord excluded 
                 </Typography>
-                <Typography variant="caption" align="left" gutterBottom>
-                    ** if VNC is left unlocked, we can't guarantee someone won't wireguard your VM
+                <Typography variant='caption' align='left' gutterBottom>
+                    ** if VNC is left unlocked, we can&#39;t guarantee someone won&#39;t wireguard your VM
                 </Typography>
             </main>
         </React.Fragment>

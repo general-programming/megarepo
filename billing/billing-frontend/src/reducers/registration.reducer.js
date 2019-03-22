@@ -1,4 +1,4 @@
-import { USER_TYPES } from "../actions/types";
+import { USER_TYPES } from '../actions/types';
 
 export function registration(state = {}, action) {
     switch (action.type) {
@@ -9,6 +9,6 @@ export function registration(state = {}, action) {
         case USER_TYPES.REGISTER_FAILURE:
             return {};
         default:
-            return state
+            return state;
     }
 }

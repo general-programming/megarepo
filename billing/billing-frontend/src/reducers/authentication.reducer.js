@@ -1,5 +1,6 @@
-import { USER_TYPES } from "../actions/types";
+import { USER_TYPES } from '../actions/types';
 
+// eslint-disable-next-line no-undef
 let user = JSON.parse(localStorage.getItem('user'));
 const initialState = user ? { loggedIn: true, user } : {};
 
@@ -22,6 +23,6 @@ export function authentication(state = initialState, action) {
         case USER_TYPES.LOGOUT:
             return {};
         default:
-            return state
+            return state;
     }
 }
