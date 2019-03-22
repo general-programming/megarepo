@@ -1,3 +1,4 @@
+/* eslint-disable react/jsx-one-expression-per-line */
 import React from 'react';
 import Button from '@material-ui/core/Button';
 import Card from '@material-ui/core/Card';
@@ -26,7 +27,7 @@ const styles = theme => ({
     },
     container: {
         marginBottom: theme.spacing.unit * 2,
-    }
+    },
 });
 
 const tiers = [
@@ -48,7 +49,7 @@ const tiers = [
             'p2hv',
             '99.9% uptime *',
             'wireguard free! **',
-            'you will never want to touch networking again'
+            'you will never want to touch networking again',
         ],
         buttonText: 'Get started',
         buttonVariant: 'contained',
@@ -72,7 +73,7 @@ function Pricing(props) {
     const { classes } = props;
 
     return (
-        <Grid container spacing={40} alignItems='flex-end' className={classes.container}>
+        <Grid container spacing={40} alignItems="flex-end" className={classes.container}>
             {tiers.map(tier => (
                 // Enterprise card is full width at sm breakpoint
                 <Grid item key={tier.title} xs={12} sm={tier.title === 'Enterprise' ? 12 : 6} md={4}>
@@ -87,21 +88,21 @@ function Pricing(props) {
                         />
                         <CardContent>
                             <div className={classes.cardPricing}>
-                                <Typography component='h2' variant='h3' color='textPrimary'>
+                                <Typography component="h2" variant="h3" color="textPrimary">
                                     ${tier.price}
                                 </Typography>
-                                <Typography variant='h6' color='textSecondary'>
+                                <Typography variant="h6" color="textSecondary">
                                     /mo
                                 </Typography>
                             </div>
                             {tier.description.map(line => (
-                                <Typography variant='subtitle1' align='center' key={line}>
+                                <Typography variant="subtitle1" align="center" key={line}>
                                     {line}
                                 </Typography>
                             ))}
                         </CardContent>
                         <CardActions className={classes.cardActions}>
-                            <Button fullWidth variant={tier.buttonVariant} color='primary'>
+                            <Button fullWidth variant={tier.buttonVariant} color="primary">
                                 {tier.buttonText}
                             </Button>
                         </CardActions>

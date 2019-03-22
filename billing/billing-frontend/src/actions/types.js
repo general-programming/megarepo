@@ -1,3 +1,4 @@
+// eslint-disable-next-line import/prefer-default-export
 export const USER_TYPES = {
     REGISTER_REQUEST: 'USER_REGISTER_REQUEST',
     REGISTER_SUCCESS: 'USER_REGISTER_SUCCESS',
@@ -6,6 +7,6 @@ export const USER_TYPES = {
     LOGIN_REQUEST: 'USER_LOGIN_REQUEST',
     LOGIN_SUCCESS: 'USER_LOGIN_SUCCESS',
     LOGIN_FAILURE: 'USER_LOGIN_FAILURE',
-    
+
     LOGOUT: 'USER_LOGOUT',
 };

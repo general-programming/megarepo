@@ -1,3 +1,4 @@
+/* eslint-disable camelcase */
 import React from 'react';
 import PropTypes from 'prop-types';
 import Avatar from '@material-ui/core/Avatar';
@@ -12,7 +13,7 @@ import withStyles from '@material-ui/core/styles/withStyles';
 import { withRouter } from 'react-router-dom';
 import { connect } from 'react-redux';
 
-import compact_logo from '../../assets/img/logo-square-compact.png';
+import compactLogo from '../../assets/img/logo-square-compact.png';
 
 import validateRegisterInput from '../../validation/register';
 import { register } from '../../actions/user.action';
@@ -62,8 +63,6 @@ class RegisterForm extends React.Component {
             password_verify: '',
             username: '',
             errors: {},
-            showPassword: false,
-            submitted: false,
         };
 
         this.handleChange = this.handleChange.bind(this);
@@ -78,20 +77,23 @@ class RegisterForm extends React.Component {
     handleSubmit(e) {
         e.preventDefault();
 
+        const {
+            email, username, password, password_verify,
+        } = this.state;
+
         const data = {
-            email: this.state.email,
-            username: this.state.username,
-            password: this.state.password,
-            password_verify: this.state.password_verify,
+            email,
+            username,
+            password,
+            password_verify,
         };
 
-        // eslint-disable-next-line react/prop-types
         const { dispatch } = this.props;
 
         const validation = validateRegisterInput(data);
         if (!validation.isValid) {
             this.setState({
-                errors: validation.errors
+                errors: validation.errors,
             });
             console.log(validation.errors);
             return;
@@ -99,74 +101,76 @@ class RegisterForm extends React.Component {
 
         dispatch(register(data));
     }
-    
+
     render() {
-        // eslint-disable-next-line react/prop-types
         const { classes, registering } = this.props;
+        const {
+            email, username, password, password_verify, errors,
+        } = this.state;
 
         return (
             <main className={classes.main}>
                 <CssBaseline />
                 <Paper className={classes.paper}>
-                    <Avatar src={compact_logo} className={classes.avatar} />
-                    <Typography component='h1' variant='h5'>
+                    <Avatar src={compactLogo} className={classes.avatar} />
+                    <Typography component="h1" variant="h5">
                         Register
                     </Typography>
                     <form className={classes.form} onSubmit={this.handleSubmit}>
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='email'>Email Address</InputLabel>
-                            <Input 
-                                id='email' 
-                                name='email' 
-                                autoComplete='email' 
-                                autoFocus 
-                                value={ this.state.email }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.email }
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="email">Email Address</InputLabel>
+                            <Input
+                                id="email"
+                                name="email"
+                                autoComplete="email"
+                                autoFocus
+                                value={email}
+                                onChange={this.handleChange}
+                                error={!!errors.email}
                             />
                         </FormControl>
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='username'>Desired Username</InputLabel>
-                            <Input 
-                                name='username' 
-                                id='username' 
-                                autoComplete='username' 
-                                value={ this.state.username }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.username }
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="username">Desired Username</InputLabel>
+                            <Input
+                                name="username"
+                                id="username"
+                                autoComplete="username"
+                                value={username}
+                                onChange={this.handleChange}
+                                error={!!errors.username}
                             />
                         </FormControl>
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='password'>Password</InputLabel>
-                            <Input 
-                                name='password' 
-                                type='password' 
-                                id='password' 
-                                autoComplete='current-password' 
-                                value={ this.state.password }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.password }
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="password">Password</InputLabel>
+                            <Input
+                                name="password"
+                                type="password"
+                                id="password"
+                                autoComplete="current-password"
+                                value={password}
+                                onChange={this.handleChange}
+                                error={!!errors.password}
                             />
                         </FormControl>
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='password_verify'>Retype Password</InputLabel>
-                            <Input 
-                                name='password_verify' 
-                                type='password' 
-                                id='password_verify' 
-                                autoComplete='current-password' 
-                                value={ this.state.password_verify }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.password_verify }
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="password_verify">Retype Password</InputLabel>
+                            <Input
+                                name="password_verify"
+                                type="password"
+                                id="password_verify"
+                                autoComplete="current-password"
+                                value={password_verify}
+                                onChange={this.handleChange}
+                                error={!!errors.password_verify}
                             />
                         </FormControl>
                         <Button
-                            type='submit'
+                            type="submit"
                             fullWidth
-                            variant='contained'
-                            color='primary'
+                            variant="contained"
+                            color="primary"
                             className={classes.submit}
-                            disabled = { registering }
+                            disabled={registering}
                         >
                             Register
                         </Button>
@@ -175,19 +179,20 @@ class RegisterForm extends React.Component {
             </main>
         );
     }
-
 }
 
 function mapStateToProps(state) {
     const { registering } = state.registration;
     return {
-        registering
+        registering,
     };
 }
 
 
 RegisterForm.propTypes = {
     classes: PropTypes.object.isRequired,
+    registering: PropTypes.bool,
+    dispatch: PropTypes.func,
 };
 
 export default connect(mapStateToProps)(withStyles(styles)(withRouter(RegisterForm)));

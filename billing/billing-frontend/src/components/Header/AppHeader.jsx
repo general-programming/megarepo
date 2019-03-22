@@ -35,26 +35,27 @@ function AppHeader(props) {
     const { classes, loggedIn } = props;
     return (
         <div className={classes.root}>
-            <AppBar className={classes.appBar} position='static'>
+            <AppBar className={classes.appBar} position="static">
                 <Toolbar>
-                    <Typography variant='h6' color='inherit' className={classes.grow}>
+                    <Typography variant="h6" color="inherit" className={classes.grow}>
                         General Programming&#39;s Store
                     </Typography>
-                    {loggedIn ? 
-                        <Button 
-                            color='inherit'
+                    {loggedIn ? (
+                        <Button
+                            color="inherit"
                             onClick={logout}
                         >
                             Logout
-                        </Button> 
-                        : 
-                        <Button 
-                            color='inherit'
-                            component={ Link } 
-                            to='/login'
+                        </Button>
+                    ) : (
+                        <Button
+                            color="inherit"
+                            component={Link}
+                            to="/login"
                         >
                         Login
                         </Button>
+                    )
                     }
                 </Toolbar>
             </AppBar>
@@ -63,14 +64,15 @@ function AppHeader(props) {
 }
 
 AppHeader.propTypes = {
+    // eslint-disable-next-line react/forbid-prop-types
     classes: PropTypes.object.isRequired,
 };
 
-const mapStateToProps = state => {
+const mapStateToProps = (state) => {
     const { user, loggedIn } = state.authentication;
     return {
         user,
-        loggedIn
+        loggedIn,
     };
 };
 

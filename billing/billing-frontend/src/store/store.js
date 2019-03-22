@@ -1,7 +1,4 @@
-import rootReducer from '../reducers/index';
-
-// import the ability to modify browser history within our router
-import { history } from '../helpers/history';
+/* eslint-disable prefer-destructuring */
 
 // import our logger for redux
 import { createLogger } from 'redux-logger';
@@ -14,6 +11,11 @@ import { createStore, applyMiddleware, compose } from 'redux';
 
 // import the middleware for using react router with redux
 import { routerMiddleware } from 'react-router-redux';
+
+import rootReducer from '../reducers/index';
+
+// import the ability to modify browser history within our router
+import { history } from '../helpers/history';
 
 // combine the middlewares we're using into a constant so that it can be used by our store
 const middleware = [thunk, routerMiddleware(history)];
@@ -36,7 +38,7 @@ if (process.env.NODE_ENV === 'development') {
 // compose our middleware
 const composedEnhancers = compose(
     applyMiddleware(...middleware),
-    ...enhancers
+    ...enhancers,
 );
 
 // create our redux store using our reducers and our middleware, and export it for use in index.js

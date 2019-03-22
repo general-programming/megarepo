@@ -2,7 +2,7 @@ import React from 'react';
 
 import RegisterForm from './RegisterForm';
 
-function RegisterPage(props) {
+function RegisterPage() {
     return (
         <div>
             <RegisterForm />
@@ -11,6 +11,3 @@ function RegisterPage(props) {
 }
 
 export default RegisterPage;
-
-
-
