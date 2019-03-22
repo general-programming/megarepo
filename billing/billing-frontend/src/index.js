@@ -1,15 +1,15 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
 
-import { Provider } from "react-redux";
+import { Provider } from 'react-redux';
 
 import './index.css';
 import App from './App';
 import * as serviceWorker from './serviceWorker';
 
-//import { setCurrentUser } from './actions/auth.action';
+//import { setCurrentUser } from "./actions/auth.action";
 
-import store from "./store/store";
+import store from './store/store';
 
 import 'typeface-roboto';
 
@@ -17,6 +17,7 @@ ReactDOM.render(
     <Provider store={store}>
         <App />
     </Provider>,
+    // eslint-disable-next-line no-undef
     document.getElementById('root')
 );
 

@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 import { BASE_URL } from '../utils/constants';
 
 export const login = (username, password) => {
@@ -15,13 +16,13 @@ export const login = (username, password) => {
 
             return user;
         });
-}
+};
 
 export const logout = () => {
     // remove user from local storage to log user out
     localStorage.removeItem('user');
     window.location.reload(true);
-}
+};
 
 export const register = (user) => {
     const requestOptions = {
@@ -31,7 +32,7 @@ export const register = (user) => {
     };
 
     return fetch(`${BASE_URL}/account/register`, requestOptions).then(handleResponse);
-}
+};
 
 function handleResponse(response) {
     return response.text().then(text => {

@@ -6,7 +6,7 @@ import CssBaseline from '@material-ui/core/CssBaseline';
 import Input from '@material-ui/core/Input';
 import InputLabel from '@material-ui/core/InputLabel';
 import Paper from '@material-ui/core/Paper';
-import FormControl from '@material-ui/core/FormControl'
+import FormControl from '@material-ui/core/FormControl';
 import Typography from '@material-ui/core/Typography';
 import withStyles from '@material-ui/core/styles/withStyles';
 import { withRouter } from 'react-router-dom';
@@ -24,9 +24,9 @@ const styles = theme => ({
         marginLeft: theme.spacing.unit * 3,
         marginRight: theme.spacing.unit * 3,
         [theme.breakpoints.up(400 + theme.spacing.unit * 3 * 2)]: {
-        width: 400,
-        marginLeft: 'auto',
-        marginRight: 'auto',
+            width: 400,
+            marginLeft: 'auto',
+            marginRight: 'auto',
         },
     },
     paper: {
@@ -57,10 +57,10 @@ class RegisterForm extends React.Component {
         super(props);
 
         this.state = {
-            email: "",
-            password: "",
-            password_verify: "",
-            username: "",
+            email: '',
+            password: '',
+            password_verify: '',
+            username: '',
             errors: {},
             showPassword: false,
             submitted: false,
@@ -70,12 +70,12 @@ class RegisterForm extends React.Component {
         this.handleSubmit = this.handleSubmit.bind(this);
     }
 
-    handleChange = e => {
+    handleChange(e) {
         const { name, value } = e.target;
         this.setState({ [name]: value });
     }
 
-    handleSubmit = e => {
+    handleSubmit(e) {
         e.preventDefault();
 
         const data = {
@@ -85,6 +85,7 @@ class RegisterForm extends React.Component {
             password_verify: this.state.password_verify,
         };
 
+        // eslint-disable-next-line react/prop-types
         const { dispatch } = this.props;
 
         const validation = validateRegisterInput(data);
@@ -96,73 +97,74 @@ class RegisterForm extends React.Component {
             return;
         }
 
-        dispatch(register(data))
+        dispatch(register(data));
     }
     
     render() {
+        // eslint-disable-next-line react/prop-types
         const { classes, registering } = this.props;
 
         return (
-          <main className={classes.main}>
+            <main className={classes.main}>
                 <CssBaseline />
                 <Paper className={classes.paper}>
                     <Avatar src={compact_logo} className={classes.avatar} />
-                    <Typography component="h1" variant="h5">
+                    <Typography component='h1' variant='h5'>
                         Register
                     </Typography>
                     <form className={classes.form} onSubmit={this.handleSubmit}>
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="email">Email Address</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='email'>Email Address</InputLabel>
                             <Input 
-                                id="email" 
-                                name="email" 
-                                autoComplete="email" 
+                                id='email' 
+                                name='email' 
+                                autoComplete='email' 
                                 autoFocus 
                                 value={ this.state.email }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.email }
                             />
                         </FormControl>
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="username">Desired Username</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='username'>Desired Username</InputLabel>
                             <Input 
-                                name="username" 
-                                id="username" 
-                                autoComplete="username" 
+                                name='username' 
+                                id='username' 
+                                autoComplete='username' 
                                 value={ this.state.username }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.username }
                             />
                         </FormControl>
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="password">Password</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='password'>Password</InputLabel>
                             <Input 
-                                name="password" 
-                                type="password" 
-                                id="password" 
-                                autoComplete="current-password" 
+                                name='password' 
+                                type='password' 
+                                id='password' 
+                                autoComplete='current-password' 
                                 value={ this.state.password }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.password }
                             />
                         </FormControl>
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="password_verify">Retype Password</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='password_verify'>Retype Password</InputLabel>
                             <Input 
-                                name="password_verify" 
-                                type="password" 
-                                id="password_verify" 
-                                autoComplete="current-password" 
+                                name='password_verify' 
+                                type='password' 
+                                id='password_verify' 
+                                autoComplete='current-password' 
                                 value={ this.state.password_verify }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.password_verify }
                             />
                         </FormControl>
                         <Button
-                            type="submit"
+                            type='submit'
                             fullWidth
-                            variant="contained"
-                            color="primary"
+                            variant='contained'
+                            color='primary'
                             className={classes.submit}
                             disabled = { registering }
                         >
@@ -170,7 +172,7 @@ class RegisterForm extends React.Component {
                         </Button>
                     </form>
                 </Paper>
-          </main>
+            </main>
         );
     }
 
@@ -185,7 +187,7 @@ function mapStateToProps(state) {
 
 
 RegisterForm.propTypes = {
-  classes: PropTypes.object.isRequired,
+    classes: PropTypes.object.isRequired,
 };
 
 export default connect(mapStateToProps)(withStyles(styles)(withRouter(RegisterForm)));

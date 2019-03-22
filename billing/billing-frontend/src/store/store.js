@@ -1,19 +1,19 @@
-import rootReducer from "../reducers/index";
+import rootReducer from '../reducers/index';
 
 // import the ability to modify browser history within our router
-import { history } from "../helpers/history"
+import { history } from '../helpers/history';
 
 // import our logger for redux
-import { createLogger } from "redux-logger";
+import { createLogger } from 'redux-logger';
 
 // import a library to handle async with redux
-import thunk from "redux-thunk";
+import thunk from 'redux-thunk';
 
 // import the redux parts needed to start our store
-import { createStore, applyMiddleware, compose } from "redux";
+import { createStore, applyMiddleware, compose } from 'redux';
 
 // import the middleware for using react router with redux
-import { routerMiddleware } from "react-router-redux";
+import { routerMiddleware } from 'react-router-redux';
 
 // combine the middlewares we're using into a constant so that it can be used by our store
 const middleware = [thunk, routerMiddleware(history)];
@@ -22,20 +22,21 @@ const middleware = [thunk, routerMiddleware(history)];
 const enhancers = [];
 
 // use Redux devtools if available in development
-if (process.env.NODE_ENV === "development") {
-  const devToolsExtension = window.devToolsExtension;
+if (process.env.NODE_ENV === 'development') {
+    // eslint-disable-next-line no-undef
+    const devToolsExtension = window.devToolsExtension;
 
-  if (typeof devToolsExtension === "function") {
-    enhancers.push(devToolsExtension());
-  }
+    if (typeof devToolsExtension === 'function') {
+        enhancers.push(devToolsExtension());
+    }
 
-  middleware.push(createLogger());
+    middleware.push(createLogger());
 }
 
 // compose our middleware
 const composedEnhancers = compose(
-  applyMiddleware(...middleware),
-  ...enhancers
+    applyMiddleware(...middleware),
+    ...enhancers
 );
 
 // create our redux store using our reducers and our middleware, and export it for use in index.js

@@ -13,7 +13,7 @@ import Typography from '@material-ui/core/Typography';
 import withStyles from '@material-ui/core/styles/withStyles';
 import { connect } from 'react-redux';
 
-import compact_logo from "../../assets/img/logo-square-compact.png";
+import compact_logo from '../../assets/img/logo-square-compact.png';
 
 import validateLoginInput from '../../validation/login';
 import { login } from '../../actions/user.action';
@@ -25,9 +25,9 @@ const styles = theme => ({
         marginLeft: theme.spacing.unit * 3,
         marginRight: theme.spacing.unit * 3,
         [theme.breakpoints.up(400 + theme.spacing.unit * 3 * 2)]: {
-        width: 400,
-        marginLeft: 'auto',
-        marginRight: 'auto',
+            width: 400,
+            marginLeft: 'auto',
+            marginRight: 'auto',
         },
     },
     paper: {
@@ -52,9 +52,9 @@ const styles = theme => ({
         marginTop: theme.spacing.unit * 3,
     },
     chip: {
-        width: "100%",
-        color: "#fff",
-        backgroundColor: "#f4620c",
+        width: '100%',
+        color: '#fff',
+        backgroundColor: '#f4620c',
     },
 });
 
@@ -76,16 +76,17 @@ class LoginForm extends React.Component {
         this.handleSubmit = this.handleSubmit.bind(this);
     }
 
-    handleChange = e => {
+    handleChange(e) {
         const { name, value } = e.target;
         this.setState({ [name]: value });
     }
 
-    handleSubmit = e => {
+    handleSubmit(e) {
         e.preventDefault();
 
         this.setState({ submitted: true });
         const { username, password } = this.state;
+        // eslint-disable-next-line react/prop-types
         const { dispatch } = this.props;
 
         const validation = validateLoginInput({ username, password });
@@ -101,6 +102,7 @@ class LoginForm extends React.Component {
     }
 
     render() {
+        // eslint-disable-next-line react/prop-types
         const { classes, error } = this.props;
 
         return (
@@ -108,57 +110,57 @@ class LoginForm extends React.Component {
                 <CssBaseline />
                 <Paper className={classes.paper}>
                     <Avatar src={compact_logo} className={classes.avatar} />
-                    <Typography component="h1" variant="h5">
+                    <Typography component='h1' variant='h5'>
                         Sign in
                     </Typography>
                     <form className={classes.form} onSubmit={this.handleSubmit}>
                         { error && <Chip 
-                            label={"Oh heck! " + error}
+                            label={'Oh heck! ' + error}
                             className={classes.chip} 
-                            color="secondary"
+                            color='secondary'
                         /> }
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="username">Username</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='username'>Username</InputLabel>
                             <Input 
-                                id="username" 
-                                name="username" 
-                                autoComplete="username" 
+                                id='username' 
+                                name='username' 
+                                autoComplete='username' 
                                 autoFocus 
                                 value={ this.state.username }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.username }
                             />
                         </FormControl>
-                        <FormControl margin="normal" required fullWidth>
-                            <InputLabel htmlFor="password">Password</InputLabel>
+                        <FormControl margin='normal' required fullWidth>
+                            <InputLabel htmlFor='password'>Password</InputLabel>
                             <Input 
-                                name="password" 
-                                type="password" 
-                                id="password" 
-                                autoComplete="current-password" 
+                                name='password' 
+                                type='password' 
+                                id='password' 
+                                autoComplete='current-password' 
                                 value={ this.state.password }
                                 onChange={ this.handleChange }
                                 error = { !!this.state.errors.password }
                             />
                         </FormControl>
                         {/* <FormControlLabel
-                            control={<Checkbox value="remember" color="primary" />}
-                            label="Remember me"
+                            control={<Checkbox value='remember' color='primary' />}
+                            label='Remember me'
                         /> */}
                         <Button
-                            type="submit"
+                            type='submit'
                             fullWidth
-                            variant="contained"
-                            color="primary"
+                            variant='contained'
+                            color='primary'
                             className={classes.submit}
                         >
                             Sign in
                         </Button>
             
                         <Button 
-                            variant="contained"
+                            variant='contained'
                             fullWidth 
-                            color="default" 
+                            color='default' 
                             className={classes.button}
                         >
                             <GithubCircle/>
@@ -172,7 +174,7 @@ class LoginForm extends React.Component {
 }
 
 LoginForm.propTypes = {
-  classes: PropTypes.object.isRequired,
+    classes: PropTypes.object.isRequired,
 };
 
 function mapStateToProps(state) {

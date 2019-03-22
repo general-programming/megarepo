@@ -5,8 +5,8 @@ class Home extends React.Component {
     constructor(props) {
         super(props);
         this.state = {
-            customerID: "",
-            customerEmail: ""
+            customerID: '',
+            customerEmail: ''
         };
 
         this.handleEmailChange = this.handleEmailChange.bind(this);
@@ -14,6 +14,7 @@ class Home extends React.Component {
     }
 
     onShopClick(productID) {
+        // eslint-disable-next-line react/prop-types
         this.props.stripe.redirectToCheckout({
             items: [{plan: productID, quantity: 1}],
             clientReferenceId: this.state.customerID,
@@ -24,14 +25,15 @@ class Home extends React.Component {
             // tab between form submission and the redirect.
             successUrl: 'https://pay.generalprogramming.org/?code=success',
             cancelUrl: 'https://pay.generalprogramming.org/?code=canceled',
-          })
-          .then(function (result) {
-            if (result.error) {
-              // If `redirectToCheckout` fails due to a browser or network
-              // error, display the localized error message to your customer.
-              alert(result.error.message);
-            }
-          })
+        })
+            .then(function (result) {
+                if (result.error) {
+                // If `redirectToCheckout` fails due to a browser or network
+                // error, display the localized error message to your customer.
+                    // eslint-disable-next-line no-undef
+                    alert(result.error.message);
+                }
+            });
     }
 
     handleEmailChange(e) {
@@ -43,17 +45,17 @@ class Home extends React.Component {
     }
 
     render() {
-        let infraItem = "plan_Dshz2OAA2E6ivm";
-        let extra = "";
+        let infraItem = 'plan_Dshz2OAA2E6ivm';
+        let extra = '';
 
         if (!process.env.NODE_ENV || process.env.NODE_ENV === 'development') {
-            infraItem = "pre10";
-            extra = " - Development";
+            infraItem = 'pre10';
+            extra = ' - Development';
         }
         return (
             <div className="home">
-                <h1>{"Home" + extra}</h1>
-                <p>welcome, if you're here, you know what you are doing</p>
+                <h1>{'Home' + extra}</h1>
+                <p>welcome, if you&#39;re here, you know what you are doing</p>
                 <p>your card will be billed monthly and account management will be added to here later on,,,</p>
                 <p>scream at @everyone for billing modifications</p>
                 <p>todo: lol use the stripe api</p>
