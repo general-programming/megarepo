@@ -2,7 +2,7 @@ FROM python:3-alpine
 
 # Update packages and install setup requirements.
 RUN apk --no-cache upgrade && \
-	apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing gcc musl-dev postgresql-dev ca-certificates && \
+	apk add --no-cache -X http://dl-cdn.alpinelinux.org/alpine/edge/testing gcc musl-dev postgresql-dev ca-certificates libffi-dev && \
 	update-ca-certificates && \
 	rm -rf /var/cache/apk/*
 

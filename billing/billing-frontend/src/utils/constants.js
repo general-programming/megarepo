@@ -1,4 +1,4 @@
-export const BASE_URL = 'https://payapi.catgirls.dev';
+export const BASE_URL = '/api';
 
 /* BRANDINGS */
 export const COLOR_LIGHT = '#FFCC4D';

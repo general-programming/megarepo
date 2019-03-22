@@ -1,10 +1,15 @@
 # This Python file uses the following encoding: utf-8
 import os
+import stripe
 
-from flask import g, request
+from functools import wraps
+
+from flask import g, request, session
 from redis import ConnectionPool, StrictRedis
 
-from gpbilling.model import sm
+from sqlalchemy.orm.exc import NoResultFound
+
+from gpbilling.model import sm, Account
 
 redis_pool = ConnectionPool(
     host=os.environ.get('REDIS_PORT_6379_TCP_ADDR', os.environ.get('REDIS_HOST', '127.0.0.1')),
@@ -13,13 +18,57 @@ redis_pool = ConnectionPool(
     decode_responses=True
 )
 
+def init_stripe():
+    plans = {
+        "email": {
+            "amount": 1000,
+            "interval": "month",
+            "product": {
+                "name": "Email service"
+            },
+            "nickname": "Email service",
+            "currency": "usd",
+        },
+        "infra10": {
+            "amount": 1000,
+            "interval": "month",
+            "product": {
+                "name": "Infrastructure 10"
+            },
+            "nickname": "Infrastructure",
+            "currency": "usd",
+        }
+    }
+
+    existing_plans = stripe.Plan.list(limit=100)
+    existing_ids = [x["id"] for x in existing_plans["data"]]
+
+    for plan_id, plan_meta in plans.items():
+        if plan_id not in existing_ids:
+            stripe.Plan.create(
+                id=plan_id,
+                **plan_meta
+            )
+
 
 def connect_sql():
     g.db = sm()
+    g.user = None
+
+    if g.user_id is not None:
+        try:
+            g.user = g.db.query(Account).filter(Account.id == g.user_id).one()
+        except NoResultFound:
+            pass
 
 
 def connect_redis():
     g.redis = StrictRedis(connection_pool=redis_pool)
+
+    if "user_id" in session:
+        g.user_id = session["user_id"]
+    else:
+        g.user_id = None
 
 
 def before_request():

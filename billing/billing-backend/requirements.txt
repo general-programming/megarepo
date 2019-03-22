@@ -11,3 +11,6 @@ blinker
 Flask-Dance
 dogpile.cache
 flask_restplus
+bcrypt
+flask-mail
+stripe

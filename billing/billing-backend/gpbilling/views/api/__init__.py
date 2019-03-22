@@ -2,7 +2,7 @@
 from flask import Blueprint, g, jsonify, request
 from flask_restplus import Api
 
-from gpbilling.views.api import account
+from gpbilling.views.api import account, products
 
 blueprint = Blueprint("api", __name__)
 api = Api(
@@ -22,3 +22,4 @@ def default_error_handler(error):
 
 
 api.add_namespace(account.ns)
+api.add_namespace(products.ns)

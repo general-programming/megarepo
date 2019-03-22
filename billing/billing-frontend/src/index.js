@@ -7,7 +7,7 @@ import './index.css';
 import App from './App';
 import * as serviceWorker from './serviceWorker';
 
-//import { setCurrentUser } from "./actions/auth.action";
+//import { setCurrentUser } from './actions/auth.action';
 
 import store from './store/store';
 
