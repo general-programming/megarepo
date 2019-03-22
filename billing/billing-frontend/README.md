@@ -1,3 +1,4 @@
+`eslint` requires [eslint-plugin-react](https://www.npmjs.com/package/eslint-plugin-react) and [eslint-plugin-react-redux](https://www.npmjs.com/package/eslint-plugin-react-redux)<br>
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
