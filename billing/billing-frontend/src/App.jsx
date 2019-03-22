@@ -1,3 +1,5 @@
+/* eslint-disable react/jsx-filename-extension */
+/* eslint-disable react/prefer-stateless-function */
 import React, { Component } from 'react';
 
 import { BrowserRouter as Router, Route } from 'react-router-dom';
@@ -29,11 +31,9 @@ const theme = createMuiTheme({
         },
         secondary: {
             main: '#F4900C',
-        }
+        },
     },
 });
-
-
 
 class App extends Component {
     render() {
@@ -42,10 +42,10 @@ class App extends Component {
                 <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
                     <Elements>
                         <Router>
-                            <PrivateRoute path="/" exact component={ HomePage } />
-                            
-                            <Route path="/login" exact component={ LoginPage } />
-                            <Route path="/register" exact component={ RegisterPage } />
+                            <PrivateRoute path="/" exact component={HomePage} />
+
+                            <Route path="/login" exact component={LoginPage} />
+                            <Route path="/register" exact component={RegisterPage} />
                         </Router>
                     </Elements>
                 </StripeProvider>
