@@ -15,3 +15,7 @@ infrastructure/k8s_configs/discourse/secrets.yml
 infrastructure/k8s_configs/minecraft/00-namespace.yml
 infrastructure/dockersetup2/sentry/.secret_env
 infrastructure/provision_ansible/inventory/nepeat_hosts
+
+# Language garbage
+node_modules/
+*.egg-info
