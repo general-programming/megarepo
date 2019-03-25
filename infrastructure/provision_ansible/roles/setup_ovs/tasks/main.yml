@@ -1,0 +1,32 @@
+---
+
+- name: "openvswitch - Install"
+  package:
+    name: "openvswitch-switch"
+    state: present
+
+- name: "openvswitch - Add vlan1 port to ports"
+  set_fact:
+    _ovs_all_ports:
+      - "vlan1_{{ ovs_bridge }}"
+
+- name: "openvswitch - Add bridge port to ports."
+  set_fact:
+    _ovs_all_ports: "{{ _ovs_all_ports }} + [ 'vxlan_{{ ovs_bridge }}_{{ item.id }}' ]"
+  with_items: "{{ ovs_ports }}"
+  when: ovs_ports is defined and ovs_ports
+
+- name: "openvswitch - Ensure bridge exists."
+  openvswitch_bridge:
+    bridge: "{{ ovs_bridge }}"
+    state: present
+    set: "Bridge {{ ovs_bridge }} rstp_enable=true"
+
+- name: "openvswitch - Generate Debian config"
+  template:
+    src: "70-openvswitch.conf.j2"
+    dest: "/etc/network/interfaces.d/70-openvswitch.conf"
+    owner: root
+    group: root
+    mode: 0644
+  register: ovs_conf

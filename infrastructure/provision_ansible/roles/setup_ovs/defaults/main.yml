@@ -1,0 +1,5 @@
+---
+ovs_bridge: ovsbr0
+ovs_ip: null
+ovs_tunnels: null
+_ovs_all_ports: []

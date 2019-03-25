@@ -1,0 +1,29 @@
+# {{ ansible_managed }}
+
+# Bridge
+allow-ovs {{ ovs_bridge }}
+iface {{ ovs_bridge }} inet manual
+    ovs_type OVSBridge
+    ovs_ports {{ _ovs_all_ports | join(' ') }}
+    up ovs-vsctl set Bridge ${IFACE} rstp_enable=true
+
+# Internal IP VLAN 1
+allow-{{ ovs_bridge }} vlan1_{{ ovs_bridge }}
+iface vlan1_{{ ovs_bridge }} inet static
+    ovs_bridge {{ ovs_bridge }}
+    ovs_type OVSIntPort
+    ovs_options tag=1
+    address {{ ovs_ip }}
+    netmask 255.255.0.0
+
+# VXLAN ports
+{% if ovs_ports is defined %}{% for port in ovs_ports %}
+allow-{{ ovs_bridge }} vxlan_{{ ovs_bridge }}_{{ port.id }}
+iface vxlan_{{ ovs_bridge }}_{{ port.id }} inet manual
+    ovs_bridge {{ ovs_bridge }}
+    ovs_type OVSTunnel
+    ovs_tunnel_type vxlan
+    ovs_tunnel_options options:remote_ip={{ port.dest }} options:key=flow options:dst_port=8472
+    up ovs-vsctl set int ${IFACE} mtu_request=1375
+
+{% endfor %}{% endif %}
