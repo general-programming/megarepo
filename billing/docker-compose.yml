@@ -1,5 +1,15 @@
 version: "3.6"
 services:
+  redis:
+    image: redis:alpine
+    networks:
+      - billing
+    volumes:
+      - /srv/var/billing/redis:/data
+    deploy:
+      restart_policy:
+        condition: any
+
   frontend:
     build: billing-frontend
     image: registry.nepeat.com/billing-frontend
