@@ -1,9 +1,13 @@
 const proxy = require('http-proxy-middleware');
 
-module.exports = function(app) {
+module.exports = (app) => {
     app.use(proxy('/api', {
-        target: 'http://localhost:5000/',
-        pathRewrite: {'^/api' : ''}
+        target: 'https://pay.generalprogramming.org/api/',
+        pathRewrite: {
+            '^/api': '',
+        },
+        changeOrigin: true,
+        secure: false,
     }));
 
     app.use(proxy('/swagger**', {
