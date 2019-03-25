@@ -1,13 +1,12 @@
 {
     "env": {
+        "browser": true,
         "es6": true,
         "node": true
     },
     "plugins": ["react", "react-redux"],
     "extends": [
-        "eslint:recommended",
-        "plugin:react/recommended",
-        "plugin:react-redux/recommended"
+        "airbnb"
     ],
     "parserOptions": {
         "ecmaVersion": 2018,
@@ -35,6 +34,19 @@
             "always"
         ],
         "no-console": 0,
-        "no-unused-vars": "warn"
+        "no-unused-vars": "warn",
+        "react/jsx-indent": [
+            "error",
+            4
+        ],
+        "react/jsx-indent-props": [
+            "error",
+            4
+        ],
+        "react/destructuring-assignment": ["warn"],
+        "react/forbid-prop-types": ["warn"],
+        "react/require-default-props": ["warn"],
+        "import/no-extraneous-dependencies": ["warn"],
+        "import/prefer-default-export": ["warn"]
     }
 }

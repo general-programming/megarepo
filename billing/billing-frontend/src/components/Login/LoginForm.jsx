@@ -13,7 +13,7 @@ import Typography from '@material-ui/core/Typography';
 import withStyles from '@material-ui/core/styles/withStyles';
 import { connect } from 'react-redux';
 
-import compact_logo from '../../assets/img/logo-square-compact.png';
+import compactLogo from '../../assets/img/logo-square-compact.png';
 
 import validateLoginInput from '../../validation/login';
 import { login } from '../../actions/user.action';
@@ -63,13 +63,12 @@ class LoginForm extends React.Component {
         super(props);
 
         // maybe remove old login, not sure yet
-        //this.props.dispatch(userActions.logout());
+        // this.props.dispatch(userActions.logout());
 
         this.state = {
             username: '',
             password: '',
             errors: {},
-            submitted: false,
         };
 
         this.handleChange = this.handleChange.bind(this);
@@ -84,7 +83,6 @@ class LoginForm extends React.Component {
     handleSubmit(e) {
         e.preventDefault();
 
-        this.setState({ submitted: true });
         const { username, password } = this.state;
         // eslint-disable-next-line react/prop-types
         const { dispatch } = this.props;
@@ -92,7 +90,7 @@ class LoginForm extends React.Component {
         const validation = validateLoginInput({ username, password });
         if (!validation.isValid) {
             this.setState({
-                errors: validation.errors
+                errors: validation.errors,
             });
             console.log(validation.errors);
             return;
@@ -102,68 +100,69 @@ class LoginForm extends React.Component {
     }
 
     render() {
-        // eslint-disable-next-line react/prop-types
-        const { classes, error } = this.props;
+        const { classes, error, loggingIn } = this.props;
 
         return (
             <main className={classes.main}>
                 <CssBaseline />
                 <Paper className={classes.paper}>
-                    <Avatar src={compact_logo} className={classes.avatar} />
-                    <Typography component='h1' variant='h5'>
+                    <Avatar src={compactLogo} className={classes.avatar} />
+                    <Typography component="h1" variant="h5">
                         Sign in
                     </Typography>
                     <form className={classes.form} onSubmit={this.handleSubmit}>
-                        { error && <Chip 
-                            label={'Oh heck! ' + error}
-                            className={classes.chip} 
-                            color='secondary'
-                        /> }
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='username'>Username</InputLabel>
-                            <Input 
-                                id='username' 
-                                name='username' 
-                                autoComplete='username' 
-                                autoFocus 
-                                value={ this.state.username }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.username }
+                        { error && (<Chip
+                            label={`Oh heck! ${error}`}
+                            className={classes.chip}
+                            color="secondary"
+                        />
+                        )}
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="username">Username</InputLabel>
+                            <Input
+                                id="username"
+                                name="username"
+                                autoComplete="username"
+                                autoFocus
+                                value={this.state.username}
+                                onChange={this.handleChange}
+                                error={!!this.state.errors.username}
                             />
                         </FormControl>
-                        <FormControl margin='normal' required fullWidth>
-                            <InputLabel htmlFor='password'>Password</InputLabel>
-                            <Input 
-                                name='password' 
-                                type='password' 
-                                id='password' 
-                                autoComplete='current-password' 
-                                value={ this.state.password }
-                                onChange={ this.handleChange }
-                                error = { !!this.state.errors.password }
+                        <FormControl margin="normal" required fullWidth>
+                            <InputLabel htmlFor="password">Password</InputLabel>
+                            <Input
+                                name="password"
+                                type="password"
+                                id="password"
+                                autoComplete="current-password"
+                                value={this.state.password}
+                                onChange={this.handleChange}
+                                error={!!this.state.errors.password}
                             />
                         </FormControl>
                         {/* <FormControlLabel
-                            control={<Checkbox value='remember' color='primary' />}
-                            label='Remember me'
+                            control={<Checkbox value="remember" color="primary" />}
+                            label="Remember me"
                         /> */}
                         <Button
-                            type='submit'
+                            type="submit"
                             fullWidth
-                            variant='contained'
-                            color='primary'
+                            variant="contained"
+                            color="primary"
                             className={classes.submit}
+                            disabled={loggingIn}
                         >
                             Sign in
                         </Button>
-            
-                        <Button 
-                            variant='contained'
-                            fullWidth 
-                            color='default' 
+
+                        <Button
+                            variant="contained"
+                            fullWidth
+                            color="default"
                             className={classes.button}
                         >
-                            <GithubCircle/>
+                            <GithubCircle />
                             Login with Github
                         </Button>
                     </form>
@@ -175,13 +174,15 @@ class LoginForm extends React.Component {
 
 LoginForm.propTypes = {
     classes: PropTypes.object.isRequired,
+    loggingIn: PropTypes.bool,
+    error: PropTypes.string,
 };
 
 function mapStateToProps(state) {
     const { loggingIn, error } = state.authentication;
     return {
         loggingIn,
-        error
+        error,
     };
 }
 

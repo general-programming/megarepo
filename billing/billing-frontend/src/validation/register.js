@@ -2,12 +2,13 @@ const Validator = require('validator');
 const isEmpty = require('./is-empty');
 
 module.exports = function validateRegisterInput(data) {
-    let errors = {};
+    const errors = {};
+    const d = {};
 
-    data.username = !isEmpty(data.username) ? data.username : '';
-    data.email = !isEmpty(data.email) ? data.email : '';
-    data.password = !isEmpty(data.password) ? data.password : '';
-    data.password_verify  = !isEmpty(data.password_verify ) ? data.password_verify : '';
+    d.username = !isEmpty(data.username) ? data.username : '';
+    d.email = !isEmpty(data.email) ? data.email : '';
+    d.password = !isEmpty(data.password) ? data.password : '';
+    d.password_verify = !isEmpty(data.password_verify) ? data.password_verify : '';
 
     if (Validator.isEmpty(data.username)) {
         errors.name = 'Username field is required';
@@ -33,16 +34,16 @@ module.exports = function validateRegisterInput(data) {
         errors.password = 'Password must be at least 6 characters and less than 512';
     }
 
-    if (Validator.isEmpty(data.password_verify )) {
+    if (Validator.isEmpty(data.password_verify)) {
         errors.password_verify = 'Confirm Password field is required';
     }
 
-    if (!Validator.equals(data.password, data.password_verify )) {
+    if (!Validator.equals(data.password, data.password_verify)) {
         errors.password_verify = 'Passwords must match';
     }
 
     return {
         errors,
-        isValid: isEmpty(errors)
+        isValid: isEmpty(errors),
     };
 };

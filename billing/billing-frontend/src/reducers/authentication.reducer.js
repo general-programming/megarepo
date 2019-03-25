@@ -1,6 +1,6 @@
 import { USER_TYPES } from '../actions/types';
 
-// eslint-disable-next-line no-undef
+// eslint-disable-next-line prefer-const
 let user = JSON.parse(localStorage.getItem('user'));
 const initialState = user ? { loggedIn: true, user } : {};
 
@@ -9,16 +9,16 @@ export function authentication(state = initialState, action) {
         case USER_TYPES.LOGIN_REQUEST:
             return {
                 loggingIn: true,
-                user: action.user
+                user: action.user,
             };
         case USER_TYPES.LOGIN_SUCCESS:
             return {
                 loggedIn: true,
-                user: action.user
+                user: action.user,
             };
         case USER_TYPES.LOGIN_FAILURE:
             return {
-                error: action.error
+                error: action.error,
             };
         case USER_TYPES.LOGOUT:
             return {};

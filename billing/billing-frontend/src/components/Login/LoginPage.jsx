@@ -2,7 +2,7 @@ import React from 'react';
 
 import LoginForm from './LoginForm';
 
-function LoginPage(props) {
+function LoginPage() {
     return (
         <div>
             <LoginForm />
@@ -11,6 +11,3 @@ function LoginPage(props) {
 }
 
 export default LoginPage;
-
-
-

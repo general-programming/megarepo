@@ -11,6 +11,3 @@ function LoginView(props) {
 }
 
 export default LoginView;
-
-
-
