@@ -118,6 +118,19 @@ class AccountLoginResource(ResourceBase):
 
         return user.to_dict()
 
+@ns.route("/logout")
+class AccountLogoutResource(ResourceBase):
+    def post(self):
+        logged_out = False
+
+        if "user_id" in session:
+            session.pop("user_id")
+            logged_out = True
+
+        return {
+            "logged_out": logged_out
+        }
+
 @ns.route("/verify")
 class AccountVerifyResource(ResourceBase):
     @ns.param("token", "Token", type=str, _in="formData", required=True)
