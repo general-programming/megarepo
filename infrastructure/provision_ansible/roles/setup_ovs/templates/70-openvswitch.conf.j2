@@ -15,7 +15,6 @@ iface vlan1_{{ ovs_bridge }} inet static
     ovs_options tag=1
     address {{ ovs_ip }}
     netmask 255.255.0.0
-    up ovs-vsctl set int ${IFACE} mtu_request=1300
 
 # VXLAN ports
 {% if ovs_ports is defined %}{% for port in ovs_ports %}
@@ -25,6 +24,5 @@ iface vxlan_{{ ovs_bridge }}_{{ port.id }} inet manual
     ovs_type OVSTunnel
     ovs_tunnel_type vxlan
     ovs_tunnel_options options:remote_ip={{ port.dest }} options:key=flow options:dst_port=8472 options:df_default=false
-    up ovs-vsctl set int ${IFACE} mtu_request=1300
 
 {% endfor %}{% endif %}
