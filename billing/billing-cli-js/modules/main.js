@@ -3,7 +3,7 @@ const Swagger = require("swagger-client");
 const homedir = require("os").homedir();
 const fs = require("fs");
 
-let { login, logout, register, products } = require("./index");
+let { login, logout, register, products, verify } = require("./index");
 
 class GPBilling {
     constructor() {
@@ -14,6 +14,7 @@ class GPBilling {
         this.logout = new logout(this);
         this.register = new register(this);
         this.products = new products(this);
+        this.verify = new verify(this);
     }
     
     assignSwaggerAPI() {

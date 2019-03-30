@@ -21,6 +21,7 @@ const exitWithError = (err) => {
 };
 
 const main = async () => {
+    console.log("Loading necessary packages, please wait...\n");
     let api = new GPBilling();
     // normally we call `await base.init();` here but
     // due to speed of the runtime, I decided to put
@@ -40,7 +41,7 @@ const main = async () => {
                 if (!api.billingConfig.authCookie) {
                     let { cookie, userObj } = await api.login.start();
                     await api.saveCookie(cookie);
-                    console.log(`You are now logged in with email ${userObj.email}.`);
+                    console.log(`You are now logged in with email "${userObj.email}".`);
                     exit();
                 } else {
                     console.log("You are already logged in!");
@@ -87,7 +88,28 @@ const main = async () => {
             }
         });
 
+    program
+        .command("verify")
+        .description("Verifies your account on the GP Billing database.")
+        .action(async () => {
+            try {
+                await api.init();
+
+                await api.verify.start();
+                console.log("You are verified! You can login now.");
+                exit();
+            } catch (error) {
+                exitWithError(error);
+            }
+        });
+
     program.parse(process.argv);
+
+    let NO_COMMAND_SPECIFIED = program.args.length === 0;
+
+    if (NO_COMMAND_SPECIFIED) {
+        program.help();
+    }
 };
 
 main();
