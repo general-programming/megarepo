@@ -32,3 +32,18 @@ class SubscriptionResource(ResourceBase):
                     return {"error": str(e)}, 500
 
         return subscriptions
+
+    @ns.param("subscription_id", "Subscription ID", type=str, _in="formData", required=True)
+    def delete(self):
+        sub_id = self.get_field("subscription_id")
+
+        try:
+            sub = stripe.Subscription.retrieve(sub_id)
+        except InvalidRequestError as e:
+            return {"error": str(e)}, 400
+
+        if sub.customer != g.user.stripe_customer:
+            return {"error": "This subscription is not yours!"}, 403
+
+        sub.delete()
+        return {"deleted": True}
