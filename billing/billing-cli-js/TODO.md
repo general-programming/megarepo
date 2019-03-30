@@ -1,4 +1,4 @@
 # TODO
 
- * Register command
+ * Verify command
  * Entire Subscriptions Parts

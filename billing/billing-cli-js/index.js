@@ -12,7 +12,9 @@ const exit = () => {
 };
 
 const exitWithError = (err) => {
-    console.error(`\n\nAn error occured!\n${err.stack}\n`);
+    console.error("\n\nAn error occured!\n");
+    if (err.response && err.response.obj) console.error(`\nError from the API: ${err.response.obj.error}\n`);
+    if (err.stack) console.error(`\nStacktrace:\n${err.stack}\n`);
     return setTimeout(() => {
         process.exit(1);
     }, 1000);
@@ -76,8 +78,9 @@ const main = async () => {
         .action(async () => {
             try {
                 await api.init();
-                
-                // TODO await base.register.start();
+
+                await api.register.start();
+                console.log("You are registered! Please check your email for verification.");
                 exit();
             } catch (error) {
                 exitWithError(error);
