@@ -1,11 +1,23 @@
 # coding=utf-8
-from flask import Blueprint, g, jsonify, request
+from flask import Blueprint, g, jsonify, request, url_for
 from flask_restplus import Api
 
 from gpbilling.views.api import account, products
 
 blueprint = Blueprint("api", __name__)
-api = Api(
+
+class CustomApi(Api):
+    # Nasty hack to get swagger.json to be served as a relative URL.
+    @property
+    def specs_url(self):
+        '''
+        The Swagger specifications absolute url (ie. `swagger.json`)
+
+        :rtype: str
+        '''
+        return url_for(self.endpoint('specs'), _external=False)
+
+api = CustomApi(
     blueprint,
     version="lol",
     title="GP Billing API",
