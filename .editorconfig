@@ -14,3 +14,8 @@ trim_trailing_whitespace = true
 [*.yml]
 indent_style = space
 indent_size = 2
+
+# JS
+[*.js]
+indent_style = spaces
+indent_size = 4
