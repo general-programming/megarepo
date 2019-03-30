@@ -7,6 +7,7 @@ from flask_mail import Mail
 
 import stripe
 
+from werkzeug.contrib.fixers import ProxyFix
 from raven.contrib.flask import Sentry
 
 from gpbilling.model.handlers import (init_stripe, before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
@@ -15,6 +16,7 @@ from gpbilling.model.handlers import (init_stripe, before_request, commit_sql, c
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", os.environ.get("SECRET_KEY"))
 app.config["SESSION_COOKIE_NAME"] = "gpbilling"
+app.wsgi_app = ProxyFix(app.wsgi_app)
 
 # Mail
 app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "localhost")
