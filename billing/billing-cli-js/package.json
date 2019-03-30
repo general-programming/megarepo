@@ -1,0 +1,19 @@
+{
+  "name": "gppayment",
+  "version": "0.0.1",
+  "description": "",
+  "preferGlobal": true,
+  "bin": "./index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node index.js"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "commander": "^2.19.0",
+    "inquirer": "^6.2.2",
+    "set-cookie-parser": "^2.3.5",
+    "swagger-client": "^3.8.25"
+  }
+}
