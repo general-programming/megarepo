@@ -33,7 +33,7 @@ const styles = theme => ({
 
 
 function Home(props) {
-    const { classes } = props;
+    const { classes, user } = props;
 
     return (
         <React.Fragment>
@@ -42,7 +42,9 @@ function Home(props) {
                 {/* Hero unit */}
                 <div className={classes.heroContent}>
                     <Typography component="h1" variant="h2" align="center" color="textPrimary" gutterBottom>
-                        Hewwo!
+                        Hewwo
+                        {" " + user.username}
+                        !
                     </Typography>
                     <Typography variant="h6" align="center" color="textSecondary" component="p">
                         if you&#39;re here, you know what you are doing. if you don&#39;t, ask your friendly furry
