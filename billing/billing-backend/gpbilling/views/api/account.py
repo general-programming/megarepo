@@ -19,11 +19,11 @@ class AccountResource(ResourceBase):
 
         return g.user.to_dict()
 
-    @ns.param("email", "New email", type=str)
-    @ns.param("email_verify", "New email to verify", type=str)
-    @ns.param("password", "New password", type=str)
-    @ns.param("new_password", "New password to verify", type=str)
-    @ns.param("refresh_stripe", "Attempt to relink with a Stripe customer object", type=str)
+    @ns.param("email", "New email", _in="formData", type=str)
+    @ns.param("email_verify", "New email to verify", _in="formData", type=str)
+    @ns.param("password", "New password", _in="formData", type=str)
+    @ns.param("new_password", "New password to verify", _in="formData", type=str)
+    @ns.param("refresh_stripe", "Attempt to relink with a Stripe customer object", _in="formData", type=str)
     def put(self):
         if not g.user:
             return {"error": "You are not logged in."}, 403
@@ -46,10 +46,10 @@ class AccountResource(ResourceBase):
 
 @ns.route("/register")
 class AccountRegisterResource(ResourceBase):
-    @ns.param("username", "Username", type=str, required=True)
-    @ns.param("password", "Password", type=str, required=True)
-    @ns.param("password_verify", "Password to verify", type=str, required=True)
-    @ns.param("email", "Email", type=str, required=True)
+    @ns.param("username", "Username", type=str, _in="formData", required=True)
+    @ns.param("password", "Password", type=str, _in="formData", required=True)
+    @ns.param("password_verify", "Password to verify", type=str, _in="formData", required=True)
+    @ns.param("email", "Email", type=str, _in="formData", required=True)
     def post(self):
         username = self.get_field("username")
         password = self.get_field("password")
