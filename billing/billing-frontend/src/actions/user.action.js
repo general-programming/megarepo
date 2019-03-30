@@ -7,6 +7,7 @@ import {
     login as LoginUser,
     logout as LogoutUser,
     register as RegisterUser,
+    getUser as GetUser,
 } from '../services/user.service';
 
 export const register = (user) => {
@@ -55,4 +56,24 @@ export const login = (username, password) => {
 export const logout = () => {
     LogoutUser();
     return { type: USER_TYPES.LOGOUT };
+};
+
+export const getUser = () => {
+    function request(user) { return { type: USER_TYPES.INIT }; }
+    function success(user) { return { type: USER_TYPES.LOGIN_SUCCESS, user }; }
+    function failure(error) { return { type: USER_TYPES.LOGIN_FAILURE, error }; }
+
+    return (dispatch) => {
+        dispatch(request());
+
+        GetUser()
+            .then(
+                (user) => {
+                    dispatch(success(user));
+                },
+                (error) => {
+                    dispatch(failure(error.toString()));
+                },
+            );
+    };
 };

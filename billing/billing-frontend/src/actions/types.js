@@ -9,4 +9,6 @@ export const USER_TYPES = {
     LOGIN_FAILURE: 'USER_LOGIN_FAILURE',
 
     LOGOUT: 'USER_LOGOUT',
+
+    INIT: 'INIT',
 };

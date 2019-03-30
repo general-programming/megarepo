@@ -15,8 +15,6 @@ export const loginUser = userData => dispatch => {
     .then(res => res.json())
     .then(response => {
         const { password, name } = response;
-        // Set user in localstorage
-        localStorage.setItem("user", JSON.stringify(response));
         // Dispatch that the user was changed
         dispatch(setCurrentUser(name))
     })
@@ -38,8 +36,6 @@ export const setCurrentUser = decoded => {
   
 // Log user out
 export const logoutUser = () => dispatch => {
-    // Remove token from localStorage
-    localStorage.removeItem("user");
     // Remove auth header for future requests
     // setAuthToken(false);
     // Set current user to {} which will set isAuthenticated to false

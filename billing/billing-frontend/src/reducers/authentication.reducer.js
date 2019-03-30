@@ -1,8 +1,6 @@
 import { USER_TYPES } from '../actions/types';
 
-// eslint-disable-next-line prefer-const
-let user = JSON.parse(localStorage.getItem('user'));
-const initialState = user ? { loggedIn: true, user } : {};
+const initialState = { notReady: true, loading: false };
 
 export function authentication(state = initialState, action) {
     switch (action.type) {
@@ -22,6 +20,8 @@ export function authentication(state = initialState, action) {
             };
         case USER_TYPES.LOGOUT:
             return {};
+        case USER_TYPES.INIT:
+            return { notReady: true, loading: true };
         default:
             return state;
     }

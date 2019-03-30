@@ -9,6 +9,7 @@ import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
 
 import './App.css';
 
+import InitialLoader from './components/InitialLoader';
 import PrivateRoute from './components/PrivateRoute';
 
 import HomePage from './components/Home/HomePage';
@@ -42,10 +43,12 @@ class App extends Component {
                 <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
                     <Elements>
                         <Router>
-                            <PrivateRoute path="/" exact component={HomePage} />
+                            <InitialLoader>
+                                <PrivateRoute path="/" exact component={HomePage} />
 
-                            <Route path="/login" exact component={LoginPage} />
-                            <Route path="/register" exact component={RegisterPage} />
+                                <Route path="/login" exact component={LoginPage} />
+                                <Route path="/register" exact component={RegisterPage} />
+                            </InitialLoader>
                         </Router>
                     </Elements>
                 </StripeProvider>
