@@ -55,21 +55,10 @@ class Account(Base):
         return hashpw(password.encode("utf8"), self.password.encode()).decode("utf8") == self.password
 
     def to_dict(self):
-        subscriptions = {}
-
-        if self.stripe_customer:
-            for subscription in stripe.Subscription.list(customer=self.stripe_customer)["data"]:
-                subscriptions[subscription["id"]] = {
-                    "name": subscription["plan"]["nickname"],
-                    "price": subscription["plan"]["amount"] / 100.0,
-                    "currency": subscription["plan"]["currency"],
-                }
-
         return {
             "id": self.id,
             "github_id": self.github_id or None,
             "email": self.email,
             "email_verified": self.email_verified,
             "stripe_linked": hasattr(self, "stripe_customer") and self.stripe_customer != "",
-            "subscriptions": subscriptions,
         }
