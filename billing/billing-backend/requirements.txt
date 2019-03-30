@@ -1,6 +1,6 @@
 redis
 hiredis
-raven
+sentry-sdk
 sqlalchemy
 psycopg2
 flask

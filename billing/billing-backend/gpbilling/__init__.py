@@ -5,13 +5,21 @@ import os
 from flask import Flask
 from flask_mail import Mail
 
+import sentry_sdk
 import stripe
 
+from sentry_sdk.integrations.flask import FlaskIntegration
 from werkzeug.contrib.fixers import ProxyFix
-from raven.contrib.flask import Sentry
 
 from gpbilling.model.handlers import (init_stripe, before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
                                       disconnect_sql)
+
+# Setup sentry before app
+sentry_sdk.init(
+    dsn=os.environ.get("SENTRY_DSN", None),
+    integrations=[FlaskIntegration()]
+)
+
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", os.environ.get("SECRET_KEY"))
@@ -38,14 +46,6 @@ if "DEBUG" in os.environ:
 
 if app.debug:
     app.config["TEMPLATES_AUTO_RELOAD"] = True
-
-app.config["SENTRY_INCLUDE_PATHS"] = ["gpbilling"]
-sentry = Sentry(
-    app,
-    dsn=app.config.get("SENTRY_DSN", None),
-    logging=True,
-    level=logging.ERROR,
-)
 
 # Handlers
 
