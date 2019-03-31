@@ -99,7 +99,7 @@ class RegisterForm extends React.Component {
             return;
         }
 
-        dispatch(history, register(data));
+        dispatch(register(data));
     }
 
     render() {

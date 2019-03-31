@@ -97,7 +97,7 @@ class LoginForm extends React.Component {
             return;
         }
 
-        dispatch(login(history, username, password));
+        dispatch(login(username, password));
     }
 
     render() {

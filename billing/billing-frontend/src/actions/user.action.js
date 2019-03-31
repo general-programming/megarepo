@@ -8,7 +8,9 @@ import {
     getUser as GetUser,
 } from '../services/user.service';
 
-export const register = (history, user) => {
+import { history } from '../helpers/history';
+
+export const register = (user) => {
     function request(user) { return { type: USER_TYPES.REGISTER_REQUEST, user }; }
     function success(user) { return { type: USER_TYPES.REGISTER_SUCCESS, user }; }
     function failure(error) { return { type: USER_TYPES.REGISTER_FAILURE, error }; }
@@ -30,7 +32,7 @@ export const register = (history, user) => {
     };
 };
 
-export const login = (history, username, password) => {
+export const login = (username, password) => {
     function request(user) { return { type: USER_TYPES.LOGIN_REQUEST, user }; }
     function success(user) { return { type: USER_TYPES.LOGIN_SUCCESS, user }; }
     function failure(error) { return { type: USER_TYPES.LOGIN_FAILURE, error }; }
