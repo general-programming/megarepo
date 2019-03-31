@@ -42,6 +42,7 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:payapi.catgirls.dev
+        - traefik.frontend.passHostHeader=true
       restart_policy:
         condition: any
 

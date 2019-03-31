@@ -10,7 +10,6 @@ import Paper from '@material-ui/core/Paper';
 import FormControl from '@material-ui/core/FormControl';
 import Typography from '@material-ui/core/Typography';
 import withStyles from '@material-ui/core/styles/withStyles';
-import { withRouter } from 'react-router-dom';
 import { connect } from 'react-redux';
 
 import compactLogo from '../../assets/img/logo-square-compact.png';
@@ -195,4 +194,4 @@ RegisterForm.propTypes = {
     dispatch: PropTypes.func,
 };
 
-export default connect(mapStateToProps)(withStyles(styles)(withRouter(RegisterForm)));
+export default connect(mapStateToProps)(withStyles(styles)(RegisterForm));

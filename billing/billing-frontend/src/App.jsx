@@ -2,13 +2,16 @@
 /* eslint-disable react/prefer-stateless-function */
 import React, { Component } from 'react';
 
-import { BrowserRouter as Router, Route } from 'react-router-dom';
+import { Router, Route } from 'react-router-dom';
 import { StripeProvider, Elements } from 'react-stripe-elements';
 
 import { MuiThemeProvider, createMuiTheme } from '@material-ui/core/styles';
 
 import './App.css';
 
+import { history } from './helpers/history';
+
+import InitialLoader from './components/InitialLoader';
 import PrivateRoute from './components/PrivateRoute';
 
 import HomePage from './components/Home/HomePage';
@@ -41,12 +44,14 @@ class App extends Component {
             <MuiThemeProvider theme={theme}>
                 <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
                     <Elements>
-                        <Router>
-                            <PrivateRoute path="/" exact component={HomePage} />
+                        <InitialLoader>
+                            <Router history={ history }>
+                                <PrivateRoute path="/" exact component={HomePage} />
 
-                            <Route path="/login" exact component={LoginPage} />
-                            <Route path="/register" exact component={RegisterPage} />
-                        </Router>
+                                <Route path="/login" exact component={LoginPage} />
+                                <Route path="/register" exact component={RegisterPage} />
+                            </Router>
+                        </InitialLoader>
                     </Elements>
                 </StripeProvider>
             </MuiThemeProvider>

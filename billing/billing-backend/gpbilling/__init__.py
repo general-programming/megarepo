@@ -3,6 +3,7 @@ import logging
 import os
 
 from flask import Flask
+from flask_cors import CORS
 from flask_mail import Mail
 
 import sentry_sdk
@@ -25,6 +26,15 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", os.environ.get("SECRET_KEY"))
 app.config["SESSION_COOKIE_NAME"] = "gpbilling"
 app.wsgi_app = ProxyFix(app.wsgi_app)
+
+# CORS
+CORS(
+    app=app,
+    origins=[
+        "https://pay.generalprogrmaming.org",
+        "https://pay.catgirls.dev"
+    ]
+)
 
 # Mail
 app.config["MAIL_SERVER"] = os.environ.get("MAIL_SERVER", "localhost")

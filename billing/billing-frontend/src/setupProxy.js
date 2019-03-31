@@ -2,11 +2,12 @@ const proxy = require('http-proxy-middleware');
 
 module.exports = (app) => {
     app.use(proxy('/api', {
-        target: 'https://pay.generalprogramming.org/api/',
+        target: 'https://payapi.catgirls.dev/',
         pathRewrite: {
             '^/api': '',
         },
         changeOrigin: true,
+        autoRewrite: true,
         secure: false,
     }));
 
