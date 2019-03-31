@@ -8,7 +8,6 @@ import LoadingScreen from './LoadingScreen';
 
 // eslint-disable-next-line react/prop-types
 const InitialLoader = ({ auth, dispatch, ...rest }) => {
-    console.log(auth);
 
     if (auth.notReady) {
         if (!auth.loading) {
