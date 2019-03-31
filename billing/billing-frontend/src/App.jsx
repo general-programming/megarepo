@@ -42,14 +42,14 @@ class App extends Component {
             <MuiThemeProvider theme={theme}>
                 <StripeProvider apiKey={stripeKey} betas={stripeBetas}>
                     <Elements>
-                        <Router>
-                            <InitialLoader>
+                        <InitialLoader>
+                            <Router>
                                 <PrivateRoute path="/" exact component={HomePage} />
 
                                 <Route path="/login" exact component={LoginPage} />
                                 <Route path="/register" exact component={RegisterPage} />
-                            </InitialLoader>
-                        </Router>
+                            </Router>
+                        </InitialLoader>
                     </Elements>
                 </StripeProvider>
             </MuiThemeProvider>

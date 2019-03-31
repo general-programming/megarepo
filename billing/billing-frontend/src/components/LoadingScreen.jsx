@@ -1,11 +1,10 @@
 /* eslint-disable max-len */
 import React from 'react';
 import PropTypes from 'prop-types';
-import CssBaseline from '@material-ui/core/CssBaseline';
+
 import LinearProgress from '@material-ui/core/LinearProgress';
 import Typography from '@material-ui/core/Typography';
 import { withStyles } from '@material-ui/core/styles';
-import { connect } from 'react-redux';
 
 const styles = theme => ({
     '@global': {
@@ -29,16 +28,13 @@ function Home(props) {
 
     return (
         <React.Fragment>
-            <CssBaseline />
             <main className={classes.layout}>
-                {/* Hero unit */}
                 <div className={classes.heroContent}>
                     <Typography variant="h3" align="center" component="p">
                         Loading
                     </Typography>
                     <LinearProgress className={classes.progress} />
                 </div>
-                {/* End hero unit */}
             </main>
         </React.Fragment>
     );

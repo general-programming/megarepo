@@ -59,7 +59,7 @@ export const logout = () => {
 };
 
 export const getUser = () => {
-    function request(user) { return { type: USER_TYPES.INIT }; }
+    function request() { return { type: USER_TYPES.INIT }; }
     function success(user) { return { type: USER_TYPES.LOGIN_SUCCESS, user }; }
     function failure(error) { return { type: USER_TYPES.LOGIN_FAILURE, error }; }
 
