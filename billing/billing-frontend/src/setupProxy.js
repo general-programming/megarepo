@@ -7,6 +7,7 @@ module.exports = (app) => {
             '^/api': '',
         },
         changeOrigin: true,
+        autoRewrite: true,
         secure: false,
     }));
 
