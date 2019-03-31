@@ -1,5 +1,4 @@
 import React from 'react';
-import { withRouter } from 'react-router-dom';
 import PropTypes from 'prop-types';
 import Avatar from '@material-ui/core/Avatar';
 import Button from '@material-ui/core/Button';
@@ -86,7 +85,7 @@ class LoginForm extends React.Component {
 
         const { username, password } = this.state;
         // eslint-disable-next-line react/prop-types
-        const { dispatch, history } = this.props;
+        const { dispatch } = this.props;
 
         const validation = validateLoginInput({ username, password });
         if (!validation.isValid) {
@@ -187,4 +186,4 @@ function mapStateToProps(state) {
     };
 }
 
-export default connect(mapStateToProps)(withRouter(withStyles(styles)(LoginForm)));
+export default connect(mapStateToProps)(withStyles(styles)(LoginForm));
