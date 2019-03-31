@@ -72,6 +72,11 @@ export const getUser = () => {
                     dispatch(success(user));
                 },
                 (error) => {
+                    if (error.toString() === "You are not logged in.") {
+                        dispatch(failure());
+                        return;
+                    }
+
                     dispatch(failure(error.toString()));
                 },
             );

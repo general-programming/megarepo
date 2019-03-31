@@ -18,6 +18,7 @@ const styles = {
     },
     grow: {
         flexGrow: 1,
+        textDecoration: "none",
     },
     menuButton: {
         marginLeft: -12,
@@ -37,16 +38,31 @@ function AppHeader(props) {
         <div className={classes.root}>
             <AppBar className={classes.appBar} position="static">
                 <Toolbar>
-                    <Typography variant="h6" color="inherit" className={classes.grow}>
+                    <Typography 
+                        variant="h6" 
+                        color="inherit" 
+                        className={classes.grow} 
+                        component={Link}
+                        to="/"
+                    >
                         General Programming&#39;s Store
                     </Typography>
                     {loggedIn ? (
-                        <Button
-                            color="inherit"
-                            onClick={logout}
-                        >
-                            Logout
-                        </Button>
+                        <>
+                            <Button
+                                color="inherit"
+                                component={Link}
+                                to="/profile"
+                            >
+                                Profile
+                            </Button>
+                            <Button
+                                color="inherit"
+                                onClick={logout}
+                            >
+                                Logout
+                            </Button>
+                        </>
                     ) : (
                         <Button
                             color="inherit"
