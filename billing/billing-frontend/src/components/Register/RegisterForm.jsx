@@ -88,7 +88,7 @@ class RegisterForm extends React.Component {
             password_verify,
         };
 
-        const { dispatch } = this.props;
+        const { dispatch, history } = this.props;
 
         const validation = validateRegisterInput(data);
         if (!validation.isValid) {
@@ -99,7 +99,7 @@ class RegisterForm extends React.Component {
             return;
         }
 
-        dispatch(register(data));
+        dispatch(history, register(data));
     }
 
     render() {

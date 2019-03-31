@@ -1,8 +1,6 @@
 /* eslint-disable no-shadow */
 import { USER_TYPES } from './types';
 
-import { history } from '../helpers/history';
-
 import {
     login as LoginUser,
     logout as LogoutUser,
@@ -10,7 +8,7 @@ import {
     getUser as GetUser,
 } from '../services/user.service';
 
-export const register = (user) => {
+export const register = (history, user) => {
     function request(user) { return { type: USER_TYPES.REGISTER_REQUEST, user }; }
     function success(user) { return { type: USER_TYPES.REGISTER_SUCCESS, user }; }
     function failure(error) { return { type: USER_TYPES.REGISTER_FAILURE, error }; }
@@ -32,7 +30,7 @@ export const register = (user) => {
     };
 };
 
-export const login = (username, password) => {
+export const login = (history, username, password) => {
     function request(user) { return { type: USER_TYPES.LOGIN_REQUEST, user }; }
     function success(user) { return { type: USER_TYPES.LOGIN_SUCCESS, user }; }
     function failure(error) { return { type: USER_TYPES.LOGIN_FAILURE, error }; }
