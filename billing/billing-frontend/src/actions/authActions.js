@@ -4,7 +4,7 @@ import { GET_ERRORS, SET_CURRENT_USER, CLEAR_CURRENT_USER } from "./types";
 
 // Login - Get User Token
 export const loginUser = userData => dispatch => {
-    var url = URL_SERVER + "/account/login"; // URL
+    var url = URL_SERVER + "/account/login/"; // URL
     fetch(url, {
         method: "POST",
         body: JSON.stringify(userData),
@@ -25,7 +25,7 @@ export const loginUser = userData => dispatch => {
         });
     });
 };
-  
+
 // Set logged in user
 export const setCurrentUser = decoded => {
     return {
@@ -33,7 +33,7 @@ export const setCurrentUser = decoded => {
         payload: decoded
     };
 };
-  
+
 // Log user out
 export const logoutUser = () => dispatch => {
     // Remove auth header for future requests

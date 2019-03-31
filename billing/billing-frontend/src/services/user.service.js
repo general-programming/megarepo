@@ -25,7 +25,7 @@ export const login = (username, password) => {
         body: JSON.stringify({ username, password }),
     };
 
-    return fetch(`${BASE_URL}/account/login`, requestOptions)
+    return fetch(`${BASE_URL}/account/login/`, requestOptions)
         .then(handleResponse)
         .then((user) => {
             return user;
@@ -39,7 +39,7 @@ export const register = (user) => {
         body: JSON.stringify(user),
     };
 
-    return fetch(`${BASE_URL}/account/register`, requestOptions).then(handleResponse);
+    return fetch(`${BASE_URL}/account/register/`, requestOptions).then(handleResponse);
 };
 
 export const logout = () => {
@@ -48,7 +48,7 @@ export const logout = () => {
         headers: { 'Content-Type': 'application/json' },
     };
 
-    return fetch(`${BASE_URL}/account/logout`, requestOptions)
+    return fetch(`${BASE_URL}/account/logout/`, requestOptions)
         .then(handleResponse)
         .then(() => {
             window.location.reload(true);
@@ -61,5 +61,5 @@ export const getUser = () => {
         headers: { 'Content-Type': 'application/json' },
     };
 
-    return fetch(`${BASE_URL}/account`, requestOptions).then(handleResponse);
+    return fetch(`${BASE_URL}/account/`, requestOptions).then(handleResponse);
 };
