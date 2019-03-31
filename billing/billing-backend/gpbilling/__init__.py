@@ -30,7 +30,10 @@ app.wsgi_app = ProxyFix(app.wsgi_app)
 # CORS
 CORS(
     app=app,
-    origins=["generalprogrmaming.org", "catgirls.dev"]
+    origins=[
+        "https://pay.generalprogrmaming.org",
+        "https://pay.catgirls.dev"
+    ]
 )
 
 # Mail
