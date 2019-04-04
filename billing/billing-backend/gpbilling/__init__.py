@@ -26,6 +26,7 @@ app = Flask(__name__)
 app.secret_key = os.environ.get("APP_SECRET", os.environ.get("SECRET_KEY"))
 app.config["SESSION_COOKIE_NAME"] = "gpbilling"
 app.wsgi_app = ProxyFix(app.wsgi_app)
+app.url_map.strict_slashes = False
 
 # CORS
 CORS(
