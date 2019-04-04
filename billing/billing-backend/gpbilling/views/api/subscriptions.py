@@ -11,6 +11,13 @@ ns = Namespace("subscriptions", "Subscriptions")
 
 @ns.route("/")
 class SubscriptionResource(ResourceBase):
+    def sub_to_dict(self, sub):
+        return sub["id"], {
+            "name": sub["plan"]["nickname"],
+            "price": sub["plan"]["amount"] / 100.0,
+            "currency": sub["plan"]["currency"],
+        }
+
     def get(self):
         subscriptions = {}
 
@@ -20,11 +27,13 @@ class SubscriptionResource(ResourceBase):
         if g.user.stripe_customer:
             try:
                 for subscription in stripe.Subscription.list(customer=g.user.stripe_customer)["data"]:
-                    subscriptions[subscription["id"]] = {
-                        "name": subscription["plan"]["nickname"],
-                        "price": subscription["plan"]["amount"] / 100.0,
-                        "currency": subscription["plan"]["currency"],
-                    }
+                    if "items" in subscription:
+                        for item in subscription["items"]:
+                            sub_id, sub_meta = self.sub_to_dict(item)
+                            subscriptions[sub_id] = sub_meta
+                    else:
+                        sub_id, sub_meta = self.sub_to_dict(subscription)
+                        subscriptions[sub_id] = sub_meta
             except InvalidRequestError as e:
                 if "No such customer" in str(e):
                     return {"error": "Customer object is invalid."}, 500
