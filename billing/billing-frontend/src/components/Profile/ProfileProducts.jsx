@@ -12,27 +12,26 @@ const styles = theme => ({
 });
 
 function ProfileProducts(props) {
-    const { classes } = props;
+    const { classes, subscriptions } = props;
 
     return (
         <div className={classes.container}>
             <Typography variant="h4" gutterBottom component="h2">
-                Your products
+                Your subscriptions
             </Typography>
-            <ProductItem />
-            <ProductItem />
-            <ProductItem />
-            <ProductItem />
-            <ProductItem />
+            {Object.keys(subscriptions).map((subID, i) => (
+                <ProductItem key={subID} product={subscriptions[subID]} />
+            ))}
         </div>
     );
 }
 
 function mapStateToProps(state) {
-    /*const { products } = state.products;
+    const { subscriptions } = state.subscriptions;
+
     return {
-        products,
-    };*/
+        subscriptions,
+    };
 }
 
 

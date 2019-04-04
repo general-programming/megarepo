@@ -1,4 +1,4 @@
-import React, { Component } from 'react';
+import React from 'react';
 import withStyles from '@material-ui/core/styles/withStyles';
 import Typography from '@material-ui/core/Typography';
 import Paper from '@material-ui/core/Paper';
@@ -13,7 +13,7 @@ const styles = theme => ({
     paper: {
         padding: theme.spacing.unit * 3,
         textAlign: 'left',
-        color: theme.palette.text.secondary
+        color: theme.palette.text.secondary,
     },
     avatar: {
         margin: 10,
@@ -23,7 +23,7 @@ const styles = theme => ({
     avatarContainer: {
         [theme.breakpoints.down('sm')]: {
             marginLeft: 0,
-            marginBottom: theme.spacing.unit * 4
+            marginBottom: theme.spacing.unit * 4,
         },
     },
     itemContainer: {
@@ -33,7 +33,7 @@ const styles = theme => ({
         [theme.breakpoints.down('sm')]: {
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'center'
+            justifyContent: 'center',
         },
     },
     baseline: {
@@ -46,14 +46,14 @@ const styles = theme => ({
             width: '100%',
             marginTop: theme.spacing.unit * 2,
             marginBottom: theme.spacing.unit * 2,
-            marginLeft: 0
+            marginLeft: 0,
         },
     },
     inline: {
         display: 'inline-block',
         marginLeft: theme.spacing.unit * 4,
         [theme.breakpoints.down('sm')]: {
-            marginLeft: 0
+            marginLeft: 0,
         },
     },
     inlineRight: {
@@ -64,66 +64,64 @@ const styles = theme => ({
         [theme.breakpoints.down('sm')]: {
             width: '100%',
             margin: 0,
-            textAlign: 'center'
+            textAlign: 'center',
         },
     },
 });
 
-class ProductItem extends Component {
-    render() {
-        const { classes } = this.props;
+const ProductItem = (props) => {
+    const { classes, product } = props;
 
-        return (
-            <div className={classes.root}>
-                <Paper className={classes.paper}>
-                    <div className={classes.itemContainer}>
-                        {/* <div className={classes.avatarContainer}>
-                            <Avatar className={classes.avatar}>
-                                <DescriptionIcon />
-                            </Avatar>
-                        </div> */}
-                        <div className={classes.baseline}>
-                            <div className={classes.inline}>
-                                <Typography style={{ textTransform: 'uppercase' }} color='secondary' gutterBottom>
-                                    Name
-                                </Typography>
-                                <Typography variant="h6" gutterBottom>
-                                    Yiff Delivery
-                                </Typography>
-                            </div>
-                            <div className={classes.inline}>
-                                <Typography style={{ textTransform: 'uppercase' }} color='secondary' gutterBottom>
-                                    Reccurence
-                                </Typography>
-                                <Typography variant="h6" gutterBottom>
-                                    Monthly
-                                </Typography>
-                            </div>
-                            <div className={classes.inline}>
-                                <Typography style={{ textTransform: 'uppercase' }} color='secondary' gutterBottom>
-                                    Creation date
-                                </Typography>
-                                <Typography variant="h6" gutterBottom>
-                                    01 February 2019
-                                </Typography>
-                            </div>
-                            <div className={classes.inline}>
-                                <Typography style={{ textTransform: 'uppercase' }} color='secondary' gutterBottom>
-                                    Amount
-                                </Typography>
-                                <Typography variant="h6" gutterBottom>
-                                    10 USD
-                                </Typography>
-                            </div>
+    return (
+        <div className={classes.root}>
+            <Paper className={classes.paper}>
+                <div className={classes.itemContainer}>
+                    {/* <div className={classes.avatarContainer}>
+                        <Avatar className={classes.avatar}>
+                            <DescriptionIcon />
+                        </Avatar>
+                    </div> */}
+                    <div className={classes.baseline}>
+                        <div className={classes.inline}>
+                            <Typography style={{ textTransform: 'uppercase' }} color="secondary" gutterBottom>
+                                Name
+                            </Typography>
+                            <Typography variant="h6" gutterBottom>
+                                {product.name}
+                            </Typography>
                         </div>
-                        <Button className={classes.button} variant="contained" color="primary">
-                            Unsubscribe
-                        </Button>
+                        <div className={classes.inline}>
+                            <Typography style={{ textTransform: 'uppercase' }} color="secondary" gutterBottom>
+                                Reccurence
+                            </Typography>
+                            <Typography variant="h6" gutterBottom>
+                                Monthly
+                            </Typography>
+                        </div>
+                        <div className={classes.inline}>
+                            <Typography style={{ textTransform: 'uppercase' }} color="secondary" gutterBottom>
+                                Creation date
+                            </Typography>
+                            <Typography variant="h6" gutterBottom>
+                                01 February 2019
+                            </Typography>
+                        </div>
+                        <div className={classes.inline}>
+                            <Typography style={{ textTransform: 'uppercase' }} color="secondary" gutterBottom>
+                                Amount
+                            </Typography>
+                            <Typography variant="h6" gutterBottom>
+                                {product.price} {product.currency.toUpperCase()}
+                            </Typography>
+                        </div>
                     </div>
-                </Paper>
-            </div>
-        )
-    }
-}
+                    <Button className={classes.button} variant="contained" color="primary">
+                        Unsubscribe
+                    </Button>
+                </div>
+            </Paper>
+        </div>
+    );
+};
 
 export default withStyles(styles)(ProductItem);
