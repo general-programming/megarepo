@@ -117,7 +117,7 @@ class ProductItem extends Component {
                             </div>
                         </div>
                         <Button className={classes.button} variant="contained" color="primary">
-                            Delete
+                            Unsubscribe
                         </Button>
                     </div>
                 </Paper>
