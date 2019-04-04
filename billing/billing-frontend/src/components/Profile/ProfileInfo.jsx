@@ -58,6 +58,15 @@ const styles = theme => ({
 
 function ProfileInfo(props) {
     const { classes, user } = props;
+    let unverifiedEmailElement = null;
+
+    if (!user.email_verified) {
+        unverifiedEmailElement = (
+            <Tooltip title="Not validated" placement="top">
+                <ErrorIcon className={classes.emailErrorIcon} />
+            </Tooltip>
+        );
+    }
 
     return (
         <React.Fragment>
@@ -86,14 +95,12 @@ function ProfileInfo(props) {
                         <Grid item xs={6}>
                             <Grid container justify="flex-start" alignItems="center">
                                 <Typography className={classes.text} color='secondary'>
-                                    Email 
+                                    Email
                                 </Typography>
-                                <Tooltip title="Not validated" placement="top">
-                                    <ErrorIcon className={classes.emailErrorIcon} />
-                                </Tooltip>
+                                {unverifiedEmailElement}
                             </Grid>
                             <Typography variant="h5" gutterBottom>
-                                {user.email} 
+                                {user.email}
                             </Typography>
                         </Grid>
                     </Grid>
