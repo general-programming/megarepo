@@ -18,3 +18,10 @@ services:
                 - "traefik.enable=true"
                 - "traefik.port=8008"
                 - "traefik.frontend.rule=Host:scuttle.thonk.dev"
+                - "traefik.docker.network=publicweb"
+networks:
+    app:
+        driver: overlay
+    publicweb:
+        driver: overlay
+        external: true
