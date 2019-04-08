@@ -8,6 +8,9 @@ services:
         volumes:
             - "/srv/ssb-pub:/home/node/.ssb/"
             - "./ssb-config.json:/home/node/.ssb/config"
+        networks:
+            - app
+            - publicweb
         deploy:
             restart_policy:
                 condition: on-failure
