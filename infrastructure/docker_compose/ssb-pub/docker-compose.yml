@@ -17,11 +17,9 @@ services:
             resources:
                 limits:
                     memory: 2048M
-            labels:
-                - "traefik.enable=true"
-                - "traefik.port=8008"
-                - "traefik.frontend.rule=Host:scuttle.thonk.dev"
-                - "traefik.docker.network=publicweb"
+            placement:
+                constraints:
+                    - node.labels.region == usa
 networks:
     app:
         driver: overlay
