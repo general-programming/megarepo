@@ -4,7 +4,7 @@
 			"net": [{
 				"scope": "public",
 				"host": "0.0.0.0",
-				"external": ["scuttle.thonk.dev"],
+				"external": ["scuttle.generalprogramming.org"],
 				"transform": "shs",
 				"port": 8008
 			}]

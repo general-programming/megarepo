@@ -19,7 +19,7 @@ services:
                     memory: 2048M
             placement:
                 constraints:
-                    - node.labels.region == usa
+                    - node.hostname == tcrp.catgirls.dev
 networks:
     app:
         driver: overlay
