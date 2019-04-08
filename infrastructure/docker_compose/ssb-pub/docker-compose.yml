@@ -15,6 +15,6 @@ services:
                 limits:
                     memory: 2048M
         labels:
-            traefik.enable: true
-            traefik.port: "8008"
-            traefik.frontend.rule: "Host:scuttle.thonk.dev"
+            - "traefik.enable=true"
+            - "traefik.port=8008"
+            - "traefik.frontend.rule=Host:scuttle.thonk.dev"
