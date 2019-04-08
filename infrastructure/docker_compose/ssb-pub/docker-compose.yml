@@ -1,20 +1,20 @@
 version: "3"
 
 services:
-	sbot:
-		image: ahdinosaur/ssb-pub
-		ports:
-			- "8008:8008"
-		volumes:
-			- "/srv/ssb-pub:/home/node/.ssb/"
-			- "./ssb-config.json:/home/node/.ssb/config"
-		deploy:
-			restart_policy:
-				condition: on-failure
-			resources:
-				limits:
-					memory: 2048M
-		labels:
-			traefik.enable: true
-			traefik.port: "8008"
-			traefik.frontend.rule: "Host:scuttle.thonk.dev"
+    sbot:
+        image: ahdinosaur/ssb-pub
+        ports:
+            - "8008:8008"
+        volumes:
+            - "/srv/ssb-pub:/home/node/.ssb/"
+            - "./ssb-config.json:/home/node/.ssb/config"
+        deploy:
+            restart_policy:
+                condition: on-failure
+            resources:
+                limits:
+                    memory: 2048M
+        labels:
+            traefik.enable: true
+            traefik.port: "8008"
+            traefik.frontend.rule: "Host:scuttle.thonk.dev"
