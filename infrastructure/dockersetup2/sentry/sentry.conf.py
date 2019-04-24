@@ -34,6 +34,9 @@ from sentry.utils.types import Bool
 import os
 import os.path
 
+import ldap
+from django_auth_ldap.config import LDAPSearch, GroupOfUniqueNamesType
+
 CONF_ROOT = os.path.dirname(__file__)
 env = os.environ.get
 
@@ -294,8 +297,54 @@ if 'SENTRY_RUNNING_UWSGI' not in os.environ and len(secret_key) < 32:
 SENTRY_OPTIONS['system.secret-key'] = secret_key
 SENTRY_FEATURES['projects:breadcrumbs'] = True
 
-# Custom Config
+# Auth
+AUTHENTICATION_BACKENDS = (
+    'sentry.utils.auth.EmailAuthBackend',
+    'social_auth.backends.github.GithubBackend',
+    'social_auth.backends.github_apps.GithubAppsBackend',
+)
 SENTRY_FEATURES['organizations:sso'] = True
-GITHUB_APP_ID = "42f02d9b8a6e2aef3baf"
-GITHUB_API_SECRET = "cc45e3e064f2d1a5fa9942d840537a51f817298d"
+
+# LDAP
+AUTH_LDAP_SERVER_URI = 'ldap://ipa.generalprogramming.org'
+AUTH_LDAP_BIND_DN = ''
+AUTH_LDAP_BIND_PASSWORD = ''
+
+AUTH_LDAP_USER_SEARCH = LDAPSearch(
+    'cn=users,cn=accounts,dc=ipa,dc=generalprogramming,dc=org',
+    ldap.SCOPE_SUBTREE,
+    '(uid=%(user)s)',
+)
+
+AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
+    '',
+    ldap.SCOPE_SUBTREE,
+    '(objectClass=groupOfUniqueNames)'
+)
+
+AUTH_LDAP_GROUP_TYPE = GroupOfUniqueNamesType()
+AUTH_LDAP_REQUIRE_GROUP = None
+AUTH_LDAP_DENY_GROUP = None
+
+AUTH_LDAP_USER_ATTR_MAP = {
+    'name': 'cn',
+    'email': 'mail'
+}
+
+AUTH_LDAP_FIND_GROUP_PERMS = False
+AUTH_LDAP_CACHE_GROUPS = True
+AUTH_LDAP_GROUP_CACHE_TIMEOUT = 3600
+
+AUTH_LDAP_DEFAULT_SENTRY_ORGANIZATION = u'Sentry'
+AUTH_LDAP_SENTRY_ORGANIZATION_ROLE_TYPE = 'member'
+AUTH_LDAP_SENTRY_USERNAME_FIELD = 'uid'
+AUTH_LDAP_SENTRY_ORGANIZATION_GLOBAL_ACCESS = True
+
+AUTHENTICATION_BACKENDS = AUTHENTICATION_BACKENDS + (
+    'sentry_ldap_auth.backend.SentryLdapBackend',
+)
+
+# Github
+# GITHUB_APP_ID = "42f02d9b8a6e2aef3baf"
+# GITHUB_API_SECRET = "cc45e3e064f2d1a5fa9942d840537a51f817298d"
 STATIC_URL = "/_static/"

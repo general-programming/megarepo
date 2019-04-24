@@ -1,8 +1,8 @@
 # Build from any git sha by passing `--build-arg SENTRY_BUILD=<sha>`
-FROM python:2.7.15-slim-jessie
+FROM python:2.7.16-slim-jessie
 
 # Cache breaker
-ENV CACHEBREAK 9
+ENV CACHEBREAK 10
 
 # add our user and group first to make sure their IDs get assigned consistently
 RUN groupadd -r sentry && useradd -r -m -g sentry sentry
@@ -19,6 +19,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         libxslt-dev \
         libyaml-dev \
         pkg-config \
+        libsasl2-dev \
+        libldap2-dev \
+        libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Sane defaults for pip
