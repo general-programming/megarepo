@@ -8,6 +8,8 @@ import {
     getUser as GetUser,
 } from '../services/user.service';
 
+import { getSubscriptions } from './subscriptions.action';
+
 import { history } from '../helpers/history';
 
 export const register = (user) => {
@@ -44,6 +46,7 @@ export const login = (username, password) => {
             .then(
                 (user) => {
                     dispatch(success(user));
+                    dispatch(getSubscriptions());
                     history.push('/');
                 },
                 (error) => {
@@ -69,6 +72,7 @@ export const getUser = () => {
         GetUser()
             .then(
                 (user) => {
+                    dispatch(getSubscriptions());
                     dispatch(success(user));
                 },
                 (error) => {

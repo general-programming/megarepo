@@ -12,7 +12,7 @@ const styles = theme => ({
 });
 
 function ProfileProducts(props) {
-    const { classes, subscriptions } = props;
+    const { classes, subscriptions, subscriptionsError } = props;
 
     return (
         <div className={classes.container}>
@@ -22,15 +22,20 @@ function ProfileProducts(props) {
             {Object.keys(subscriptions).map((subID, i) => (
                 <ProductItem key={subID} product={subscriptions[subID]} />
             ))}
+            <p>
+                {subscriptionsError}
+            </p>
         </div>
     );
 }
 
 function mapStateToProps(state) {
     const { subscriptions } = state.subscriptions;
+    const subscriptionsError = state.subscriptions.error;
 
     return {
         subscriptions,
+        subscriptionsError,
     };
 }
 

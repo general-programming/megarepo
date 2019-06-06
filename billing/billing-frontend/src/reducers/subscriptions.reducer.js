@@ -21,6 +21,7 @@ export function subscriptions(state = initialState, action) {
             return {
                 ...state,
                 error: action.error,
+                loaded: true,
             };
         default:
             return state;
