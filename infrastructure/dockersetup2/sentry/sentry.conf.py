@@ -65,9 +65,8 @@ if postgres:
                 env('SENTRY_POSTGRES_PORT')
                 or ''
             ),
-            'OPTIONS': {
-                'autocommit': True,
-            },
+            'AUTOCOMMIT': True,
+            'ATOMIC_REQUESTS': False,
         },
     }
 
@@ -204,7 +203,7 @@ SENTRY_QUOTAS = 'sentry.quotas.redis.RedisQuota'
 # The TSDB is used for building charts as well as making things like per-rate
 # alerts possible.
 
-SENTRY_TSDB = 'sentry.tsdb.redis.RedisTSDB'
+SENTRY_TSDB = 'sentry.tsdb.redissnuba.RedisSnubaTSDB'
 
 ###########
 # Digests #
@@ -348,3 +347,7 @@ AUTHENTICATION_BACKENDS = AUTHENTICATION_BACKENDS + (
 # GITHUB_APP_ID = "42f02d9b8a6e2aef3baf"
 # GITHUB_API_SECRET = "cc45e3e064f2d1a5fa9942d840537a51f817298d"
 STATIC_URL = "/_static/"
+
+SENTRY_SEARCH = 'sentry.search.snuba.SnubaSearchBackend'
+SENTRY_TAGSTORE = 'sentry.tagstore.snuba.SnubaCompatibilityTagStorage'
+SENTRY_EVENTSTREAM = 'sentry.eventstream.snuba.SnubaEventStream'

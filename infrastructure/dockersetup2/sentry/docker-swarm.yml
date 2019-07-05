@@ -13,6 +13,18 @@ services:
         constraints:
           - node.labels.region == usa
 
+  snuba:
+    image: getsentry/snuba:latest
+    env_file: .env
+    networks:
+      - sentry
+    deploy:
+      restart_policy:
+        condition: any
+      placement:
+        constraints:
+          - node.labels.region == usa
+
   worker:
     build: .
     image: registry.nepeat.com/sentry
