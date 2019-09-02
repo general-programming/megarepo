@@ -7,7 +7,7 @@
         - "host    all             all             192.168.0.0/16          md5"
     - role: ansible-elasticsearch
       es_major_version: "7.x"
-      es_version: 7.3.0
+      es_version: 7.3.1
       es_instance_name: 'elklog_{{ ansible_hostname | replace("-", "_") }}'
       es_data_dirs:
         - /var/lib/elasticsearch

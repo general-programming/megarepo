@@ -37,7 +37,7 @@
         },
         {
             "es": {
-                "default_index": "kubernetes-*"
+                "default_index": "filebeat-*"
             },
             "tail_interval_in_seconds": 10,
             "es_index_time_offset_in_seconds": 0,
@@ -50,11 +50,11 @@
             "fields": {
                 "mapping": {
                     "timestamp": "@timestamp",
-                    "hostname": "kubernetes.host",
-                    "program": "kubernetes.pod_name",
-                    "message": "log"
+                    "hostname": "host.name",
+                    "program": "log.file.path",
+                    "message": "message"
                 },
-                "message_format": "{{{kubernetes.namespace_name}}} - {{{log}}}"
+                "message_format": "{{{program}}} - {{{message}}}"
             },
             "color_mapping": {
                 "field": "stream",
