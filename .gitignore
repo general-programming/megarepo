@@ -19,3 +19,4 @@ infrastructure/provision_ansible/inventory/nepeat_hosts
 # Language garbage
 node_modules/
 *.egg-info
+infrastructure/dockersetup2/pleroma/config/secret.exs
