@@ -16,6 +16,8 @@ services:
         # Routes
         - traefik.main.frontend.rule=Host:www.nepeat.com,nepeat.com
         - traefik.portfolio.frontend.rule=Host:portfolio.nepeat.com
+        - traefik.gaysounds.frontend.rule=Host:gaysounds.shitpos.ts.it
+        - traefik.rpan.frontend.rule=Host:rpan.generalprogramming.org
         # - traefik.soy.frontend.rule=Host:www.fucking.soy,fucking.soy
       restart_policy:
         condition: any
