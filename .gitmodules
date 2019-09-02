@@ -4,3 +4,6 @@
 [submodule "mailapis"]
 	path = mailapis
 	url = git@github.com:general-programming/mailapis.git
+[submodule "infrastructure/provision_ansible/roles/ansible-node-exporter"]
+	path = infrastructure/provision_ansible/roles/ansible-node-exporter
+	url = https://github.com/cloudalchemy/ansible-node-exporter.git
