@@ -5,7 +5,7 @@ services:
     image: consul:1.6
     deploy:
       restart_policy:
-        condition: always
+        condition: any
       mode: global
     networks:
       - hostnet
