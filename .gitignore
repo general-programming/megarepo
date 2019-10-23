@@ -4,15 +4,9 @@
 .env
 infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
-infrastructure/k8s_configs/other/bot-secrets.yml
-infrastructure/k8s_configs/registry/auth
-infrastructure/k8s_configs/logging/01-secrets.yml
-infrastructure/k8s_configs/sentry/02-secrets.yml
 infrastructure/other/gitlab_runner_ssh_key
 infrastructure/docker_swarm/logging/docker-swarm.yml
 infrastructure/docker_swarm/registry/docker-swarm.yml
-infrastructure/k8s_configs/discourse/secrets.yml
-infrastructure/k8s_configs/minecraft/00-namespace.yml
 infrastructure/docker_swarm/sentry/.secret_env
 infrastructure/provision_ansible/inventory/nepeat_hosts
 
