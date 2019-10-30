@@ -26,8 +26,6 @@ services:
   #   networks:
   #     - minecraft
   #     - publicweb
-  #   environment:
-  #     - "constraint:node==kara"
 
   # gay-space-communism:
   #   build: .
@@ -55,8 +53,6 @@ services:
   #   networks:
   #     - minecraft
   #     - publicweb
-  #   environment:
-  #     - "constraint:node==kara"
 
   # offbeateggs:
   #   build: .
@@ -77,8 +73,6 @@ services:
   #       mode: host
   #   networks:
   #     - minecraft
-  #   environment:
-  #     - "constraint:node==kara"
 
   # chirstmaspack:
   #   build: .
@@ -96,8 +90,6 @@ services:
   #       mode: host
   #   networks:
   #     - minecraft
-  #   environment:
-  #     - "constraint:node==kara"
 
   sarenevanilla:
     build: .
@@ -115,8 +107,6 @@ services:
         mode: host
     networks:
       - minecraft
-    environment:
-      - "constraint:node==do-not-yiff-the-egg"
 
   uwuvanilla:
     build: .
@@ -134,8 +124,6 @@ services:
         mode: host
     networks:
       - minecraft
-    environment:
-      - "constraint:node==do-not-yiff-the-egg"
 
   uwuftb:
     build: .
@@ -153,8 +141,6 @@ services:
         mode: host
     networks:
       - minecraft
-    environment:
-      - "constraint:node==do-not-yiff-the-egg"
 
   moxvanilla:
     build: .
@@ -172,8 +158,6 @@ services:
         mode: host
     networks:
       - minecraft
-    environment:
-      - "constraint:node==do-not-yiff-the-egg"
 
 networks:
   minecraft:
