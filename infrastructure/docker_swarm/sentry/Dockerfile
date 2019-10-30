@@ -1,8 +1,8 @@
 # Build from any git sha by passing `--build-arg SENTRY_BUILD=<sha>`
-FROM python:2.7.16-slim-stretch
+FROM python:2.7.16-slim-buster
 
 # Cache breaker
-ENV CACHEBREAK 11
+ENV CACHEBREAK 1
 
 # add our user and group first to make sure their IDs get assigned consistently
 RUN groupadd -r sentry && useradd -r -m -g sentry sentry
@@ -89,14 +89,13 @@ RUN set -x \
     && python -c 'import maxminddb' \
     && apt-get purge -y --auto-remove make
 
-ENV NODE_VERSION 8.15.1
+ENV NODE_VERSION 10.16.3
 
 ARG SENTRY_BUILD=master
 ENV SENTRY_BUILD $SENTRY_BUILD
 
 RUN [ "$SENTRY_BUILD" != '' ] \
     # Install node to build assets
-    && export NODE_VERSION=8.15.1 \
     && export GNUPGHOME="$(mktemp -d)" \
     && export YARN_CACHE_FOLDER="$(mktemp -d)" \
     && buildDeps=" \

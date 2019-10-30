@@ -9,9 +9,6 @@ services:
     deploy:
       restart_policy:
         condition: any
-      placement:
-        constraints:
-          - node.labels.region == usa
 
   snuba:
     image: getsentry/snuba:latest
@@ -21,9 +18,6 @@ services:
     deploy:
       restart_policy:
         condition: any
-      placement:
-        constraints:
-          - node.labels.region == usa
 
   worker:
     build: .
@@ -35,9 +29,6 @@ services:
     deploy:
       restart_policy:
         condition: any
-      placement:
-        constraints:
-          - node.labels.region == usa
 
   cron:
     build: .
@@ -49,9 +40,6 @@ services:
     deploy:
       restart_policy:
         condition: any
-      placement:
-        constraints:
-          - node.labels.region == usa
 
   web:
     build: .
@@ -70,9 +58,6 @@ services:
         - traefik.frontend.rule=Host:sentry.nepeat.com
       restart_policy:
         condition: any
-      placement:
-        constraints:
-          - node.labels.region == usa
 
 networks:
   sentry:
