@@ -4,6 +4,3 @@ Mostly programs that aren't easy to adapt to swarm mode and old dockerfiles that
 ## Things to remove/port
 * GitLab runner
 * fluentd syslog ingest
-
-## No clue why this is here
-* ssb
