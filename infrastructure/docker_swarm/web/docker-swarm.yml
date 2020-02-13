@@ -18,6 +18,7 @@ services:
         - traefik.portfolio.frontend.rule=Host:portfolio.nepeat.com
         - traefik.gaysounds.frontend.rule=Host:gaysounds.shitpos.ts.it
         - traefik.rpan.frontend.rule=Host:rpan.generalprogramming.org
+        - traefik.erin_e2pm.frontend.rule=Host:www.e2.pm,e2.pm
         # - traefik.soy.frontend.rule=Host:www.fucking.soy,fucking.soy
       restart_policy:
         condition: any
