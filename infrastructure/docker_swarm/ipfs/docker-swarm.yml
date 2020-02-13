@@ -1,0 +1,16 @@
+version: "3.6"
+services:
+  ipfs:
+    image: ipfs/go-ipfs:latest
+    ports:
+      - target: 4001
+        published: 4001
+        mode: host
+      # - target: 5001
+      #   published: 127.0.0.1:5001
+      #   mode: host
+    volumes:
+      - /srv/var/ipfs:/data/ipfs
+    deploy:
+      restart_policy:
+        condition: any
