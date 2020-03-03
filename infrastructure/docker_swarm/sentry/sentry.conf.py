@@ -35,7 +35,7 @@ import os
 import os.path
 
 import ldap
-from django_auth_ldap.config import LDAPSearch, GroupOfUniqueNamesType
+from django_auth_ldap.config import LDAPSearch, GroupOfNamesType
 
 CONF_ROOT = os.path.dirname(__file__)
 env = os.environ.get
@@ -120,22 +120,27 @@ SENTRY_OPTIONS.update({
 # Sentry currently utilizes two separate mechanisms. While CACHES is not a
 # requirement, it will optimize several high throughput patterns.
 
-memcached = env('SENTRY_MEMCACHED_HOST') or (env('MEMCACHED_PORT_11211_TCP_ADDR') and 'memcached')
-if memcached:
-    memcached_port = (
-        env('SENTRY_MEMCACHED_PORT')
-        or '11211'
-    )
-    CACHES = {
-        'default': {
-            'BACKEND': 'django.core.cache.backends.memcached.MemcachedCache',
-            'LOCATION': [memcached + ':' + memcached_port],
-            'TIMEOUT': 3600,
-        }
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.memcached.MemcachedCache",
+        "LOCATION": ["memcached:11211"],
+        "TIMEOUT": 3600,
     }
+}
 
 # A primary cache is required for things such as processing events
-SENTRY_CACHE = 'sentry.cache.redis.RedisCache'
+SENTRY_CACHE = "sentry.cache.redis.RedisCache"
+
+DEFAULT_KAFKA_OPTIONS = {
+    "bootstrap.servers": "kafka:9092",
+    "message.max.bytes": 50000000,
+    "socket.timeout.ms": 1000,
+}
+
+SENTRY_EVENTSTREAM = "sentry.eventstream.kafka.KafkaEventStream"
+SENTRY_EVENTSTREAM_OPTIONS = {"producer_configuration": DEFAULT_KAFKA_OPTIONS}
+
+KAFKA_CLUSTERS["default"] = DEFAULT_KAFKA_OPTIONS
 
 #########
 # Queue #
@@ -205,6 +210,14 @@ SENTRY_QUOTAS = 'sentry.quotas.redis.RedisQuota'
 
 SENTRY_TSDB = 'sentry.tsdb.redissnuba.RedisSnubaTSDB'
 
+#########
+# SNUBA #
+#########
+
+SENTRY_SEARCH = "sentry.search.snuba.EventsDatasetSnubaSearchBackend"
+SENTRY_SEARCH_OPTIONS = {}
+SENTRY_TAGSTORE_OPTIONS = {}
+
 ###########
 # Digests #
 ###########
@@ -222,10 +235,10 @@ SENTRY_DIGESTS = 'sentry.digests.backends.redis.RedisBackend'
 
 SENTRY_OPTIONS["filestore.backend"] = 's3'
 SENTRY_OPTIONS["filestore.options"] = {
-    'access_key': '7VXP2J82OU8ZJL5LXOBG',
-    'secret_key': 'vLgKiXvQMC2dcCmeM/lmtYKkbP3G4MDAxaqsrakT',
+    'access_key': 'SENTRY_MINIO_INTERNAL',
+    'secret_key': 'MINIO_INSECURE_SECRET',
     'bucket_name': 'sentry',
-    'endpoint_url': 'http://192.168.10.1:9000'
+    'endpoint_url': 'http://minio:9000'
 }
 
 ##############
@@ -235,16 +248,19 @@ SENTRY_OPTIONS["filestore.options"] = {
 # If you're using a reverse SSL proxy, you should enable the X-Forwarded-Proto
 # header and set `SENTRY_USE_SSL=1`
 
-if Bool(env('SENTRY_USE_SSL', False)):
-    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
-    SESSION_COOKIE_SECURE = True
-    CSRF_COOKIE_SECURE = True
-
-SENTRY_WEB_HOST = '0.0.0.0'
+SENTRY_WEB_HOST = "0.0.0.0"
 SENTRY_WEB_PORT = 9000
 SENTRY_WEB_OPTIONS = {
+    "http": "%s:%s" % (SENTRY_WEB_HOST, SENTRY_WEB_PORT),
+    "protocol": "uwsgi",
+    # This is needed to prevent https://git.io/fj7Lw
+    "uwsgi-socket": None,
+    "http-keepalive": True,
+    "http-chunked-input": True,
+    "memory-report": False,
     # 'workers': 3,  # the number of web workers
 }
+
 
 ###############
 # Mail Server #
@@ -294,20 +310,18 @@ if 'SENTRY_RUNNING_UWSGI' not in os.environ and len(secret_key) < 32:
     print('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!')
 
 SENTRY_OPTIONS['system.secret-key'] = secret_key
-SENTRY_FEATURES['projects:breadcrumbs'] = True
 
 # Auth
 AUTHENTICATION_BACKENDS = (
     'sentry.utils.auth.EmailAuthBackend',
     'social_auth.backends.github.GithubBackend',
-    'social_auth.backends.github_apps.GithubAppsBackend',
 )
 SENTRY_FEATURES['organizations:sso'] = True
 
 # LDAP
 AUTH_LDAP_SERVER_URI = 'ldap://ipa.generalprogramming.org'
-AUTH_LDAP_BIND_DN = ''
-AUTH_LDAP_BIND_PASSWORD = ''
+AUTH_LDAP_BIND_DN = 'uid=sentrybind,cn=users,cn=accounts,dc=ipa,dc=generalprogramming,dc=org'
+AUTH_LDAP_BIND_PASSWORD = '03681cfb-ce34-4ac6-9ded-6a011960622c'
 
 AUTH_LDAP_USER_SEARCH = LDAPSearch(
     'cn=users,cn=accounts,dc=ipa,dc=generalprogramming,dc=org',
@@ -316,12 +330,18 @@ AUTH_LDAP_USER_SEARCH = LDAPSearch(
 )
 
 AUTH_LDAP_GROUP_SEARCH = LDAPSearch(
-    '',
+    'cn=groups,cn=accounts,dc=ipa,dc=generalprogramming,dc=org',
     ldap.SCOPE_SUBTREE,
-    '(objectClass=groupOfUniqueNames)'
+    '(objectClass=groupOfNames)'
 )
 
-AUTH_LDAP_GROUP_TYPE = GroupOfUniqueNamesType()
+AUTH_LDAP_SENTRY_GROUP_ROLE_MAPPING = {
+    'owner': ['superadmins'],
+    'admin': ['admins', 'superadmins'],
+    'member': ['ipausers'],
+}
+
+AUTH_LDAP_GROUP_TYPE = GroupOfNamesType()
 AUTH_LDAP_REQUIRE_GROUP = None
 AUTH_LDAP_DENY_GROUP = None
 
@@ -330,7 +350,7 @@ AUTH_LDAP_USER_ATTR_MAP = {
     'email': 'mail'
 }
 
-AUTH_LDAP_FIND_GROUP_PERMS = False
+AUTH_LDAP_FIND_GROUP_PERMS = True
 AUTH_LDAP_CACHE_GROUPS = True
 AUTH_LDAP_GROUP_CACHE_TIMEOUT = 3600
 
@@ -346,8 +366,36 @@ AUTHENTICATION_BACKENDS = AUTHENTICATION_BACKENDS + (
 # Github
 # GITHUB_APP_ID = "42f02d9b8a6e2aef3baf"
 # GITHUB_API_SECRET = "cc45e3e064f2d1a5fa9942d840537a51f817298d"
+GITHUB_EXTENDED_PERMISSIONS = ["repo"]
 STATIC_URL = "/_static/"
 
-SENTRY_SEARCH = 'sentry.search.snuba.SnubaSearchBackend'
-SENTRY_TAGSTORE = 'sentry.tagstore.snuba.SnubaCompatibilityTagStorage'
-SENTRY_EVENTSTREAM = 'sentry.eventstream.snuba.SnubaEventStream'
+############
+# Features #
+############
+
+SENTRY_FEATURES["projects:sample-events"] = False
+SENTRY_FEATURES.update(
+    {
+        feature: True
+        for feature in (
+            "organizations:discover",
+            "organizations:events",
+            "organizations:discover-basic",
+            "organizations:discover-query",
+            "organizations:events-v2",
+            "organizations:global-views",
+            "organizations:integrations-issue-basic",
+            "organizations:integrations-issue-sync",
+            "organizations:invite-members",
+            "organizations:sso-basic",
+            "organizations:sso-rippling",
+            "organizations:sso-saml2",
+            "projects:custom-inbound-filters",
+            "projects:data-forwarding",
+            "projects:discard-groups",
+            "projects:plugins",
+            "projects:rate-limits",
+            "projects:servicehooks",
+        )
+    }
+)
