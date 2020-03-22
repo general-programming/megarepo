@@ -16,3 +16,4 @@ node_modules/
 infrastructure/docker_swarm/pleroma/config/secret.exs
 infrastructure/docker_swarm/zabbix/.env_db_pgsql
 serverless/twilio-discordhook/.envrc
+.envrc_secret
