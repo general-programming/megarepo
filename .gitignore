@@ -2,6 +2,7 @@
 *.pyc
 .gitsecret/keys/random_seed
 .env
+.direnv/
 infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
 infrastructure/other/gitlab_runner_ssh_key
