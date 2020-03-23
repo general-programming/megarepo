@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+import sys
+import socket
+import json
+import random
+import requests
+
+DISCORD_WEBHOOK = "{{ discord_webhook }}"
+
+# easter egg
+if random.randint(0, 1000) <= 1:
+    valid = "you are cute and valid! <3 -{socket.gethostname()"
+else:
+    valid = f"the cute and valid dhcp server running on {socket.gethostname()}"
+
+requests.post(DISCORD_WEBHOOK, json={
+    "username": f"isc-dhcp-server",
+    "embeds": [{
+        "title": "DHCP IP allocated!",
+        # "description": ""
+        "fields": [
+            {"name": "IP", "value": sys.argv[1], "inline": True},
+            {"name": "Hostname", "value": sys.argv[2], "inline": True},
+            {"name": "MAC", "value": sys.argv[3], "inline": True},
+        ],
+        "footer": {
+            "text": valid
+        },
+    }]
+})
