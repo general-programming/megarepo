@@ -2,7 +2,7 @@ require 'spec_helper'
 require 'json'
 vars = JSON.parse(File.read('/tmp/vars.json'))
 
-families = {
+$families = {
   'Debian' => {
     'shell'    => '/bin/false',
     'password' => '*',
@@ -15,9 +15,9 @@ families = {
   }
 }
 
-family = families[vars['ansible_os_family']]
+$family = $families[vars['ansible_os_family']]
 
-es_api_url = "http://localhost:#{vars['es_api_port']}"
+es_api_url = "#{vars['es_api_scheme']}://localhost:#{vars['es_api_port']}"
 username = vars['es_api_basic_auth_username']
 password = vars['es_api_basic_auth_password']
 
@@ -88,9 +88,9 @@ shared_examples 'shared::init' do |vars|
     it { should belong_to_group vars['es_group'] }
     it { should have_uid vars['es_user_id'] } if vars.key?('es_user_id')
 
-    it { should have_login_shell family['shell'] }
+    it { should have_login_shell $family['shell'] }
 
-    its(:encrypted_password) { should eq(family['password']) }
+    its(:encrypted_password) { should eq($family['password']) }
   end
 
   describe package(vars['es_package_name']) do
@@ -108,11 +108,11 @@ shared_examples 'shared::init' do |vars|
   if vars['es_templates']
     describe file('/etc/elasticsearch/templates') do
       it { should be_directory }
-      it { should be_owned_by vars['es_user'] }
+      it { should be_owned_by 'root' }
     end
     describe file('/etc/elasticsearch/templates/basic.json') do
       it { should be_file }
-      it { should be_owned_by vars['es_user'] }
+      it { should be_owned_by 'root' }
     end
     #This is possibly subject to format changes in the response across versions so may fail in the future
     describe 'Template Contents Correct' do
@@ -129,7 +129,7 @@ shared_examples 'shared::init' do |vars|
     end
   end
 
-  describe file(family['defaults_path']) do
+  describe file($family['defaults_path']) do
     its(:content) { should match '' }
   end
 
@@ -138,7 +138,7 @@ shared_examples 'shared::init' do |vars|
       name = plugin['plugin']
       describe file('/usr/share/elasticsearch/plugins/'+name) do
         it { should be_directory }
-        it { should be_owned_by vars['es_user'] }
+        it { should be_owned_by 'root' }
       end
       it 'should be installed and the right version' do
         plugins = curl_json("#{es_api_url}/_nodes/plugins", username=username, password=password)
@@ -152,6 +152,7 @@ shared_examples 'shared::init' do |vars|
     end
   end
   describe file("/etc/elasticsearch/elasticsearch.yml") do
+    it { should be_owned_by 'root' }
     it { should contain "node.name: localhost" }
     it { should contain 'cluster.name: elasticsearch' }
     it { should_not contain "path.conf: /etc/elasticsearch" }

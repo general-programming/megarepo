@@ -19,7 +19,7 @@ provisioner:
     extra_vars:
       es_major_version: "<%= ENV['VERSION'] %>"
       <% if ENV['VERSION'] == '6.x' %>
-      es_version: '6.8.0'
+      es_version: '6.8.7'
       <% end %>
   <% end %>
 
@@ -131,4 +131,8 @@ suites:
   - name: issue-test
     provisioner:
       playbook: test/integration/issue-test.yml
+      idempotency_test: false
+  - name: xpack-upgrade-trial
+    provisioner:
+      playbook: test/integration/xpack-upgrade-trial.yml
       idempotency_test: false
