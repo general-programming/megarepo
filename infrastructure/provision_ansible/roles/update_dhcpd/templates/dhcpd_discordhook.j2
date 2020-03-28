@@ -21,6 +21,10 @@ def push_lease(ip, hostname, mac):
     if last_ip == ip:
         return
 
+    # Set hostname to a default if it is not set.
+    if not hostname:
+        hostname = "N/A"
+
     # Post the lease to Discord if is not the same.
     requests.post(DISCORD_WEBHOOK, json={
         "username": f"isc-dhcp-server",
