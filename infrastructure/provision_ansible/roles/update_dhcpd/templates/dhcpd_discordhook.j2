@@ -27,7 +27,7 @@ def push_lease(ip, hostname, mac):
 
     # Post the lease to Discord if is not the same.
     requests.post(DISCORD_WEBHOOK, json={
-        "username": f"isc-dhcp-server",
+        "username": "isc-dhcp-server",
         "embeds": [{
             "title": "DHCP IP allocated!",
             "color": random.randint(0, 16777215),
