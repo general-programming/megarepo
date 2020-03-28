@@ -10,7 +10,7 @@ DISCORD_WEBHOOK = "{{ discord_webhook }}"
 def push_lease(ip, hostname, mac):
     # easter egg :>
     if random.randint(0, 1000) <= 1:
-        valid = "you are cute and valid! <3 -{socket.gethostname()"
+        valid = f"you are cute and valid! <3 -{socket.gethostname()}"
     else:
         valid = f"the cute and valid dhcp server running on {socket.gethostname()}"
 
