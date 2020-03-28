@@ -399,3 +399,6 @@ SENTRY_FEATURES.update(
         )
     }
 )
+
+# Other
+SENTRY_URL_PREFIX = env('SENTRY_URL_PREFIX')
