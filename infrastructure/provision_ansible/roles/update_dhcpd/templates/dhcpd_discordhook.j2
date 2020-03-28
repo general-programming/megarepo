@@ -26,7 +26,7 @@ def push_lease(ip, hostname, mac):
         "username": f"isc-dhcp-server",
         "embeds": [{
             "title": "DHCP IP allocated!",
-            # "description": ""
+            "color": random.randint(0, 16777215),
             "fields": [
                 {"name": "IP", "value": ip, "inline": True},
                 {"name": "Hostname", "value": hostname, "inline": True},
