@@ -25,6 +25,9 @@ def push_lease(ip, hostname, mac):
     if not hostname:
         hostname = "N/A"
 
+    # Set the random seed to the MAC for the random color.
+    random.seed(mac_key)
+
     # Post the lease to Discord if is not the same.
     requests.post(DISCORD_WEBHOOK, json={
         "username": "isc-dhcp-server",
