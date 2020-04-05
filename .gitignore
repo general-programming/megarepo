@@ -20,3 +20,4 @@ serverless/twilio-discordhook/.envrc
 serverless/cfworker-netbox-discord/wrangler.toml
 infrastructure/docker_swarm/logging/.env_oauth
 infrastructure/docker_swarm/logging/.env_grafana
+infrastructure/docker_swarm/dex/config.yaml
