@@ -1,0 +1,36 @@
+
+version: "3.6"
+services:
+  redis:
+    image: redis:alpine
+    command: 'redis-server --save 0'
+    networks:
+      - requestbin
+    deploy:
+      restart_policy:
+        condition: any
+  app:
+    build: .
+    image: registry.nepeat.com/requestbin:latest
+    networks:
+      - requestbin
+      - publicweb
+    environment:
+      REALM: prod
+      REDIS_URL: "//redis:6379"
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=8000
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:requestbin.nepeat.com
+      restart_policy:
+        condition: any
+
+networks:
+  requestbin:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true

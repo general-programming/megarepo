@@ -1,8 +1,8 @@
-[submodule "requestbin"]
-	path = requestbin
+[submodule "services/requestbin"]
+	path = services/requestbin
 	url = git@github.com:general-programming/requestbin.git
-[submodule "mailapis"]
-	path = mailapis
+[submodule "services/mailapis"]
+	path = services/mailapis
 	url = git@github.com:general-programming/mailapis.git
 [submodule "infrastructure/provision_ansible/roles/ansible-node-exporter"]
 	path = infrastructure/provision_ansible/roles/ansible-node-exporter
