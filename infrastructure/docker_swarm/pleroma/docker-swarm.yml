@@ -1,0 +1,23 @@
+version: "3.6"
+services:
+  web:
+    build: .
+    image: pleroma
+    networks:
+      - publicweb
+    volumes:
+      - /srv/var/pleroma/uploads:/pleroma/uploads
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=4000
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:pleroma.catgirls.dev
+      restart_policy:
+        condition: any
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true

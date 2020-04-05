@@ -129,10 +129,9 @@ output.elasticsearch:
   ilm.rollover_alias: "auditbeat"
   ilm.pattern: "{now/d}-000001"
 
-  # Optional protocol and basic auth credentials.
-  #protocol: "https"
-  #username: "elastic"
-  #password: "changeme"
+  # Upload settings
+  bulk_max_size: 3200
+  worker: 2
 
 #----------------------------- Logstash output --------------------------------
 #output.logstash:
@@ -166,11 +165,5 @@ output.elasticsearch:
 # reporting is disabled by default.
 
 # Set to true to enable the monitoring reporter.
-xpack.monitoring.enabled: true
-
-# Uncomment to send the metrics to Elasticsearch. Most settings from the
-# Elasticsearch output are accepted here as well. Any setting that is not set is
-# automatically inherited from the Elasticsearch output configuration, so if you
-# have the Elasticsearch output configured, you can simply uncomment the
-# following line.
-xpack.monitoring.elasticsearch:
+monitoring:
+  enabled: true

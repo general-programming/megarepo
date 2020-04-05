@@ -1,0 +1,25 @@
+version: '3.6'
+
+services:
+  dex:
+    image: quay.io/dexidp/dex:v2.23.0
+    volumes:
+      - /etc/ipa/ca.crt:/ipa_ca.crt:ro
+      - /srv/etc/dex.yaml:/config.yaml:ro
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=5556
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:auth.generalprogramming.org
+      restart_policy:
+        condition: any
+    command: serve /config.yaml
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true

@@ -1,8 +1,0 @@
-version: '2'
-services:
-  tor:
-    build:
-      context: .
-    restart: always
-    volumes:
-      - /mnt/nfs/etc/tor:/etc/tor

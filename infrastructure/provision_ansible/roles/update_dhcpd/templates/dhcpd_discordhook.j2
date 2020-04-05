@@ -1,0 +1,53 @@
+#!/usr/bin/env python3
+import sys
+import socket
+import json
+import random
+import requests
+
+DISCORD_WEBHOOK = "{{ discord_webhook }}"
+
+def push_lease(ip, hostname, mac):
+    # easter egg :>
+    if random.randint(0, 1000) <= 1:
+        valid = f"you are cute and valid! <3 -{socket.gethostname()}"
+    else:
+        valid = f"the cute and valid dhcp server running on {socket.gethostname()}"
+
+    # Check with localhost Consul if the last MAC is equal to the the lease's MAC.
+    mac_key = mac.replace(":", "").lower()
+    last_ip = requests.get(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}?stale&raw").text
+
+    if last_ip == ip:
+        return
+
+    # Set hostname to a default if it is not set.
+    if not hostname:
+        hostname = "N/A"
+
+    # Set the random seed to the MAC for the random color.
+    random.seed(mac_key)
+
+    # Post the lease to Discord if is not the same.
+    requests.post(DISCORD_WEBHOOK, json={
+        "username": "isc-dhcp-server",
+        "embeds": [{
+            "title": "DHCP IP allocated!",
+            "color": random.randint(0, 16777215),
+            "fields": [
+                {"name": "IP", "value": ip, "inline": True},
+                {"name": "Hostname", "value": hostname, "inline": True},
+                {"name": "MAC", "value": mac, "inline": True},
+            ],
+            "footer": {
+                "text": valid
+            },
+        }]
+    })
+
+    # Push it to Consul too.
+    requests.put(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}", data=ip)
+
+if __name__ == "__main__":
+    ip, hostname, mac = sys.argv[1:4]
+    push_lease(ip, hostname, mac)

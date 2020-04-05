@@ -1,0 +1,25 @@
+- name: dhcpd - Generate leases config
+  local_action: shell python ../../scripts/netbox-macips.py
+  delegate_to: localhost
+  register: leases_output
+
+- name: dhcpd - Parse leases output
+  set_fact:
+    leases: "{{ leases_output.stdout|from_json }}"
+
+- name: dhcpd - Update config
+  template:
+    src: 00-dhcpd.j2
+    dest: /etc/dhcp/dhcpd.d/00-ansible.conf
+
+- name: dhcpd - Update webhook
+  template:
+    src: dhcpd_discordhook.j2
+    dest: /usr/local/bin/dhcpd_discordhook
+    mode: 0755
+
+- name: dhcpd - Restart
+  service:
+    name: "isc-dhcp-server"
+    enabled: true
+    state: restarted

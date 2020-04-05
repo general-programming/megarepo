@@ -1,0 +1,21 @@
+{
+  "name": "twilio-discordhook",
+  "version": "1.0.0",
+  "description": "Twilio Functions sample for the Serverless framework",
+  "scripts": {
+    "test": "echo \"No tests yet...\""
+  },
+  "keywords": [
+    "twilio",
+    "serverless"
+  ],
+  "dependencies": {
+    "@twilio-labs/serverless-twilio-runtime": "^1.0.0",
+    "axios": "^0.19.2",
+    "file-type": "^14.1.4",
+    "form-data": "^3.0.0"
+  },
+  "devDependencies": {
+    "eslint": "^6.8.0"
+  }
+}

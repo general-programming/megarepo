@@ -1,0 +1,184 @@
+version: "3.6"
+services:
+  # ftb-infinity-evolved:
+  #   build: .
+  #   image: registry.nepeat.com/minecraft-base
+  #   volumes:
+  #     - /srv/minecraft/globalroot:/root
+  #     - /srv/minecraft/ftb-infinity-evolved/data:/data
+  #     - /srv/minecraft/ftb-infinity-evolved/ssh:/etc/ssh
+  #   ports:
+  #     - target: 22
+  #       published: 2222
+  #       mode: host
+  #     - target: 25565
+  #       published: 25567
+  #       mode: host
+  #   deploy:
+  #     labels:
+  #       - traefik.enable=true
+  #       - traefik.port=8123
+  #       - traefik.docker.network=publicweb
+  #       # Routes
+  #       - traefik.frontend.rule=Host:ftbinfdynmap.nepeat.com
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - minecraft
+  #     - publicweb
+
+  # gay-space-communism:
+  #   build: .
+  #   image: registry.nepeat.com/minecraft-base
+  #   volumes:
+  #     - /srv/minecraft/globalroot:/root
+  #     - /srv/minecraft/gay-space-communism/data:/data
+  #     - /srv/minecraft/gay-space-communism/ssh:/etc/ssh
+  #   ports:
+  #     - target: 22
+  #       published: 2223
+  #       mode: host
+  #     - target: 25565
+  #       published: 25568
+  #       mode: host
+  #   deploy:
+  #     labels:
+  #       - traefik.enable=true
+  #       - traefik.port=8123
+  #       - traefik.docker.network=publicweb
+  #       # Routes
+  #       - traefik.frontend.rule=Host:gaysovietmaps.nepeat.com
+  #     restart_policy:
+  #       condition: any
+  #   networks:
+  #     - minecraft
+  #     - publicweb
+
+  # offbeateggs:
+  #   build: .
+  #   image: registry.nepeat.com/minecraft-base
+  #   volumes:
+  #     - /srv/minecraft/globalroot:/root
+  #     - /srv/minecraft/offbeateggs/data:/data
+  #     - /srv/minecraft/offbeateggs/ssh:/etc/ssh
+  #   ports:
+  #     - target: 22
+  #       published: 2224
+  #       mode: host
+  #     - target: 25565
+  #       published: 25569
+  #       mode: host
+  #     - target: 25566
+  #       published: 25570
+  #       mode: host
+  #   networks:
+  #     - minecraft
+
+  # chirstmaspack:
+  #   build: .
+  #   image: registry.nepeat.com/minecraft-base
+  #   volumes:
+  #     - /srv/minecraft/globalroot:/root
+  #     - /srv/minecraft/chirstmaspack/data:/data
+  #     - /srv/minecraft/chirstmaspack/ssh:/etc/ssh
+  #   ports:
+  #     - target: 22
+  #       published: 2225
+  #       mode: host
+  #     - target: 25565
+  #       published: 25571
+  #       mode: host
+  #   networks:
+  #     - minecraft
+
+  sarenevanilla:
+    build: .
+    image: registry.nepeat.com/minecraft-base
+    volumes:
+      - /srv/minecraft/globalroot:/root
+      - /srv/minecraft/sarene/data:/data
+      - /srv/minecraft/sarene/ssh:/etc/ssh
+    ports:
+      - target: 22
+        published: 2226
+        mode: host
+      - target: 25565
+        published: 25577
+        mode: host
+    networks:
+      - minecraft
+
+  uwuvanilla:
+    build: .
+    image: registry.nepeat.com/minecraft-base
+    volumes:
+      - /srv/minecraft/globalroot:/root
+      - /srv/minecraft/uwuvanilla/data:/data
+      - /srv/minecraft/uwuvanilla/ssh:/etc/ssh
+    ports:
+      - target: 22
+        published: 2227
+        mode: host
+      - target: 25565
+        published: 25578
+        mode: host
+    networks:
+      - minecraft
+
+  uwuftb:
+    build: .
+    image: registry.nepeat.com/minecraft-base
+    volumes:
+      - /srv/minecraft/globalroot:/root
+      - /srv/minecraft/uwuftb/data:/data
+      - /srv/minecraft/uwuftb/ssh:/etc/ssh
+    ports:
+      - target: 22
+        published: 2228
+        mode: host
+      - target: 25565
+        published: 25579
+        mode: host
+    networks:
+      - minecraft
+
+  moxvanilla:
+    build: .
+    image: registry.nepeat.com/minecraft-base
+    volumes:
+      - /srv/minecraft/globalroot:/root
+      - /srv/minecraft/mox_vanilla/data:/data
+      - /srv/minecraft/mox_vanilla/ssh:/etc/ssh
+    ports:
+      - target: 22
+        published: 2229
+        mode: host
+      - target: 25565
+        published: 25580
+        mode: host
+    networks:
+      - minecraft
+
+  toast:
+    build: .
+    image: registry.nepeat.com/minecraft-base
+    volumes:
+      - /srv/minecraft/globalroot:/root
+      - /srv/minecraft/toast/data:/data
+      - /srv/minecraft/toast/ssh:/etc/ssh
+    ports:
+      - target: 22
+        published: 2230
+        mode: host
+      - target: 25565
+        published: 25581
+        mode: host
+    networks:
+      - minecraft
+
+networks:
+  minecraft:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true

@@ -1,6 +1,12 @@
-[submodule "requestbin"]
-	path = requestbin
+[submodule "services/requestbin"]
+	path = services/requestbin
 	url = git@github.com:general-programming/requestbin.git
-[submodule "mailapis"]
-	path = mailapis
+[submodule "services/mailapis"]
+	path = services/mailapis
 	url = git@github.com:general-programming/mailapis.git
+[submodule "infrastructure/provision_ansible/roles/ansible-node-exporter"]
+	path = infrastructure/provision_ansible/roles/ansible-node-exporter
+	url = https://github.com/cloudalchemy/ansible-node-exporter.git
+[submodule "services/svg-render-server"]
+	path = services/svg-render-server
+	url = git@github.com:general-programming/svg-render-server.git

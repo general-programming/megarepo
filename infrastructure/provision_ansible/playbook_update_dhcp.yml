@@ -1,0 +1,7 @@
+- hosts: all_hosts
+  strategy: free
+  roles:
+    - role: update_dhcpd
+      when: dhcp_update
+  vars:
+    - discord_webhook: "{{ lookup('env', 'DISCORD_WEBHOOK_DEBUG') }}"

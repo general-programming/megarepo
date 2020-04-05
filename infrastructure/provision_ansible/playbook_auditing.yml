@@ -1,6 +1,0 @@
-- hosts: all_hosts
-  become: true
-  roles:
-    - role: setup_auditbeat
-  vars:
-    elastic_host: 192.168.3.2

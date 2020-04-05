@@ -1,0 +1,25 @@
+version: "3.6"
+services:
+  registry:
+    image: jellyfin/jellyfin:nightly
+    volumes:
+      - /srv/var/jellyfin/config:/config
+      - /srv/var/jellyfin/cache:/cache
+      - /srv/media:/media
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=8096
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.catgirl.rule=Host:jellyfin.catgirls.dev
+        - traefik.gp.rule=Host:jellyfin.generalprogramming.org
+      restart_policy:
+        condition: any
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true

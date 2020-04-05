@@ -2,8 +2,8 @@
   become: true
   roles:
     - role: update_packages
-    - role: setup_tincd
-      when: tinc_ip is defined and tinc_ip
+    - role: setup_ovs
+      when: ovs_ip is defined and ovs_ip
     - role: update_configs
     # - role: create_admin_user
     - role: setup_influxdb

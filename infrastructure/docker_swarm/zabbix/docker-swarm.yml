@@ -1,0 +1,171 @@
+version: '3.5'
+services:
+ zabbix-server:
+  image: zabbix/zabbix-server-pgsql:alpine-4.2-latest
+  ports:
+   - "10051:10051"
+  volumes:
+   - /etc/localtime:/etc/localtime:ro
+   - /etc/timezone:/etc/timezone:ro 
+   - /srv/zabbix/usr/lib/zabbix/alertscripts:/usr/lib/zabbix/alertscripts:ro
+   - /srv/zabbix/usr/lib/zabbix/externalscripts:/usr/lib/zabbix/externalscripts:ro
+   - /srv/zabbix/var/lib/zabbix/modules:/var/lib/zabbix/modules:ro
+   - /srv/zabbix/var/lib/zabbix/enc:/var/lib/zabbix/enc:ro
+   - /srv/zabbix/var/lib/zabbix/ssh_keys:/var/lib/zabbix/ssh_keys:ro
+   - /srv/zabbix/var/lib/zabbix/mibs:/var/lib/zabbix/mibs:ro
+   - /srv/zabbix/var/lib/zabbix/snmptraps:/var/lib/zabbix/snmptraps:ro
+  ulimits:
+   nproc: 65535
+   nofile:
+    soft: 20000
+    hard: 40000
+  deploy:
+    resources:
+      limits:
+        cpus: '0.70'
+        memory: 1G
+      reservations:
+        cpus: '0.5'
+        memory: 512M
+    labels:
+      com.zabbix.description: "Zabbix server with PostgreSQL database support"
+      com.zabbix.company: "Zabbix SIA"
+      com.zabbix.component: "zabbix-server"
+      com.zabbix.dbtype: "pgsql"
+      com.zabbix.os: "alpine"
+  env_file:
+   - .env_db_pgsql
+   - .env_srv
+  user: root
+  depends_on:
+   - zabbix-snmptraps
+  networks:
+   zbx_net_backend:
+     aliases:
+      - zabbix-server
+      - zabbix-server-pgsql
+      - zabbix-server-alpine-pgsql
+      - zabbix-server-pgsql-alpine
+  stop_grace_period: 30s
+
+ zabbix-web-nginx-pgsql:
+  image: zabbix/zabbix-web-nginx-pgsql:alpine-4.2-latest
+  links:
+   - zabbix-server:zabbix-server
+  volumes:
+   - /etc/localtime:/etc/localtime:ro
+   - /etc/timezone:/etc/timezone:ro
+   - /srv/zabbix/etc/ssl/nginx:/etc/ssl/nginx:ro
+  deploy:
+    resources:
+      limits:
+        cpus: '0.70'
+        memory: 512M
+      reservations:
+        cpus: '0.5'
+        memory: 256M
+    labels:
+      com.zabbix.description: "Zabbix frontend on Nginx web-server with PostgreSQL database support"
+      com.zabbix.company: "Zabbix SIA"
+      com.zabbix.component: "zabbix-frontend"
+      com.zabbix.webserver: "nginx"
+      com.zabbix.dbtype: "pgsql"
+      com.zabbix.os: "alpine"
+      traefik.enable: "true"
+      traefik.port: 80
+      traefik.docker.network: "publicweb"
+      # Routes
+      traefik.frontend.rule: "Host:zabbix.generalprogramming.org"
+  env_file:
+   - .env_db_pgsql
+   - .env_web
+  user: root
+  depends_on:
+   - zabbix-server
+  healthcheck:
+   test: ["CMD", "curl", "-f", "http://localhost"]
+   interval: 10s
+   timeout: 5s
+   retries: 3
+   start_period: 30s
+  networks:
+   zbx_net_backend:
+    aliases:
+     - zabbix-web-nginx-pgsql
+     - zabbix-web-nginx-alpine-pgsql
+     - zabbix-web-nginx-pgsql-alpine
+   publicweb:
+  stop_grace_period: 10s
+
+ zabbix-agent:
+  image: zabbix/zabbix-agent:alpine-4.2-latest
+  ports:
+   - "10050:10050"
+  volumes:
+   - /etc/localtime:/etc/localtime:ro
+   - /etc/timezone:/etc/timezone:ro
+   - /srv/zabbix/etc/zabbix/zabbix_agentd.d:/etc/zabbix/zabbix_agentd.d:ro
+   - /srv/zabbix/var/lib/zabbix/modules:/var/lib/zabbix/modules:ro
+   - /srv/zabbix/var/lib/zabbix/enc:/var/lib/zabbix/enc:ro
+   - /srv/zabbix/var/lib/zabbix/ssh_keys:/var/lib/zabbix/ssh_keys:ro
+  links:
+   - zabbix-server:zabbix-server
+  deploy:
+    resources:
+      limits:
+        cpus: '0.2'
+        memory: 128M
+      reservations:
+        cpus: '0.1'
+        memory: 64M
+    mode: global
+    labels:
+      com.zabbix.description: "Zabbix agent"
+      com.zabbix.company: "Zabbix SIA"
+      com.zabbix.component: "zabbix-agentd"
+      com.zabbix.os: "alpine"
+  env_file:
+   - .env_agent
+  user: root
+  privileged: true
+  pid: "host"
+  networks:
+   zbx_net_backend:
+    aliases:
+     - zabbix-agent
+     - zabbix-agent-passive
+     - zabbix-agent-alpine
+  stop_grace_period: 5s
+
+ zabbix-snmptraps:
+  image: zabbix/zabbix-snmptraps:alpine-4.2-latest
+  ports:
+   - "162:162/udp"
+  volumes:
+   - /srv/zabbix/var/lib/zabbix/snmptraps:/var/lib/zabbix/snmptraps:rw
+  deploy:
+    resources:
+      limits:
+        cpus: '0.5'
+        memory: 256M
+      reservations:
+        cpus: '0.25'
+        memory: 128M
+    labels:
+      com.zabbix.description: "Zabbix snmptraps"
+      com.zabbix.company: "Zabbix SIA"
+      com.zabbix.component: "snmptraps"
+      com.zabbix.os: "ubuntu"
+  user: root
+  networks:
+   zbx_net_backend:
+  stop_grace_period: 5s
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true
+  zbx_net_backend:
+    driver: overlay
+    driver_opts:
+      com.docker.network.enable_ipv6: "false"

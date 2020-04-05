@@ -3,7 +3,7 @@
 #
 # Marcin Hlybin, marcin.hlybin@gmail.com
 #
-from itertools import izip, izip_longest
+from itertools import zip_longest
 
 def zipped(list1, list2, longest=False, fillvalue=None):
     if all([type(x) is dict for x in list1]):
@@ -20,9 +20,9 @@ def zipped(list1, list2, longest=False, fillvalue=None):
         return list1
     else:
         if longest:
-            return list(izip_longest(list1, list2, fillvalue=fillvalue))
+            return list(zip_longest(list1, list2, fillvalue=fillvalue))
 
-        return list(izip(list1, list2))
+        return list(zip(list1, list2))
 
 def fill_list_with_empty_dicts(array, length):
     if len(array) < length:
