@@ -6,7 +6,6 @@
 infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
 infrastructure/other/gitlab_runner_ssh_key
-infrastructure/docker_swarm/logging/docker-swarm.yml
 infrastructure/docker_swarm/registry/docker-swarm.yml
 infrastructure/docker_swarm/sentry/.secret_env
 infrastructure/provision_ansible/inventory/nepeat_hosts
@@ -19,3 +18,5 @@ infrastructure/docker_swarm/zabbix/.env_db_pgsql
 serverless/twilio-discordhook/.envrc
 .envrc_secret
 serverless/cfworker-netbox-discord/wrangler.toml
+infrastructure/docker_swarm/logging/.env_oauth
+infrastructure/docker_swarm/logging/.env_grafana
