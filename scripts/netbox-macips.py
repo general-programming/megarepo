@@ -27,13 +27,16 @@ def generate_lease(hostname: str, mac: str, ip: str):
         "ip": ip,
     }
 
+def populate_dict(getter, resultdict):
+    for x in getter.all():
+        resultdict[x.id] = x
+
 if __name__ == "__main__":
-    for interface in netbox.virtualization.interfaces.all():
-        virtual_interfaces[interface.id] = interface
+    # Populate the virtual / physical interfaces dicts.
+    populate_dict(netbox.virtualization.interfaces, virtual_interfaces)
+    populate_dict(netbox.dcim.interfaces, dcim_interfaces)
 
-    for interface in netbox.dcim.interfaces.all():
-        dcim_interfaces[interface.id] = interface
-
+    # Iterate through all IPs that are IPv4.
     for ip in netbox.ipam.ip_addresses.filter(family=4):
         # Filer out the internal interfaces.
         if not is_internal(ip.address):
@@ -50,9 +53,8 @@ if __name__ == "__main__":
         elif ip.interface.virtual_machine:
             iface = virtual_interfaces[ip.interface.id]
 
-        mac = iface.mac_address
-
-        if not mac:
+        # Do not use IPs that do not have MAC addresses.
+        if not iface.mac_address:
             log.warning(f"{ip.address} missing MAC")
             continue
 
