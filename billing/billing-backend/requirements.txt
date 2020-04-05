@@ -1,0 +1,17 @@
+redis
+hiredis
+sentry-sdk
+sqlalchemy
+psycopg2
+flask
+gunicorn
+gevent
+alembic
+blinker
+Flask-Dance
+dogpile.cache
+flask_restplus
+bcrypt
+flask-mail
+stripe
+flask-cors

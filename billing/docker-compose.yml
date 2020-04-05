@@ -1,0 +1,54 @@
+version: "3.6"
+services:
+  redis:
+    image: redis:alpine
+    networks:
+      - billing
+    volumes:
+      - /srv/var/billing/redis:/data
+    deploy:
+      restart_policy:
+        condition: any
+
+  frontend:
+    build: billing-frontend
+    image: registry.nepeat.com/billing-frontend
+    networks:
+      - billing
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=80
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:pay.generalprogramming.org
+      restart_policy:
+        condition: any
+
+  backend:
+    build: billing-backend
+    image: registry.nepeat.com/billing-backend
+    networks:
+      - billing
+      - publicweb
+    environment:
+      REDIS_HOST: redis
+    env_file: .env
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=5000
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:payapi.catgirls.dev
+        - traefik.frontend.passHostHeader=true
+      restart_policy:
+        condition: any
+
+networks:
+  billing:
+    driver: overlay
+  publicweb:
+    driver: overlay
+    external: true
