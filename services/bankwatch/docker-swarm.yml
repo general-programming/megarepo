@@ -13,7 +13,7 @@ services:
 
   webhooks:
     build: .
-    image: registry.nepeat.com/bankwatch
+    image: registry.generalprogramming.org/bankwatch
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -28,7 +28,7 @@ services:
         - traefik.port=5000
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:bankwatch.api.nepeat.com
+        - traefik.frontend.rule=Host:bankwatch.api.generalprogramming.org
       restart_policy:
         condition: any
 

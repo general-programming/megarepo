@@ -12,7 +12,7 @@ x-sentry-defaults: &sentry_defaults
     context: .
     args:
       - SENTRY_IMAGE
-  image: registry.nepeat.com/sentry
+  image: registry.generalprogramming.org/sentry
   depends_on:
     - redis
     - memcached
@@ -131,7 +131,7 @@ services:
 
   snuba-cleanup:
     << : *snuba_defaults
-    image: registry.nepeat.com/snuba-cleanup-onpremise-local
+    image: registry.generalprogramming.org/snuba-cleanup-onpremise-local
     build:
       context: ./cron
       args:
@@ -147,7 +147,7 @@ services:
 
   symbolicator-cleanup:
     << : *restart_policy
-    image: registry.nepeat.com/symbolicator-cleanup-onpremise-local
+    image: registry.generalprogramming.org/symbolicator-cleanup-onpremise-local
     build:
       context: ./cron
       args:
@@ -184,11 +184,11 @@ services:
 
   sentry-cleanup:
     << : *sentry_defaults
-    image: registry.nepeat.com/sentry-cleanup-onpremise-local
+    image: registry.generalprogramming.org/sentry-cleanup-onpremise-local
     build:
       context: ./cron
       args:
-        BASE_IMAGE: 'registry.nepeat.com/sentry'
+        BASE_IMAGE: 'registry.generalprogramming.org/sentry'
     command: '"0 0 * * * gosu sentry sentry cleanup --days $SENTRY_EVENT_RETENTION_DAYS"'
 
 networks:

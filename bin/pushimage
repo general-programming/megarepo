@@ -1,8 +1,8 @@
 IMAGE_NAME="$1"
 
-docker tag "$IMAGE_NAME" "registry.nepeat.com/$IMAGE_NAME"
-docker push "registry.nepeat.com/$IMAGE_NAME"
+docker tag "$IMAGE_NAME" "registry.generalprogramming.org/$IMAGE_NAME"
+docker push "registry.generalprogramming.org/$IMAGE_NAME"
 
 echo "image updated, latest image is"
-echo "registry.nepeat.com/$IMAGE_NAME"
+echo "registry.generalprogramming.org/$IMAGE_NAME"
 echo "update the k8s file now, k thx"

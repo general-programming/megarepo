@@ -12,7 +12,7 @@ services:
 
   render:
     build: render_api
-    image: registry.nepeat.com/mailapi_render
+    image: registry.generalprogramming.org/mailapi_render
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -27,13 +27,13 @@ services:
         - traefik.port=8080
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:mailrender.api.nepeat.com
+        - traefik.frontend.rule=Host:mailrender.api.generalprogramming.org
       restart_policy:
         condition: on-failure
 
   webhooks:
     build: webhooks
-    image: registry.nepeat.com/mailapi_webhooks
+    image: registry.generalprogramming.org/mailapi_webhooks
     environment:
       REDIS_HOST: redis
       REDIS_PORT: 6379
@@ -48,7 +48,7 @@ services:
         - traefik.port=8080
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:mailhooker.api.nepeat.com
+        - traefik.frontend.rule=Host:mailhooker.api.generalprogramming.org
       restart_policy:
         condition: on-failure
 

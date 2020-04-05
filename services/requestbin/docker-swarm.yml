@@ -11,7 +11,7 @@ services:
         condition: any
   app:
     build: .
-    image: registry.nepeat.com/requestbin:latest
+    image: registry.generalprogramming.org/requestbin:latest
     networks:
       - requestbin
       - publicweb
@@ -24,7 +24,7 @@ services:
         - traefik.port=8000
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:requestbin.nepeat.com
+        - traefik.frontend.rule=Host:requestbin.generalprogramming.org
       restart_policy:
         condition: any
 

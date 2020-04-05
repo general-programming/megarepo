@@ -2,7 +2,7 @@ version: "3.6"
 services:
   # ftb-infinity-evolved:
   #   build: .
-  #   image: registry.nepeat.com/minecraft-base
+  #   image: registry.generalprogramming.org/minecraft-base
   #   volumes:
   #     - /srv/minecraft/globalroot:/root
   #     - /srv/minecraft/ftb-infinity-evolved/data:/data
@@ -29,7 +29,7 @@ services:
 
   # gay-space-communism:
   #   build: .
-  #   image: registry.nepeat.com/minecraft-base
+  #   image: registry.generalprogramming.org/minecraft-base
   #   volumes:
   #     - /srv/minecraft/globalroot:/root
   #     - /srv/minecraft/gay-space-communism/data:/data
@@ -56,7 +56,7 @@ services:
 
   # offbeateggs:
   #   build: .
-  #   image: registry.nepeat.com/minecraft-base
+  #   image: registry.generalprogramming.org/minecraft-base
   #   volumes:
   #     - /srv/minecraft/globalroot:/root
   #     - /srv/minecraft/offbeateggs/data:/data
@@ -76,7 +76,7 @@ services:
 
   # chirstmaspack:
   #   build: .
-  #   image: registry.nepeat.com/minecraft-base
+  #   image: registry.generalprogramming.org/minecraft-base
   #   volumes:
   #     - /srv/minecraft/globalroot:/root
   #     - /srv/minecraft/chirstmaspack/data:/data
@@ -93,7 +93,7 @@ services:
 
   sarenevanilla:
     build: .
-    image: registry.nepeat.com/minecraft-base
+    image: registry.generalprogramming.org/minecraft-base
     volumes:
       - /srv/minecraft/globalroot:/root
       - /srv/minecraft/sarene/data:/data
@@ -110,7 +110,7 @@ services:
 
   uwuvanilla:
     build: .
-    image: registry.nepeat.com/minecraft-base
+    image: registry.generalprogramming.org/minecraft-base
     volumes:
       - /srv/minecraft/globalroot:/root
       - /srv/minecraft/uwuvanilla/data:/data
@@ -127,7 +127,7 @@ services:
 
   uwuftb:
     build: .
-    image: registry.nepeat.com/minecraft-base
+    image: registry.generalprogramming.org/minecraft-base
     volumes:
       - /srv/minecraft/globalroot:/root
       - /srv/minecraft/uwuftb/data:/data
@@ -144,7 +144,7 @@ services:
 
   moxvanilla:
     build: .
-    image: registry.nepeat.com/minecraft-base
+    image: registry.generalprogramming.org/minecraft-base
     volumes:
       - /srv/minecraft/globalroot:/root
       - /srv/minecraft/mox_vanilla/data:/data
@@ -161,7 +161,7 @@ services:
 
   toast:
     build: .
-    image: registry.nepeat.com/minecraft-base
+    image: registry.generalprogramming.org/minecraft-base
     volumes:
       - /srv/minecraft/globalroot:/root
       - /srv/minecraft/toast/data:/data

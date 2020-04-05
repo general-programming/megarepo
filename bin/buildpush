@@ -38,7 +38,7 @@ fi
 # Builder
 IMAGE_NAME="$1:v$BUILD"
 
-docker login -u nepeat -p anus registry.nepeat.com
+docker login -u nepeat -p anus registry.generalprogramming.org
 docker build --no-cache --force-rm --pull -t "$IMAGE_NAME" "$1"
 pushimage "$IMAGE_NAME"
 

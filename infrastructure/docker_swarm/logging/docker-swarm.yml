@@ -24,7 +24,7 @@ services:
 
   kibana:
     build: kibana
-    image: registry.nepeat.com/kibana
+    image: registry.generalprogramming.org/kibana
     environment:
       SERVER_NAME: logs.generalprogramming.org
       ELASTICSEARCH_HOSTS: http://192.168.3.2:9200
@@ -67,7 +67,7 @@ services:
 
   prometheus:
     build: prometheus
-    image: registry.nepeat.com/prometheus
+    image: registry.generalprogramming.org/prometheus
     command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.max-block-duration=2h --storage.tsdb.min-block-duration=2h --web.console.libraries=/usr/share/prometheus/console_libraries --web.console.templates=/usr/share/prometheus/consoles --web.enable-lifecycle
     volumes:
       - /srv/var/prometheus:/prometheus

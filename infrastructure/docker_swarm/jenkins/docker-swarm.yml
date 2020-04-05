@@ -1,7 +1,7 @@
 version: "3.6"
 services:
   jenkins:
-    image: registry.nepeat.com/jenkins
+    image: registry.generalprogramming.org/jenkins
     build: .
     volumes:
       - /srv/var/jenkins:/var/jenkins_home
