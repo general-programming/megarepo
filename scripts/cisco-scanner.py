@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 while True:
     with open("ciscos.csv", "a") as f:
         model = input("Model: ")
