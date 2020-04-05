@@ -1,0 +1,69 @@
+global: {}
+serversTransport:
+  insecureSkipVerify: true
+entryPoints:
+  http:
+    address: :80
+    http:
+      middlewares:
+        test-redirectscheme:
+          redirectScheme:
+            scheme: https
+            permanent: true
+  https:
+    address: :443
+    http:
+      tls:
+
+  internal:
+    address: :8080
+    http:
+      routers:
+        api:
+          rule: Host(`traefik.generalprogramming.org`)
+          service: api@internal
+          middlewares:
+            - apiauth
+      middlewares:
+        apiauth:
+          basicAuth:
+            users:
+              - "obw:$2y$09$78.LlJ/k8g6dAw.BehQm0u2E4U3DRhv1WzC8XsTnRPPVxYUyqH.nm" 
+              - "genprog:$2y$09$YMczPBg2cBceQ.EjlIoAOuu8Lq6mY86dfEciawdnVQmgoZ3AMxpKK"
+# TLS on entry point "https" must be converted manually. See https://docs.traefik.io/routing/routers/#tls
+# The domain (docker.localhost) defined in the Docker provider must be converted manually. See https://docs.traefik.io/providers/docker/#defaultrule
+# The entry point (internal) defined in API must be converted manually. See https://docs.traefik.io/operations/api/
+# The entry point (https) defined in the ACME configuration must be converted manually. See https://docs.traefik.io/routing/routers/#certresolver
+providers:
+  providersThrottleDuration: 2s
+  consul:
+    endpoints:
+      - "consul.service.dc1.consul:8500"
+    rootKey: "traefik"
+  consulCatalog:
+    endpoint:
+      address: "consul.service.dc1.consul:8500"
+    exposedByDefault: false
+    defaultRule: "Host(`{{ .Name }}.{{ index .Labels \"customLabel\"}}`)"
+  docker:
+    watch: true
+    swarmMode: true
+    swarmModeRefreshSeconds: 15s
+  file:
+    watch: true
+    filename: /rules.toml
+api:
+  dashboard: true
+ping:
+  entryPoint: http
+log:
+  level: INFO
+certificatesResolvers:
+  default:
+    acme:
+      email: nepeat@gmail.com
+      storage: traefik/acme/account
+      dnsChallenge:
+        provider: cloudflare
+      httpChallenge:
+        entryPoint: http
