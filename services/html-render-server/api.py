@@ -5,6 +5,7 @@ import hashlib
 import os
 import logging
 import functools
+import io
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -32,7 +33,7 @@ s3_client = boto3.client(
     "s3",
     endpoint_url=os.environ.get("S3_ENDPOINT", None),
     aws_access_key_id=os.environ["S3_ACCESS_KEY"],
-    aws_secret_access_key=os.environ["SE_SECRET_KEY"],
+    aws_secret_access_key=os.environ["S3_SECRET_KEY"],
 )
 
 # Service
@@ -45,8 +46,14 @@ async def rootpage(request):
 
 async def upload_file(data: bytes, file_name: str):
     loop = asyncio.get_running_loop()
-    # XXX MAKE THIS WORK WITH S3
-    return await loop.run_in_executor(executor, functools.partial(bucket.files.upload, contents=data, file_name=file_name))
+    data_io = io.BytesIO(data)
+
+    return await loop.run_in_executor(executor, functools.partial(
+        s3_client.upload_fileobj,
+        data_io,
+        os.environ["S3_BUCKET"],
+        file_name,
+    ))
 
 async def check_auth(key: str) -> bool:
     # very secure
