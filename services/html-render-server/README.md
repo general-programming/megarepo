@@ -3,9 +3,9 @@ It renders HTML pages.
 
 ## Environ
 **CDN_URL**: Domain that is CNAMEd to a B2 bucket.
-**B2_BUCKET**: Backblaze B2 bucket name.
-**B2_KEY_ID**: B2 Application ID
-**B2_APPLICATION_KEY**: B2 API application key
+**S3_BUCKET**: Backblaze B2 bucket name.
+**S3_ACCESS_KEY**: S3 access key
+**SE_SECRET_KEY**: S3 secret key
 
 ## Development
 ```sh

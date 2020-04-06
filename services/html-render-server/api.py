@@ -10,7 +10,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
 from aiohttp import web
-from b2blaze import B2
 from pyppeteer import launch as launch_pyppeteer
 
 # Logging configuration
@@ -24,11 +23,9 @@ log = logging.getLogger(__name__)
 
 # TODO: Move these constants somewhere.
 HEIGHT_PADDING = 25
-CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["B2_BUCKET"] + "/htmlrender_api/"
+CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["S3_BUCKET"] + "/htmlrender_api/"
 
-# B2 utility
-b2 = B2()
-bucket = b2.buckets.get(os.environ["B2_BUCKET"])
+# XXX S3 STUFF PLS
 
 # Service
 routes = web.RouteTableDef()
@@ -40,7 +37,7 @@ async def rootpage(request):
 
 async def upload_file(data: bytes, file_name: str):
     loop = asyncio.get_running_loop()
-
+    # XXX MAKE THIS WORK WITH S3
     return await loop.run_in_executor(executor, functools.partial(bucket.files.upload, contents=data, file_name=file_name))
 
 @routes.post('/render')
@@ -57,6 +54,7 @@ async def render_post(request):
 
     # Grab options from the payload.
     save_html = data.get("save_html", False)  # XXX: strict checking later
+    output = data.get("output", "upload")
 
     # Check for the HTML in data by popping it.
     try:
@@ -92,15 +90,16 @@ async def render_post(request):
     )
     page = await browser.newPage()
 
-    with tempfile.TemporaryDirectory() as tmpdirname:
+    with tempfile. TemporaryDirectory() as tmpdirname:
+        # Setup the temporary paths.
         tmphtml_path = os.path.join(tmpdirname, page_hash + ".html")
         rendered_path = os.path.join(tmpdirname, "rendered.jpg")
 
         with open(tmphtml_path, "wb") as tmphtml_handle:
             tmphtml_handle.write(page_html)
 
+        # Open the page and get the real height of the page.
         await page.goto("file://" + tmphtml_path)
-
         real_height = await page.evaluate('''() => {
             let body = document.body,
                 html = document.documentElement;
@@ -112,13 +111,15 @@ async def render_post(request):
                 html.scrollHeight,
                 html.offsetHeight
             )
-        }''') + HEIGHT_PADDING
+        }''') + HEIGHT_PADDING  # lmao black magic
 
+        # Set the browser window size / viewport.
         await page.setViewport({
             "width": 1024,
             "height": real_height
         })
 
+        # Make the screenshot and cleanup.
         await page.screenshot({
             'path': rendered_path,
             "clip": {
@@ -131,13 +132,26 @@ async def render_post(request):
 
         await browser.close()
 
+        # Grab the image data.
+        image_data = await image.read()
+
+        # Output the image to the user if the output is set to client.
+        if output == "client":
+            # Create and prepare the response.
+            response = web.StreamResponse(status=200)
+            response.headers["Content-Type"] = "image/jpeg"
+            await resp.prepare(request)
+
+            # Write the image data and return.
+            response.write(image_data)
+            return response
+
         # Upload the raw HTML if desired..
         if save_html:
             await upload_file(page_html, f"htmlrender_api/{page_hash}.html")
 
         # Upload the rendered HTML page.
         async with aiofiles.open(rendered_path, "rb") as image:
-            image_data = await image.read()
             await upload_file(image_data, f"htmlrender_api/{page_hash}.jpg")
 
         return web.json_response({
