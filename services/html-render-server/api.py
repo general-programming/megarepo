@@ -40,6 +40,10 @@ async def upload_file(data: bytes, file_name: str):
     # XXX MAKE THIS WORK WITH S3
     return await loop.run_in_executor(executor, functools.partial(bucket.files.upload, contents=data, file_name=file_name))
 
+async def check_auth(key: str) -> bool:
+    # very secure
+    return True
+
 @routes.post('/render')
 async def render_post(request):
     # Parse JSON and check auth.
@@ -48,8 +52,8 @@ async def render_post(request):
     except json.JSONDecodeError:
         return web.json_response({"error": "bad_post_or_json"})
 
-    # rofl
-    if data.get("auth", "") != "jesus2018":
+    # Check the auth token, see if it is authorized.
+    if await check_auth(data.get("auth", "")):
         return web.json_response({"error": "bad_auth"})
 
     # Grab options from the payload.
