@@ -85,7 +85,7 @@ async def render_post(request):
 
     # Launch the Chromium instance.
     browser = await launch_pyppeteer(
-        executablePath="/usr/bin/chromium-browser",
+        # executablePath="/usr/bin/chromium-browser",
         args=[
             # "By default, Docker runs a container with a /dev/shm shared memory space 64MB.
             # This is typically too small for Chrome and will cause Chrome to crash when rendering large pages.
