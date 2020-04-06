@@ -61,7 +61,7 @@ async def render_post(request):
         return web.json_response({"error": "bad_post_or_json"})
 
     # Check the auth token, see if it is authorized.
-    if await check_auth(data.get("auth", "")):
+    if not await check_auth(data.get("auth", "")):
         return web.json_response({"error": "bad_auth"})
 
     # Grab options from the payload.
@@ -145,17 +145,18 @@ async def render_post(request):
         await browser.close()
 
         # Grab the image data.
-        image_data = await image.read()
+        async with aiofiles.open(rendered_path, "rb") as image:
+            image_data = await image.read()
 
         # Output the image to the user if the output is set to client.
         if output == "client":
             # Create and prepare the response.
             response = web.StreamResponse(status=200)
             response.headers["Content-Type"] = "image/jpeg"
-            await resp.prepare(request)
+            await response.prepare(request)
 
             # Write the image data and return.
-            response.write(image_data)
+            await response.write(image_data)
             return response
 
         # Upload the raw HTML if desired..
@@ -163,8 +164,7 @@ async def render_post(request):
             await upload_file(page_html, f"htmlrender_api/{page_hash}.html")
 
         # Upload the rendered HTML page.
-        async with aiofiles.open(rendered_path, "rb") as image:
-            await upload_file(image_data, f"htmlrender_api/{page_hash}.jpg")
+        await upload_file(image_data, f"htmlrender_api/{page_hash}.jpg")
 
         return web.json_response({
             "image_url": CDN_BASE + page_hash + ".jpg",
