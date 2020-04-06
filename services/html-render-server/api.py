@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 
 # TODO: Move these constants somewhere.
 HEIGHT_PADDING = 25
-CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["B2_BUCKET"] + "/mailrender_api/"
+CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["B2_BUCKET"] + "/htmlrender_api/"
 
 # B2 utility
 b2 = B2()
@@ -36,7 +36,7 @@ executor = ThreadPoolExecutor(max_workers=4)
 
 @routes.get('/')
 async def rootpage(request):
-    return web.Response(text="mail render api")
+    return web.Response(text="html render api")
 
 async def upload_file(data: bytes, file_name: str):
     loop = asyncio.get_running_loop()
@@ -51,8 +51,12 @@ async def render_post(request):
     except json.JSONDecodeError:
         return web.json_response({"error": "bad_post_or_json"})
 
+    # rofl
     if data.get("auth", "") != "jesus2018":
         return web.json_response({"error": "bad_auth"})
+
+    # Grab options from the payload.
+    save_html = data.get("save_html", False)  # XXX: strict checking later
 
     # Check for the HTML in data by popping it.
     try:
@@ -69,9 +73,22 @@ async def render_post(request):
     # Hash it for the filename.
     page_hash = hashlib.md5(page_html).hexdigest()
 
+    # Launch the Chromium instance.
     browser = await launch_pyppeteer(
         executablePath="/usr/bin/chromium-browser",
-        args=["--disable-dev-shm-usage", "--no-sandbox", "--disable-setuid-sandbox"]
+        args=[
+            # "By default, Docker runs a container with a /dev/shm shared memory space 64MB.
+            # This is typically too small for Chrome and will cause Chrome to crash when rendering large pages.
+            # To fix, run the container with docker run --shm-size=1gb to increase the size of /dev/shm.
+            # Since Chrome 65, this is no longer necessary.
+            # Instead, launch the browser with the --disable-dev-shm-usage flag"
+            # - https://developers.google.com/web/tools/puppeteer/troubleshooting
+            "--disable-dev-shm-usage",
+
+            # XXX Add sandbox, pls.
+            "--no-sandbox",
+            "--disable-setuid-sandbox"
+        ]
     )
     page = await browser.newPage()
 
@@ -114,11 +131,14 @@ async def render_post(request):
 
         await browser.close()
 
-        # Upload the raw HTML and the screenshot.
-        await upload_file(page_html, f"mailrender_api/{page_hash}.html")
+        # Upload the raw HTML if desired..
+        if save_html:
+            await upload_file(page_html, f"htmlrender_api/{page_hash}.html")
+
+        # Upload the rendered HTML page.
         async with aiofiles.open(rendered_path, "rb") as image:
             image_data = await image.read()
-            await upload_file(image_data, f"mailrender_api/{page_hash}.jpg")
+            await upload_file(image_data, f"htmlrender_api/{page_hash}.jpg")
 
         return web.json_response({
             "image_url": CDN_BASE + page_hash + ".jpg",

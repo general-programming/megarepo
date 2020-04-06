@@ -10,27 +10,6 @@ services:
       restart_policy:
         condition: on-failure
 
-  render:
-    build: render_api
-    image: registry.generalprogramming.org/mailapi_render
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-    env_file: .env
-    command: python3 api.py
-    networks:
-      - mailrenderapi
-      - publicweb
-    deploy:
-      labels:
-        - traefik.enable=true
-        - traefik.port=8080
-        - traefik.docker.network=publicweb
-        # Routes
-        - traefik.frontend.rule=Host:mailrender.api.generalprogramming.org
-      restart_policy:
-        condition: on-failure
-
   webhooks:
     build: webhooks
     image: registry.generalprogramming.org/mailapi_webhooks
