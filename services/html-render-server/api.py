@@ -9,8 +9,10 @@ import functools
 from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
+
 from aiohttp import web
 from pyppeteer import launch as launch_pyppeteer
+import boto3
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:
@@ -26,6 +28,12 @@ HEIGHT_PADDING = 25
 CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["S3_BUCKET"] + "/htmlrender_api/"
 
 # XXX S3 STUFF PLS
+s3_client = boto3.client(
+    "s3",
+    endpoint_url=os.environ.get("S3_ENDPOINT", None),
+    aws_access_key_id=os.environ["S3_ACCESS_KEY"],
+    aws_secret_access_key=os.environ["SE_SECRET_KEY"],
+)
 
 # Service
 routes = web.RouteTableDef()

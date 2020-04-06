@@ -1,3 +1,4 @@
 pyppeteer
 aiohttp
 aiofiles
+boto3
