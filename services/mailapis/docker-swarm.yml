@@ -1,21 +1,9 @@
 # Production Compose
 version: "3.6"
 services:
-  redis:
-    image: redis:4.0.11-alpine
-    command: 'redis-server --save 0'
-    networks:
-      - mailrenderapi
-    deploy:
-      restart_policy:
-        condition: on-failure
-
   webhooks:
     build: webhooks
     image: registry.generalprogramming.org/mailapi_webhooks
-    environment:
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
     env_file: .env
     command: python3 api.py
     networks:
