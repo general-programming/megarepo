@@ -10,10 +10,19 @@ import io
 from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
+import boto3
+import sentry_sdk
 
 from aiohttp import web
 from pyppeteer import launch as launch_pyppeteer
-import boto3
+from sentry_sdk.integrations.aiohttp import AioHttpIntegration
+
+# Sentry setup
+if "SENTRY_DSN" in os.environ:
+    sentry_sdk.init(
+        dsn=os.environ["SENTRY_DSN"],
+        integrations=[AioHttpIntegration()]
+    )
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:

@@ -2,3 +2,5 @@ pyppeteer
 aiohttp
 aiofiles
 boto3
+sentry-sdk
+aiocontextvars
