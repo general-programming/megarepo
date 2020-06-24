@@ -6,6 +6,11 @@ import random
 import requests
 
 DISCORD_WEBHOOK = "{{ discord_webhook }}"
+{% if no_consul %}
+USE_CONSUL = False
+{% else %}
+USE_CONSUL = True
+{% endif %}
 
 def push_lease(ip, hostname, mac):
     # easter egg :>
@@ -16,7 +21,10 @@ def push_lease(ip, hostname, mac):
 
     # Check with localhost Consul if the last MAC is equal to the the lease's MAC.
     mac_key = mac.replace(":", "").lower()
-    last_ip = requests.get(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}?stale&raw").text
+    if USE_CONSUL:
+        last_ip = requests.get(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}?stale&raw").text
+    else:
+        last_ip = None
 
     if last_ip == ip:
         return
@@ -46,7 +54,8 @@ def push_lease(ip, hostname, mac):
     })
 
     # Push it to Consul too.
-    requests.put(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}", data=ip)
+    if USE_CONSUL:
+        requests.put(f"http://localhost:8500/v1/kv/dhcp/leases/{mac_key}", data=ip)
 
 if __name__ == "__main__":
     ip, hostname, mac = sys.argv[1:4]
