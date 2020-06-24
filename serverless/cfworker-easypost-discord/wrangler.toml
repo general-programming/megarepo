@@ -1,0 +1,6 @@
+name = "easypost-discord"
+type = "webpack"
+account_id = "6bf403c1bd9a90269d9b160ed2f1f3c8"
+workers_dev = true
+route = ""
+zone_id = ""
