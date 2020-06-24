@@ -19,7 +19,8 @@ services:
         - traefik.gaysounds.frontend.rule=Host:gaysounds.shitpos.ts.it
         - traefik.rpan.frontend.rule=Host:rpan.generalprogramming.org
         - traefik.erin_e2pm.frontend.rule=Host:www.e2.pm,e2.pm
-        # - traefik.soy.frontend.rule=Host:www.fucking.soy,fucking.soy
+        - traefik.googleboats.frontend.rule=Host:www.google.boats,google.boats
+        - traefik.ewitch.frontend.rule=Host:www.e-wit.ch,e-wit.ch
       restart_policy:
         condition: any
 
