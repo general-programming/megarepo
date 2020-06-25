@@ -1,10 +1,10 @@
 const INTERESTING_FIELDS = {
-    "name": "Name"
+  name: 'Name'
 };
 
 const COLOR_MAX = 16777215;
 
 export {
-    INTERESTING_FIELDS,
-    COLOR_MAX
+  INTERESTING_FIELDS,
+  COLOR_MAX
 };
