@@ -11,14 +11,23 @@ def push_lease(ip, hostname, mac):
     if not hostname:
         hostname = "N/A"
 
-    # Post the lease to Discord if is not the same.
-    requests.post(CLOUDFLARE_WEBHOOK, json={
-        "ip": ip,
-        "hostname": hostname,
-        "mac": mac,
-        "dhcp_hostname": socket.gethostname()
-    }, timeout=2) 
-    # We set a low timeout of 2 because dhcpd really does not like waiting too long for the script to execute.
+    # Post the lease to Cloudflare.
+    try:
+        requests.post(CLOUDFLARE_WEBHOOK, json={
+            "ip": ip,
+            "hostname": hostname,
+            "mac": mac,
+            "dhcp_hostname": socket.gethostname()
+        }, timeout=2)
+    except requests.exceptions.Timeout:
+        # We set a low timeout of 2 because dhcpd really does not like waiting too long for the script to execute.
+        # This has happened before with the previous implemention where Consul taking forever means DHCP shits the bed.
+        pass
+    except requests.exceptions.RequestException:
+        # Also doesn't hurt to handle general request exceptions.
+        # We'll lose the notification but if the machine tries to renew the lease, it'll be caught anyways.
+        pass
+    
 
 if __name__ == "__main__":
     ip, hostname, mac = sys.argv[1:4]
