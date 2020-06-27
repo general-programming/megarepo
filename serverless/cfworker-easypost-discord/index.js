@@ -4,6 +4,17 @@ addEventListener('fetch', event => {
   event.respondWith(handleRequest(event.request));
 });
 
+const addTrackingField = (trackingLocation, extraFields) => {
+  const parts = [];
+
+  if (trackingLocation.city) parts.push(trackingLocation.city);
+  if (trackingLocation.state) parts.push(trackingLocation.state);
+  if (trackingLocation.zip) parts.push(trackingLocation.zip);
+  if (trackingLocation.country) parts.push(trackingLocation.country);
+
+  extraFields.push({ name: 'Current Location', value: parts.join(', '), inline: false });
+};
+
 /**
  * Respond to the request
  * @param {Request} request
@@ -38,7 +49,10 @@ async function handleRequest (request) {
   // Add extra fields depending on extra carrier info.
   if (data.tracking_details && data.tracking_details.length > 0) {
     const lastItem = data.tracking_details[data.tracking_details.length - 1];
-    if (lastItem) extraFields.push({ name: 'Latest Message', value: lastItem.description || lastItem.message, inline: false });
+    if (lastItem) {
+      extraFields.push({ name: 'Latest Message', value: lastItem.description || lastItem.message, inline: false });
+      if (lastItem.tracking_location) addTrackingField(lastItem.tracking_location, extraFields);
+    }
   }
 
   if (data.carrier_detail) {
