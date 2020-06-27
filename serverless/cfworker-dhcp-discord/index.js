@@ -30,7 +30,7 @@ async function handleRequest (request) {
   }
 
   // Generate a color and KV key based on the MAC address.
-  const macKey = 'dhcp:' + data.mac.replaceAll(':', '').toLowerCase();
+  const macKey = 'dhcp:' + data.mac.replace(/:/g, '').toLowerCase();
   const color = randIntFromSeed(macKey, COLOR_MAX);
 
   // Try to grab the last KV data from CF.
