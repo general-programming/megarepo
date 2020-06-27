@@ -1,0 +1,9 @@
+name = "dhcp-discord"
+type = "webpack"
+account_id = "6bf403c1bd9a90269d9b160ed2f1f3c8"
+workers_dev = true
+route = ""
+zone_id = ""
+kv-namespaces = [ 
+    { binding = "NETHOOKS", id = "f62812ed607f4beba7414294d58a5ce1" } 
+]
