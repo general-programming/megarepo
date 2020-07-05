@@ -18,13 +18,11 @@ async function handleRequest (request) {
     return new Response(JSON.stringify({ error: 'bad_secret' }), { status: 500 });
   }
 
-  let body;
   let data;
 
   // Try to parse the JSON data.
   try {
-    body = JSON.parse(await request.text());
-    data = body;
+    data = JSON.parse(await request.text());
   } catch (e) {
     return new Response(e, { status: 500 });
   }
