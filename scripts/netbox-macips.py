@@ -39,10 +39,6 @@ if __name__ == "__main__":
 
     # Iterate through all IPs that are IPv4.
     for ip in netbox.ipam.ip_addresses.filter(family=4):
-        # Filer out the internal interfaces.
-        if not is_internal(ip.address):
-            continue
-
         # Ignore IPs that do not have interfaces asscoiated with them.
         if not ip.interface:
             log.warning(f"{ip.address} missing interface")
