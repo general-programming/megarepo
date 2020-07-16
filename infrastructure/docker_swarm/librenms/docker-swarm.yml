@@ -8,6 +8,15 @@ x-default-settings: &default_settings
   env_file: .env
 
 services:
+  redis:
+    << : *default_settings
+    image: redis:alpine
+    container_name: librenms_redis
+    environment:
+      - "TZ=${TZ}"
+    networks:
+      - librenms
+
   memcached:
     << : *default_settings
     image: 'memcached:alpine'
@@ -63,23 +72,28 @@ services:
     networks:
       - librenms
       - publicweb
-
-  cron:
+  
+  dispatcher:
     << : *default_settings
     image: librenms/librenms:latest
-    container_name: librenms_cron
+    container_name: librenms_dispatcher
+    hostname: librenms-dispatcher
     domainname: generalprogramming.org
-    hostname: nms
     depends_on:
       - librenms
+      - redis
     volumes:
       - "/srv/var/librenms/data:/data"
     environment:
       - "DB_TIMEOUT=60"
-      - "SIDECAR_CRON=1"
+      - "DISPATCHER_NODE_ID=dispatcher1"
+      - "REDIS_HOST=redis"
+      - "REDIS_PORT=6379"
+      - "REDIS_DB=0"
+      - "SIDECAR_DISPATCHER=1"
     networks:
       - librenms
-  
+
 networks:
   librenms:
     driver: overlay
