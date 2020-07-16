@@ -27,19 +27,19 @@ async function handleRequest (request) {
     return new Response(e, { status: 500 });
   }
 
-  // Generate a color and KV key based on the MAC address.
-  const macKey = 'dhcp:' + data.mac.replace(/:/g, '').toLowerCase();
-  const color = randIntFromSeed(macKey, COLOR_MAX);
+  // Generate a color and KV key based on the IP address.
+  const kvKey = 'dhcp:' + data.ip.replace(/[:.]/g, '-').toLowerCase();
+  const color = randIntFromSeed(kvKey, COLOR_MAX);
 
   // Try to grab the last KV data from CF.
-  let KVData = await NETHOOKS.get(macKey, 'json');
-  if (KVData === null) KVData = { ip: '' };
+  let KVData = await NETHOOKS.get(kvKey, 'json');
+  if (KVData === null) KVData = { mac: '' };
 
   // Do nothing if the last IP matches the current IP.
-  if (KVData.ip === data.ip) return new Response('', { status: 204 });
+  if (KVData.mac === data.mac) return new Response('', { status: 204 });
 
-  // Else update the IP in the KVData object.
-  KVData.ip = data.ip;
+  // Else update the MAC in the KVData object.
+  KVData.mac = data.mac;
 
   // Create the footer text.
   let footerText = data.dhcp_hostname;
@@ -76,7 +76,7 @@ async function handleRequest (request) {
     });
 
     // Update the CF KV data and return a good state if we are able to post to Discord.
-    await NETHOOKS.put(macKey, JSON.stringify(KVData), {
+    await NETHOOKS.put(kvKey, JSON.stringify(KVData), {
       metadata: {
         expiration: 604800 // Let the data expire every week so things don't get too spammy but not too silent.
       }
