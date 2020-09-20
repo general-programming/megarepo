@@ -21,6 +21,8 @@ services:
         - traefik.erin_e2pm.frontend.rule=Host:www.e2.pm,e2.pm
         - traefik.googleboats.frontend.rule=Host:www.google.boats,google.boats
         - traefik.ewitch.frontend.rule=Host:www.e-wit.ch,e-wit.ch
+        - traefik.erinorg.frontend.rule=Host:www.erin.org,erin.org
+        - traefik.owome.frontend.rule=Host:www.owo.me,owo.me
       restart_policy:
         condition: any
 
