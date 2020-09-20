@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   dex:
-    image: quay.io/dexidp/dex:v2.23.0
+    image: quay.io/dexidp/dex:v2.24.0
     volumes:
       - /etc/ipa/ca.crt:/ipa_ca.crt:ro
       - /srv/etc/dex.yaml:/config.yaml:ro
