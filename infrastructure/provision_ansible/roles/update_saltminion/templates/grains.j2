@@ -1,0 +1,15 @@
+# grains.j2
+# {{ ansible_managed }}
+
+{% if tags %}
+roles:
+{% for tag in tags %}
+    - {{ tag }}
+{% endfor %}
+{% endif %}
+
+{% if 'wob' in inventory_hostname %}
+datacenter: wob
+{% elif 'fmt2' in inventory_hostname %}
+datacenter: fmt2
+{% endif %}

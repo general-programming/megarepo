@@ -1,0 +1,4 @@
+- hosts: tags_saltminion
+  strategy: free
+  roles:
+    - role: update_saltminion

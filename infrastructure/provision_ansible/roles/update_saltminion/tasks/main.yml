@@ -1,0 +1,28 @@
+- name: Salt Minion - Install latest minion
+  script:
+    cmd: bootstrap-salt.sh
+    creates: /usr/bin/salt-minion
+
+- name: Salt Minion - Check if Salt managed config exists
+  stat: 
+    path: /etc/salt/minion.d/f_defaults.conf
+  register: salt_managed
+
+- name: Salt Minion - Update config
+  template:
+    src: 00-config.j2
+    dest: /etc/salt/minion.d/00-config.conf
+  register: salt_config
+
+- name: Salt Minion - Update grains
+  template:
+    src: grains.j2
+    dest: /etc/salt/grains
+  register: salt_grains
+
+- name: Salt Minion - Restart
+  service:
+    name: "salt-minion"
+    enabled: true
+    state: restarted
+  when: salt_config.changed or salt_grains.changed
