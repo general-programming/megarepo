@@ -40,15 +40,15 @@ if __name__ == "__main__":
     # Iterate through all IPs that are IPv4.
     for ip in netbox.ipam.ip_addresses.filter(family=4):
         # Ignore IPs that do not have interfaces asscoiated with them.
-        if not ip.interface:
+        if ip.assigned_object_type not in ("dcim.interface", "virtualization.vminterface"):
             log.warning(f"{ip.address} missing interface")
             continue
 
         # Ignore interfaces that do not have MACs.
-        if ip.interface.device:
-            iface = dcim_interfaces[ip.interface.id]
-        elif ip.interface.virtual_machine:
-            iface = virtual_interfaces[ip.interface.id]
+        if ip.assigned_object_type == "dcim.interface":
+            iface = dcim_interfaces[ip.assigned_object.id]
+        elif ip.assigned_object_type == "virtualization.vminterface":
+            iface = virtual_interfaces[ip.assigned_object.id]
 
         # Do not use IPs that do not have MAC addresses.
         if not iface.mac_address:
@@ -58,16 +58,17 @@ if __name__ == "__main__":
         ips.append(ip)
 
     for ip in ips:
-        if ip.interface.virtual_machine:
-            interface = virtual_interfaces[ip.interface.id]
+        if ip.assigned_object_type == "virtualization.vminterface":
+            interface = virtual_interfaces[ip.assigned_object.id]
             device_name = interface.virtual_machine.name
         else:
-            interface = dcim_interfaces[ip.interface.id]
+            interface = dcim_interfaces[ip.assigned_object.id]
             device_name = interface.device.name
             
 
-        device_name = device_name.replace(" ", "_").replace(":","")
-        hostname = f"{device_name}-{interface.name}".lower()
+        device_name = device_name.replace(" ", "_").replace(":","").replace("_-_", "_").replace("/", "_")
+        interface_name = interface.name.replace(" ", "_").replace(":","").replace("_-_", "_").replace("/", "_")
+        hostname = f"{device_name}-{interface_name}".lower()
         address = ip.address.split("/")[0]
 
         leases.append(generate_lease(hostname, interface.mac_address, address))
