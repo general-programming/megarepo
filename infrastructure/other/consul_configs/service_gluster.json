@@ -1,0 +1,26 @@
+// from https://docs.gluster.org/en/latest/Administrator-Guide/Consul/
+{
+    "service": {
+        "address": "",
+        "checks": [
+            {
+                "interval": "10s",
+                "tcp": "localhost:24007",
+                "timeout": "5s"
+            },
+            {
+                "interval": "10s",
+                "script": "/bin/bash -c \"sudo -n /sbin/gluster pool list |grep -v UUID|grep -v localhost|grep Connected\"",
+                "timeout": "5s"
+            }
+        ],
+        "enableTagOverride": false,
+        "id": "gluster",
+        "name": "gluster",
+        "port": 24007,
+        "tags": [
+            "gluster",
+            "server"
+        ]
+    }
+}
