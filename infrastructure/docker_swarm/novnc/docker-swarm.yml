@@ -1,0 +1,22 @@
+version: "3.6"
+services:
+  staticweb:
+    build: .
+    image: registry.nepeat.com/novnc
+    command: "/app/utils/launch.sh --vnc 10.65.67.10:5969"
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=6080
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:chaos.owo.me
+      restart_policy:
+        condition: any
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true
