@@ -12,17 +12,10 @@ services:
         - traefik.enable=true
         - traefik.port=80
         - traefik.docker.network=publicweb
-        - traefik.backend=nginx
         # Routes
-        - traefik.main.frontend.rule=Host:www.nepeat.com,nepeat.com
-        - traefik.portfolio.frontend.rule=Host:portfolio.nepeat.com
-        - traefik.gaysounds.frontend.rule=Host:gaysounds.shitpos.ts.it
-        - traefik.rpan.frontend.rule=Host:rpan.generalprogramming.org
-        - traefik.erin_e2pm.frontend.rule=Host:www.e2.pm,e2.pm
-        - traefik.googleboats.frontend.rule=Host:www.google.boats,google.boats
-        - traefik.ewitch.frontend.rule=Host:www.e-wit.ch,e-wit.ch
-        - traefik.erinorg.frontend.rule=Host:www.erin.org,erin.org
-        - traefik.owome.frontend.rule=Host:www.owo.me,owo.me
+        - traefik.http.routers.staticweb.rule=Host(`www.owo.me`, `owo.me`, `gaysounds.shitpos.ts.it`, `www.e2.pm`, `e2.pm`, `portfolio.nepeat.com`, `www.nepeat.com`, `nepeat.com`, `www.e-wit.ch`, `e-wit.ch`)
+        - traefik.http.services.staticweb.loadbalancer.server.port=80
+        # - traefik.main.frontend.rule=Host:www.nepeat.com,nepeat.com
       restart_policy:
         condition: any
 
