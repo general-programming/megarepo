@@ -1,0 +1,55 @@
+variant: fcos
+version: 1.3.0
+ignition:
+  config:
+    merge:
+      - source: http://10.65.67.2/coreos-configs/base.ign
+storage:
+  directories:
+  - path: /etc/consul.d
+    user:
+      id: 100
+    group:
+      id: 1000
+  - path: /var/lib/consul
+    user:
+      id: 100
+    group:
+      id: 1000
+  - path: /etc/vault.d
+    user:
+      id: 100
+    group:
+      id: 1000
+systemd:
+  units:
+    - name: consul.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=hashicorp consul
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        TimeoutStartSec=0
+        ExecStartPre=-/bin/podman rm -f consul
+        ExecStart=/bin/podman run --name consul --net host -v /etc/consul.d:/consul/config -v /var/lib/consul:/consul/data:z -e CONSUL_DISABLE_PERM_MGMT=1 docker.io/consul:latest agent -config-dir=/consul/config
+
+        [Install]
+        WantedBy=multi-user.target
+    - name: vault.service
+      enabled: true
+      contents: |
+        [Unit]
+        Description=hashicorp vault
+        After=network-online.target
+        Wants=network-online.target
+
+        [Service]
+        TimeoutStartSec=0
+        ExecStartPre=-/bin/podman rm -f vault
+        ExecStart=/bin/podman run --name vault -v /etc/vault.d:/vault/config -e -p 8200:8200 -p 8201:8201 -e SKIP_CHOWN=1 docker.io/vault server -config=/vault/config
+
+        [Install]
+        WantedBy=multi-user.target
