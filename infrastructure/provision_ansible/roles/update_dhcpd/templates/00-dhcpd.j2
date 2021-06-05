@@ -6,7 +6,7 @@
 on commit {
   # Get client hostname only (no generated or static). Used by the hook to show which hostname the client requested.
   set clienthost = pick-first-value (option fqdn.hostname, option host-name, "");
- 
+
   # Get lease IP and hwaddr
   set clientip = binary-to-ascii(10, 8, ".", leased-address);
   # https://kb.isc.org/docs/aa-01039
@@ -18,12 +18,12 @@ on commit {
     suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,5,1))),2), ":",
     suffix (concat ("0", binary-to-ascii (16, 8, "", substring(hardware,6,1))),2)
   );
- 
+
   # Execute the hook
   execute("/usr/local/bin/dhcpd_discordhook", clientip, clienthost, clientmac);
 }
 
 # Leases from Netbox
 {% for lease in leases %}
-host {{ lease.host }} { hardware ethernet {{ lease.mac }}; fixed-address {{ lease.ip }}; }
+host {{ lease.host }} { hardware ethernet {{ lease.mac }}; fixed-address {{ lease.ip }}; option host-name "{{ lease.hostname }}"; }
 {% endfor %}

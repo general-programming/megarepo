@@ -21,9 +21,10 @@ leases = []
 def is_internal(address):
     return ipaddress.ip_network(address, strict=False).is_private
 
-def generate_lease(hostname: str, mac: str, ip: str):
+def generate_lease(lease_name, hostname: str, mac: str, ip: str):
     return {
-        "host": hostname,
+        "host": lease_name,
+        "hostname": hostname,
         "mac": mac,
         "ip": ip,
     }
@@ -64,13 +65,18 @@ if __name__ == "__main__":
         else:
             interface = dcim_interfaces[ip.assigned_object.id]
             device_name = interface.device.name
-            
+
 
         device_name = device_name.replace(" ", "_").replace(":","").replace("_-_", "_").replace("/", "_")
         interface_name = interface.name.replace(" ", "_").replace(":","").replace("_-_", "_").replace("/", "_")
         hostname = f"{device_name}-{interface_name}".lower()
         address = ip.address.split("/")[0]
 
-        leases.append(generate_lease(hostname, interface.mac_address, address))
+        leases.append(generate_lease(
+            lease_name=hostname,
+            hostname=device_name,
+            mac=interface.mac_address,
+            ip=address
+        ))
 
     print(json.dumps(leases))
