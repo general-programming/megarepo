@@ -1,0 +1,10 @@
+version: "3.6"
+services:
+  unrealircd:
+    build: .
+    volumes:
+      - /etc/unrealircd:/etc/unrealircd
+    network_mode: host
+    deploy:
+      restart_policy:
+        condition: any
