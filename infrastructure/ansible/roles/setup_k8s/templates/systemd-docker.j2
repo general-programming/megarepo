@@ -1,4 +1,0 @@
-[Service]
-EnvironmentFile=/run/flannel/subnet.env
-ExecStart=
-ExecStart=/usr/bin/dockerd --ip-masq=false --iptables=false --ip-masq=false --bip=${FLANNEL_SUBNET} --mtu=${FLANNEL_MTU} -H fd://

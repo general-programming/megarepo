@@ -1,3 +1,0 @@
-{% for x in zipped_tokens %}
-{{x[1].content | b64decode | replace("\n", "") }},{{x[0]}},{{x[0]}}
-{% endfor %}
