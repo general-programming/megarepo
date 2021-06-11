@@ -10,9 +10,3 @@
 
 # Docker servers setup.
 - import_playbook: playbook_docker_server.yml
-
-# Server auditing setup
-- import_playbook: playbook_auditing.yml
-
-# Kubernetes servers setup.
-- import_playbook: playbook_k8s_server.yml
