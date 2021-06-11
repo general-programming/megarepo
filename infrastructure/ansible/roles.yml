@@ -1,12 +1,7 @@
 ---
 
-# - src: tersmitten.limits
-#   path: roles/
-# - src: debops-contrib.etckeeper
-#   path: roles/
+- src: debops-contrib.etckeeper
 - src: elastic.elasticsearch
-  path: roles/
-# - src: geerlingguy.nfs
-#   path: roles/
-# - src: savagegus.ansible-consul
-#   path: roles/
+  version: v7.13.1
+- src: griggheo.consul-template
+- src: geerlingguy.nfs
