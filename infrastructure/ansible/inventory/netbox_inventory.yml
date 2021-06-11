@@ -1,0 +1,8 @@
+plugin: netbox
+api_endpoint: https://netbox.generalprogramming.org
+validate_certs: True
+config_context: False
+group_by:
+  - tags
+query_filters:
+  - tag: saltminion
