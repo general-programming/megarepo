@@ -1,7 +1,10 @@
 ---
 
-- src: debops-contrib.etckeeper
-- src: elastic.elasticsearch
-  version: v7.13.1
-- src: griggheo.consul-template
-- src: geerlingguy.nfs
+roles:
+  - name: debops-contrib.etckeeper
+  - name: elastic.elasticsearch
+    version: v7.13.1
+  - name: griggheo.consul-template
+  - name: geerlingguy.nfs
+collections:
+  - name: community.hashi_vault
