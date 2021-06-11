@@ -10,11 +10,11 @@
             },
             {
                 "interval": "10s",
-                "script": "/bin/bash -c \"sudo -n /sbin/gluster pool list |grep -v UUID|grep -v localhost|grep Connected\"",
+                "args": ["/bin/bash", "-c", "sudo -n /sbin/gluster pool list |grep -v UUID|grep -v localhost|grep Connected"],
                 "timeout": "5s"
             }
         ],
-        "enableTagOverride": false,
+        "enable_tag_override": false,
         "id": "gluster",
         "name": "gluster",
         "port": 24007,
