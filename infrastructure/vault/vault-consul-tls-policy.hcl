@@ -1,3 +1,3 @@
-path "pki_int/issue/consul-fmt2-vault" {
+path "pki_internal/issue/consul-fmt2-vault" {
   capabilities = ["update"]
 }
