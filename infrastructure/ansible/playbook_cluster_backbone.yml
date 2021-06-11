@@ -8,7 +8,6 @@
       when: influx_listen_ip is defined and influx_listen_ip
     - role: setup_telegraf
       when: influx_listen_ip is defined and influx_listen_ip
-    # - role: setup_collectd
   vars:
     influx_host: 192.168.3.2
     syslog_server: 192.168.3.2
