@@ -2,9 +2,34 @@ import json
 import os
 
 from pyinfra import host
-from pyinfra.operations import server, files, systemd
+from pyinfra.operations import server, files, systemd, apt
 
 consul_datacenter = host.data.consul_datacenter
+
+if host.fact.linux_distribution["name"] in ["Debian", "Ubuntu"]:
+    server.shell(
+        name="Install HashiCorp repo",
+        commands='apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"',
+    )
+
+    apt.packages(
+        name="Install Consul.",
+        packages=[
+            "consul",
+        ],
+        update=True,
+    )
+
+    for cert_file in ["server.crt", "server.key", "ca.crt"]:
+        files.file(
+            name="Touch Consul TLS files.",
+            path="/etc/consul.d/" + cert_file,
+            present=True,
+            user="consul",
+            group="consul",
+            touch=True,
+        )
+
 
 files.sync(
     name="Sync Consul consul-template configs",
@@ -25,15 +50,8 @@ files.template(
     dest="/etc/consul.d/consul.hcl",
     mode="644",
     consul_datacenter=consul_datacenter,
-    consul_servers=json.dumps(host.data.consul_servers)
-)
-
-server.service(
-    name="Restart Consul.",
-    service="consul",
-    running=True,
-    restarted=True,
-    enabled=True,
+    consul_servers=json.dumps(host.data.consul_servers),
+    consul_server=host.data.consul_server or False
 )
 
 server.service(
@@ -44,9 +62,9 @@ server.service(
 )
 
 server.service(
-    name="Reload Consul.",
+    name="Restart Consul.",
     service="consul",
     running=True,
+    restarted=True,
     enabled=True,
-    reloaded=True,
 )
