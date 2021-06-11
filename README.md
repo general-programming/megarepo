@@ -9,12 +9,10 @@ Mega repo for General Programming business operations.
 ```sh
 
 # Create PKI engines.
-vault secrets enable pki
 vault secrets enable -path=pki_internal pki
 vault secrets enable -path=pki_nomad pki
 
 # Set PKI engine variables.
-vault secrets tune -max-lease-ttl=87600h pki
 vault secrets tune -max-lease-ttl=43800h pki_internal
 vault secrets tune -max-lease-ttl=43800h pki_nomad
 
@@ -22,7 +20,9 @@ vault secrets tune -max-lease-ttl=43800h pki_nomad
 vault write -format=json pki_nomad/intermediate/generate/internal common_name="General Programming Nomad Intermediate Authority" ttl="43800h" | jq -r '.data.csr' > pki_nomad.csr
 vault write -format=json pki_internal/intermediate/generate/internal common_name="General Programming Internal Services Intermediate Authority" ttl="43800h" | jq -r '.data.csr' > pki_internal.csr
 
-# Sign the CSR.
+# Create an internal root CA and sign the CSRs if no HSM.
+vault secrets enable pki
+vault secrets tune -max-lease-ttl=87600h pki
 vault write -format=json pki/root/sign-intermediate csr=@pki_nomad.csr format=pem_bundle ttl="43800h" | jq -r '.data.certificate' > pki_nomad.cert.pem
 vault write -format=json pki/root/sign-intermediate csr=@pki_internal.csr format=pem_bundle ttl="43800h" | jq -r '.data.certificate' > pki_internal.cert.pem
 
