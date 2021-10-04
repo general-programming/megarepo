@@ -1,7 +1,6 @@
-- hosts: all_hosts
+- hosts: tags_dhcpserver
   strategy: free
   roles:
     - role: update_dhcpd
-      when: dhcp_update
   vars:
     - cloudflare_webhook: "{{ lookup('env', 'CLOUDFLARE_WEBHOOK_DHCP') }}"
