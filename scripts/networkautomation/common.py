@@ -10,7 +10,7 @@ def get_nb_client() -> Client:
     transport = AIOHTTPTransport(
         url="https://netbox.generalprogramming.org/graphql/",
         headers={
-            "Authorization": f"Token {os.environ['NETBOX_KEY']}"
+            "Authorization": f"Token {os.environ['NETBOX_API_KEY']}"
         },
     )
 

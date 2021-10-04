@@ -20,19 +20,14 @@ def generate_dns(hostname: str, ipv4: str, ipv6: str):
     }
 
 def create_zone(leases):
-    print("$ORIGIN generalprogramming.org.")
-    print("$TTL 3600")
-
     for lease in leases:
         hostname = lease["hostname"].lower()
 
         if lease["ipv6"]:
-            lease_type = "AAAA"
-            print(f"{hostname}\t{lease_type}\t{lease['ipv6']}")
+            print(f"address=/{hostname}.generalprogramming.org/{lease['ipv6']}")
 
         if lease["ipv4"]:
-            lease_type = "A"
-            print(f"{hostname}\t{lease_type}\t{lease['ipv4']}")
+            print(f"address=/{hostname}.generalprogramming.org/{lease['ipv4']}")
 
 
 def non_static_host(hostname: str) -> bool:
