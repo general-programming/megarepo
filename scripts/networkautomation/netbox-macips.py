@@ -57,6 +57,10 @@ if __name__ == "__main__":
         except IndexError:
             continue
 
+        # Ignore IPv6 IPs.
+        if ":" in ip_address:
+            continue
+
         # Device name for physical / virt.
         if "device" in interface:
             device_name = interface["device"]["name"]
