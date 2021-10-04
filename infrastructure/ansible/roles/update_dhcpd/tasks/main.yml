@@ -1,5 +1,5 @@
 - name: dhcpd - Generate leases config
-  local_action: shell python ../../scripts/netbox-macips.py
+  local_action: shell python ../../scripts/networkautomation/netbox-macips.py
   delegate_to: localhost
   register: leases_output
 
