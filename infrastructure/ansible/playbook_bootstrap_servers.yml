@@ -3,11 +3,6 @@
   become: true
   roles:
     - role: bootstrap_ansible
-    - role: debops-contrib.etckeeper
-      tags: [ "role::etckeeper" ]
-      etckeeper__vcs_user: nouser
-      etckeeper__vcs_email: '{{ etckeeper__vcs_user + "@" + ansible_fqdn }}'
-      when: not provisioned.stat.exists
 
   post_tasks:
     - file:
