@@ -54,6 +54,9 @@ services:
     container_name: librenms
     domainname: generalprogramming.org
     hostname: nms
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     deploy:
       labels:
         - traefik.enable=true
@@ -72,13 +75,16 @@ services:
     networks:
       - librenms
       - publicweb
-  
+
   dispatcher:
     << : *default_settings
     image: librenms/librenms:latest
     container_name: librenms_dispatcher
     hostname: librenms-dispatcher
     domainname: generalprogramming.org
+    cap_add:
+      - NET_ADMIN
+      - NET_RAW
     depends_on:
       - librenms
       - redis
