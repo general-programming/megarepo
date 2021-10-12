@@ -37,4 +37,9 @@ vault write pki_internal/roles/consul-fmt2-vault \
   allow_subdomains=true \
   generate_lease=true \
   max_ttl="8766h"
+vault write pki_internal/roles/genprog \
+  allowed_domains="generalprogramming.org" \
+  allow_subdomains=true \
+  generate_lease=true \
+  max_ttl="8766h"
 ```
