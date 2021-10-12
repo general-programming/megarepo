@@ -1,5 +1,6 @@
 const INTERESTING_FIELDS = {
-  name: 'Name'
+  serial: 'Serial',
+  description: 'Description',
 };
 
 const COLOR_MAX = 16777215;
