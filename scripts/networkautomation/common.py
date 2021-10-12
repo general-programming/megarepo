@@ -1,6 +1,8 @@
 import os
 import ipaddress
 
+from dataclasses import dataclass
+
 from gql import Client
 from gql.transport.aiohttp import AIOHTTPTransport
 
@@ -27,3 +29,14 @@ def is_internal(address):
 
 def clean_hostname(data: str) -> str:
     return data.replace(" ", "_").replace(":", "").replace("_-_", "_").replace("/", "_")
+
+@dataclass
+class IPAMHost:
+    hostname: str
+    ipv4: str = None
+    ipv6: str = None
+    mac: str = None
+
+    @property
+    def clean_hostname(self):
+        return clean_hostname(self.hostname)

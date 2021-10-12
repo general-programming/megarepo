@@ -2,9 +2,10 @@
 import logging
 import sys
 
+from typing import Generator
 from gql import gql
 
-from common import get_nb_client, clean_hostname
+from common import get_nb_client, IPAMHost
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()
@@ -12,22 +13,18 @@ log = logging.getLogger()
 client = get_nb_client()
 
 
-def generate_dns(hostname: str, ipv4: str, ipv6: str):
-    return {
-        "hostname": hostname,
-        "ipv4": ipv4,
-        "ipv6": ipv6,
-    }
-
-def create_zone(leases):
+def create_zone(leases) -> Generator[IPAMHost, None, None]:
     for lease in leases:
-        hostname = lease["hostname"].lower()
+        hostname = lease.clean_hostname.lower()
+        fqdn = f"{hostname}.generalprogramming.org"
 
-        if lease["ipv6"]:
-            print(f"address=/{hostname}.generalprogramming.org/{lease['ipv6']}")
+        if lease.ipv6:
+            yield f"address=/{fqdn}/{lease.ipv6}"
 
-        if lease["ipv4"]:
-            print(f"address=/{hostname}.generalprogramming.org/{lease['ipv4']}")
+        if lease.ipv4:
+            reverse_arpa = ".".join(lease.ipv4.split(".")[::-1]) + ".in-addr.arpa"
+            yield f"address=/{fqdn}/{lease.ipv4}"
+            yield f"ptr-record={reverse_arpa},{fqdn}"
 
 
 def non_static_host(hostname: str) -> bool:
@@ -42,6 +39,7 @@ def non_static_host(hostname: str) -> bool:
         result = True
 
     return result
+
 
 query = gql("""
 query {
@@ -72,35 +70,32 @@ if __name__ == "__main__":
 
     # Execute query and merge physical device + VM interfaces in one list.
     result = client.execute(query)
-    interfaces = result["device_list"] + result["virtual_machine_list"]
+    hosts = result["device_list"] + result["virtual_machine_list"]
 
     # Iterate through all interfaces.
-    for interface in interfaces:
+    for host in hosts:
+        host_name = host["name"]
+
         # Ignore hosts that should not have static IPs.
-        if non_static_host(interface["name"]):
+        if non_static_host(host_name):
             continue
 
         # Ignore interfaces without primary IPs.
-        if not interface["primary_ip4"] and not interface["primary_ip6"]:
-            print(interface["name"], "missing primary ip.", file=sys.stderr)
+        if not host["primary_ip4"] and not host["primary_ip6"]:
+            print(host_name, "missing primary ip.", file=sys.stderr)
             continue
 
         # Try to get the IP.
-        ipv4 = (interface.get("primary_ip4") or {}).get("address", "").split("/")[0]
-        ipv6 = (interface.get("primary_ip6") or {}).get("address", "").split("/")[0]
+        ipv4 = (host.get("primary_ip4") or {}).get("address", "").split("/")[0]
+        ipv6 = (host.get("primary_ip6") or {}).get("address", "").split("/")[0]
 
-        # Device name for physical / virt.
-        device_name = interface["name"]
-
-        # Clean the names for DHCPd.
-        interface_name = clean_hostname(interface["name"])
-        device_name = clean_hostname(device_name)
-        hostname = f"{device_name}-{interface_name}".lower()
-
-        leases.append(generate_dns(
-            hostname=device_name,
+        # Create host dataclass.
+        leases.append(IPAMHost(
+            hostname=host_name,
             ipv4=ipv4,
             ipv6=ipv6,
         ))
 
-    create_zone(leases)
+    for entry in create_zone(leases):
+        print(entry)
+
