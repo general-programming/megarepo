@@ -1,0 +1,6 @@
+apt__group_sources:
+  - uri: 'https://apt.releases.hashicorp.com'
+    suite: '{{ apt__distribution_release }}'
+    architecture: amd64
+    component: main
+    state: present

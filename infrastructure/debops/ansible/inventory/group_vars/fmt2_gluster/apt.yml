@@ -1,0 +1,9 @@
+apt__group_sources:
+  - uri: 'https://apt.releases.hashicorp.com'
+    suite: '{{ apt__distribution_release }}'
+    architecture: amd64
+    component: main
+    state: present
+  - repo: 'deb https://download.gluster.org/pub/gluster/glusterfs/LATEST/Debian/{{ apt__distribution_release }}/amd64/apt {{ apt__distribution_release }} main'
+    state: present
+    distribution: Debian

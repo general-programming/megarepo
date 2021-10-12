@@ -1,0 +1,5 @@
+# consul ALL=(ALL) NOPASSWD: /sbin/gluster pool list
+sudo__group_sudoers:
+  - name: 'consul-glusterlist'
+    raw: |
+    hashicorp ALL=(ALL) NOPASSWD: /sbin/gluster pool list

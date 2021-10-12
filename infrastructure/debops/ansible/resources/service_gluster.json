@@ -1,0 +1,25 @@
+{
+    "service": {
+        "address": "",
+        "checks": [
+            {
+                "interval": "10s",
+                "tcp": "localhost:24007",
+                "timeout": "5s"
+            },
+            {
+                "interval": "10s",
+                "args": ["/bin/bash", "-c", "sudo -n /sbin/gluster pool list |grep -v UUID|grep -v localhost|grep Connected"],
+                "timeout": "5s"
+            }
+        ],
+        "enable_tag_override": false,
+        "id": "gluster",
+        "name": "gluster",
+        "port": 24007,
+        "tags": [
+            "gluster",
+            "server"
+        ]
+    }
+}
