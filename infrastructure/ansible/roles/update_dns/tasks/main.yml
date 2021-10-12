@@ -21,4 +21,4 @@
   service:
     name: "dnsmasq"
     enabled: true
-    state: reloaded
+    state: restarted

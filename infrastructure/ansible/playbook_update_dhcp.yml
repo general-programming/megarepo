@@ -1,4 +1,4 @@
-- hosts: tags_dhcpserver
+- hosts: dhcpserver
   strategy: free
   roles:
     - role: update_dhcpd

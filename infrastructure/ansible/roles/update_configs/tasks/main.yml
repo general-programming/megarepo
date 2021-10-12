@@ -23,22 +23,6 @@
     reload: true
   when: not appserver
 
-- name: "Settings - Set map count to 262144"
-  sysctl:
-    name: vm.max_map_count
-    value: 262144
-    state: present
-    reload: true
-
-- name: "Settings - Set file descriptors limit to unlimited"
-  lineinfile:
-    path: "/etc/security/limits.d/000-ansible.conf"
-    line: "{{ item }}"
-    create: true
-  with_items:
-    - '* soft nofile unlimited'
-    - '* hard nofile unlimited'
-
 - name: "Settings - IPTables Save"
   shell: iptables-save > /etc/iptables.rules
 
@@ -49,13 +33,6 @@
     owner: root
     group: root
     mode: 0644
-
-- name: "Settings - Setup rsyslog remote logging"
-  lineinfile:
-    path: "/etc/rsyslog.d/00-ansible.conf"
-    line: "*.* @{{ syslog_server }}:{{ syslog_port }}"
-    create: true
-  register: rsyslog_config
 
 - name: "Settings - Restart rsyslog daemon"
   systemd:

@@ -1,4 +1,4 @@
-- hosts: tags_dnsserver
+- hosts: dnsserver
   strategy: free
   roles:
     - role: update_dns
