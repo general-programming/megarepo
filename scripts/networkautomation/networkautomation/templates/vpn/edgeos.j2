@@ -1,0 +1,34 @@
+{% include 'common/vyos.j2' %}
+
+{% for link in links %}
+    {%- set interface_id = link.link_id | string() -%}
+    {%- set interface_name = "wg" + interface_id[-3:] -%}
+    {%- set port = link.link_id -%}
+    {%- if link.side_a == device -%}
+        {%- set our_side = link.side_a -%}
+        {%- set other_peer = link.side_b -%}
+    {%- else -%}
+        {%- set our_side = link.side_b -%}
+        {%- set other_peer = link.side_a -%}
+    {%- endif -%}
+set interfaces wireguard {{ interface_name }} description '{{ link.side_a.hostname }} -> {{ link.side_b.hostname }}'
+set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side) }}/31
+set interfaces wireguard {{ interface_name }} private-key '{{ our_side.privkey(port) }}'
+set interfaces wireguard {{ interface_name }} listen-port {{ port }}
+set interfaces wireguard {{ interface_name }} route-allowed-ips false
+set interfaces wireguard {{ interface_name }} peer '{{ other_peer.pubkey(port) }}' allowed-ips 0.0.0.0/0
+    {% if other_peer.address %}
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.pubkey(port) }} endpoint {{ other_peer.address }}:{{ port }}
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.pubkey(port) }} persistent-keepalive 10
+    {% endif %}
+set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
+set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
+{% if other_peer.is_spine -%}
+set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group spine
+{%- else %}
+set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group leaf
+{%- endif %}
+{% endfor %}
+
+set protocols bgp {{ device.asn }} peer-group leaf ebgp-multihop '6'
+set protocols bgp {{ device.asn }} peer-group spine ebgp-multihop '6'

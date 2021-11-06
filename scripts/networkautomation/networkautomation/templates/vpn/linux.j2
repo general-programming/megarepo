@@ -1,0 +1,36 @@
+{% for link in links %}
+    {%- set interface_name = "wg" ~ link.link_id -%}
+    {%- set port = link.link_id -%}
+    {%- if link.side_a == device -%}
+        {%- set our_side = link.side_a -%}
+        {%- set other_peer = link.side_b -%}
+    {%- else -%}
+        {%- set our_side = link.side_b -%}
+        {%- set other_peer = link.side_a -%}
+    {%- endif -%}
+cat << EOF > /etc/wireguard/{{ interface_name }}.conf
+# {{ interface_name }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }}
+[Interface]
+ListenPort = {{ port }}
+PrivateKey = {{ our_side.privkey(port) }}
+
+[Peer]
+PublicKey = {{ other_peer.pubkey(port) }}
+AllowedIPs = 0.0.0.0/0
+    {%- if other_peer.address %}
+Endpoint = {{ other_peer.address }}:{{ port }}
+PersistentKeepalive = 10
+    {% endif %}
+EOF
+cat << EOF > /etc/network/interfaces.d/{{ interface_name }}.conf
+# {{ interface_name }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }}
+auto {{ interface_name }}
+iface {{ interface_name }} inet static
+        address {{ link.get_ip(our_side) }}
+        netmask  255.255.255.254
+        mtu 1420
+        pre-up ip link add \$IFACE type wireguard
+        pre-up wg setconf \$IFACE /etc/wireguard/\$IFACE.conf
+        post-down ip link del \$IFACE
+EOF
+{% endfor %}
