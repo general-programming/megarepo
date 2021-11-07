@@ -1,22 +1,31 @@
 from dataclasses import dataclass
 import ipaddress
 import subprocess
-from typing import Tuple
+from typing import List, Optional, Tuple
 from functools import cache
 import hvac
 
 vault = hvac.Client()
 
 
+@dataclass
+class HostInterface:
+    name: str
+    address: str
+    netmask: str
+    dhcp: bool = False
+    vlan: Optional[int] = None
+
+
 class BaseHost:
     DEVICETYPE = "base"
 
-    def __init__(self, hostname: str, address: str=None, asn: int=None):
-        self.dhcp_interfaces = []
+    def __init__(self, hostname: str, address: str = None, asn: int = None, interfaces: List[HostInterface] = None):
         self.address = address
         self.hostname = hostname
         self.asn = asn
         self.snmp_location = "placeholder snmp location"
+        self.interfaces = interfaces or []
 
     @property
     def devicetype(self):
