@@ -1,0 +1,10 @@
+gluster volume replace-brick fmt2-proxmox 10.65.67.10:/var/gluster/proxmox 10.65.67.5:/var/gluster/proxmox-12 commit force
+gluster volume replace-brick fmt2-srv 10.65.67.10:/var/gluster/fmt2-srv 10.65.67.5:/var/gluster/srv-12 commit force
+gluster peer detach 10.65.67.10
+
+gluster volume replace-brick fmt2-proxmox 10.65.67.5:/var/gluster/proxmox-12 10.65.67.10:/var/gluster/proxmox commit force
+gluster volume replace-brick fmt2-srv 10.65.67.5:/var/gluster/srv-12 10.65.67.10:/var/gluster/fmt2-srv commit force
+
+
+systemctl stop glusterd; pkill -f glusterfs
+systemctl start glusterd
