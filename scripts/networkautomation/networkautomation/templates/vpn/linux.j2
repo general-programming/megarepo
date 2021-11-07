@@ -34,3 +34,5 @@ iface {{ interface_name }} inet static
         post-down ip link del \$IFACE
 EOF
 {% endfor %}
+
+{% include 'common/all_suffix.j2' %}

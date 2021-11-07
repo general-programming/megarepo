@@ -4,6 +4,9 @@ set system login user vyos authentication plaintext-password {{ secrets.password
 set service snmp community '{{ global_meta.snmp_public }}' authorization ro
 set service snmp location '{{ device.snmp_location }}'
 set service snmp contact '{{ global_meta.snmp_contact }}'
+{% for dns_server in device.nameservers %}
+set system name-server {{ dns_server }}
+{% endfor %}
 
 {% for interface in device.interfaces %}
 {% if interface.vlan %}

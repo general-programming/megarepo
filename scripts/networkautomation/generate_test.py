@@ -56,7 +56,9 @@ def load_network(filename: str):
         hosts.append(hostclass(
             hostname=hostname,
             address=meta.get("address", None),
-            asn=meta["asn"]
+            asn=meta["asn"],
+            nameservers=meta.get("nameservers", []),
+            extra_config=meta.get("extra_config", ""),
         ))
 
     links = []

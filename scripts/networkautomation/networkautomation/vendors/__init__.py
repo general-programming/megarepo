@@ -21,12 +21,22 @@ class HostInterface:
 class BaseHost:
     DEVICETYPE = "base"
 
-    def __init__(self, hostname: str, address: str = None, asn: int = None, interfaces: List[HostInterface] = None):
+    def __init__(
+        self,
+        hostname: str,
+        address: str = None,
+        asn: int = None,
+        interfaces: List[HostInterface] = None,
+        nameservers: List[str] = None,
+        extra_config: Optional[str] = "",
+    ):
         self.address = address
         self.hostname = hostname
         self.asn = asn
         self.snmp_location = "placeholder snmp location"
         self.interfaces = interfaces or []
+        self.nameservers = nameservers or []
+        self.extra_config = extra_config
 
     @property
     def devicetype(self):
