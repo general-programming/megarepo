@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 import logging
 
-from gql import gql
-
 from common import get_nb_client
+from gql import gql
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()

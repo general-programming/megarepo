@@ -1,6 +1,5 @@
-import os
 import ipaddress
-
+import os
 from dataclasses import dataclass
 
 from gql import Client

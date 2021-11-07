@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import logging
 import sys
-
 from typing import Generator
-from gql import gql
 
-from common import get_nb_client, IPAMHost
+from common import IPAMHost, get_nb_client
+from gql import gql
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()

@@ -1,8 +1,9 @@
-from dataclasses import dataclass
 import ipaddress
 import subprocess
-from typing import List, Optional, Tuple
+from dataclasses import dataclass
 from functools import cache
+from typing import List, Optional, Tuple
+
 import hvac
 
 vault = hvac.Client()
