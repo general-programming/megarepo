@@ -5,6 +5,18 @@ set service snmp community '{{ global_meta.snmp_public }}' authorization ro
 set service snmp location '{{ device.snmp_location }}'
 set service snmp contact '{{ global_meta.snmp_contact }}'
 
-{% for interface in device.dhcp_interfaces %}
-set interfaces ethernet {{ interface.name }} vif {{ interface.vlan }} address dhcp
+{% for interface in device.interfaces %}
+{% if interface.vlan %}
+    {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.vlan %}
+{% else %}
+    {% set set_string = 'set interfaces ethernet ' + interface.name %}
+{% endif %}
+{# DHCP interfaces. #}
+{% if interface.dhcp %}
+{{ set_string }} address dhcp
+{% endif %}
+{# Interface IP #}
+{% if interface.address %}
+{{ set_string }} address {{ interface.address }}/{{ interface.netmask }}
+{% endif %}
 {%- endfor -%}
