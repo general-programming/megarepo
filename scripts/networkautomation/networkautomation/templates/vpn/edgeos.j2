@@ -32,5 +32,7 @@ set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-g
 
 set protocols bgp {{ device.asn }} peer-group leaf ebgp-multihop '6'
 set protocols bgp {{ device.asn }} peer-group spine ebgp-multihop '6'
+set protocols bgp {{ device.asn }} timers keepalive 10
+set protocols bgp {{ device.asn }} timers holdtime 30
 
 {% include 'common/all_suffix.j2' %}

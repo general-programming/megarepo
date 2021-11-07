@@ -35,5 +35,7 @@ set protocols bgp peer-group leaf address-family ipv4-unicast
 set protocols bgp peer-group leaf ebgp-multihop '6'
 set protocols bgp peer-group spine address-family ipv4-unicast
 set protocols bgp peer-group spine ebgp-multihop '6'
+set protocols bgp timers keepalive 10
+set protocols bgp timers holdtime 30
 
 {% include 'common/all_suffix.j2' %}
