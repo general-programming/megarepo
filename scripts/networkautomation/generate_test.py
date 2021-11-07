@@ -1,17 +1,18 @@
-from dataclasses import dataclass
 import ipaddress
-import hvac
+import os
 import subprocess
+from dataclasses import dataclass
 from typing import Optional, Tuple
+
+import hvac
 import jinja2
+import yaml
 from jinja2 import Environment, PackageLoader, make_logging_undefined
 from magic import logging
-import yaml
-
 from networkautomation.vendors import NetworkLink
-from networkautomation.vendors.vyos import VyOSHost
 from networkautomation.vendors.edgeos import EdgeOSHost
 from networkautomation.vendors.linux import LinuxBirdHost
+from networkautomation.vendors.vyos import VyOSHost
 
 log = logging.getLogger(__name__)
 vault = hvac.Client()
@@ -201,16 +202,15 @@ if __name__ == "__main__":
 
     for device in devices:
         template = jinja_env.get_template(f"vpn/{device.devicetype}.j2")
+        os.makedirs("output/vpn/", exist_ok=True)
         device_links = [
             link for link in links
             if device == link.side_a or device == link.side_b
         ]
-        print(device.hostname)
-        print(device.devicetype)
-        print(template.render(
-            global_meta=global_meta,
-            device=device,
-            links=device_links,
-            secrets=secrets,
-        ))
-        print()
+        with open("output/vpn/" + device.hostname, "w") as f:
+            f.write(template.render(
+                global_meta=global_meta,
+                device=device,
+                links=device_links,
+                secrets=secrets,
+            ))
