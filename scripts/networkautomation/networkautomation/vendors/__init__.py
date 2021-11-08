@@ -30,7 +30,7 @@ class BaseHost:
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
         extra_config: Optional[str] = None,
-        snmp_location: str = "",
+        snmp_location: Optional[str] = None,
         networks: List[str] = None,
         **kwargs
     ):
@@ -83,7 +83,7 @@ class BaseHost:
             nameservers=meta.get("nameservers", []),
             extra_config=meta.get("extra_config", []),
             networks=meta.get("networks", []),
-            snmp_location=meta.get("location", ""),
+            snmp_location=meta.get("location", None),
             interfaces=interfaces,
         )
 
