@@ -28,7 +28,7 @@ class BaseHost:
         asn: int = None,
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
-        extra_config: Optional[str] = "",
+        extra_config: Optional[str] = None,
     ):
         self.address = address
         self.hostname = hostname

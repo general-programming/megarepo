@@ -1,1 +1,3 @@
-{{ device.extra_config }}
+{% for line in device.extra_config %}
+{{ line }}
+{% endfor %}
