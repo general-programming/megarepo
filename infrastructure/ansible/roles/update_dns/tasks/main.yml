@@ -1,5 +1,5 @@
 - name: dns - Generate leases config
-  local_action: shell python ../../scripts/networkautomation/netbox-dns.py
+  local_action: shell python ../../projects/barf/netbox-dns.py
   delegate_to: localhost
   register: dns_output
 

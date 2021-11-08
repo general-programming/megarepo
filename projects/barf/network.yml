@@ -1,0 +1,127 @@
+global_meta:
+  search_domain: generalprogramming.org
+  snmp_public: genprogllc
+  snmp_contact: support@generalprogramming.org
+  snmp_location: General Programming Virtual Infrastructure
+hosts:
+  fmt2-vpn-spine-1:
+    address: 79.110.170.6
+    asn: 4280805525
+    type: vyos
+    interfaces:
+      - name: eth0
+        description: external uplink
+        dhcp: true
+      - name: eth1
+        description: management vlan
+        address: 10.255.1.21
+        netmask: 24
+    nameservers:
+      - 10.255.1.8
+      - 1.1.1.1
+  fmt2-vpn-spine-2:
+    address: 79.110.170.7
+    asn: 4280805525
+    type: vyos
+    interfaces:
+      - name: eth0
+        description: external uplink
+        dhcp: true
+      - name: eth1
+        description: management vlan
+        address: 10.255.1.22
+        netmask: 24
+    nameservers:
+      - 10.255.1.8
+      - 1.1.1.1
+  fmt2-vpn-leaf-1:
+    asn: 4280805526
+    type: vyos
+    nameservers:
+      - 10.255.1.8
+      - 1.1.1.1
+    networks:
+      - 10.65.67.0/24
+      - 10.255.0.0/24
+    extra_config:
+      - set protocols ospf area 0 network 10.65.67.0/24
+      - set protocols ospf redistribute bgp metric-type 2
+      - set nat source rule 10 outbound-interface eth1
+      - set nat source rule 10 source address 172.31.255.0/24
+      - set nat source rule 10 translation address masquerade
+  fmt2-vpn-leaf-2:
+    asn: 4280851827
+    type: vyos
+    nameservers:
+      - 10.255.1.8
+      - 1.1.1.1
+    networks:
+      - 10.65.67.0/24
+      - 10.255.0.0/24
+    extra_config:
+      - set protocols ospf area 0 network 10.65.67.0/24
+      - set protocols ospf redistribute bgp metric-type 2
+      - set nat source rule 10 outbound-interface eth1
+      - set nat source rule 10 source address 172.31.255.0/24
+      - set nat source rule 10 translation address masquerade
+  sea69-acc-v-a-1:
+    asn: 4280805527
+    type: edgeos
+    networks:
+      - 192.168.8.0/23
+      - 10.255
+    nameservers:
+      - 10.255.1.8
+      - 1.1.1.1
+  sea21-hv-egg-irl:
+    asn: 4280805528
+    type: linux
+  # iad1-vpn-leaf-1:
+  #   asn: 4280805529
+  #   type: vyos
+  #   nameservers:
+  #     - 1.1.1.1
+  #     - 1.0.0.1
+  #   networks:
+  #     - 10.20.30.0/24
+links:
+  51820:
+    side_a: fmt2-vpn-spine-1
+    side_b: fmt2-vpn-leaf-1
+    network: 172.31.255.0/31
+  51821:
+    side_a: fmt2-vpn-spine-2
+    side_b: fmt2-vpn-leaf-1
+    network: 172.31.255.2/31
+  51823:
+    side_a: fmt2-vpn-spine-1
+    side_b: sea69-acc-v-a-1
+    network: 172.31.255.4/31
+  51824:
+    side_a: fmt2-vpn-spine-2
+    side_b: sea69-acc-v-a-1
+    network: 172.31.255.6/31
+  51825:
+    side_a: fmt2-vpn-spine-1
+    side_b: sea21-hv-egg-irl
+    network: 172.31.255.8/31
+  51826:
+    side_a: fmt2-vpn-spine-2
+    side_b: sea21-hv-egg-irl
+    network: 172.31.255.10/31
+  51827:
+    side_a: fmt2-vpn-spine-1
+    side_b: fmt2-vpn-leaf-2
+    network: 172.31.255.12/31
+  51828:
+    side_a: fmt2-vpn-spine-2
+    side_b: fmt2-vpn-leaf-2
+    network: 172.31.255.14/31
+  # 51829:
+  #   side_a: fmt2-vpn-spine-1
+  #   side_b: iad1-vpn-leaf-1
+  #   network: 172.31.255.16/31
+  # 51830:
+  #   side_a: fmt2-vpn-spine-2
+  #   side_b: iad1-vpn-leaf-1
+  #   network: 172.31.255.18/31
