@@ -113,7 +113,7 @@ if __name__ == "__main__":
             }, f)
 
         # napalm
-        napalm_push = False
+        napalm_push = "NAPALM_PUSH" in os.environ
         if napalm_push:
             if not isinstance(device, VyOSHost):
                 continue
@@ -133,3 +133,7 @@ if __name__ == "__main__":
 
             napalm_device.load_merge_candidate(config=rendered_config)
             log.info(napalm_device.compare_config())
+
+            confirmation = input("Confirm push? Y/[N]: ")
+            if confirmation.lower().strip() == "y":
+                napalm_device.commit_config()
