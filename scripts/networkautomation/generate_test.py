@@ -10,12 +10,14 @@ from networkautomation.vendors.edgeos import EdgeOSHost
 from networkautomation.vendors.linux import LinuxBirdHost
 from networkautomation.vendors.vyos import VyOSHost
 
-log = logging.getLogger(__name__)
+global_log = logging.getLogger(__name__)
 vault = hvac.Client()
 jinja_env = Environment(
     loader=PackageLoader("networkautomation"),
     autoescape=False,
-    undefined=make_logging_undefined(log, base=jinja2.Undefined),
+    undefined=make_logging_undefined(global_log, base=jinja2.Undefined),
+    trim_blocks=True,
+    lstrip_blocks=True,
 )
 
 

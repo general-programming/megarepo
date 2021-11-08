@@ -25,10 +25,10 @@ set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} remote
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
 {% if other_peer.is_spine -%}
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group spine
-{%- else %}
+{% else %}
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group leaf
-{%- endif %}
-{% endfor %}
+{% endif %}
+{% endfor -%}
 
 set protocols bgp {{ device.asn }} peer-group leaf ebgp-multihop '6'
 set protocols bgp {{ device.asn }} peer-group spine ebgp-multihop '6'

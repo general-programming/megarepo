@@ -16,19 +16,20 @@ set interfaces wireguard {{ interface_name }} private-key '{{ our_side.privkey(p
 set interfaces wireguard {{ interface_name }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.pubkey(port) }}'
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips 0.0.0.0/0
-    {%- if other_peer.address -%}
+    {% if other_peer.address %}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.address }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} persistent-keepalive 10
-    {%- endif %}
+    {% endif %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
-{% if other_peer.is_spine -%}
+{% if other_peer.is_spine %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group spine
-{%- else %}
+{% else %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group leaf
-{%- endif %}
-{% endfor %}
+{% endif %}
+{% endfor -%}
+
 
 set protocols bgp local-as '{{ device.asn }}'
 set protocols bgp peer-group leaf address-family ipv4-unicast
