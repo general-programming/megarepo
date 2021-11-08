@@ -28,6 +28,9 @@ set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group spine
     {% else %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group leaf
     {% endif %}
+    {% if other_peer.can_bfd %}
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} bfd
+    {% endif %}
 {% endfor -%}
 
 {% for network in device.networks %}

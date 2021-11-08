@@ -47,6 +47,10 @@ class BaseHost:
     def devicetype(self):
         return self.DEVICETYPE
 
+    @staticmethod
+    def can_bfd():
+        return False
+
     @cache
     def pubkey(self, port: int):
         _, pubkey = get_wg_keys(self.hostname, port)
