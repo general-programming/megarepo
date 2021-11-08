@@ -30,6 +30,9 @@ set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group leaf
 {% endif %}
 {% endfor -%}
 
+{% for network in device.networks %}
+set protocols bgp address-family ipv4-unicast network {{ network }}
+{% endfor -%}
 
 set protocols bgp local-as '{{ device.asn }}'
 set protocols bgp peer-group leaf address-family ipv4-unicast

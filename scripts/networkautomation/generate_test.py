@@ -5,6 +5,7 @@ import jinja2
 import yaml
 from jinja2 import Environment, PackageLoader, make_logging_undefined
 from magic import logging
+from napalm import get_network_driver
 from networkautomation.vendors import NetworkLink
 from networkautomation.vendors.edgeos import EdgeOSHost
 from networkautomation.vendors.linux import LinuxBirdHost
@@ -55,14 +56,12 @@ def load_network(filename: str):
         else:
             raise ValueError("Invalid host type " + meta["type"])
 
-        hosts.append(hostclass(
+        hosts.append(hostclass.from_meta(
             hostname=hostname,
-            address=meta.get("address", None),
-            asn=meta["asn"],
-            nameservers=meta.get("nameservers", []),
-            extra_config=meta.get("extra_config", ""),
+            meta=meta,
         ))
 
+    # links
     links = []
     for link_id, link in network["links"].items():
         side_a = next(host for host in hosts if host.hostname == link["side_a"])
@@ -80,22 +79,57 @@ def load_network(filename: str):
 
 if __name__ == "__main__":
     devices, links, global_meta = load_network("network.yml")
+    os.makedirs("output/vpn/", exist_ok=True)
 
     secrets = dict(
         password=get_secret("vyos-password"),
     )
 
     for device in devices:
-        template = jinja_env.get_template(f"vpn/{device.devicetype}.j2")
-        os.makedirs("output/vpn/", exist_ok=True)
+        log = logging.getLogger(device.hostname)
+
+        # config render
         device_links = [
             link for link in links
             if device == link.side_a or device == link.side_b
         ]
+        template = jinja_env.get_template(f"vpn/{device.devicetype}.j2")
+        rendered_config = template.render(
+            global_meta=global_meta,
+            device=device,
+            links=device_links,
+            secrets=secrets,
+        )
+
+        # write config file
         with open("output/vpn/" + device.hostname, "w") as f:
-            f.write(template.render(
-                global_meta=global_meta,
-                device=device,
-                links=device_links,
-                secrets=secrets,
-            ))
+            f.write(rendered_config)
+
+        # write cloud-init file
+        with open("output/vpn/cloud-init-" + device.hostname, "w") as f:
+            f.write("#cloud-config\n")
+            yaml.dump({
+                "vyos_config_commands": [x for x in rendered_config.split("\n") if x]
+            }, f)
+
+        # napalm
+        napalm_push = False
+        if napalm_push:
+            if not isinstance(device, VyOSHost):
+                continue
+            driver = get_network_driver("vyos")
+            napalm_device = driver(
+                hostname=f"{device.hostname}.generalprogramming.org",
+                username="vyos",
+                password=secrets["password"],
+                optional_args={"port": 22},
+            )
+            napalm_device.open()
+            log.info("Connected.")
+
+            if napalm_device.compare_config():
+                log.error("Pending changes not commited, not pushing configs.")
+                continue
+
+            napalm_device.load_merge_candidate(config=rendered_config)
+            log.info(napalm_device.compare_config())

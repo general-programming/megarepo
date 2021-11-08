@@ -12,8 +12,9 @@ vault = hvac.Client()
 @dataclass
 class HostInterface:
     name: str
-    address: str
-    netmask: str
+    description: Optional[str] = ""
+    address: Optional[str] = None
+    netmask: Optional[str] = None
     dhcp: bool = False
     vlan: Optional[int] = None
 
@@ -29,14 +30,18 @@ class BaseHost:
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
         extra_config: Optional[str] = None,
+        snmp_location: str = "",
+        networks: List[str] = None,
+        **kwargs
     ):
         self.address = address
         self.hostname = hostname
         self.asn = asn
-        self.snmp_location = "placeholder snmp location"
+        self.snmp_location = snmp_location
         self.interfaces = interfaces or []
         self.nameservers = nameservers or []
-        self.extra_config = extra_config
+        self.networks = networks or []
+        self.extra_config = extra_config or []
 
     @property
     def devicetype(self):
@@ -57,6 +62,30 @@ class BaseHost:
     @property
     def is_spine(self):
         return "-spine-" in self.hostname
+
+    @classmethod
+    def from_meta(cls, hostname: str, meta: dict):
+        interfaces = []
+        for interface in meta.get("interfaces", []):
+            interfaces.append(HostInterface(
+                name=interface["name"],
+                description=interface.get("description"),
+                address=interface.get("address"),
+                netmask=interface.get("netmask"),
+                dhcp=interface.get("dhcp", False),
+                vlan=interface.get("vlan"),
+            ))
+
+        return cls(
+            hostname=hostname,
+            address=meta.get("address", None),
+            asn=meta["asn"],
+            nameservers=meta.get("nameservers", []),
+            extra_config=meta.get("extra_config", []),
+            networks=meta.get("networks", []),
+            snmp_location=meta.get("location", ""),
+            interfaces=interfaces,
+        )
 
 @dataclass
 class NetworkLink:
@@ -89,7 +118,7 @@ def generate_wireguard_keys() -> Tuple[str, str]:
     return (privkey, pubkey)
 
 
-def get_wg_keys(host: str, port: int, generate_keys: bool = False) -> Tuple[str, str]:
+def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, str]:
     """Get the WireGuard private, public keys for a host.
 
     Args:
