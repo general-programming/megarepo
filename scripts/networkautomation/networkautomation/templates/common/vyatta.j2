@@ -25,6 +25,6 @@ set system name-server {{ dns_server }}
 {{ set_string }} address {{ interface.address }}/{{ interface.netmask }}
     {% endif %}
     {% if interface.description %}
-{{ set_string }} description {{ interface.description }}
+{{ set_string }} description '{{ interface.description }}'
     {% endif %}
 {% endfor %}
