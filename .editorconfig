@@ -19,3 +19,7 @@ indent_size = 2
 [*.js]
 indent_style = spaces
 indent_size = 4
+
+# Jinja
+[*.j2]
+insert_final_newline = false
