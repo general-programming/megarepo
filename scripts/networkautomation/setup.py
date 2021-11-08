@@ -2,7 +2,7 @@
 from setuptools import find_packages, setup
 
 setup(
-    name="networkautomation",
+    name="barf",
     packages=find_packages(),
     zip_safe=False,
 )

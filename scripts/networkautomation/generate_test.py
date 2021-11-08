@@ -2,19 +2,20 @@ import os
 
 import hvac
 import jinja2
+import netmiko
 import yaml
+from barf.vendors import NetworkLink
+from barf.vendors.edgeos import EdgeOSHost
+from barf.vendors.linux import LinuxBirdHost
+from barf.vendors.vyos import VyOSHost
 from jinja2 import Environment, PackageLoader, make_logging_undefined
 from magic import logging
 from napalm import get_network_driver
-from networkautomation.vendors import NetworkLink
-from networkautomation.vendors.edgeos import EdgeOSHost
-from networkautomation.vendors.linux import LinuxBirdHost
-from networkautomation.vendors.vyos import VyOSHost
 
 global_log = logging.getLogger(__name__)
 vault = hvac.Client()
 jinja_env = Environment(
-    loader=PackageLoader("networkautomation"),
+    loader=PackageLoader("barf"),
     autoescape=False,
     undefined=make_logging_undefined(global_log, base=jinja2.Undefined),
     trim_blocks=True,
@@ -124,7 +125,11 @@ if __name__ == "__main__":
                 password=secrets["password"],
                 optional_args={"port": 22},
             )
-            napalm_device.open()
+            try:
+                napalm_device.open()
+            except netmiko.ssh_exception.NetmikoTimeoutException as e:
+                log.error(e)
+                continue
             log.info("Connected.")
 
             if napalm_device.compare_config():

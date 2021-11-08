@@ -1,4 +1,4 @@
-from networkautomation.vendors import BaseHost
+from barf.vendors import BaseHost
 
 
 class LinuxBirdHost(BaseHost):
