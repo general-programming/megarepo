@@ -23,11 +23,11 @@ set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} per
     {% endif %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
-{% if other_peer.is_spine %}
+    {% if other_peer.is_spine %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group spine
-{% else %}
+    {% else %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group leaf
-{% endif %}
+    {% endif %}
 {% endfor -%}
 
 {% for network in device.networks %}
