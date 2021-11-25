@@ -32,9 +32,9 @@ def get_secret(secret: str) -> str:
     Returns:
         str: The secret's value.
     """
-    response = vault.secrets.kv.v2.read_secret_version(
-        path=secret,
-    )["data"]["data"]
+    response = vault.secrets.kv.v2.read_secret_version(path=secret,)[
+        "data"
+    ]["data"]
     return response["secret"]
 
 
@@ -57,10 +57,12 @@ def load_network(filename: str):
         else:
             raise ValueError("Invalid host type " + meta["type"])
 
-        hosts.append(hostclass.from_meta(
-            hostname=hostname,
-            meta=meta,
-        ))
+        hosts.append(
+            hostclass.from_meta(
+                hostname=hostname,
+                meta=meta,
+            )
+        )
 
     # links
     links = []
@@ -68,12 +70,11 @@ def load_network(filename: str):
         side_a = next(host for host in hosts if host.hostname == link["side_a"])
         side_b = next(host for host in hosts if host.hostname == link["side_b"])
 
-        links.append(NetworkLink(
-            link_id=link_id,
-            side_a=side_a,
-            side_b=side_b,
-            network=link["network"]
-        ))
+        links.append(
+            NetworkLink(
+                link_id=link_id, side_a=side_a, side_b=side_b, network=link["network"]
+            )
+        )
 
     return hosts, links, global_meta
 
@@ -91,8 +92,7 @@ if __name__ == "__main__":
 
         # config render
         device_links = [
-            link for link in links
-            if device == link.side_a or device == link.side_b
+            link for link in links if device == link.side_a or device == link.side_b
         ]
         template = jinja_env.get_template(f"vpn/{device.devicetype}.j2")
         rendered_config = template.render(
@@ -109,9 +109,10 @@ if __name__ == "__main__":
         # write cloud-init file
         with open("output/vpn/cloud-init-" + device.hostname, "w") as f:
             f.write("#cloud-config\n")
-            yaml.dump({
-                "vyos_config_commands": [x for x in rendered_config.split("\n") if x]
-            }, f)
+            yaml.dump(
+                {"vyos_config_commands": [x for x in rendered_config.split("\n") if x]},
+                f,
+            )
 
         # napalm
         napalm_push = "NAPALM_PUSH" in os.environ

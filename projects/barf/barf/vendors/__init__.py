@@ -32,7 +32,7 @@ class BaseHost:
         extra_config: Optional[str] = None,
         snmp_location: Optional[str] = None,
         networks: List[str] = None,
-        **kwargs
+        **kwargs,
     ):
         self.address = address
         self.hostname = hostname
@@ -48,6 +48,7 @@ class BaseHost:
         return self.DEVICETYPE
 
     @staticmethod
+    @property
     def can_bfd():
         return False
 
@@ -71,14 +72,16 @@ class BaseHost:
     def from_meta(cls, hostname: str, meta: dict):
         interfaces = []
         for interface in meta.get("interfaces", []):
-            interfaces.append(HostInterface(
-                name=interface["name"],
-                description=interface.get("description"),
-                address=interface.get("address"),
-                netmask=interface.get("netmask"),
-                dhcp=interface.get("dhcp", False),
-                vlan=interface.get("vlan"),
-            ))
+            interfaces.append(
+                HostInterface(
+                    name=interface["name"],
+                    description=interface.get("description"),
+                    address=interface.get("address"),
+                    netmask=interface.get("netmask"),
+                    dhcp=interface.get("dhcp", False),
+                    vlan=interface.get("vlan"),
+                )
+            )
 
         return cls(
             hostname=hostname,
@@ -90,6 +93,7 @@ class BaseHost:
             snmp_location=meta.get("location", None),
             interfaces=interfaces,
         )
+
 
 @dataclass
 class NetworkLink:
@@ -117,7 +121,11 @@ def generate_wireguard_keys() -> Tuple[str, str]:
         (str, str): (private_key, public_key)
     """
     privkey = subprocess.check_output("wg genkey", shell=True).decode("utf-8").strip()
-    pubkey = subprocess.check_output(f"echo '{privkey}' | wg pubkey", shell=True).decode("utf-8").strip()
+    pubkey = (
+        subprocess.check_output(f"echo '{privkey}' | wg pubkey", shell=True)
+        .decode("utf-8")
+        .strip()
+    )
 
     return (privkey, pubkey)
 
@@ -149,7 +157,7 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
             secret={
                 "public_key": public_key,
                 "private_key": private_key,
-            }
+            },
         )
 
     return (private_key, public_key)

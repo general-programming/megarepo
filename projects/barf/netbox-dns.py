@@ -40,7 +40,8 @@ def non_static_host(hostname: str) -> bool:
     return result
 
 
-query = gql("""
+query = gql(
+    """
 query {
   device_list {
     name
@@ -62,7 +63,8 @@ query {
     }
   }
 }
-""")
+"""
+)
 
 if __name__ == "__main__":
     leases = []
@@ -89,12 +91,13 @@ if __name__ == "__main__":
         ipv6 = (host.get("primary_ip6") or {}).get("address", "").split("/")[0]
 
         # Create host dataclass.
-        leases.append(IPAMHost(
-            hostname=host_name,
-            ipv4=ipv4,
-            ipv6=ipv6,
-        ))
+        leases.append(
+            IPAMHost(
+                hostname=host_name,
+                ipv4=ipv4,
+                ipv6=ipv6,
+            )
+        )
 
     for entry in create_zone(leases):
         print(entry)
-

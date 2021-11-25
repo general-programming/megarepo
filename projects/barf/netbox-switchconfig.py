@@ -19,7 +19,8 @@ def generate_lease(lease_name, hostname: str, mac: str, ip: str):
     }
 
 
-query = gql("""
+query = gql(
+    """
 query ($device_name: [String]) {
   device_list (name: $device_name) {
     name
@@ -51,7 +52,8 @@ query ($device_name: [String]) {
       }
     }
   }
-}""")
+}"""
+)
 
 
 def cisco_interface(interface: dict) -> str:
@@ -73,8 +75,12 @@ def cisco_interface(interface: dict) -> str:
 
         # oh no
         config_result.append("switchport mode trunk")
-        config_result.append(f"switchport trunk native vlan {interface['untagged_vlan']['vid']}")
-        config_result.append(f"switchport trunk allowed vlan {interface['untagged_vlan']['vid']}")
+        config_result.append(
+            f"switchport trunk native vlan {interface['untagged_vlan']['vid']}"
+        )
+        config_result.append(
+            f"switchport trunk allowed vlan {interface['untagged_vlan']['vid']}"
+        )
         config_result.append("spanning-tree portfast edge trunk")
     elif interface["mode"] == "TAGGED_ALL":
         config_result.append("switchport mode trunk")
@@ -119,8 +125,8 @@ if __name__ == "__main__":
     leases = []
 
     # Execute query and merge physical device + VM interfaces in one list.
-    result = client.execute(query, variable_values={
-        "device_name": "fmt2-con-sw-140752-1"
-    })
+    result = client.execute(
+        query, variable_values={"device_name": "fmt2-con-sw-140752-1"}
+    )
     for interface in result["interface_list"]:
         print(cisco_interface(interface))

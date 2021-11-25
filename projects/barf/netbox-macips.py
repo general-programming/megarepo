@@ -20,7 +20,8 @@ def generate_lease(lease_name, hostname: str, mac: str, ip: str):
     }
 
 
-query = gql("""
+query = gql(
+    """
 query {
   interface_list {
     mac_address
@@ -38,7 +39,8 @@ query {
       address
     }
   }
-}""")
+}"""
+)
 
 if __name__ == "__main__":
     leases = []
@@ -75,11 +77,13 @@ if __name__ == "__main__":
             log.warning(f"{ip_address} missing MAC")
             continue
 
-        leases.append(generate_lease(
-            lease_name=hostname,
-            hostname=device_name,
-            mac=interface["mac_address"],
-            ip=ip_address
-        ))
+        leases.append(
+            generate_lease(
+                lease_name=hostname,
+                hostname=device_name,
+                mac=interface["mac_address"],
+                ip=ip_address,
+            )
+        )
 
     print(json.dumps(leases))

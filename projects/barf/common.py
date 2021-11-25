@@ -10,16 +10,11 @@ def get_nb_client() -> Client:
     # Select your transport with a defined url endpoint
     transport = AIOHTTPTransport(
         url="https://netbox.generalprogramming.org/graphql/",
-        headers={
-            "Authorization": f"Token {os.environ['NETBOX_API_KEY']}"
-        },
+        headers={"Authorization": f"Token {os.environ['NETBOX_API_KEY']}"},
     )
 
     # Create a GraphQL client using the defined transport
-    return Client(
-        transport=transport,
-        fetch_schema_from_transport=True
-    )
+    return Client(transport=transport, fetch_schema_from_transport=True)
 
 
 def is_internal(address):
@@ -28,6 +23,7 @@ def is_internal(address):
 
 def clean_hostname(data: str) -> str:
     return data.replace(" ", "_").replace(":", "").replace("_-_", "_").replace("/", "_")
+
 
 @dataclass
 class IPAMHost:
