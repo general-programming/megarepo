@@ -1,3 +1,5 @@
 click
 napalm
 napalm-vyos
+hvac
+python-magic
