@@ -107,6 +107,8 @@ class NetworkLink:
     side_a: BaseHost
     side_b: BaseHost
     network: str
+    secret: Optional[str] = None
+    ipsec: bool = False
 
     def get_ip(self, host: BaseHost):
         side_a_ip, side_b_ip = list(ipaddress.IPv4Network(self.network).hosts())
