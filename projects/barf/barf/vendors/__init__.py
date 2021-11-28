@@ -21,6 +21,7 @@ class HostInterface:
 
 class BaseHost:
     DEVICETYPE = "base"
+    TEMPLATABLE = True
 
     def __init__(
         self,
@@ -51,6 +52,10 @@ class BaseHost:
     @property
     def can_bfd():
         return False
+
+    @property
+    def is_templatable(self):
+        return self.TEMPLATABLE
 
     @cache
     def pubkey(self, port: int):
