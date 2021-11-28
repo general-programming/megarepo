@@ -1,8 +1,21 @@
 {% include 'common/vyos.j2' %}
 
+set vpn ipsec esp-group ESP_DEFAULT compression 'disable'
+set vpn ipsec esp-group ESP_DEFAULT lifetime '3600'
+set vpn ipsec esp-group ESP_DEFAULT mode 'tunnel'
+set vpn ipsec esp-group ESP_DEFAULT pfs 'dh-group20'
+set vpn ipsec esp-group ESP_DEFAULT proposal 10 encryption 'aes256'
+set vpn ipsec esp-group ESP_DEFAULT proposal 10 hash 'sha384'
+set vpn ipsec ike-group IKEv2_DEFAULT ikev2-reauth 'no'
+set vpn ipsec ike-group IKEv2_DEFAULT key-exchange 'ikev2'
+set vpn ipsec ike-group IKEv2_DEFAULT lifetime '3600'
+set vpn ipsec ike-group IKEv2_DEFAULT mobike 'disable'
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 dh-group '19'
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 encryption 'aes256gcm128'
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 hash 'sha256'
+set vpn ipsec interface eth0
+
 {% for link in links %}
-    {%- set interface_name = "wg" ~ link.link_id -%}
-    {%- set port = link.link_id -%}
     {%- if link.side_a == device -%}
         {%- set our_side = link.side_a -%}
         {%- set other_peer = link.side_b -%}
@@ -10,17 +23,36 @@
         {%- set our_side = link.side_b -%}
         {%- set other_peer = link.side_a -%}
     {%- endif -%}
+    {# ipsec links#}
+    {% if link.ipsec %}
+        {%- set interface_name = "vti" ~ link.link_id -%}
+set interfaces vti {{ interface_name }} address '{{ link.get_ip(our_side) }}/31'
+set vpn ipsec site-to-site peer {{ other_peer.address }} authentication id '{{ our_side.address }}'
+set vpn ipsec site-to-site peer {{ other_peer.address }} authentication mode 'pre-shared-secret'
+set vpn ipsec site-to-site peer {{ other_peer.address }} authentication pre-shared-secret '{{ link.secret }}'
+set vpn ipsec site-to-site peer {{ other_peer.address }} authentication remote-id '{{ other_peer.address }}'
+set vpn ipsec site-to-site peer {{ other_peer.address }} connection-type 'initiate'
+set vpn ipsec site-to-site peer {{ other_peer.address }} ike-group 'IKEv1_DEFAULT'
+set vpn ipsec site-to-site peer {{ other_peer.address }} dhcp-interface eth0
+set vpn ipsec site-to-site peer {{ other_peer.address }} vti bind '{{ interface_name }}'
+set vpn ipsec site-to-site peer {{ other_peer.address }} vti esp-group 'ESP_DEFAULT'
+    {# wireguard links #}
+    {% else %}
+        {%- set interface_name = "wg" ~ link.link_id -%}
+        {%- set port = link.link_id -%}
 set interfaces wireguard {{ interface_name }} description '{{ link.side_a.hostname }} -> {{ link.side_b.hostname }}'
 set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side) }}/31
 set interfaces wireguard {{ interface_name }} private-key '{{ our_side.privkey(port) }}'
 set interfaces wireguard {{ interface_name }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.pubkey(port) }}'
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips 0.0.0.0/0
-    {% if other_peer.address %}
+        {% if other_peer.address %}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.address }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} persistent-keepalive 10
+        {% endif %}
     {% endif %}
+
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
     {% if other_peer.is_spine %}
