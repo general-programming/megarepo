@@ -1,41 +1,16 @@
 import os
 
-import hvac
-import jinja2
-import netmiko
 import yaml
+from barf.actions import get_secret, push_config
+from barf.common import render_template
 from barf.vendors import NetworkLink
 from barf.vendors.edgeos import EdgeOSHost
+from barf.vendors.external import ExternalHost
 from barf.vendors.linux import LinuxBirdHost
 from barf.vendors.vyos import VyOSHost
-from jinja2 import Environment, PackageLoader, make_logging_undefined
 from magic import logging
-from napalm import get_network_driver
 
 global_log = logging.getLogger(__name__)
-vault = hvac.Client()
-jinja_env = Environment(
-    loader=PackageLoader("barf"),
-    autoescape=False,
-    undefined=make_logging_undefined(global_log, base=jinja2.Undefined),
-    trim_blocks=True,
-    lstrip_blocks=True,
-)
-
-
-def get_secret(secret: str) -> str:
-    """Vault secret fetcher.
-
-    Args:
-        secret (str): The secret's path.
-
-    Returns:
-        str: The secret's value.
-    """
-    response = vault.secrets.kv.v2.read_secret_version(path=secret,)[
-        "data"
-    ]["data"]
-    return response["secret"]
 
 
 def load_network(filename: str):
@@ -54,6 +29,8 @@ def load_network(filename: str):
             hostclass = EdgeOSHost
         elif meta["type"] == "linux":
             hostclass = LinuxBirdHost
+        elif meta["type"] == "external":
+            hostclass = ExternalHost
         else:
             raise ValueError("Invalid host type " + meta["type"])
 
@@ -67,12 +44,18 @@ def load_network(filename: str):
     # links
     links = []
     for link_id, link in network["links"].items():
+        print(link)
         side_a = next(host for host in hosts if host.hostname == link["side_a"])
         side_b = next(host for host in hosts if host.hostname == link["side_b"])
 
         links.append(
             NetworkLink(
-                link_id=link_id, side_a=side_a, side_b=side_b, network=link["network"]
+                link_id=link_id,
+                side_a=side_a,
+                side_b=side_b,
+                network=link["network"],
+                secret=link.get("secret", None),
+                ipsec=link.get("ipsec", False),
             )
         )
 
@@ -90,12 +73,16 @@ if __name__ == "__main__":
     for device in devices:
         log = logging.getLogger(device.hostname)
 
+        # Ignore untemplatable devices.
+        if not device.is_templatable:
+            continue
+
         # config render
         device_links = [
             link for link in links if device == link.side_a or device == link.side_b
         ]
-        template = jinja_env.get_template(f"vpn/{device.devicetype}.j2")
-        rendered_config = template.render(
+        rendered_config = render_template(
+            f"vpn/{device.devicetype}.j2",
             global_meta=global_meta,
             device=device,
             links=device_links,
@@ -114,32 +101,6 @@ if __name__ == "__main__":
                 f,
             )
 
-        # napalm
-        napalm_push = "NAPALM_PUSH" in os.environ
-        if napalm_push:
-            if not isinstance(device, VyOSHost):
-                continue
-            driver = get_network_driver("vyos")
-            napalm_device = driver(
-                hostname=f"{device.hostname}.generalprogramming.org",
-                username="vyos",
-                password=secrets["password"],
-                optional_args={"port": 22},
-            )
-            try:
-                napalm_device.open()
-            except netmiko.ssh_exception.NetmikoTimeoutException as e:
-                log.error(e)
-                continue
-            log.info("Connected.")
-
-            if napalm_device.compare_config():
-                log.error("Pending changes not commited, not pushing configs.")
-                continue
-
-            napalm_device.load_merge_candidate(config=rendered_config)
-            log.info(napalm_device.compare_config())
-
-            confirmation = input("Confirm push? Y/[N]: ")
-            if confirmation.lower().strip() == "y":
-                napalm_device.commit_config()
+        # napalm push
+        if "NAPALM_PUSH" in os.environ:
+            push_config(device, rendered_config)
