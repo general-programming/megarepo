@@ -1,22 +1,24 @@
 global:
-  scrape_interval:     10s
+  scrape_interval: 10s
   evaluation_interval: 25s
   external_labels:
     host: docker
     replica: A
 
 scrape_configs:
-  - job_name: 'node'
+  - job_name: "node"
     static_configs:
       - targets:
-        - '192.168.3.1:9100'
-        - '192.168.3.2:9100'
-        - 'nhome.hosts.generalprogramming.org:9100'
-  - job_name: 'linuxhome'
-    metrics_path: '/api/v1/allmetrics'
+          - "192.168.3.1:9100"
+          - "192.168.3.2:9100"
+          - "nhome.hosts.generalprogramming.org:9100"
+          - "10.65.67.170:9121"
+          - "10.65.67.170:9122"
+  - job_name: "linuxhome"
+    metrics_path: "/api/v1/allmetrics"
     params:
       # format: prometheus | prometheus_all_hosts
-      # You can use `prometheus_all_hosts` if you want Prometheus to set the `instance` to your hostname instead of IP 
+      # You can use `prometheus_all_hosts` if you want Prometheus to set the `instance` to your hostname instead of IP
       format: [prometheus]
       #
       # sources: as-collected | raw | average | sum | volume
@@ -28,18 +30,18 @@ scrape_configs:
       #server: ['prometheus1']
     honor_labels: true
     static_configs:
-      - targets: ['192.168.2.101:19999']
+      - targets: ["192.168.2.101:19999"]
     scrape_interval: 1s
   - job_name: linuxtraefik
     static_configs:
       - targets:
-        - '172.16.1.8:64500'
+          - "172.16.1.8:64500"
   - job_name: linuxupstream
-    metrics_path: '/api/v1/allmetrics'
+    metrics_path: "/api/v1/allmetrics"
     params:
       # format: prometheus | prometheus_all_hosts
-      # You can use `prometheus_all_hosts` if you want Prometheus to set the `instance` to your hostname instead of IP 
+      # You can use `prometheus_all_hosts` if you want Prometheus to set the `instance` to your hostname instead of IP
       format: [prometheus]
     honor_labels: true
     static_configs:
-      - targets: ['172.16.1.9:19999']
+      - targets: ["172.16.1.9:19999"]

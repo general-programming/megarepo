@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   consul:
-    image: consul:1.9.5
+    image: consul:1.11.0
     deploy:
       restart_policy:
         condition: any
