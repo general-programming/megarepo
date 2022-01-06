@@ -1,0 +1,9 @@
+server {
+  enabled = false
+}
+
+client {
+  enabled = true
+  node_class = "class_q"
+  servers = {{ nomad_servers }}
+}

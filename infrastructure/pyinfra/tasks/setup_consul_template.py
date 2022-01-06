@@ -1,15 +1,5 @@
-import hvac
-
 from pyinfra import host
 from pyinfra.operations import server, files, systemd
-
-vault_role = host.data.vault_role
-
-if vault_role:
-    hvac_client = hvac.Client()
-    vault_token = hvac_client.create_token(role=vault_role, period="72h", orphan=True)["auth"]["client_token"]
-else:
-    vault_token = None
 
 files.template(
     name="Create Consul Template base config.",
@@ -17,7 +7,6 @@ files.template(
     dest="/etc/consul-template/config/00-base.hcl",
     mode="644",
     vault_url=host.data.vault_url,
-    vault_token=vault_token,
 )
 
 if host.fact.linux_distribution["name"] == "Alpine":

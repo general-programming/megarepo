@@ -1,0 +1,51 @@
+{% if approle_name == "cluster-server" %}
+template {
+    source = "/etc/consul-template/templates/nomad/server-ca.tpl"
+    destination = "/etc/nomad.d/ca.crt"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+
+template {
+    source = "/etc/consul-template/templates/nomad/server-cert.tpl"
+    destination = "/etc/nomad.d/server.crt"
+    perms = "0700"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+
+template {
+    source = "/etc/consul-template/templates/nomad/server-key.tpl"
+    destination = "/etc/nomad.d/server.key"
+    perms = "0700"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+{% else %}
+template {
+    source = "/etc/consul-template/templates/nomad/client-ca.tpl"
+    destination = "/etc/nomad.d/ca.crt"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+
+template {
+    source = "/etc/consul-template/templates/nomad/client-cert.tpl"
+    destination = "/etc/nomad.d/server.crt"
+    perms = "0700"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+
+template {
+    source = "/etc/consul-template/templates/nomad/client-key.tpl"
+    destination = "/etc/nomad.d/server.key"
+    perms = "0700"
+    command = "/bin/bash -c 'systemctl reload nomad || true'"
+}
+{% endif %}
+template {
+    source = "/etc/consul-template/templates/nomad/cli-cert.tpl"
+    destination = "/etc/nomad.d/cli.crt"
+}
+
+template {
+    source = "/etc/consul-template/templates/nomad/cli-key.tpl"
+    destination = "/etc/nomad.d/cli.key"
+    perms = "0640"
+}

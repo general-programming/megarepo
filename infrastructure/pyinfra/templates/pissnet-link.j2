@@ -1,0 +1,15 @@
+link {{ server_name }} {
+    incoming {
+        mask *;
+    }
+    outgoing {
+        hostname {{ server_ip }};
+        port 6900;
+        options {
+            tls;
+            {% if autoconnect %}autoconnect;{% endif %}
+        }
+    }
+    password "8RtOWBWD0OYJMklSzSY2rGnnZ89GD9PBxpDdN2HkheY=" { spkifp; }
+    class servers;
+}

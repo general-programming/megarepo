@@ -1,0 +1,31 @@
+#
+# These are the settings saved from running './Config'.
+# Note that it is not recommended to edit config.settings by hand!
+# Chances are you misunderstand what a variable does or what the
+# supported values are. You better just re-run the ./Config script
+# and answer appropriately there, to get a correct config.settings
+# file.
+#
+BASEPATH="/opt/ircd"
+BINDIR="/opt/ircd/bin"
+DATADIR="/opt/ircd/data"
+CONFDIR="/opt/ircd/conf"
+MODULESDIR="/opt/ircd/modules"
+LOGDIR="/opt/ircd/logs"
+CACHEDIR="/opt/ircd/cache"
+DOCDIR="/opt/ircd/doc"
+TMPDIR="/opt/ircd/tmp"
+PRIVATELIBDIR="/opt/ircd/lib"
+PREFIXAQ="1"
+MAXCONNECTIONS_REQUEST="auto"
+NICKNAMEHISTORYLENGTH="2000"
+DEFPERM="0600"
+SSLDIR=""
+REMOTEINC=""
+CURLDIR=""
+SHOWLISTMODES="1"
+NOOPEROVERRIDE=""
+OPEROVERRIDEVERIFY=""
+GENCERTIFICATE="1"
+EXTRAPARA=""
+ADVANCED=""
