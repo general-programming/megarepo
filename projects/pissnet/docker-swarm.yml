@@ -8,4 +8,4 @@ services:
     network_mode: host
     deploy:
       restart_policy:
-        condition: any
+        condition: always

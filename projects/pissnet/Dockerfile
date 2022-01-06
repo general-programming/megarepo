@@ -1,4 +1,4 @@
-FROM alpine:3.13
+FROM alpine:3.15
 
 # Basic setup.
 RUN apk add --no-cache openssl pcre2 c-ares argon2-dev libsodium && \
