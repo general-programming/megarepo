@@ -1,0 +1,11 @@
+FROM openjdk:17-alpine
+
+RUN apk add --no-cache less nano byobu openssh-server openssh-server-pam htop vim rsync python3 py3-pip py3-virtualenv musl-locales && \
+    cp /etc/ssh/sshd_config /etc/system_sshd_config && \
+    # sed -i 's/^# *\(en_US.UTF-8\)/\1/' /etc/locale.gen && \
+    # locale-gen && \
+    echo "export PATH=$JAVA_HOME/bin:\$PATH" >> /etc/profile
+
+ADD init.sh /init.sh
+
+CMD /init.sh

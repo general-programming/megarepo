@@ -1,11 +1,13 @@
 #!/bin/sh
 
 if [ ! -f /etc/ssh/sshd_config ]; then
-    cp /usr/share/openssh/sshd_config /etc/ssh/
-    dpkg-reconfigure openssh-server
+    cp /etc/system_sshd_config /etc/ssh/
+    ssh-keygen -A
 fi
 
-service ssh start
+service ssh start || /usr/sbin/sshd &
 
 byobu new-session -d -s "server" "/data/start.sh"
 tail -f /var/log/*
+
+while true; do sleep 10000; done
