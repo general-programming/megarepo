@@ -64,7 +64,7 @@ def load_network(filename: str):
 
 if __name__ == "__main__":
     devices, links, global_meta = load_network("network.yml")
-    os.makedirs("output/vpn/", exist_ok=True)
+    os.makedirs("output/vpn/cloud_init", exist_ok=True)
 
     secrets = dict(
         password=get_secret("vyos-password"),
@@ -92,9 +92,10 @@ if __name__ == "__main__":
         # write config file
         with open("output/vpn/" + device.hostname, "w") as f:
             f.write(rendered_config)
+            log.info("Config saved.")
 
         # write cloud-init file
-        with open("output/vpn/cloud-init-" + device.hostname, "w") as f:
+        with open("output/vpn/cloud_init/" + device.hostname, "w") as f:
             f.write("#cloud-config\n")
             yaml.dump(
                 {"vyos_config_commands": [x for x in rendered_config.split("\n") if x]},
