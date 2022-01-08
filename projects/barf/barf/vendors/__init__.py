@@ -17,6 +17,7 @@ class HostInterface:
     netmask: Optional[str] = None
     dhcp: bool = False
     vlan: Optional[int] = None
+    mtu: Optional[int] = None
 
 
 class BaseHost:
@@ -33,6 +34,7 @@ class BaseHost:
         extra_config: Optional[str] = None,
         snmp_location: Optional[str] = None,
         networks: List[str] = None,
+        cloud_init: bool = False,
         **kwargs,
     ):
         self.address = address
@@ -43,6 +45,7 @@ class BaseHost:
         self.nameservers = nameservers or []
         self.networks = networks or []
         self.extra_config = extra_config or []
+        self.cloud_init = cloud_init
 
     @property
     def devicetype(self):
@@ -85,6 +88,7 @@ class BaseHost:
                     netmask=interface.get("netmask"),
                     dhcp=interface.get("dhcp", False),
                     vlan=interface.get("vlan"),
+                    mtu=interface.get("mtu", None),
                 )
             )
 
@@ -97,6 +101,7 @@ class BaseHost:
             networks=meta.get("networks", []),
             snmp_location=meta.get("location", None),
             interfaces=interfaces,
+            cloud_init=meta.get("cloud_init", False),
         )
 
 
