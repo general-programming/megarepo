@@ -50,8 +50,15 @@ def push_config(device, config):
     napalm_device.load_merge_candidate(config=config)
     log.info(napalm_device.compare_config())
 
-    confirmation = input("Confirm push? [y]es/[N]/[d]iscard: ").lower().strip()
+    confirmation = (
+        input(f"Confirm push for '{device.hostname}': [y]es/[N]/[d]iscard: ")
+        .lower()
+        .strip()
+    )
+
     if confirmation == "y":
         napalm_device.commit_config()
+        log.info("Pushing configuration.")
     elif confirmation == "d":
         napalm_device.discard_config()
+        log.info("Discarding configuration.")
