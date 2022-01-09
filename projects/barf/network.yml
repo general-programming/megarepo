@@ -76,14 +76,23 @@ hosts:
   sea21-hv-egg-irl:
     asn: 4280805528
     type: linux
-  # iad1-vpn-leaf-1:
-  #   asn: 4280805529
-  #   type: vyos
-  #   nameservers:
-  #     - 1.1.1.1
-  #     - 1.0.0.1
-  #   networks:
-  #     - 10.20.30.0/24
+  iad1-vpn-leaf-1:
+    asn: 4280805529
+    type: vyos
+    cloudinit: true
+    interfaces:
+      - name: eth0
+        description: hetzner external
+        dhcp: true
+      - name: eth1
+        description: hetzner internal
+        dhcp: true
+        mtu: 1450
+    nameservers:
+      - 1.1.1.1
+      - 1.0.0.1
+    networks:
+      - 10.64.16.0/24
 links:
   51820:
     side_a: fmt2-vpn-spine-1
@@ -117,11 +126,11 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-leaf-2
     network: 172.31.255.14/31
-  # 51829:
-  #   side_a: fmt2-vpn-spine-1
-  #   side_b: iad1-vpn-leaf-1
-  #   network: 172.31.255.16/31
-  # 51830:
-  #   side_a: fmt2-vpn-spine-2
-  #   side_b: iad1-vpn-leaf-1
-  #   network: 172.31.255.18/31
+  51829:
+    side_a: fmt2-vpn-spine-1
+    side_b: iad1-vpn-leaf-1
+    network: 172.31.255.16/31
+  51830:
+    side_a: fmt2-vpn-spine-2
+    side_b: iad1-vpn-leaf-1
+    network: 172.31.255.18/31
