@@ -29,3 +29,8 @@ consul {
   server_service_name = "nomad-cluster"
   client_service_name = "nomad-cluster-client"
 }
+
+client {
+  enabled = true
+  node_class = "server"
+}
