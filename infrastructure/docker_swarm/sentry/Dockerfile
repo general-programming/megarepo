@@ -1,4 +1,4 @@
-FROM getsentry/sentry:latest
+FROM getsentry/sentry:21.5.0
 
 WORKDIR /usr/src/sentry
 

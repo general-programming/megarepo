@@ -42,3 +42,4 @@ infrastructure/docker_swarm/dex/config.yaml
 infrastructure/docker_swarm/traefik/traefik_users.passwd
 infrastructure/docker_swarm/sentry/config.yml
 infrastructure/pyinfra/files/pissnet/secret.conf
+infrastructure/docker_swarm/sentry/sentry.conf.py
