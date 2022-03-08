@@ -1,9 +1,9 @@
+import ipaddress
 import json
 import os
-import ipaddress
 
 from pyinfra import host
-from pyinfra.operations import server, files, systemd
+from pyinfra.operations import files, server, systemd
 
 approle_name = host.data.vault_role or "cluster-node"
 is_server = approle_name == "cluster-server"
@@ -13,12 +13,6 @@ if is_server:
     config_type = "01-server"
 else:
     config_type = "01-client"
-
-# Arch specific config
-if host.fact.arch == "aarch64":
-    nomad_binary = "https://releases.hashicorp.com/nomad/1.1.4/nomad_1.1.4_linux_arm64.zip"
-else:
-    nomad_binary = "https://releases.hashicorp.com/nomad/1.1.4/nomad_1.1.4_linux_amd64.zip"
 
 # Get public IPv4 address
 v4_addr = None
@@ -68,9 +62,12 @@ files.template(
 
 if is_server:
     import hvac
+
     hvac_client = hvac.Client()
 
-    vault_token = hvac_client.create_token(policies=["nomad-server"], period="72h", orphan=True)["auth"]["client_token"]
+    vault_token = hvac_client.create_token(
+        policies=["nomad-server"], period="72h", orphan=True
+    )["auth"]["client_token"]
 else:
     vault_token = None
 
@@ -100,9 +97,5 @@ server.service(
 )
 
 server.service(
-    name="Restart Nomad.",
-    service="nomad",
-    running=True,
-    enabled=True,
-    restarted=True
+    name="Restart Nomad.", service="nomad", running=True, enabled=True, restarted=True
 )
