@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import logging
 
+from barf.common import render_template
 from common import get_nb_client
 from gql import gql
 
@@ -126,7 +127,17 @@ if __name__ == "__main__":
 
     # Execute query and merge physical device + VM interfaces in one list.
     result = client.execute(
-        query, variable_values={"device_name": "fmt2-con-sw-140752-1"}
+        query,
+        variable_values={
+            "device_name": "fmt2-con-sw-140752-1",
+        },
     )
-    for interface in result["interface_list"]:
-        print(cisco_interface(interface))
+
+    devicetype = "con-sw"
+
+    print(
+        render_template(
+            f"switch/{devicetype}.j2",
+            interfaces=result["interface_list"],
+        )
+    )

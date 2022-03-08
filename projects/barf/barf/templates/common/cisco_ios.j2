@@ -1,0 +1,33 @@
+{% for interface in interfaces %}
+    {% if interface["cable"] %}
+        {% set description =  interface["cable"]["_termination_a_device"]["name"] + " -> " + interface["cable"]["_termination_b_device"]["name"] %}
+    {% else %}
+        {% set description = interface["description"] or "" %}
+    {% endif %}
+    {% if interface["type"] == "LAG" %}
+        {% set interface_name =  "Port-Channel" + interface["name"] %}
+    {% else %}
+        {% set interface_name = interface["name"] %}
+    {% endif %}
+interface {{ interface_name }}
+    {% if interface["mode"] == "ACCESS" %}
+switchport mode access
+switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+    {% elif interface["mode"] == "TAGGED_ALL" %}
+switchport mode trunk
+    {% elif interface["mode"] == "TAGGED" %}
+switchport mode trunk
+    {% endif %}
+    {% if interface["lag"] %}
+channel-group {{ interface["lag"]["name"] }}
+    {% endif %}
+    {% if description %}
+description {{ description }}
+    {% endif %}
+    {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
+shutdown
+    {% else %}
+no shutdown
+    {% endif %}
+!
+{% endfor %}
