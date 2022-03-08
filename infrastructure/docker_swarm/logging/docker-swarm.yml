@@ -120,7 +120,7 @@ services:
         condition: any
 
   thanos-sidecar:
-    image: thanosio/thanos:v0.23.1
+    image: thanosio/thanos:v0.25.0
     command: "sidecar --prometheus.url=http://prometheus:9090 --tsdb.path=/prometheus --objstore.config-file=/thanos/bucket_config.yml --shipper.upload-compacted"
     volumes:
       - /srv/var/thanos/bucket_config.yml:/thanos/bucket_config.yml:ro
@@ -132,7 +132,7 @@ services:
         condition: any
 
   thanos-store:
-    image: thanosio/thanos:v0.23.1
+    image: thanosio/thanos:v0.25.0
     command: 'store --data-dir "/thanos/store" --objstore.config-file=/thanos/bucket_config.yml --index-cache.config-file=/thanos/thanos_cache.yml --store.caching-bucket.config-file=/thanos/thanos_cache.yml'
     volumes:
       - /srv/var/thanos/store:/thanos/store
@@ -145,7 +145,7 @@ services:
         condition: any
 
   thanos-query-backend:
-    image: thanosio/thanos:v0.23.1
+    image: thanosio/thanos:v0.25.0
     command: 'query --http-address "0.0.0.0:9090" --query.replica-label "replica" --store thanos-sidecar:10901 --store thanos-store:10901'
     networks:
       - logging
@@ -154,7 +154,7 @@ services:
         condition: any
 
   thanos-query:
-    image: thanosio/thanos:v0.23.1
+    image: thanosio/thanos:v0.25.0
     command: 'query-frontend --http-address "0.0.0.0:9090" --query-range.response-cache-config-file=/thanos/thanos_cache.yml --labels.response-cache-config-file=/thanos/thanos_cache.yml --query-frontend.downstream-url="http://thanos-query-backend:9090"'
     networks:
       - logging
@@ -165,7 +165,7 @@ services:
         condition: any
 
   thanos-compactor:
-    image: thanosio/thanos:v0.23.1
+    image: thanosio/thanos:v0.25.0
     command: 'compact --wait --data-dir "/thanos/store" --objstore.config-file=/thanos/bucket_config.yml'
     networks:
       - logging
