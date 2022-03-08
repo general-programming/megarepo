@@ -13,11 +13,12 @@ services:
         - traefik.port=80
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.http.routers.staticweb.rule=Host(`www.owo.me`, `owo.me`, `gaysounds.shitpos.ts.it`, `www.e2.pm`, `e2.pm`, `portfolio.nepeat.com`, `www.nepeat.com`, `nepeat.com`, `www.e-wit.ch`, `e-wit.ch`)
+        - traefik.http.routers.staticweb.rule=Host(`www.owo.me`, `owo.me`, `gaysounds.shitpos.ts.it`, `www.e2.pm`, `e2.pm`, `portfolio.nepeat.com`, `www.nepeat.com`, `nepeat.com`, `fastly.nepeat.com`, `www.e-wit.ch`, `e-wit.ch`)
         - traefik.http.services.staticweb.loadbalancer.server.port=80
         # - traefik.main.frontend.rule=Host:www.nepeat.com,nepeat.com
       restart_policy:
         condition: any
+      replicas: 3
 
 networks:
   publicweb:
