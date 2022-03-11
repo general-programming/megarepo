@@ -1,7 +1,7 @@
 - hosts: all_hosts
   become: true
   roles:
-    - role: ansible-node-exporter
+    - role: cloudalchemy.node_exporter
       when: prom_node_exporter and prom_node_exporter == true
     - role: setup_auditbeat
     - role: setup_filebeat

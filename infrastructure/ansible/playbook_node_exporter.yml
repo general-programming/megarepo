@@ -1,0 +1,4 @@
+- hosts: nodeexporter
+  strategy: free
+  roles:
+    - role: cloudalchemy.node_exporter

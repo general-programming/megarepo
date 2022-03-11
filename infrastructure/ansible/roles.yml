@@ -6,5 +6,6 @@ roles:
     version: v7.13.1
   - name: griggheo.consul-template
   - name: geerlingguy.nfs
+  - name: cloudalchemy.node_exporter
 collections:
   - name: community.hashi_vault
