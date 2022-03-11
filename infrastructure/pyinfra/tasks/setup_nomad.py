@@ -8,23 +8,23 @@ from pyinfra.operations import files, server, systemd
 approle_name = host.data.vault_role or "cluster-node"
 is_server = approle_name == "cluster-server"
 
+# Public IP, used only for servers.
+v4_addr = None
+
 # Config for client/server
 if is_server:
     config_type = "01-server"
+    # Find the public IPv6 address of the machine if we are a server.
+    for dev, dev_config in host.fact.network_devices.items():
+        if dev_config["ipv4"]:
+            dev_v4_addr = ipaddress.IPv4Address(dev_config["ipv4"]["address"])
+            if dev_v4_addr.is_global:
+                v4_addr = dev_v4_addr
+                break
 else:
     config_type = "01-client"
 
-# Get public IPv4 address
-v4_addr = None
-
-# Find the public IPv6 address of the machine.
-for dev, dev_config in host.fact.network_devices.items():
-    if dev_config["ipv4"]:
-        dev_v4_addr = ipaddress.IPv4Address(dev_config["ipv4"]["address"])
-        if dev_v4_addr.is_global:
-            v4_addr = dev_v4_addr
-            break
-
+# Arch specific config
 files.file(
     name="Delete /etc/nomad.d/nomad.hcl",
     path="/etc/nomad.d/nomad.hcl",
@@ -49,7 +49,6 @@ files.template(
     dest=f"/etc/nomad.d/{ config_type }.hcl",
     mode="644",
     public_ip=v4_addr,
-    nomad_servers=json.dumps(host.data.nomad_servers),
 )
 
 files.template(
