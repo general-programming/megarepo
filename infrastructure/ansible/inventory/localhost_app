@@ -1,0 +1,5 @@
+[all]
+localhost appserver=1 nodeexporter=1
+
+[nodeexporter]
+all
