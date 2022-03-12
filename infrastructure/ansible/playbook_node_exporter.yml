@@ -2,3 +2,4 @@
   strategy: free
   roles:
     - role: cloudalchemy.node_exporter
+    - role: update_configs

@@ -1,3 +1,5 @@
 syslog_server: ''
 syslog_port: '5140'
 appserver: false
+hypervisor: false
+ip_forward: false

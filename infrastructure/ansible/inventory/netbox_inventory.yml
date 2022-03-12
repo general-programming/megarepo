@@ -5,5 +5,3 @@ config_context: False
 group_by:
   - tags
 group_names_raw: True
-query_filters:
-  - tag: dhcpserver

@@ -13,7 +13,7 @@
     value: 1
     state: present
     reload: true
-  when: appserver
+  when: "(appserver or hypervisor or ip_forward)"
 
 - name: "Settings - Enable kernel IP forwarding for not app servers."
   sysctl:
@@ -21,7 +21,7 @@
     value: 0
     state: present
     reload: true
-  when: not appserver
+  when: "(not appserver and not hypervisor and not ip_forward)"
 
 - name: "Settings - IPTables Save"
   shell: iptables-save > /etc/iptables.rules
@@ -34,13 +34,20 @@
     group: root
     mode: 0644
 
-- name: "Settings - Restart rsyslog daemon"
-  systemd:
-    name: rsyslog
-    enabled: true
-    state: restarted
-  when: rsyslog_config.changed
-
 - name: "Settings - Set timezone to UTC"
   timezone:
     name: UTC
+
+- name: "Settings - Check if Consul config folder exists."
+  stat:
+    path: "/etc/consul.d/"
+  register: consul_folder
+
+- name: "Settings - Add node_exporter Consul service."
+  copy:
+    src: consul_node_exporter.json
+    dest: /etc/consul.d/service_node_exporter.json
+    owner: root
+    group: root
+    mode: 0644
+  when: consul_folder.stat.exists and consul_folder.stat.isdir
