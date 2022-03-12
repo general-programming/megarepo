@@ -77,6 +77,18 @@ services:
       restart_policy:
         condition: any
 
+  alertmanager:
+    image: prom/alertmanager:main
+    command: --config.file=/alertmanager/config.yml --storage.path="/data"
+    volumes:
+      - /srv/etc/alertmanager:/alertmanager
+      - /srv/var/alertmanager:/data
+    networks:
+      - logging
+    deploy:
+      restart_policy:
+        condition: any
+
   prometheus-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy
     command:
