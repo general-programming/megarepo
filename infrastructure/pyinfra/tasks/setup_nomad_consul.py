@@ -14,6 +14,13 @@ files.template(
     consul_servers=json.dumps(host.data.consul_servers),
 )
 
+files.put(
+    name="Consul node_exporter template.",
+    src="files/consul_configs/service_node_exporter.json",
+    dest="/etc/consul.d/service_node_exporter.json",
+    mode="644",
+)
+
 server.service(
     name="Restart Consul.",
     service="consul",
