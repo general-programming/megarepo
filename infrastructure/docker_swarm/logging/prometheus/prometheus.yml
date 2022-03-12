@@ -9,15 +9,42 @@ scrape_configs:
   - job_name: "node"
     static_configs:
       - targets:
-          - "storage-conejar.catgirls.dev:9100"
           - "10.65.67.170:9121"
           - "10.65.67.170:9122"
-  - job_name: "consul"
+  - job_name: "consul-dc1"
     consul_sd_configs:
       - server: "consul.service.dc1.consul:8500"
+        datacenter: dc1
     relabel_configs:
-      - source_labels: [__meta_consul_tags]
+      - source_labels: ["__meta_consul_tags"]
         regex: .*,prometheus,.*
         action: keep
-      - source_labels: [__meta_consul_service]
+      - source_labels: ["__meta_consul_service"]
         target_label: job
+      - source_labels: ["__meta_consul_node"]
+        target_label: instance
+      - source_labels: ["__meta_consul_dc"]
+        target_label: datacenter
+  - job_name: "consul-fmt2"
+    consul_sd_configs:
+      - server: "consul.service.dc1.consul:8500"
+        datacenter: fmt2
+    relabel_configs:
+      - source_labels: ["__meta_consul_tags"]
+        regex: .*,prometheus,.*
+        action: keep
+      - source_labels: ["__meta_consul_service"]
+        target_label: job
+      - source_labels: ["__meta_consul_node"]
+        target_label: instance
+      - source_labels: ["__meta_consul_dc"]
+        target_label: datacenter
+alerting:
+  alertmanagers:
+    - static_configs:
+      - targets:
+        # Alertmanager's default port is 9093
+        - alertmanager:9093
+
+rule_files:
+  - alerts.yml
