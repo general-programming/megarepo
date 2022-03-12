@@ -1,1 +1,0 @@
-../service-zuscale/zuscale_inventory.py
