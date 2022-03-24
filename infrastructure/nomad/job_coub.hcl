@@ -1,8 +1,8 @@
-job "at_ua_grab" {
+job "at_coub" {
     type = "system"
     datacenters = ["dc1"]
 
-    group "ua_grab" {
+    group "coub" {
         restart {
             mode = "delay"
         }
@@ -11,28 +11,28 @@ job "at_ua_grab" {
             deploy_nonce = 1
         }
 
-        task "warrior_ua_grab" {
+        task "warrior-coub" {
             driver = "docker"
             kill_signal = "SIGINT"
             kill_timeout = "180s"
 
             resources {
-                memory = 512
+                memory = 256
             }
 
             config {
                 args = [
                     "--concurrent",
-                    "20",
+                    "4",
                     "nepeat"
                 ]
                 labels = {
                     "com.centurylinklabs.watchtower.enable" = "true"
                 }
-                image = "atdr.meo.ws/archiveteam/ua-grab"
+                image = "atdr.meo.ws/archiveteam/coub-grab"
                 force_pull = true
-                // got oom killed at 768. 1024 should be enough...
-                memory_hard_limit = 1024
+                // worst case scenario, 512 gives enough room for disaster
+                memory_hard_limit = 512
             }
         }
     }
