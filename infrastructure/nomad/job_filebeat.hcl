@@ -34,8 +34,9 @@ job "filebeat" {
             template {
             data = <<EOH
 filebeat.inputs:
-  - type: docker
-    containers.ids: '*'
+  - type: container
+    paths:
+      - '/var/lib/docker/containers/*/*.log'
   - type: log
     paths:
       - /var/log/*.log
@@ -66,7 +67,7 @@ processors:
                     "-e",
                     "-strict.perms=false"
                 ]
-                image = "docker.elastic.co/beats/filebeat:7.14.1"
+                image = "docker.elastic.co/beats/filebeat:8.1.1"
                 network_mode = "host"
                 volumes = [
                     "local/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro",
