@@ -3,16 +3,18 @@
 set vpn ipsec esp-group ESP_DEFAULT compression 'disable'
 set vpn ipsec esp-group ESP_DEFAULT lifetime '3600'
 set vpn ipsec esp-group ESP_DEFAULT mode 'tunnel'
-set vpn ipsec esp-group ESP_DEFAULT pfs 'dh-group20'
-set vpn ipsec esp-group ESP_DEFAULT proposal 10 encryption 'aes256'
-set vpn ipsec esp-group ESP_DEFAULT proposal 10 hash 'sha384'
+set vpn ipsec esp-group ESP_DEFAULT pfs enable
+set vpn ipsec esp-group ESP_DEFAULT proposal 1 encryption 'aes256'
+set vpn ipsec esp-group ESP_DEFAULT proposal 1 hash 'sha384'
+
 set vpn ipsec ike-group IKEv2_DEFAULT ikev2-reauth 'no'
 set vpn ipsec ike-group IKEv2_DEFAULT key-exchange 'ikev2'
-set vpn ipsec ike-group IKEv2_DEFAULT lifetime '3600'
+set vpn ipsec ike-group IKEv2_DEFAULT lifetime 28800
 set vpn ipsec ike-group IKEv2_DEFAULT mobike 'disable'
-set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 dh-group '19'
-set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 encryption 'aes256gcm128'
-set vpn ipsec ike-group IKEv2_DEFAULT proposal 10 hash 'sha256'
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 dh-group 5
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 encryption aes256gcm128
+set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 hash sha256
+
 set vpn ipsec interface eth0
 
 {% for link in links %}
@@ -31,13 +33,13 @@ set vpn ipsec site-to-site peer {{ other_peer.address }} authentication id '{{ o
 set vpn ipsec site-to-site peer {{ other_peer.address }} authentication mode 'pre-shared-secret'
 set vpn ipsec site-to-site peer {{ other_peer.address }} authentication pre-shared-secret '{{ link.secret }}'
 set vpn ipsec site-to-site peer {{ other_peer.address }} authentication remote-id '{{ other_peer.address }}'
-set vpn ipsec site-to-site peer {{ other_peer.address }} connection-type 'initiate'
-set vpn ipsec site-to-site peer {{ other_peer.address }} ike-group 'IKEv1_DEFAULT'
+set vpn ipsec site-to-site peer {{ other_peer.address }} connection-type initiate
+set vpn ipsec site-to-site peer {{ other_peer.address }} ike-group 'IKEv2_DEFAULT'
 set vpn ipsec site-to-site peer {{ other_peer.address }} dhcp-interface eth0
 set vpn ipsec site-to-site peer {{ other_peer.address }} vti bind '{{ interface_name }}'
 set vpn ipsec site-to-site peer {{ other_peer.address }} vti esp-group 'ESP_DEFAULT'
-    {# wireguard links #}
     {% else %}
+    {# wireguard links #}
         {%- set interface_name = "wg" ~ link.link_id -%}
         {%- set port = link.link_id -%}
 set interfaces wireguard {{ interface_name }} description '{{ link.side_a.hostname }} -> {{ link.side_b.hostname }}'
