@@ -22,8 +22,8 @@ RUN apk add --no-cache openssl pcre2 c-ares argon2-dev libsodium && \
 		--with-pidfile=/var/lib/unrealircd/run/unrealircd.pid \
 		--with-privatelibdir=/usr/lib/unrealircd/private_lib \
 		--with-scriptdir=/usr/lib/unrealircd/scripts \
-		--with-showlistmodes \
-		--with-tmpdir=/var/lib/unrealircd/tmp && \
+		--with-tmpdir=/var/lib/unrealircd/tmp \
+		--with-controlfile=/tmp/unrealircd.ctl && \
     make -j8 && \
     mkdir -p /usr/lib/unrealircd/scripts /usr/lib/unrealircd/run /usr/lib/unrealircd/private_lib && \
     make install && \
