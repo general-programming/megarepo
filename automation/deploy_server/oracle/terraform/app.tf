@@ -55,7 +55,7 @@ resource "oci_core_instance" "zuscale" {
 
   create_vnic_details {
       assign_public_ip = true
-      subnet_id = "ocid1.subnet.oc1.iad.aaaaaaaatfygybwsegaeahuunfjvk4q2pwxubpfir4kwo62qzuyxu2lwglwq"
+      subnet_id = var.subnet_ocid
   }
 
   metadata = {

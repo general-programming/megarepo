@@ -4,9 +4,28 @@ variable "public_key" {
 }
 
 variable "app-scaling" {
-  default = 64
+  default = 1
 }
 
 variable "platform_config_instance_shape" {
   default = "VM.Standard.E3.Flex"
+}
+
+variable region {
+  default = "us-ashburn-1"
+}
+
+variable tenancy_ocid {
+}
+
+variable subnet_ocid {
+}
+
+variable user_ocid {
+}
+
+variable fingerprint {
+}
+
+variable private_key_path {
 }
