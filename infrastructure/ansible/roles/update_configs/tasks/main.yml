@@ -15,14 +15,6 @@
     reload: true
   when: "(appserver or hypervisor or ip_forward)"
 
-- name: "Settings - Enable kernel IP forwarding for not app servers."
-  sysctl:
-    name: net.ipv4.ip_forward
-    value: 0
-    state: present
-    reload: true
-  when: "(not appserver and not hypervisor and not ip_forward)"
-
 - name: "Settings - IPTables Save"
   shell: iptables-save > /etc/iptables.rules
 
