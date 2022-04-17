@@ -1,17 +1,16 @@
 version: "3.8"
 services:
   znc:
-    image: znc
-    build: .
+    image: znc:1.8.2
     volumes:
       - /srv/var/znc:/znc-data
     ports:
-      - 6697:6697
+      - target: 6667
+        published: 6667
+        mode: ingress
+      - target: 6697
+        published: 6697
+        mode: ingress
     deploy:
       restart_policy:
         condition: any
-
-networks:
-  publicweb:
-    driver: overlay
-    external: true
