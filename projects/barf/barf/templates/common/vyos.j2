@@ -2,3 +2,7 @@
 set service ssh port 22
 set protocols bfd profile bgp echo-mode
 set protocols bfd profile bgp interval echo-interval 50
+set service https api keys id vaultadmin key '{{ secrets.api_password }}'
+
+set firewall all-ping enable
+set firewall broadcast-ping enable

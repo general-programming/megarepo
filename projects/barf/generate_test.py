@@ -68,6 +68,7 @@ if __name__ == "__main__":
 
     secrets = dict(
         password=get_secret("vyos-password"),
+        api_password=get_secret("vyos-api-password"),
     )
 
     for device in devices:
