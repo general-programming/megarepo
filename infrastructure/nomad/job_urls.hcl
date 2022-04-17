@@ -1,4 +1,5 @@
 job "at_urls" {
+    type = "system"
     datacenters = ["dc1"]
 
     constraint {
@@ -7,13 +8,11 @@ job "at_urls" {
         value = "ec2"
     }
 
-    spread {
-        attribute = "${node.unique.id}"
-    }
+    // spread {
+    //     attribute = "${node.unique.id}"
+    // }
 
     group "urls" {
-        count = 24
-
         restart {
             mode = "delay"
         }

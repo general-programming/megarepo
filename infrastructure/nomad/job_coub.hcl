@@ -23,7 +23,7 @@ job "at_coub" {
             config {
                 args = [
                     "--concurrent",
-                    "4",
+                    "20",
                     "nepeat"
                 ]
                 labels = {
