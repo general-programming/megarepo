@@ -1,0 +1,128 @@
+- name: Install iptables-persistent
+  package:
+    name: iptables-persistent
+    state: present
+
+- name: Allow all INPUT before changes
+  ansible.builtin.iptables:
+    chain: INPUT
+    policy: ACCEPT
+
+- name: Allow all OUTPUT before changes
+  ansible.builtin.iptables:
+    chain: OUTPUT
+    policy: ACCEPT
+
+- name: Flush INPUT/OUTPUT tables
+  ansible.builtin.iptables:
+    chain: "{{ item }}"
+    flush: yes
+  with_items:
+    - 'INPUT'
+    - 'OUTPUT'
+
+- name: Allow related and established connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+
+- name: Allow ICMP
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: icmp
+    ctstate: NEW,ESTABLISHED,RELATED
+    jump: ACCEPT
+
+- name: Allow SSH connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 22
+    jump: ACCEPT
+
+- name: Allow HTTP connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 80
+      - 443
+      - 8080
+    jump: ACCEPT
+  when: "'service_http_https' in group_names"
+
+- name: Allow IRC connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 6667
+    jump: ACCEPT
+  when: "'service_irc' in group_names"
+
+- name: Allow IRCS connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 6697
+    jump: ACCEPT
+  when: "'service_ircs' in group_names"
+
+- name: Allow Nomad HTTP connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 4646
+    jump: ACCEPT
+  when: "'service_nomad_http' in group_names"
+
+- name: Allow Nomad RPC connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 4647
+    jump: ACCEPT
+  when: "'service_nomad_rpc' in group_names"
+
+- name: Allow Nomad Serf TCP connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 4648
+    jump: ACCEPT
+  when: "'service_nomad_serf' in group_names"
+
+- name: Allow Nomad Serf UDP connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 4648
+    jump: ACCEPT
+  when: "'service_nomad_serf' in group_names"
+
+- name: Drop all traffic for external interface
+  ansible.builtin.iptables:
+    chain: INPUT
+    in_interface: ens19
+    jump: DROP
+
+- name: Save IPv4 tables
+  community.general.iptables_state:
+    ip_version: ipv4
+    table: filter
+    state: saved
+    path: /etc/iptables/rules.v4
+
+- name: Save IPv6 tables
+  community.general.iptables_state:
+    ip_version: ipv6
+    table: filter
+    state: saved
+    path: /etc/iptables/rules.v6

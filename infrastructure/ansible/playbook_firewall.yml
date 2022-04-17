@@ -1,0 +1,4 @@
+- hosts: managed_firewall
+  become: true
+  roles:
+    - role: update_firewall
