@@ -63,7 +63,7 @@ class CdkTwilioSmsDiscordStack(Stack):
         )
 
         # Defines an AWS Lambda resource
-        my_lambda = aws_lambda_python_alpha.PythonFunction(
+        processing_lambda = aws_lambda_python_alpha.PythonFunction(
             self,
             "DiscordHandler",
             runtime=aws_lambda.Runtime.PYTHON_3_9,
@@ -85,13 +85,35 @@ class CdkTwilioSmsDiscordStack(Stack):
             ),
         )
 
+        ingress_lambda = aws_lambda_python_alpha.PythonFunction(
+            self,
+            "DiscordIngress",
+            runtime=aws_lambda.Runtime.PYTHON_3_9,
+            entry="ingress/",
+            environment={
+                "DISCORD_PUBLIC_KEY": get_secret(
+                    "twilio-discord", "discord_public_key"
+                ),
+                "PROOCESSING_LAMBDA_NAME": processing_lambda.function_arn,
+            },
+            timeout=Duration.seconds(10),
+            index="index.py",
+            architecture=aws_lambda.Architecture.ARM_64,
+            bundling=aws_lambda_python_alpha.BundlingOptions(
+                image=aws_cdk.DockerImage.from_build(
+                    path="ingress/", platform="linux/arm64"
+                )
+            ),
+        )
+
         # Grant lambda permissions to the databases.
-        table_config.grant_read_write_data(my_lambda)
-        table_messages.grant_read_write_data(my_lambda)
+        processing_lambda.grant_invoke(ingress_lambda)
+        table_config.grant_read_write_data(processing_lambda)
+        table_messages.grant_read_write_data(processing_lambda)
 
         # Defines an API Gateway resource for the lambda.
         aws_apigateway.LambdaRestApi(
             self,
             "Endpoint",
-            handler=my_lambda,
+            handler=ingress_lambda,
         )
