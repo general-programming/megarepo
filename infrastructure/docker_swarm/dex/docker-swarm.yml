@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   dex:
-    image: quay.io/dexidp/dex:v2.24.0
+    image: dexidp/dex:v2.31.1
     volumes:
       - /etc/ipa/ca.crt:/ipa_ca.crt:ro
       - /srv/etc/dex.yaml:/config.yaml:ro
@@ -15,9 +15,12 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:auth.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.dex.rule=Host(`auth.generalprogramming.org`)
+        - traefik.http.services.dex.loadbalancer.server.port=5556
       restart_policy:
         condition: any
-    command: serve /config.yaml
+    command: dex serve /config.yaml
 
 networks:
   publicweb:

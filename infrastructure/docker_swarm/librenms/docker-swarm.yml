@@ -64,6 +64,9 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:nms.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.librenms.rule=Host(`nms.generalprogramming.org`)
+        - traefik.http.services.librenms.loadbalancer.server.port=8000
     depends_on:
       - memcached
       - rrdcached

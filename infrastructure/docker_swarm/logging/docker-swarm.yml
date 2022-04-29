@@ -19,6 +19,9 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:grafana.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.grafana.rule=Host(`grafana.generalprogramming.org`)
+        - traefik.http.services.grafana.loadbalancer.server.port=3000
       restart_policy:
         condition: any
 
@@ -62,6 +65,9 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:logs.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.kibana_proxy.rule=Host(`logs.generalprogramming.org`)
+        - traefik.http.services.kibana_proxy.loadbalancer.server.port=5601
       restart_policy:
         condition: any
 
@@ -113,6 +119,9 @@ services:
         - traefik.docker.network=publicweb
         # Routes
         - traefik.frontend.rule=Host:prometheus.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.prometheus_proxy.rule=Host(`prometheus.generalprogramming.org`)
+        - traefik.http.services.prometheus_proxy.loadbalancer.server.port=80
       restart_policy:
         condition: any
 
@@ -132,7 +141,7 @@ services:
         condition: any
 
   thanos-sidecar:
-    image: thanosio/thanos:v0.25.0
+    image: thanosio/thanos:v0.25.2
     command: "sidecar --prometheus.url=http://prometheus:9090 --tsdb.path=/prometheus --objstore.config-file=/thanos/bucket_config.yml --shipper.upload-compacted"
     volumes:
       - /srv/var/thanos/bucket_config.yml:/thanos/bucket_config.yml:ro
@@ -144,7 +153,7 @@ services:
         condition: any
 
   thanos-store:
-    image: thanosio/thanos:v0.25.0
+    image: thanosio/thanos:v0.25.2
     command: 'store --data-dir "/thanos/store" --objstore.config-file=/thanos/bucket_config.yml --index-cache.config-file=/thanos/thanos_cache.yml --store.caching-bucket.config-file=/thanos/thanos_cache.yml'
     volumes:
       - /srv/var/thanos/store:/thanos/store
@@ -157,7 +166,7 @@ services:
         condition: any
 
   thanos-query-backend:
-    image: thanosio/thanos:v0.25.0
+    image: thanosio/thanos:v0.25.2
     command: 'query --http-address "0.0.0.0:9090" --query.replica-label "replica" --store thanos-sidecar:10901 --store thanos-store:10901'
     networks:
       - logging
@@ -166,7 +175,7 @@ services:
         condition: any
 
   thanos-query:
-    image: thanosio/thanos:v0.25.0
+    image: thanosio/thanos:v0.25.2
     command: 'query-frontend --http-address "0.0.0.0:9090" --query-range.response-cache-config-file=/thanos/thanos_cache.yml --labels.response-cache-config-file=/thanos/thanos_cache.yml --query-frontend.downstream-url="http://thanos-query-backend:9090"'
     networks:
       - logging
@@ -177,7 +186,7 @@ services:
         condition: any
 
   thanos-compactor:
-    image: thanosio/thanos:v0.25.0
+    image: thanosio/thanos:v0.25.2
     command: 'compact --wait --data-dir "/thanos/store" --objstore.config-file=/thanos/bucket_config.yml'
     networks:
       - logging
