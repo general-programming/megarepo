@@ -1,24 +1,24 @@
-import os
-
-from base64 import decode
 import json
+import os
+import string
+from base64 import decode
 from sqlite3 import adapt
 from typing import Type
-import redis
-import string
 
+import redis
 from pyinfra import host
-from pyinfra.operations import server, files, apt
+from pyinfra.facts.server import Command
+from pyinfra.operations import apt, files, server
 
 r = redis.Redis(decode_responses=True)
 
-v4_addr = host.fact.command("curl ifconfig.me")
+v4_addr = host.get_fact(Command, "curl ifconfig.me")
 try:
     files.rsync(
         name="rsync config files",
         src="links/",
         dest="/opt/ircd/conf/servers/",
-        flags=['-av']
+        flags=["-av"],
     )
 
     server_links = json.loads(r.hget("pissnet:links", v4_addr))

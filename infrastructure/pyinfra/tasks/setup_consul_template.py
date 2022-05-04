@@ -1,5 +1,6 @@
 from pyinfra import host
-from pyinfra.operations import server, files, systemd
+from pyinfra.facts.server import LinuxName
+from pyinfra.operations import files, server, systemd
 
 files.template(
     name="Create Consul Template base config.",
@@ -9,7 +10,7 @@ files.template(
     vault_url=host.data.vault_url,
 )
 
-if host.fact.linux_distribution["name"] == "Alpine":
+if host.get_fact(LinuxName) == "Alpine":
     server.packages(
         name="Ensure Consul Template is installed.",
         packages=["consul-template"],

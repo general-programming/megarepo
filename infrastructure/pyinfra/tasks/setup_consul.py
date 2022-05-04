@@ -2,11 +2,12 @@ import json
 import os
 
 from pyinfra import host
-from pyinfra.operations import server, files, systemd, apt
+from pyinfra.facts.server import LinuxName
+from pyinfra.operations import apt, files, server, systemd
 
 consul_datacenter = host.data.consul_datacenter
 
-if host.fact.linux_distribution["name"] in ["Debian", "Ubuntu"]:
+if host.get_fact(LinuxName) in ["Debian", "Ubuntu"]:
     server.shell(
         name="Install HashiCorp repo",
         commands='apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"',
@@ -51,7 +52,7 @@ files.template(
     mode="644",
     consul_datacenter=consul_datacenter,
     consul_servers=json.dumps(host.data.consul_servers),
-    consul_server=host.data.consul_server or False
+    consul_server=host.data.consul_server or False,
 )
 
 server.service(

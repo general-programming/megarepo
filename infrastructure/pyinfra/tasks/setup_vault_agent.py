@@ -1,7 +1,8 @@
 import os
 
 from pyinfra import host
-from pyinfra.operations import server, files, systemd
+from pyinfra.facts.server import LinuxName
+from pyinfra.operations import files, server, systemd
 
 approle_name = host.data.vault_role or "cluster-node"
 if "APPROLE_EXISTS" in os.environ:
@@ -15,7 +16,9 @@ else:
     if not hvac_client.is_authenticated():
         raise Exception("'vault login' is required to deploy.")
 
-    approle_id = hvac_client.auth.approle.read_role_id(role_name=approle_name)["data"]["role_id"]
+    approle_id = hvac_client.auth.approle.read_role_id(role_name=approle_name)["data"][
+        "role_id"
+    ]
     approle_secret = hvac_client.write(
         path=f"auth/approle/role/{ approle_name }/secret-id",
     )["data"]["secret_id"]
@@ -59,7 +62,7 @@ files.template(
     vault_url=host.data.vault_url,
 )
 
-if host.fact.linux_distribution["name"] == "Alpine":
+if host.get_fact(LinuxName) == "Alpine":
     files.template(
         name="Update /etc/conf.d/vault",
         src="templates/line.j2",
@@ -72,7 +75,7 @@ if host.fact.linux_distribution["name"] == "Alpine":
 
     server.service(
         name="Restart and enable the Vault agent",
-        service='vault',
+        service="vault",
         running=True,
         restarted=True,
         enabled=True,
@@ -89,7 +92,7 @@ else:
 
     systemd.service(
         name="Restart and enable the Vault agent",
-        service='vault-agent.service',
+        service="vault-agent.service",
         running=True,
         restarted=True,
         enabled=True,

@@ -3,6 +3,7 @@ import json
 import os
 
 from pyinfra import host
+from pyinfra.facts.hardware import NetworkDevices
 from pyinfra.operations import files, server, systemd
 
 approle_name = host.data.vault_role or "cluster-node"
@@ -15,7 +16,7 @@ v4_addr = None
 if is_server:
     config_type = "01-server"
     # Find the public IPv6 address of the machine if we are a server.
-    for dev, dev_config in host.fact.network_devices.items():
+    for dev, dev_config in host.get_fact(NetworkDevices).items():
         if dev_config["ipv4"]:
             dev_v4_addr = ipaddress.IPv4Address(dev_config["ipv4"]["address"])
             if dev_v4_addr.is_global:
