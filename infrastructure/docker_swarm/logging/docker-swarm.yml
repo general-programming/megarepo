@@ -25,57 +25,11 @@ services:
       restart_policy:
         condition: any
 
-  kibana:
-    build: kibana
-    image: registry.generalprogramming.org/kibana
-    environment:
-      SERVER_NAME: logs.generalprogramming.org
-      ELASTICSEARCH_HOSTS: http://192.168.3.2:9200
-      XPACK_MONITORING_ENABLED: "true"
-      XPACK_INFRA_SOURCES_DEFAULT_LOGALIAS: "logstash-*"
-      XPACK_INFRA_SOURCES_DEFAULT_FIELDS_HOST: "host"
-    networks:
-      - logging
-      - publicweb
-    deploy:
-      restart_policy:
-        condition: any
-
-  kibana-proxy:
-    image: quay.io/oauth2-proxy/oauth2-proxy
-    command:
-      - --provider=oidc
-      - --provider-display-name=FreeIPA
-      - --oidc-issuer-url=https://auth.generalprogramming.org
-      - --cookie-secure=false
-      - --upstream=http://kibana:5601
-      - --http-address=http://0.0.0.0:5601
-      - --redirect-url=https://logs.generalprogramming.org/oauth2/callback
-      - --email-domain=*
-    environment:
-      OAUTH2_PROXY_COOKIE_DOMAIN: logs.generalprogramming.org
-    env_file: .env_oauth
-    networks:
-      - logging
-      - publicweb
-    deploy:
-      labels:
-        - traefik.enable=true
-        - traefik.port=5601
-        - traefik.docker.network=publicweb
-        # Routes
-        - traefik.frontend.rule=Host:logs.generalprogramming.org
-        # Traefik 2
-        - traefik.http.routers.kibana_proxy.rule=Host(`logs.generalprogramming.org`)
-        - traefik.http.services.kibana_proxy.loadbalancer.server.port=5601
-      restart_policy:
-        condition: any
-
   prometheus:
-    build: prometheus
-    image: registry.generalprogramming.org/prometheus
+    image: prom/prometheus
     command: --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.max-block-duration=2h --storage.tsdb.min-block-duration=2h --web.console.libraries=/usr/share/prometheus/console_libraries --web.console.templates=/usr/share/prometheus/consoles --web.enable-lifecycle
     volumes:
+      - /src/etc/prometheus:/etc/prometheus
       - /srv/var/prometheus:/prometheus
     networks:
       - logging
@@ -99,13 +53,17 @@ services:
     image: quay.io/oauth2-proxy/oauth2-proxy
     command:
       - --provider=oidc
-      - --provider-display-name=FreeIPA
+      - --custom-sign-in-logo=https://cdn.owo.me/file/nepeat-public/genprog/logo-transparent-dark.png
+      - --provider-display-name=General Programming
       - --oidc-issuer-url=https://auth.generalprogramming.org
       - --cookie-secure=false
       - --upstream=http://thanos-query:9090
       - --http-address=http://0.0.0.0:5601
       - --redirect-url=https://prometheus.generalprogramming.org/oauth2/callback
       - --email-domain=*
+      - --custom-templates-dir=/templates
+    volumes:
+      - /srv/share/oauth2_proxy_templates:/templates:ro
     environment:
       OAUTH2_PROXY_COOKIE_DOMAIN: prometheus.generalprogramming.org
     env_file: .env_oauth
@@ -121,7 +79,7 @@ services:
         - traefik.frontend.rule=Host:prometheus.generalprogramming.org
         # Traefik 2
         - traefik.http.routers.prometheus_proxy.rule=Host(`prometheus.generalprogramming.org`)
-        - traefik.http.services.prometheus_proxy.loadbalancer.server.port=80
+        - traefik.http.services.prometheus_proxy.loadbalancer.server.port=5601
       restart_policy:
         condition: any
 
