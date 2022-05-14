@@ -7,10 +7,11 @@ services:
       - traefik
 
       # static config provider
-      - --providers.file.filename=/config/traefik.yml
+      - --providers.file.directory=/config
+      - --providers.file.watch=true
 
       # acme json
-      --certificatesResolvers.sample.acme.storage=/acme/acme.json
+      - --certificatesResolvers.main.acme.storage=/var/lib/traefik/acme.json
 
       # entrypoint http
       - --entrypoints.http.address=:80
@@ -21,8 +22,12 @@ services:
       - --entrypoints.https.address=:443
       - --entrypoints.https.http.tls.options=default@file
 
-      # internal entrypoint
-      - --entrypoints.internal.address=:8080
+      # api
+      - --api=true
+      - --api.dashboard=true
+
+      # ping
+      - --ping.entryPoint=http
 
       # docker swarm provider
       - --providers.docker.endpoint=unix:///var/run/docker.sock
@@ -34,14 +39,13 @@ services:
       # - --providers.consul.endpoints=consul.service.fmt2.consul.:8500
 
       # consul catalog provider
-      #- --providers.consulcatalog.endpoint.address=consul.service.fmt2.consul.:8500
-      #- --providers.consulcatalog.exposedByDefault=false
-      #- --providers.consulcatalog.defaultRule="Host(`{{ .Name }}.thonk.dev`)"
+      - --providers.consulcatalog.endpoint.address=consul.service.fmt2.consul:8500
+      - --providers.consulcatalog.exposedByDefault=false
+      - --providers.consulcatalog.defaultRule="Host(`{{ .Name }}.thonk.dev`)"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/etc/traefik:/config
       - /var/lib/traefik:/var/lib/traefik
-      - /acme:/etc/traefik-acme
     networks:
       - publicweb
       - traefik
@@ -51,9 +55,6 @@ services:
         mode: ingress
       - target: 443
         published: 443
-        mode: ingress
-      - target: 8080
-        published: 8080
         mode: ingress
     deploy:
       mode: global
