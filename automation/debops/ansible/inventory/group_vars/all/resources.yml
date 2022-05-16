@@ -1,0 +1,6 @@
+resources__files:
+  - src: '{{ resources__src + "root_ca.crt" }}'
+    dest: "/etc/ssl/certs/General_Programming_Root.pem"
+    owner: "root"
+    group: "root"
+    mode: "0644"
