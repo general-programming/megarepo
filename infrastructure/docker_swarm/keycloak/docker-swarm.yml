@@ -1,0 +1,42 @@
+version: "3.6"
+
+services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:18.0.0
+    volumes:
+      - /etc/ipa/ca.crt:/ipa_ca.crt:ro
+      - /srv/var/keycloak:/data
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=8080
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:idp.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.keycloak.rule=Host(`idp.generalprogramming.org`)
+        - traefik.http.services.keycloak.loadbalancer.server.port=8080
+      restart_policy:
+        condition: any
+    env_file: .env
+    command:
+      - start
+      - --auto-build
+      - --db=postgres
+      - --features=token-exchange
+      - --http-enabled=true
+      - --db-url=${DB_HOST}
+      - --db-username=keycloak
+      - --db-password=${DB_PASSWORD}
+      - --https-certificate-file=/data/server.crt.pem
+      - --https-certificate-key-file=/data/server.key.pem
+      - --hostname=idp.generalprogramming.org
+      - --proxy=edge
+      - --log-level=DEBUG
+
+networks:
+  publicweb:
+    driver: overlay
+    external: true
