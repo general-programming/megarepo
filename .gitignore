@@ -48,3 +48,5 @@ infrastructure/docker_swarm/sentry/sentry.conf.py
 .terraform
 terraform.tfvars
 terraform.tfstate*
+infrastructure/docker_swarm/traefik/config-fmt2/traefik.yml
+infrastructure/docker_swarm/logging/alertmanager.yml
