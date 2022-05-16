@@ -1,30 +1,30 @@
 resources__group_paths:
-  - path: '/etc/consul.d'
-    owner: 'consul'
-    group: 'consul'
-    mode: '0755'
-  - path: '/var/lib/consul'
-    owner: 'consul'
-    group: 'consul'
-    mode: '0755'
+  - path: "/etc/consul.d"
+    owner: "consul"
+    group: "consul"
+    mode: "0755"
+  - path: "/var/lib/consul"
+    owner: "consul"
+    group: "consul"
+    mode: "0755"
 
 resources__group_files:
   - src: '{{ resources__src + "consul_fmt2.hcl" }}'
-    dest: '/etc/consul.d/consul.hcl'
-    owner: 'consul'
-    group: 'consul'
+    dest: "/etc/consul.d/consul.hcl"
+    owner: "consul"
+    group: "consul"
   - src: '{{ resources__src + "service_gluster.json" }}'
-    dest: '/etc/consul.d/service_gluster.json'
-    owner: 'consul'
-    group: 'consul'
+    dest: "/etc/consul.d/service_gluster.json"
+    owner: "consul"
+    group: "consul"
   - src: '{{ resources__src + "consul.service" }}'
-    dest: '/lib/systemd/system/consul.service'
-    owner: 'root'
-    group: 'root'
-    mode: '0644'
+    dest: "/lib/systemd/system/consul.service"
+    owner: "root"
+    group: "root"
+    mode: "0644"
 
 resources__group_commands:
-  - name: 'Reload systemd and start consul service'
+  - name: "Reload systemd and start consul service"
     shell: |
       if ! systemctl is-active consul.service ; then
           systemctl daemon-reload
