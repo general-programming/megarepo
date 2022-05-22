@@ -1,9 +1,9 @@
-- hosts: all_hosts
+- hosts: ansible_managed
   become: true
   roles:
     - role: update_packages
     - role: update_configs
-    # - role: create_admin_user
+    - role: create_admin_user
     - role: setup_influxdb
       when: influx_listen_ip is defined and influx_listen_ip
     - role: setup_telegraf
@@ -11,4 +11,4 @@
   vars:
     influx_host: 192.168.3.2
     syslog_server: 192.168.3.2
-    syslog_port: '5140'
+    syslog_port: "5140"
