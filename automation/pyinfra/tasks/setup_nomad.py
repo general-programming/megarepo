@@ -34,7 +34,7 @@ files.file(
 
 files.sync(
     name="Sync Nomad template configs",
-    src="files/nomad_vault/",
+    src="common/consul_template/nomad/",
     dest="/etc/consul-template/templates/nomad/",
 )
 

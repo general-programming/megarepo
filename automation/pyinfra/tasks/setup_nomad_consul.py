@@ -16,7 +16,7 @@ files.template(
 
 files.put(
     name="Consul node_exporter template.",
-    src="files/consul_configs/service_node_exporter.json",
+    src="common/consul_configs/service_node_exporter.json",
     dest="/etc/consul.d/service_node_exporter.json",
     mode="644",
 )

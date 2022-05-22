@@ -9,7 +9,7 @@ resources__paths:
     mode: "0755"
 
 resources__files:
-  - src: '{{ resources__src + "root_ca.crt" }}'
+  - src: '{{ resources__src + "common/root_ca.crt" }}'
     dest: "/etc/ssl/certs/General_Programming_Root.pem"
     owner: "root"
     group: "root"
