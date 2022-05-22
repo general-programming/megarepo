@@ -8,3 +8,16 @@ gluster volume replace-brick fmt2-srv 10.65.67.5:/var/gluster/srv-12 10.65.67.10
 
 systemctl stop glusterd; pkill -f glusterfs
 systemctl start glusterd
+
+
+gluster volume create fmt2-srv disperse-data 4 redundancy 2 transport tcp 10.65.67.12:/var/gluster/fmt2-srv 10.65.67.11:/var/gluster/fmt2-srv 10.65.67.17:/var/gluster/fmt2-srv 10.65.67.10:/var/gluster/fmt2-srv 10.65.67.8:/var/gluster/fmt2-srv 10.65.67.5:/var/gluster/fmt2-srv force
+
+gluster volume create fmt2-proxmox disperse-data 4 redundancy 2 transport tcp 10.65.67.12:/var/gluster/proxmox 10.65.67.11:/var/gluster/proxmox 10.65.67.17:/var/gluster/proxmox 10.65.67.10:/var/gluster/proxmox 10.65.67.8:/var/gluster/proxmox 10.65.67.5:/var/gluster/proxmox force
+
+echo "deb https://enterprise.proxmox.com/debian/pve bullseye pve-enterprise" > /etc/apt/sources.list.d/pve-enterprise.list
+sed -i -e 's/buster/bullseye/g' /etc/apt/sources.list.d/pve-install-repo.list
+echo "deb http://download.proxmox.com/debian/ceph-pacific bullseye main" > /etc/apt/sources.list.d/ceph.list
+echo "deb https://download.gluster.org/pub/gluster/glusterfs/LATEST/Debian/11/amd64/apt bullseye main" > /etc/apt/sources.list.d/gluster.list
+sed -i -e 's/buster/bullseye/g' /etc/apt/sources.list.d/saltstack.list
+
+apt update
