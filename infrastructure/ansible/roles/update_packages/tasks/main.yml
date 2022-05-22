@@ -1,5 +1,4 @@
 ---
-
 - name: "Packages - apt-get upgrade"
   apt:
     upgrade: yes
@@ -7,7 +6,7 @@
 
 - name: "Packages - Admin convienence packages"
   package:
-    name: '{{ item }}'
+    name: "{{ item }}"
     state: latest
   with_items:
     - mosh
@@ -27,27 +26,11 @@
 
 - name: "Packages - GPG keys"
   apt_key:
-    url: '{{ item.key }}'
-    id: '{{ item.value }}'
+    url: "{{ item.key }}"
+    id: "{{ item.value }}"
     state: present
   with_dict:
-      "https://download.docker.com/linux/ubuntu/gpg": "0EBFCD88"
-      "https://repos.influxdata.com/influxdb.key": "2582E0C5"
-      "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
-      "https://download.gluster.org/pub/gluster/glusterfs/9/rsa.pub": "C2F8238C"
-
-- name: "Packages - App server repos"
-  apt_repository:
-    repo: '{{ item }}'
-    state: present
-  with_items:
-    - 'deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable edge test'
-  when: appserver_packages
-
-- name: "Packages - App server support packages"
-  package:
-    name: '{{ item }}'
-    state: latest
-  with_items:
-    - docker-ce
-  when: appserver_packages
+    "https://download.docker.com/linux/ubuntu/gpg": "0EBFCD88"
+    "https://repos.influxdata.com/influxdb.key": "2582E0C5"
+    "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
+    "https://download.gluster.org/pub/gluster/glusterfs/9/rsa.pub": "C2F8238C"
