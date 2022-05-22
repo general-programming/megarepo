@@ -1,6 +1,9 @@
+import time
+
 import hvac
 from proxmoxer import ProxmoxAPI
 
+THIRTY_ONE_DAYS = 60 * 60 * 24 * 31
 vault = hvac.Client()
 
 proxmox_secrets = vault.secrets.kv.v2.read_secret_version(path="proxmox-cert-updater",)[
@@ -27,8 +30,20 @@ def get_proxmox_hosts():
 
 for node in get_proxmox_hosts():
     node_hostname = node["node"] + ".generalprogramming.org"
-    print("Updating certificate on node {}".format(node_hostname))
+    remaining_cert_time = 0
+
     proxmox_node = proxmox.nodes(node["node"])
+    for cert in proxmox_node.certificates.info.get():
+        if cert["filename"] != "pveproxy-ssl.pem":
+            continue
+
+        remaining_cert_time = cert["notafter"] - time.time()
+
+    if remaining_cert_time > THIRTY_ONE_DAYS:
+        print("Certificate for node {} is good.".format(node_hostname))
+        continue
+
+    print("Updating certificate on node {}".format(node_hostname))
 
     alt_names = [
         node_hostname,
