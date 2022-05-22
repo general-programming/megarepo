@@ -3,6 +3,11 @@
   delegate_to: localhost
   register: dns_output
 
+- name: dns - Install dnsmasq
+  package:
+    name: dnsmasq
+    state: present
+
 - name: dns - Parse leases output
   set_fact:
     dns_file: "{{ dns_output.stdout }}"
