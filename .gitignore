@@ -26,7 +26,7 @@ infrastructure/other/discourse/discourse_web.yml
 infrastructure/other/gitlab_runner_ssh_key
 infrastructure/docker_swarm/registry/docker-swarm.yml
 infrastructure/docker_swarm/sentry/.secret_env
-infrastructure/ansible/inventory/nepeat_hosts
+automation/ansible/inventory/nepeat_hosts
 
 # Language garbage
 node_modules/
