@@ -18,6 +18,14 @@
     dest: /usr/local/bin/dhcpd_discordhook
     mode: 0755
 
+- name: dhcpd - Update apparmor config
+  copy:
+    src: apparmor_local
+    dest: /etc/apparmor.d/local/usr.sbin.dhcpd
+    owner: root
+    group: root
+    mode: 0644
+
 - name: dhcpd - Restart
   service:
     name: "isc-dhcp-server"
