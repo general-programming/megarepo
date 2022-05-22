@@ -1,0 +1,2 @@
+apt_install__group_packages_proxmox:
+  - "openvswitch-switch"

@@ -1,0 +1,10 @@
+apt_install__packages:
+  - consul
+  - htop
+  - zsh
+
+# merge groups
+apt_install__group_packages_proxmox: []
+apt_install__group_packages_gluster: []
+
+apt_install__group_packages: "{{ apt_install__group_packages_proxmox + apt_install__group_packages_gluster }}"
