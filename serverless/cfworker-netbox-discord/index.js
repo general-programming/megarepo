@@ -87,11 +87,13 @@ async function handleRequest(request) {
             body_type = body.data.type.label || body.data.type.value;
         }
 
-        extraFields.push({
-            name: 'Type',
-            value: body_type,
-            inline: true,
-        });
+        if (body_type) {
+            extraFields.push({
+                name: 'Type',
+                value: body_type,
+                inline: true,
+            });
+        }
     }
 
     // Merge in intersting fields.
