@@ -94,4 +94,30 @@ id = tac_plus {
             set local-user-name = superadmins
         }
     }
+
+    group = netsuperadmin {
+        #Permit all services by default
+        default service = permit
+        #Users will need to re-enter their AD password for the enable password (feel free to customize this however you want)
+        enable = login
+        ###
+        ### Cisco IOS Authentication
+        ###
+        service = shell  {
+            # Permit all commands
+            default command = permit
+
+            # Permit all command attributes
+            default attribute = permit
+
+            # Set privilege level to 15 on IOS/XE
+            set priv-lvl = 15
+        }
+        ###
+        ### Juniper JunOS Authentication
+        ###
+        service = junos-exec {
+            set local-user-name = superadmins
+        }
+    }
 }
