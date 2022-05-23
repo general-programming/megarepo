@@ -52,7 +52,7 @@ files.template(
     mode="644",
     consul_datacenter=consul_datacenter,
     consul_servers=json.dumps(host.data.consul_servers),
-    consul_server=host.data.consul_server or False,
+    consul_server=host.data.get("consul_server", False),
 )
 
 server.service(
@@ -63,9 +63,9 @@ server.service(
 )
 
 server.service(
-    name="Restart Consul.",
+    name="Reload Consul.",
     service="consul",
     running=True,
-    restarted=True,
+    reloaded=True,
     enabled=True,
 )

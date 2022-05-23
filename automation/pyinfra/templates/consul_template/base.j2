@@ -9,8 +9,12 @@ vault {
   # of the address is required.
   address = "{{ vault_url }}"
 
+{% if vault_token %}
+  token = "{{ vault_token }}"
+{% else %}
   # This value can also be specified via the environment variable VAULT_TOKEN.
   vault_agent_token_file = "/opt/vault/agent-token"
+{% endif %}
 
   # This tells consul-template that the provided token is actually a wrapped
   # token that should be unwrapped using Vault's cubbyhole response wrapping

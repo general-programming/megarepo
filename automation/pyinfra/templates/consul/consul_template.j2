@@ -8,6 +8,8 @@ template {
     source = "/etc/consul-template/templates/consul/server-cert.tpl"
     destination = "/etc/consul.d/server.crt"
     perms = "0700"
+    user = "consul"
+    group = "consul"
     command = "/bin/bash -c 'systemctl reload consul || true'"
 }
 
@@ -15,5 +17,7 @@ template {
     source = "/etc/consul-template/templates/consul/server-key.tpl"
     destination = "/etc/consul.d/server.key"
     perms = "0700"
+    user = "consul"
+    group = "consul"
     command = "/bin/bash -c 'systemctl reload consul || true'"
 }

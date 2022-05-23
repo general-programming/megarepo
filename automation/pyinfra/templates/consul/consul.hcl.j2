@@ -12,15 +12,24 @@ server = false
 datacenter = "{{ consul_datacenter }}"
 data_dir = "/opt/consul"
 client_addr = "127.0.0.1"
-bootstrap_expect = 3
 bind_addr = {{ '"{{ GetPrivateInterfaces | include \\"network\\" \\"10.0.0.0/8\\" | attr \\"address\\" }}"'}}
 retry_join = {{ consul_servers }}
 
-// TLS
-ca_file = "/etc/consul.d/ca.crt",
-cert_file = "/etc/consul.d/server.crt",
-key_file = "/etc/consul.d/server.key",
+ports {
+  https = 8501
+}
 
-verify_incoming = true
-verify_outgoing = true
-verify_server_hostname = true
+// TLS
+tls {
+  defaults {
+    ca_file = "/etc/consul.d/ca.crt"
+    cert_file = "/etc/consul.d/server.crt"
+    key_file = "/etc/consul.d/server.key"
+    verify_incoming = true
+    verify_outgoing = true
+  }
+
+  internal_rpc {
+    verify_server_hostname = true
+  }
+}
