@@ -64,7 +64,6 @@ def load_network(filename: str):
 
 if __name__ == "__main__":
     devices, links, global_meta = load_network("network.yml")
-    os.makedirs("output/vpn/cloud_init", exist_ok=True)
 
     secrets = dict(
         password=get_secret("vyos-password"),
@@ -76,6 +75,10 @@ if __name__ == "__main__":
     for device in devices:
         log = logging.getLogger(device.hostname)
 
+        # XXX/TODO: get device role from somewhere
+        device_role = "vpn"
+        os.makedirs(f"output/{device_role}/cloud_init", exist_ok=True)
+
         # Ignore untemplatable devices.
         if not device.is_templatable:
             continue
@@ -85,7 +88,7 @@ if __name__ == "__main__":
             link for link in links if device == link.side_a or device == link.side_b
         ]
         rendered_config = render_template(
-            f"vpn/{device.devicetype}.j2",
+            f"{device_role}/{device.devicetype}.j2",
             global_meta=global_meta,
             device=device,
             links=device_links,
@@ -93,12 +96,12 @@ if __name__ == "__main__":
         )
 
         # write config file
-        with open("output/vpn/" + device.hostname, "w") as f:
+        with open(f"output/{device_role}/" + device.hostname, "w") as f:
             f.write(rendered_config)
             log.info("Config saved.")
 
         # write cloud-init file
-        with open("output/vpn/cloud_init/" + device.hostname, "w") as f:
+        with open(f"output/{device_role}/cloud_init/" + device.hostname, "w") as f:
             f.write("#cloud-config\n")
             yaml.dump(
                 {"vyos_config_commands": [x for x in rendered_config.split("\n") if x]},
