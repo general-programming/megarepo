@@ -12,15 +12,6 @@ log = logging.getLogger()
 client = get_nb_client()
 
 
-def generate_lease(lease_name, hostname: str, mac: str, ip: str):
-    return {
-        "host": lease_name,
-        "hostname": hostname,
-        "mac": mac,
-        "ip": ip,
-    }
-
-
 query = gql(
     """
 query ($device_name: [String]) {
@@ -57,72 +48,6 @@ query ($device_name: [String]) {
 }"""
 )
 
-
-def cisco_interface(interface: dict) -> str:
-    result = []
-    config_result = []
-
-    # Generate the interface name.
-    if interface["type"] == "LAG":
-        interface_name = "Port-Channel" + interface["name"]
-    else:
-        interface_name = interface["name"]
-
-    result.append(f"interface {interface_name}")
-
-    # Handle switchport configs
-    if interface["mode"] == "ACCESS":
-        # config_result.append("switchport mode access")
-        # config_result.append(f"switchport access vlan {interface['untagged_vlan']['vid']}")
-
-        # oh no
-        config_result.append("switchport mode trunk")
-        config_result.append(
-            f"switchport trunk native vlan {interface['untagged_vlan']['vid']}"
-        )
-        config_result.append(
-            f"switchport trunk allowed vlan {interface['untagged_vlan']['vid']}"
-        )
-        config_result.append("spanning-tree portfast edge trunk")
-    elif interface["mode"] == "TAGGED_ALL":
-        config_result.append("switchport mode trunk")
-    elif interface["mode"] == "TAGGED":
-        config_result.append("switchport mode trunk")
-        # TODO: Handle tagged VLANs
-
-    # Port channel handling.
-    if interface["lag"]:
-        result.append("channel-group " + interface["lag"]["name"])
-
-    # Description generation - Netbox description and cable.
-    description = interface.get("description", "")
-
-    if interface["cable"]:
-        cable_description = (
-            interface["cable"]["_termination_a_device"]["name"]
-            + " -> "
-            + interface["cable"]["_termination_b_device"]["name"]
-        )
-        if description:
-            description += " (" + cable_description + ")"
-        else:
-            description = cable_description
-
-    if description:
-        result.append("description " + description)
-
-    # Shutdown or not shutdown the port if it is configured.
-    if config_result:
-        result.extend(config_result)
-        result.append("no shutdown")
-    else:
-        result.append("shutdown")
-
-    # Generate config.
-    result.append("!")
-    return "\n".join(result)
-
-
 if __name__ == "__main__":
     leases = []
 
@@ -134,11 +59,12 @@ if __name__ == "__main__":
         },
     )
 
-    devicetype = "con-sw"
+    device_role = "con-sw"
+    device_type = "cisco"
 
     print(
         render_template(
-            f"switch/{devicetype}.j2",
+            f"{device_role}/{device_type}.j2",
             interfaces=result["interface_list"],
         )
     )
