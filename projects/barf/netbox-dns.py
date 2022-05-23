@@ -3,8 +3,9 @@ import logging
 import sys
 from typing import Generator
 
-from common import IPAMHost, get_nb_client
 from gql import gql
+
+from common import IPAMHost, get_nb_client
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()

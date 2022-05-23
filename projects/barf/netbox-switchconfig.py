@@ -2,8 +2,9 @@
 import logging
 
 from barf.common import render_template
-from common import get_nb_client
 from gql import gql
+
+from common import get_nb_client
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()

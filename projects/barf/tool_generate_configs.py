@@ -7,10 +7,6 @@ from barf.actions import get_secret
 from barf.actions import push_config as f_push_config
 from barf.common import render_template
 from barf.vendors import VENDOR_MAP, BaseHost, NetworkLink
-from barf.vendors.edgeos import EdgeOSHost
-from barf.vendors.external import ExternalHost
-from barf.vendors.linux import LinuxBirdHost
-from barf.vendors.vyos import VyOSHost
 from magic import logging
 
 global_log = logging.getLogger(__name__)

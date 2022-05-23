@@ -2,8 +2,9 @@
 import json
 import logging
 
-from common import clean_hostname, get_nb_client
 from gql import gql
+
+from common import clean_hostname, get_nb_client
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()
