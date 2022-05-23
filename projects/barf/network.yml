@@ -8,6 +8,7 @@ hosts:
     address: 79.110.170.6
     asn: 4280805525
     type: vyos
+    role: vpn
     interfaces:
       - name: eth0
         description: external uplink
@@ -23,6 +24,7 @@ hosts:
     address: 79.110.170.7
     asn: 4280805525
     type: vyos
+    role: vpn
     interfaces:
       - name: eth0
         description: external uplink
@@ -37,6 +39,7 @@ hosts:
   fmt2-vpn-leaf-1:
     asn: 4280805526
     type: vyos
+    role: vpn
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
@@ -52,6 +55,7 @@ hosts:
   fmt2-vpn-leaf-2:
     asn: 4280851827
     type: vyos
+    role: vpn
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
@@ -67,6 +71,7 @@ hosts:
   sea69-acc-v-a-1:
     asn: 4280805527
     type: edgeos
+    role: vpn
     networks:
       - 192.168.8.0/23
     nameservers:
@@ -75,9 +80,11 @@ hosts:
   sea21-hv-egg-irl:
     asn: 4280805528
     type: linux
+    role: vpn
   iad1-vpn-leaf-1:
     asn: 4280805529
     type: vyos
+    role: vpn
     cloudinit: true
     interfaces:
       - name: eth0

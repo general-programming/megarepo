@@ -1,4 +1,4 @@
-{% for link in links %}
+{% for link in vpn_links %}
     {%- set interface_name = "wg" ~ link.link_id -%}
     {%- set port = link.link_id -%}
     {%- if link.side_a == device -%}

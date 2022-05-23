@@ -1,4 +1,5 @@
 import os
+from functools import lru_cache
 from typing import List, Tuple
 
 import click
@@ -55,6 +56,28 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[NetworkLink], dict
     return hosts, links, global_meta
 
 
+class VaultSecrets:
+    """Secret fetcher that uses Vault and caches secrets.
+
+    This lets us avoid hitting Vault for every single secret fetched.
+    Static secrets in theory will not change during the lifetime of the script.
+    """
+
+    @lru_cache(maxsize=256)
+    def __getattr__(self, key: str) -> str:
+        """Fetch a secret from Vault.
+
+        Args:
+            key (str): The key to fetch.
+
+        Returns:
+            str: The secret's value.
+        """
+        key = key.replace("_", "-").strip()
+
+        return get_secret(key)
+
+
 @click.command()
 @click.option("--push-config", default=False, is_flag=True)
 def main(network_filename: str = "network.yml", push_config: bool = False):
@@ -62,44 +85,41 @@ def main(network_filename: str = "network.yml", push_config: bool = False):
     hosts, links, global_meta = load_network(network_filename)
 
     # Get secrets from Vault.
-    secrets = dict(
-        password=get_secret("vyos-password"),
-        vyos_api_password=get_secret("vyos-api-password"),
-        tacacs_host=get_secret("tacacs-host"),
-        tacacs_key=get_secret("tacacs-key"),
-    )
+    secrets = VaultSecrets()
 
     # Render configs
     for host in hosts:
         log = logging.getLogger(host.hostname)
+        role_meta = {}
 
-        # XXX/TODO: get device role from somewhere
-        device_role = "vpn"
-        os.makedirs(f"output/{device_role}/cloud_init", exist_ok=True)
+        # vpn role meta
+        if host.role == "vpn":
+            role_meta["vpn_links"] = [
+                link for link in links if host == link.side_a or host == link.side_b
+            ]
 
         # Ignore untemplatable devices.
         if not host.is_templatable:
             continue
 
         # config render
-        device_links = [
-            link for link in links if host == link.side_a or host == link.side_b
-        ]
+        os.makedirs(f"output/{host.role}/cloud_init", exist_ok=True)
+
         rendered_config = render_template(
-            f"{device_role}/{host.devicetype}.j2",
-            global_meta=global_meta,
+            f"{host.role}/{host.devicetype}.j2",
             device=host,
-            links=device_links,
             secrets=secrets,
+            global_meta=global_meta,
+            **role_meta,
         )
 
         # write config file
-        with open(f"output/{device_role}/" + host.hostname, "w") as f:
+        with open(f"output/{host.role}/" + host.hostname, "w") as f:
             f.write(rendered_config)
             log.info("Config saved.")
 
         # write cloud-init file
-        with open(f"output/{device_role}/cloud_init/" + host.hostname, "w") as f:
+        with open(f"output/{host.role}/cloud_init/" + host.hostname, "w") as f:
             f.write("#cloud-config\n")
             yaml.dump(
                 {"vyos_config_commands": [x for x in rendered_config.split("\n") if x]},

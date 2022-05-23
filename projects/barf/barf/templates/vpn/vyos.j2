@@ -17,7 +17,7 @@ set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 hash sha256
 
 set vpn ipsec interface eth0
 
-{% for link in links %}
+{% for link in vpn_links %}
     {%- if link.side_a == device -%}
         {%- set our_side = link.side_a -%}
         {%- set other_peer = link.side_b -%}

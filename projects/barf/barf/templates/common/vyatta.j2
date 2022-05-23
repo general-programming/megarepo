@@ -1,6 +1,6 @@
 set system host-name '{{ device.hostname }}'
 set system domain-name '{{ global_meta.search_domain }}'
-set system login user vyos authentication plaintext-password '{{ secrets.password }}'
+set system login user vyos authentication plaintext-password '{{ secrets.vyos_password }}'
 set service snmp community '{{ global_meta.snmp_public }}' authorization 'ro'
 {% if device.snmp_location %}
 set service snmp location '{{ device.snmp_location }}'

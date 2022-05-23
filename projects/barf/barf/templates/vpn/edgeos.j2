@@ -1,6 +1,6 @@
 {% include 'common/vyos.j2' %}
 
-{% for link in links %}
+{% for link in vpn_links %}
     {%- set interface_id = link.link_id | string() -%}
     {%- set interface_name = "wg" + interface_id[-3:] -%}
     {%- set port = link.link_id -%}

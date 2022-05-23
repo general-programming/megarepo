@@ -27,6 +27,7 @@ class BaseHost:
     def __init__(
         self,
         hostname: str,
+        role: str,
         address: str = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
@@ -46,6 +47,7 @@ class BaseHost:
         self.networks = networks or []
         self.extra_config = extra_config or []
         self.cloud_init = cloud_init
+        self.role = role
 
     @property
     def devicetype(self):
@@ -94,6 +96,7 @@ class BaseHost:
 
         return cls(
             hostname=hostname,
+            role=meta["role"],
             address=meta.get("address", None),
             asn=meta["asn"],
             nameservers=meta.get("nameservers", []),
