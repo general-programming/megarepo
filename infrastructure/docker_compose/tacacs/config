@@ -46,9 +46,6 @@ id = tac_plus {
         # Setting UNLIMIT_AD_GROUP_MEMBERSHIP to 0 will cause a NACK response if the AD account is a member of more than one security group
         setenv UNLIMIT_AD_GROUP_MEMBERSHIP = 1
 
-        # I'm not 100% sure what EXPAND_AD_GROUP_MEMBERSHIP does
-        setenv EXPAND_AD_GROUP_MEMBERSHIP = 1
-
         # Clear default setting of tacplus for AD_GROUP_PREFIX
         setenv AD_GROUP_PREFIX = ""
 
