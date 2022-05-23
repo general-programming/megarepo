@@ -47,10 +47,13 @@ id = tac_plus {
         setenv UNLIMIT_AD_GROUP_MEMBERSHIP = 1
 
         # Clear default setting of tacplus for AD_GROUP_PREFIX
-        setenv AD_GROUP_PREFIX = ""
+        setenv AD_GROUP_PREFIX = "net"
+
+        # ???
+        # setenv EXPAND_AD_GROUP_MEMBERSHIP = 1
 
         # Setting REQUIRE_TACACS_GROUP_PREFIX to 1 will cause a NACK response if the AD account is not a member of a security group with the required prefix
-        setenv REQUIRE_TACACS_GROUP_PREFIX = 0
+        setenv REQUIRE_TACACS_GROUP_PREFIX = 1
         setenv FLAG_USE_MEMBEROF = 1
 
         exec = /tacacs/lib/mavis/mavis_tacplus_ldap.pl
@@ -66,10 +69,55 @@ id = tac_plus {
         key = "${TACACS_KEY}"
     }
 
-    group = superadmins {
-        #Permit all services by default
-        default service = permit
+    group = readonly {
+        member = readonly
+
+        # Deny  all services by default
+        default service = deny
+
         #Users will need to re-enter their AD password for the enable password (feel free to customize this however you want)
+        # enable = login
+
+        ###
+        ### Cisco IOS Authentication
+        ###
+        service = shell  {
+            default command = deny
+
+            # Set privilege level to 15 on IOS/XE
+            set priv-lvl = 1
+
+            cmd = show {
+                permit .*
+            }
+            cmd = write {
+                permit term
+            }
+            cmd = dir {
+                permit .*
+            }
+            cmd = admin {
+                permit .*
+            }
+            cmd = terminal {
+                permit .*
+            }
+            cmd = more {
+                permit .*
+            }
+            cmd = exit {
+                permit .*
+            }
+            cmd = quit {
+                permit .*
+            }
+        }
+    }
+
+    group = superadmin {
+        member = superadmin
+
+        default service = permit
         enable = login
         ###
         ### Cisco IOS Authentication
@@ -92,29 +140,4 @@ id = tac_plus {
         }
     }
 
-    group = netsuperadmin {
-        #Permit all services by default
-        default service = permit
-        #Users will need to re-enter their AD password for the enable password (feel free to customize this however you want)
-        enable = login
-        ###
-        ### Cisco IOS Authentication
-        ###
-        service = shell  {
-            # Permit all commands
-            default command = permit
-
-            # Permit all command attributes
-            default attribute = permit
-
-            # Set privilege level to 15 on IOS/XE
-            set priv-lvl = 15
-        }
-        ###
-        ### Juniper JunOS Authentication
-        ###
-        service = junos-exec {
-            set local-user-name = superadmins
-        }
-    }
 }

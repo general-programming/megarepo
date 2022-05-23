@@ -17,11 +17,14 @@ RUN tar -xjf /tac_plus.tar.bz2 && \
 
 
 FROM base
+
 COPY --from=build /tacacs /tacacs
-COPY config /etc/tac_plus/tac_plus.cfg
 COPY entrypoint.sh /entrypoint.sh
 
 RUN apk add --no-cache perl perl-digest-md5 perl-ldap && \
     chmod u+x /entrypoint.sh
+
+COPY config /etc/tac_plus/tac_plus.cfg
+
 EXPOSE 49
 ENTRYPOINT ["/entrypoint.sh"]
