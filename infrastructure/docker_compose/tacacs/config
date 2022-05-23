@@ -1,0 +1,97 @@
+id = spawnd {
+    listen = { port = 49 }
+    spawn = {
+        instances min = 1
+        instances max = 10
+    }
+    background = no
+}
+
+id = tac_plus {
+    debug = AUTHOR AUTHEN
+
+    log = stdout {
+        destination = /proc/1/fd/1
+    }
+
+    log = stderr {
+        destination = /dev/stderr
+    }
+
+    log = file {
+        destination = /var/log/tac_plus.log
+    }
+
+    authentication log = stderr
+    authorization log = stderr
+    accounting log = stderr
+
+    authentication log = file
+    authorization log = file
+    accounting log = file
+
+    mavis module = external {
+        setenv LDAP_SERVER_TYPE = "microsoft"
+
+        #If you are using Microsoft Global Catalog with regular LDAP (non-SSL)
+        setenv LDAP_HOSTS = "${LDAP_HOSTS}"
+        setenv LDAP_BASE = "${LDAP_BASE}"
+        setenv LDAP_SCOPE = sub
+        setenv LDAP_FILTER = "(uid=%s)"
+
+        ## Username + UPN Authentication [example: user@mydomain.lan]
+        setenv LDAP_USER = "${LDAP_BIND_USER}"
+        setenv LDAP_PASSWD = "${LDAP_BIND_PASS}"
+
+        # Setting UNLIMIT_AD_GROUP_MEMBERSHIP to 0 will cause a NACK response if the AD account is a member of more than one security group
+        setenv UNLIMIT_AD_GROUP_MEMBERSHIP = 1
+
+        # I'm not 100% sure what EXPAND_AD_GROUP_MEMBERSHIP does
+        setenv EXPAND_AD_GROUP_MEMBERSHIP = 1
+
+        # Clear default setting of tacplus for AD_GROUP_PREFIX
+        setenv AD_GROUP_PREFIX = ""
+
+        # Setting REQUIRE_TACACS_GROUP_PREFIX to 1 will cause a NACK response if the AD account is not a member of a security group with the required prefix
+        setenv REQUIRE_TACACS_GROUP_PREFIX = 0
+        setenv FLAG_USE_MEMBEROF = 1
+
+        exec = /tacacs/lib/mavis/mavis_tacplus_ldap.pl
+    }
+
+    login backend = mavis
+    user backend = mavis
+    pap backend = mavis
+    skip missing groups = yes
+
+    host = world {
+        address = 0.0.0.0/0
+        key = "${TACACS_KEY}"
+    }
+
+    group = superadmins {
+        #Permit all services by default
+        default service = permit
+        #Users will need to re-enter their AD password for the enable password (feel free to customize this however you want)
+        enable = login
+        ###
+        ### Cisco IOS Authentication
+        ###
+        service = shell  {
+            # Permit all commands
+            default command = permit
+
+            # Permit all command attributes
+            default attribute = permit
+
+            # Set privilege level to 15 on IOS/XE
+            set priv-lvl = 15
+        }
+        ###
+        ### Juniper JunOS Authentication
+        ###
+        service = junos-exec {
+            set local-user-name = superadmins
+        }
+    }
+}
