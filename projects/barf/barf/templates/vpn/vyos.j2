@@ -31,7 +31,7 @@ set vpn ipsec interface eth0
 set interfaces vti {{ interface_name }} address '{{ link.get_ip(our_side) }}/31'
 set vpn ipsec site-to-site peer {{ other_peer.address }} authentication id '{{ our_side.address }}'
 set vpn ipsec site-to-site peer {{ other_peer.address }} authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer {{ other_peer.address }} authentication pre-shared-secret '{{ link.secret }}'
+set vpn ipsec site-to-site peer {{ other_peer.address }} authentication pre-shared-secret '{{ secrets[link.secret] }}'
 set vpn ipsec site-to-site peer {{ other_peer.address }} connection-type initiate
 set vpn ipsec site-to-site peer {{ other_peer.address }} default-esp-group 'ESP_DEFAULT'
 set vpn ipsec site-to-site peer {{ other_peer.address }} ike-group 'IKEv2_DEFAULT'

@@ -2,6 +2,7 @@ import logging
 
 import hvac
 import netmiko
+from barf.vendors import BaseHost
 from napalm import get_network_driver
 
 
@@ -21,7 +22,7 @@ def get_secret(secret: str) -> str:
     return response["secret"]
 
 
-def push_config(device, config):
+def push_config(device: BaseHost, config: str):
     log = logging.getLogger("configpush." + device.hostname)
 
     if device.DEVICETYPE not in ["vyos"]:
