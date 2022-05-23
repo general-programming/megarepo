@@ -1,0 +1,11 @@
+tacacs-server host {{ tsecrets.acacs_host }} key {{ secrets.tacacs_key }}
+
+aaa authentication login default tacacs+ local
+aaa authentication enable default tacacs+ enable
+
+aaa authorization exec default tacacs+ local
+
+aaa accounting exec default start-stop tacacs+
+aaa accounting commands 0 default start-stop tacacs+
+aaa accounting commands 1 default start-stop tacacs+
+aaa accounting commands 15 default start-stop tacacs+

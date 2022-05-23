@@ -3,3 +3,5 @@ napalm
 napalm-vyos
 hvac
 python-magic
+gql
+aiohttp

@@ -1,0 +1,14 @@
+tacacs-server host {{ secrets.tacacs_host }} vrf internal key {{ secrets.tacacs_key }}
+
+aaa authentication login default group tacacs+ local
+aaa authentication enable default group tacacs+ local
+
+aaa authorization exec default group tacacs+ local
+aaa authorization commands 0 default group tacacs+
+aaa authorization commands 1 default group tacacs+
+aaa authorization commands 15 default group tacacs+
+
+aaa accounting exec default start-stop group tacacs+
+aaa accounting commands 0 default start-stop group tacacs+
+aaa accounting commands 1 default start-stop group tacacs+
+aaa accounting commands 15 default start-stop group tacacs+
