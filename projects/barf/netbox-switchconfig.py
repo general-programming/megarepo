@@ -14,35 +14,54 @@ client = get_nb_client()
 
 query = gql(
     """
-query ($device_name: [String]) {
-  device_list (name: $device_name) {
+query ($tag: [String]) {
+  device_list(tag: $tag) {
     name
     serial
     asset_tag
-  }
-  interface_list (device: $device_name) {
-    name
-    type
-    description
-    mode
-    lag {
+
+    platform {
+      slug
       name
     }
-    tagged_vlans {
+
+    tags {
       name
-      vid
     }
-    untagged_vlan {
+
+    interfaces {
       name
-      vid
-    }
-    cable {
-      _termination_a_device {
+      type
+      description
+      mode
+
+      lag {
         name
       }
-      _termination_b_device {
+
+      tagged_vlans {
         name
+        vid
       }
+
+      untagged_vlan {
+        name
+        vid
+      }
+
+      cable {
+        _termination_a_device {
+          name
+        }
+        _termination_b_device {
+          name
+        }
+      }
+
+      ip_addresses {
+        address
+      }
+
     }
   }
 }"""
@@ -55,16 +74,19 @@ if __name__ == "__main__":
     result = client.execute(
         query,
         variable_values={
-            "device_name": "fmt2-con-sw-140752-1",
+            "tag": "managed_netdevice",
         },
     )
 
-    device_role = "con-sw"
-    device_type = "cisco"
+    for device in result["device_list"]:
+        hostname = device["name"]
+        platform = device["platform"]["slug"]
+        secrets = {}
 
-    print(
-        render_template(
-            f"{device_role}/{device_type}.j2",
-            interfaces=result["interface_list"],
+        print(
+            render_template(
+                f"network_devices/{platform}.j2",
+                interfaces=device["interfaces"],
+                secrets=secrets,
+            )
         )
-    )
