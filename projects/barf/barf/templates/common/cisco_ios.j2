@@ -27,19 +27,26 @@ aaa accounting commands 15 default start-stop group tacacs+
         {% set interface_name = interface["name"] %}
     {% endif %}
 interface {{ interface_name }}
-    {% if interface["mode"] == "ACCESS" %}
+    {% if interface["type"] == "VIRTUAL" %}
+    {% elif interface["mode"] == "ACCESS" %}
 switchport mode access
+        {% if interface.untagged_vlan %}
 switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+        {% endif %}
     {% elif interface["mode"] == "TAGGED_ALL" %}
-switchport mode trunk
+switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
     {% elif interface["mode"] == "TAGGED" %}
-switchport mode trunk
+switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
     {% endif %}
+
     {% if interface["lag"] %}
-channel-group {{ interface["lag"]["name"] }}
+channel-group {{ interface["lag"]["name"] }} mode active
     {% endif %}
     {% if description %}
 description {{ description }}
+    {% endif %}
+    {% if interface.ip_addresses %}
+ip address {{ interface.ip_addresses[0].address }}
     {% endif %}
     {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
 shutdown
