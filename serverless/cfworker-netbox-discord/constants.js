@@ -6,6 +6,7 @@ const INTERESTING_FIELDS = {
     memory: 'Memory',
     address: 'IP Address',
     mac_address: 'MAC',
+    model: 'Model',
 };
 
 const COLOR_MAX = 16777215;

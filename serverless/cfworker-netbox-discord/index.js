@@ -2,7 +2,7 @@ import { INTERESTING_FIELDS, COLOR_MAX } from './constants';
 
 const encoder = new TextEncoder();
 
-addEventListener('fetch', event => {
+addEventListener('fetch', (event) => {
     event.respondWith(handleRequest(event.request));
 });
 
@@ -77,6 +77,24 @@ async function handleRequest(request) {
         });
     }
 
+    // Extract device type.
+    if (body.data.device_type && body.data.device_type.display) {
+        extraFields.push({
+            name: 'Device',
+            value: body.data.device_type.display,
+            inline: true,
+        });
+    }
+
+    // Extract airflow.
+    if (body.data.airflow) {
+        extraFields.push({
+            name: 'Airflow',
+            value: body.data.airflow.label,
+            inline: true,
+        });
+    }
+
     // Add type.
     if (body.data.type) {
         let body_type;
@@ -111,7 +129,7 @@ async function handleRequest(request) {
     if (body.data.tags && body.data.tags.length != 0) {
         extraFields.push({
             name: 'Tags',
-            value: body.data.tags.map(_ => _.display).join(', '),
+            value: body.data.tags.map((_) => _.display).join(', '),
             inline: true,
         });
     }
