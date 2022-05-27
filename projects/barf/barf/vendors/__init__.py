@@ -63,13 +63,13 @@ class BaseHost:
         return self.TEMPLATABLE
 
     @cache
-    def pubkey(self, port: int):
+    def wg_pubkey(self, port: int):
         _, pubkey = get_wg_keys(self.hostname, port)
 
         return pubkey
 
     @cache
-    def privkey(self, port: int):
+    def wg_privkey(self, port: int):
         privkey, _ = get_wg_keys(self.hostname, port)
 
         return privkey

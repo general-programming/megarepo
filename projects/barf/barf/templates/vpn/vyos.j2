@@ -43,9 +43,9 @@ set vpn ipsec site-to-site peer {{ other_peer.address }} vti bind '{{ interface_
         {%- set port = link.link_id -%}
 set interfaces wireguard {{ interface_name }} description '{{ link.side_a.hostname }} -> {{ link.side_b.hostname }}'
 set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side) }}/31
-set interfaces wireguard {{ interface_name }} private-key '{{ our_side.privkey(port) }}'
+set interfaces wireguard {{ interface_name }} private-key '{{ our_side.wg_privkey(port) }}'
 set interfaces wireguard {{ interface_name }} port {{ port }}
-set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.pubkey(port) }}'
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.wg_pubkey(port) }}'
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips 0.0.0.0/0
         {% if other_peer.address %}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.address }}

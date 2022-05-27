@@ -12,10 +12,10 @@ cat << EOF > /etc/wireguard/{{ interface_name }}.conf
 # {{ interface_name }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }}
 [Interface]
 ListenPort = {{ port }}
-PrivateKey = {{ our_side.privkey(port) }}
+PrivateKey = {{ our_side.wg_privkey(port) }}
 
 [Peer]
-PublicKey = {{ other_peer.pubkey(port) }}
+PublicKey = {{ other_peer.wg_pubkey(port) }}
 AllowedIPs = 0.0.0.0/0
     {%- if other_peer.address %}
 Endpoint = {{ other_peer.address }}:{{ port }}
