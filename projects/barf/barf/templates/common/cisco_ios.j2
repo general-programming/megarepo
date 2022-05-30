@@ -51,10 +51,10 @@ interface {{ interface_name }}
     {% if interface.address %}
     ip address {{ interface.address }}
     {% endif %}
-    {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
-    shutdown
-    {% else %}
+    {% if interface.enabled %}
     no shutdown
+    {% else %}
+    shutdown
     {% endif %}
 !
 {% endfor %}

@@ -47,6 +47,7 @@ query ($tag: [String]) {
       type
       description
       mode
+      enabled
 
       lag {
         name

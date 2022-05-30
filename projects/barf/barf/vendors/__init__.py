@@ -59,6 +59,7 @@ class Cable:
 class HostInterface:
     name: str
     description: Optional[str] = ""
+    enabled: bool = True
     address: Optional[str] = None
     netmask: Optional[str] = None
     dhcp: bool = False
@@ -143,6 +144,7 @@ class BaseHost:
     def tacacs_key(self):
         return get_tacacs_key(self.hostname)
 
+    @property
     def is_spine(self):
         return "-spine-" in self.hostname
 
@@ -167,6 +169,7 @@ class BaseHost:
                 HostInterface(
                     name=interface["name"],
                     description=interface.get("description"),
+                    enabled=interface.get("enabled", True),
                     address=interface.get("address"),
                     netmask=interface.get("netmask"),
                     dhcp=interface.get("dhcp", False),
@@ -297,6 +300,8 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
 
     Args:
         host (str): The host to get the WireGuard keypair for.
+        port (int): The port to get the WireGuard keypair for.
+        generate_keys (bool): Whether to generate a new keypair if one doesn't exist.
 
     Returns:
         Tuple[str, str]: Tuple of (private_key, public_key).
