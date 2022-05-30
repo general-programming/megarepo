@@ -19,6 +19,11 @@ query ($tag: [String]) {
     name
     serial
     asset_tag
+    config_context
+
+    primary_ip4 {
+      address
+    }
 
     platform {
       slug
@@ -62,6 +67,9 @@ query ($tag: [String]) {
         address
       }
 
+      vrf {
+        name
+      }
     }
   }
 }"""
