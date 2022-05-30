@@ -1,4 +1,4 @@
-tacacs-server host {{ tsecrets.acacs_host }} key {{ secrets.tacacs_key }}
+tacacs-server host {{ tsecrets.acacs_host }} key {{ device.tacacs_key }}
 
 aaa authentication login default tacacs+ local
 aaa authentication enable default tacacs+ enable

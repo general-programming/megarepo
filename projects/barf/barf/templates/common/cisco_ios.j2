@@ -2,7 +2,7 @@ hostname {{ device.hostname }}
 
 aaa new-model
 
-tacacs-server host {{ secrets.tacacs_host }} key {{ secrets.tacacs_key }}
+tacacs-server host {{ secrets.tacacs_host }} key {{ device.tacacs_key }}
 
 aaa authentication login default group tacacs+ local
 aaa authentication enable default group tacacs+ enable

@@ -1,4 +1,5 @@
 import ipaddress
+import secrets
 import subprocess
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
@@ -138,6 +139,10 @@ class BaseHost:
         return privkey
 
     @property
+    @cache
+    def tacacs_key(self):
+        return get_tacacs_key(self.hostname)
+
     def is_spine(self):
         return "-spine-" in self.hostname
 
@@ -318,6 +323,58 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
         )
 
     return (private_key, public_key)
+
+
+def generate_tacacs_key() -> str:
+    """Generate a TACACS+ key.
+
+    Returns:
+        str: The TACACS+ key.
+    """
+    return secrets.token_urlsafe(16)
+
+
+def get_tacacs_key(host: str, generate_keys: bool = True) -> str:
+    """Get the TACACS+ key for a host.
+
+    Args:
+        host (str): The host to get the TACACS+ key for.
+        generate_keys (bool): Whether to generate a new key if one does not exist.
+
+    Returns:
+        str: The TACACS+ key.
+    """
+    secret_path = "tacacs-keys"
+
+    try:
+        response = vault.secrets.kv.v2.read_secret_version(
+            mount_point="cluster-secrets",
+            path=secret_path,
+        )["data"]["data"]
+
+        try:
+            tacacs_key = response[host]
+        except KeyError:
+            tacacs_key = generate_tacacs_key()
+
+            vault.secrets.kv.v2.patch(
+                mount_point="cluster-secrets",
+                path=secret_path,
+                secret={host: tacacs_key},
+            )
+    except hvac.exceptions.InvalidPath:
+        if not generate_keys:
+            raise ValueError(f"Secret '{secret_path}' does not exist.")
+
+        tacacs_key = generate_tacacs_key()
+
+        vault.secrets.kv.v2.create_or_update_secret(
+            mount_point="cluster-secrets",
+            path=secret_path,
+            secret={host: tacacs_key},
+        )
+
+    return tacacs_key
 
 
 from barf.vendors.arista import EosHost

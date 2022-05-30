@@ -4,7 +4,7 @@ service unsupported-transceiver wiprolabs f5047577
 {# AAA #}
 no aaa root
 
-tacacs-server host {{ secrets.tacacs_host }} vrf internal key {{ secrets.tacacs_key }}
+tacacs-server host {{ secrets.tacacs_host }} vrf internal key {{ device.tacacs_key }}
 
 aaa authentication login default group tacacs+ local
 aaa authentication enable default group tacacs+ local
