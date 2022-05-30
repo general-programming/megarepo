@@ -19,8 +19,10 @@ aaa accounting commands 0-1,15 default start-stop group tacacs+
 vrf instance internal
 
 {% for vlan in device.vlans %}
-vlan {{ vlan.number }}
+vlan {{ vlan.vid }}
+    {% if vlan.name %}
     name {{ vlan.name }}
+    {% endif %}
 !
 {% endfor %}
 
@@ -28,10 +30,8 @@ vlan {{ vlan.number }}
 
 {% for interface in device.interfaces %}
     {% set description = interface["description"] or "" %}
-    {% if interface["cable"] %}
-        {% if interface.cable._termination_a_device and interface.cable._termination_b_device %}
-            {% set description =  interface["cable"]["_termination_a_device"]["name"] + " -> " + interface["cable"]["_termination_b_device"]["name"] %}
-        {% endif %}
+    {% if interface.cable %}
+        {% set description = interface.cable %}
     {% endif %}
     {% if interface["type"] == "LAG" %}
         {% set interface_name =  "Port-Channel" + interface["name"] %}
@@ -58,14 +58,14 @@ interface {{ interface_name }}
     {% if interface["type"] != "VIRTUAL" %}
     switchport
     {% endif %}
-    {% if interface["lag"] %}
-    channel-group {{ interface["lag"]["name"] }} mode active
+    {% if interface.lag_id %}
+    channel-group {{ interface.lag_id }} mode active
     {% endif %}
-    {% if description | length%}
+    {% if description | length %}
     description {{ description }}
     {% endif %}
-    {% if interface.ip_addresses %}
-    ip address {{ interface.ip_addresses[0].address }}
+    {% if interface.address %}
+    ip address {{ interface.address }}
     {% endif %}
     {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
     shutdown
@@ -77,8 +77,12 @@ interface {{ interface_name }}
 
 {# SNMP #}
 snmp-server community {{ global_meta.snmp_public }} ro
+{% if device.snmp_location %}
 snmp-server location {{ device.snmp_location }}
+{% endif %}
+{% if global_meta.snmp_contact %}
 snmp-server contact {{ global_meta.snmp_contact }}
+{% endif %}
 snmp-server vrf internal
 
 {# Routing #}

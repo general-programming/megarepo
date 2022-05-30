@@ -11,8 +11,8 @@ set service snmp contact '{{ global_meta.snmp_contact }}'
 set system name-server '{{ dns_server }}'
 {% endfor %}
 {% for interface in device.interfaces %}
-    {% if interface.vlan %}
-        {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.vlan %}
+    {% if interface.untagged_vlan %}
+        {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.untagged_vlan %}
     {% else %}
         {% set set_string = 'set interfaces ethernet ' + interface.name %}
     {% endif %}

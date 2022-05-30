@@ -18,6 +18,11 @@ global_log = logging.getLogger(__name__)
 query = gql(
     """
 query ($tag: [String]) {
+  vlan_list {
+    name
+    vid
+  }
+
   device_list(tag: $tag) {
     name
     serial
@@ -58,6 +63,7 @@ query ($tag: [String]) {
       }
 
       cable {
+        id
         _termination_a_device {
           name
         }
@@ -163,14 +169,19 @@ def get_nb_hosts():
             raise ValueError("Invalid host type " + platform)
 
         hostclass = VENDOR_MAP[platform]
-        hosts.append(hostclass.from_netbox_meta(meta))
+        hosts.append(hostclass.from_netbox_meta(meta, result["vlan_list"]))
 
     return hosts
 
 
 @click.command()
 @click.option("--push-config", default=False, is_flag=True)
-def main(network_filename: str = "network.yml", push_config: bool = False):
+@click.option("--push-host", default=None)
+def main(
+    network_filename: str = "network.yml",
+    push_config: bool = False,
+    push_host: str = None,
+):
     # Load network file
     hosts, links, global_meta = load_network(network_filename)
 
@@ -183,6 +194,11 @@ def main(network_filename: str = "network.yml", push_config: bool = False):
     # Render configs
     for host in hosts:
         log = logging.getLogger(host.hostname)
+
+        if push_host and host.hostname != push_host:
+            log.debug("Skipping host %s", host.hostname)
+            continue
+
         role_meta = {}
 
         # vpn role meta

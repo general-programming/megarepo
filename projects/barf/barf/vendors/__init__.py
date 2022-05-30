@@ -1,12 +1,57 @@
 import ipaddress
 import subprocess
-from dataclasses import dataclass
-from functools import cache
+from dataclasses import dataclass, field
+from functools import cache, lru_cache
 from typing import List, Optional, Tuple
 
 import hvac
 
 vault = hvac.Client()
+
+
+@dataclass
+class Cable:
+    """A cable between two hosts.
+
+    Attributes:
+        name (str): The name of the cable.
+        host_a_name (str): The name of host A.
+        host_b_name (str): The name of host B.
+    """
+
+    def __len__(self) -> int:
+        return len(str(self))
+
+    def __str__(self) -> str:
+        return f"{self.host_a_name} -> {self.host_b_name}"
+
+    name: str
+    host_a_name: str
+    host_b_name: str
+
+    @classmethod
+    def from_netbox(cls, data: dict):
+        """Create a cable from a Netbox cable.
+
+        Attributes:
+            data (dict): A dictionary containing the cable data.
+
+        Returns:
+            Cable: The cable.
+
+        Throws:
+            KeyError: If the cable data is missing any devices.
+            ValueError: If the cable data is invalid.
+        """
+
+        if not data["_termination_a_device"] or not data["_termination_b_device"]:
+            raise ValueError("Cable does not have both device ends.")
+
+        return cls(
+            name=data["id"],
+            host_a_name=data["_termination_a_device"]["name"],
+            host_b_name=data["_termination_b_device"]["name"],
+        )
 
 
 @dataclass
@@ -16,8 +61,21 @@ class HostInterface:
     address: Optional[str] = None
     netmask: Optional[str] = None
     dhcp: bool = False
-    vlan: Optional[int] = None
+    untagged_vlan: Optional[int] = None
+    tagged_vlans: List[int] = field(default_factory=list)
     mtu: Optional[int] = None
+    lag_id: Optional[str] = None
+    cable: Optional[Cable] = None
+    vrf: Optional[str] = None
+
+
+@dataclass
+class NetworkVLAN:
+    vid: int
+    name: Optional[str] = ""
+
+    def __hash__(self) -> int:
+        return self.vid ^ hash(self.name)
 
 
 class BaseHost:
@@ -36,6 +94,7 @@ class BaseHost:
         snmp_location: Optional[str] = None,
         networks: List[str] = None,
         cloud_init: bool = False,
+        vlan_map: Optional[NetworkVLAN] = None,
         **kwargs,
     ):
         self.address = address
@@ -48,6 +107,10 @@ class BaseHost:
         self.extra_config = extra_config or []
         self.cloud_init = cloud_init
         self.role = role
+
+        if not vlan_map:
+            vlan_map = {}
+        self.vlan_map = vlan_map
 
     @property
     def devicetype(self):
@@ -78,6 +141,19 @@ class BaseHost:
     def is_spine(self):
         return "-spine-" in self.hostname
 
+    @property
+    @lru_cache
+    def vlans(self):
+        all_vlans = set()
+        for interface in self.interfaces:
+            if interface.untagged_vlan and interface.untagged_vlan in self.vlan_map:
+                all_vlans.add(self.vlan_map[interface.untagged_vlan])
+            for vlan in interface.tagged_vlans:
+                if vlan in self.vlan_map:
+                    all_vlans.add(self.vlan_map[vlan])
+
+        return list(all_vlans)
+
     @classmethod
     def from_meta(cls, hostname: str, meta: dict):
         interfaces = []
@@ -89,7 +165,10 @@ class BaseHost:
                     address=interface.get("address"),
                     netmask=interface.get("netmask"),
                     dhcp=interface.get("dhcp", False),
-                    vlan=interface.get("vlan"),
+                    untagged_vlan=interface.get("vlan"),
+                    tagged_vlans=[
+                        vlan["vid"] for vlan in interface.get("tagged_vlans", [])
+                    ],
                     mtu=interface.get("mtu", None),
                 )
             )
@@ -108,14 +187,62 @@ class BaseHost:
         )
 
     @classmethod
-    def from_netbox_meta(cls, netbox_meta: dict):
+    def from_netbox_meta(cls, netbox_meta: dict, netbox_vlans: dict):
         interfaces = []
+
+        for interface in netbox_meta["interfaces"]:
+            # get lag id
+            lag_id = (interface.get("lag") or {}).get("name", None)
+
+            # get cable
+            try:
+                cable = Cable.from_netbox(interface.get("cable") or {})
+            except (ValueError, KeyError):
+                cable = None
+
+            # XXX: This will break if there are multiple IPs for this interface.
+            ip_address = None
+            netmask = None
+
+            if "ip_addresses" in interface and interface["ip_addresses"]:
+                ip_address, netmask = interface["ip_addresses"][0]["address"].split(
+                    "/", 1
+                )
+
+            untagged_vlan = interface.get("untagged_vlan") or {}
+
+            interfaces.append(
+                HostInterface(
+                    name=interface["name"],
+                    description=interface.get("description", None),
+                    address=ipaddress.IPv4Address(ip_address) if ip_address else None,
+                    netmask=netmask,
+                    dhcp=False,
+                    untagged_vlan=untagged_vlan.get("vid", None),
+                    mtu=interface.get("mtu", None),
+                    lag_id=lag_id,
+                    cable=cable,
+                    vrf=interface.get("vrf", None),
+                )
+            )
+
+        # handle netbox VLANs
+        parsed_vlans = {}
+        for vlan in netbox_vlans:
+            if vlan["vid"] in netbox_vlans:
+                continue
+
+            parsed_vlans[vlan["vid"]] = NetworkVLAN(
+                vid=vlan["vid"],
+                name=vlan.get("name", None),
+            )
 
         return cls(
             hostname=netbox_meta["name"],
             role="network_devices",
             address=netbox_meta["primary_ip4"]["address"],
-            interfaces=netbox_meta["interfaces"],
+            interfaces=interfaces,
+            vlan_map=parsed_vlans,
         )
 
 
