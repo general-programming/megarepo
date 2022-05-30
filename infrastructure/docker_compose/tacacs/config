@@ -75,8 +75,7 @@ id = tac_plus {
         # Deny  all services by default
         default service = deny
 
-        #Users will need to re-enter their AD password for the enable password (feel free to customize this however you want)
-        # enable = login
+        enable = deny
 
         ###
         ### Cisco IOS Authentication
