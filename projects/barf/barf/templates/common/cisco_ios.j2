@@ -1,3 +1,5 @@
+hostname {{ device.hostname }}
+
 aaa new-model
 
 tacacs-server host {{ secrets.tacacs_host }} key {{ secrets.tacacs_key }}
@@ -15,7 +17,7 @@ aaa accounting commands 0 default start-stop group tacacs+
 aaa accounting commands 1 default start-stop group tacacs+
 aaa accounting commands 15 default start-stop group tacacs+
 
-{% for interface in interfaces %}
+{% for interface in device.interfaces %}
     {% if interface["cable"] %}
         {% set description =  interface["cable"]["_termination_a_device"]["name"] + " -> " + interface["cable"]["_termination_b_device"]["name"] %}
     {% else %}
@@ -29,29 +31,30 @@ aaa accounting commands 15 default start-stop group tacacs+
 interface {{ interface_name }}
     {% if interface["type"] == "VIRTUAL" %}
     {% elif interface["mode"] == "ACCESS" %}
-switchport mode access
+    switchport mode access
         {% if interface.untagged_vlan %}
-switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+    switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
         {% endif %}
     {% elif interface["mode"] == "TAGGED_ALL" %}
-switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
-    {% elif interface["mode"] == "TAGGED" %}
-switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
-    {% endif %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
 
+    {% elif interface["mode"] == "TAGGED" %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
+
+    {% endif %}
     {% if interface["lag"] %}
-channel-group {{ interface["lag"]["name"] }} mode active
+    channel-group {{ interface["lag"]["name"] }} mode active
     {% endif %}
     {% if description %}
-description {{ description }}
+    description {{ description }}
     {% endif %}
     {% if interface.ip_addresses %}
-ip address {{ interface.ip_addresses[0].address }}
+    ip address {{ interface.ip_addresses[0].address }}
     {% endif %}
     {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
-shutdown
+    shutdown
     {% else %}
-no shutdown
+    no shutdown
     {% endif %}
 !
 {% endfor %}

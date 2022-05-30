@@ -2,6 +2,7 @@
 import logging
 
 from barf.common import render_template
+from barf.vendors import VENDOR_MAP
 from gql import gql
 
 from common import get_nb_client
@@ -86,15 +87,22 @@ if __name__ == "__main__":
         },
     )
 
-    for device in result["device_list"]:
-        hostname = device["name"]
-        platform = device["platform"]["slug"]
+    for meta in result["device_list"]:
+        platform = meta["platform"]["slug"]
         secrets = {}
+
+        if platform not in VENDOR_MAP:
+            raise ValueError("Invalid host type " + platform)
+
+        hostclass = VENDOR_MAP[platform]
+
+        device = hostclass.from_netbox_meta(meta)
 
         print(
             render_template(
                 f"network_devices/{platform}.j2",
-                interfaces=device["interfaces"],
+                device=device,
+                interfaces=device.interfaces,
                 secrets=secrets,
             )
         )

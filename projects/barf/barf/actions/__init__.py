@@ -28,13 +28,18 @@ def push_config(device: BaseHost, config: str):
     if device.DEVICETYPE not in ["vyos"]:
         return
 
+    device_hostname = f"{device.hostname}.generalprogramming.org"
+
     driver = get_network_driver(device.DEVICETYPE)
     vendor_secret_key = f"{device.DEVICETYPE}-password"
     napalm_device = driver(
-        hostname=f"{device.hostname}.generalprogramming.org",
+        hostname=device_hostname,
         username=device.DEVICETYPE,
         password=get_secret(vendor_secret_key),
-        optional_args={"port": 22},
+        optional_args={
+            "port": 22,
+            "allow_agent": True,
+        },
     )
     try:
         napalm_device.open()

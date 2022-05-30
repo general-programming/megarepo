@@ -7,13 +7,79 @@ import yaml
 from barf.actions import get_secret
 from barf.actions import push_config as f_push_config
 from barf.common import render_template
-from barf.vendors import VENDOR_MAP, BaseHost, NetworkLink
+from barf.vendors import VENDOR_MAP, BaseHost, WGNetworkLink
+from gql import gql
 from magic import logging
+
+from common import get_nb_client
 
 global_log = logging.getLogger(__name__)
 
+query = gql(
+    """
+query ($tag: [String]) {
+  device_list(tag: $tag) {
+    name
+    serial
+    asset_tag
+    config_context
 
-def load_network(filename: str) -> Tuple[List[BaseHost], List[NetworkLink], dict]:
+    primary_ip4 {
+      address
+    }
+
+    platform {
+      slug
+      name
+    }
+
+    tags {
+      name
+    }
+
+    interfaces {
+      name
+      type
+      description
+      mode
+
+      lag {
+        name
+      }
+
+      tagged_vlans {
+        name
+        vid
+      }
+
+      untagged_vlan {
+        name
+        vid
+      }
+
+      cable {
+        _termination_a_device {
+          name
+        }
+        _termination_b_device {
+          name
+        }
+      }
+
+      ip_addresses {
+        address
+      }
+
+      vrf {
+        name
+      }
+    }
+  }
+}"""
+)
+
+
+def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], dict]:
     with open(filename, "r") as f:
         network = yaml.safe_load(f)
 
@@ -43,7 +109,7 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[NetworkLink], dict
         side_b = next(host for host in hosts if host.hostname == link["side_b"])
 
         links.append(
-            NetworkLink(
+            WGNetworkLink(
                 link_id=link_id,
                 side_a=side_a,
                 side_b=side_b,
@@ -78,11 +144,38 @@ class VaultSecrets:
         return get_secret(key)
 
 
+def get_nb_hosts():
+    netbox_client = get_nb_client()
+    hosts = []
+
+    # Execute query and merge physical device + VM interfaces in one list.
+    result = netbox_client.execute(
+        query,
+        variable_values={
+            "tag": "managed_netdevice",
+        },
+    )
+
+    for meta in result["device_list"]:
+        platform = meta["platform"]["slug"]
+
+        if platform not in VENDOR_MAP:
+            raise ValueError("Invalid host type " + platform)
+
+        hostclass = VENDOR_MAP[platform]
+        hosts.append(hostclass.from_netbox_meta(meta))
+
+    return hosts
+
+
 @click.command()
 @click.option("--push-config", default=False, is_flag=True)
 def main(network_filename: str = "network.yml", push_config: bool = False):
     # Load network file
     hosts, links, global_meta = load_network(network_filename)
+
+    # Merge network file with Netbox switches.
+    hosts.extend(get_nb_hosts())
 
     # Get secrets from Vault.
     secrets = VaultSecrets()

@@ -107,6 +107,17 @@ class BaseHost:
             cloud_init=meta.get("cloud_init", False),
         )
 
+    @classmethod
+    def from_netbox_meta(cls, netbox_meta: dict):
+        interfaces = []
+
+        return cls(
+            hostname=netbox_meta["name"],
+            role="network_devices",
+            address=netbox_meta["primary_ip4"]["address"],
+            interfaces=netbox_meta["interfaces"],
+        )
+
 
 @dataclass
 class NetworkLink:
@@ -114,6 +125,10 @@ class NetworkLink:
 
     side_a: BaseHost
     side_b: BaseHost
+
+
+@dataclass
+class WGNetworkLink(NetworkLink):
     network: str
     secret: Optional[str] = None
     ipsec: bool = False
