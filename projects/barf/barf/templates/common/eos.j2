@@ -1,14 +1,92 @@
+hostname {{ device.hostname }}
+service unsupported-transceiver wiprolabs f5047577
+
+{# AAA #}
+no aaa root
+
 tacacs-server host {{ secrets.tacacs_host }} vrf internal key {{ secrets.tacacs_key }}
 
 aaa authentication login default group tacacs+ local
 aaa authentication enable default group tacacs+ local
 
 aaa authorization exec default group tacacs+ local
-aaa authorization commands 0 default group tacacs+
-aaa authorization commands 1 default group tacacs+
-aaa authorization commands 15 default group tacacs+
+aaa authorization commands 0-1,15 default group tacacs+
 
 aaa accounting exec default start-stop group tacacs+
-aaa accounting commands 0 default start-stop group tacacs+
-aaa accounting commands 1 default start-stop group tacacs+
-aaa accounting commands 15 default start-stop group tacacs+
+aaa accounting commands 0-1,15 default start-stop group tacacs+
+
+{# VLANs #}
+vrf instance internal
+
+{% for vlan in device.vlans %}
+vlan {{ vlan.number }}
+    name {{ vlan.name }}
+!
+{% endfor %}
+
+{# Interfaces #}
+
+{% for interface in device.interfaces %}
+    {% set description = interface["description"] or "" %}
+    {% if interface["cable"] %}
+        {% if interface.cable._termination_a_device and interface.cable._termination_b_device %}
+            {% set description =  interface["cable"]["_termination_a_device"]["name"] + " -> " + interface["cable"]["_termination_b_device"]["name"] %}
+        {% endif %}
+    {% endif %}
+    {% if interface["type"] == "LAG" %}
+        {% set interface_name =  "Port-Channel" + interface["name"] %}
+    {% else %}
+        {% set interface_name = interface["name"] %}
+    {% endif %}
+interface {{ interface_name }}
+    {% if interface["type"] == "VIRTUAL" %}
+    {% elif interface["mode"] == "ACCESS" %}
+    switchport mode access
+        {% if interface.untagged_vlan %}
+    switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+        {% endif %}
+    {% elif interface["mode"] == "TAGGED_ALL" %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
+
+    {% elif interface["mode"] == "TAGGED" %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
+
+    {% endif %}
+    {% if interface.vrf %}
+    vrf {{ interface.vrf.name }}
+    {% endif %}
+    {% if interface["type"] != "VIRTUAL" %}
+    switchport
+    {% endif %}
+    {% if interface["lag"] %}
+    channel-group {{ interface["lag"]["name"] }} mode active
+    {% endif %}
+    {% if description | length%}
+    description {{ description }}
+    {% endif %}
+    {% if interface.ip_addresses %}
+    ip address {{ interface.ip_addresses[0].address }}
+    {% endif %}
+    {% if interface["mode"] is not in ["ACCESS", "TAGGED", "TAGGED_ALL"] %}
+    shutdown
+    {% else %}
+    no shutdown
+    {% endif %}
+!
+{% endfor %}
+
+{# SNMP #}
+snmp-server community {{ global_meta.snmp_public }} ro
+snmp-server location {{ device.snmp_location }}
+snmp-server contact {{ global_meta.snmp_contact }}
+snmp-server vrf internal
+
+{# Routing #}
+ip routing
+ip routing vrf internal
+
+{# Management #}
+management api http-commands
+    vrf internal
+        no shutdown
+!

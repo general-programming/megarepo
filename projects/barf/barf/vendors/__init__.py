@@ -178,6 +178,7 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
     return (private_key, public_key)
 
 
+from barf.vendors.arista import EosHost
 from barf.vendors.cisco import CiscoHost
 from barf.vendors.edgeos import EdgeOSHost
 from barf.vendors.external import ExternalHost
@@ -190,4 +191,6 @@ VENDOR_MAP = {
     "linux": LinuxBirdHost,
     "external": ExternalHost,
     "cisco": CiscoHost,
+    "cisco-ios": CiscoHost,
+    "eos": EosHost,
 }
