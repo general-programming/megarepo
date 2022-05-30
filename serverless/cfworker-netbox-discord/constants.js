@@ -7,6 +7,7 @@ const INTERESTING_FIELDS = {
     address: 'IP Address',
     mac_address: 'MAC',
     model: 'Model',
+    cid: 'Circuit ID',
 };
 
 const COLOR_MAX = 16777215;

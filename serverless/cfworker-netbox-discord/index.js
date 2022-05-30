@@ -59,6 +59,8 @@ async function handleRequest(request) {
     //     )
     //   }
 
+    console.log(body);
+
     // Add status.
     if (body.data['status']) {
         extraFields.push({
@@ -95,6 +97,36 @@ async function handleRequest(request) {
         });
     }
 
+    // Extract cable.
+    if (body.data.termination_a && body.data.termination_b) {
+        let side_a_name = (body.data.termination_a.device || body.data.termination_a.circuit).display;
+        let side_b_name = (body.data.termination_b.device || body.data.termination_b.circuit).display;
+
+        const cable_text = `${side_a_name} <-> ${side_b_name}`;
+        extraFields.push({
+            name: 'Cable',
+            value: cable_text,
+            inline: true,
+        });
+    }
+
+    // Extract link_peer.
+    if (body.data.link_peer) {
+        let connection_display;
+
+        if (body.data.link_peer.device) {
+            connection_display = `${body.data.link_peer.device.display} > ${body.data.link_peer.display}`;
+        } else {
+            connection_display = `${body.data.link_peer.display}`;
+        }
+
+        extraFields.push({
+            name: 'Connection',
+            value: connection_display,
+            inline: true,
+        });
+    }
+
     // Add type.
     if (body.data.type) {
         let body_type;
@@ -102,7 +134,7 @@ async function handleRequest(request) {
         if (typeof body.data.type === 'string') {
             body_type = body.data.type;
         } else if (typeof body.data.type === 'object') {
-            body_type = body.data.type.label || body.data.type.value;
+            body_type = body.data.type.display || body.data.type.label || body.data.type.value;
         }
 
         if (body_type) {
@@ -112,6 +144,64 @@ async function handleRequest(request) {
                 inline: true,
             });
         }
+    }
+
+    // Extract Mode.
+    if (body.data.mode) {
+        extraFields.push({
+            name: 'Mode',
+            value: body.data.mode.label,
+            inline: true,
+        });
+    }
+
+    // Extract VRF.
+    if (body.data.vrf) {
+        extraFields.push({
+            name: 'VRF',
+            value: body.data.vrf.display,
+            inline: true,
+        });
+    }
+
+    // Extract Circuit.
+    if (body.data.circuit) {
+        extraFields.push({
+            name: 'Circuit',
+            value: body.data.circuit.display,
+            inline: true,
+        });
+    }
+
+    // Extract Site.
+    if (body.data.site) {
+        extraFields.push({
+            name: 'Site',
+            value: body.data.site.display,
+            inline: true,
+        });
+    }
+
+    // Extract Assigned Object.
+    if (body.data.assigned_object) {
+        let assigned_device;
+
+        if (body.data.assigned_object.device) {
+            assigned_device = body.data.assigned_object.device.display;
+        } else if (body.data.assigned_device.virtual_machine) {
+            assigned_device = body.data.assigned_object.virtual_machine.display;
+        }
+
+        let assigned_text = body.data.assigned_object.display;
+        if (assigned_device) {
+            assigned_text = `${assigned_text} [${assigned_device}]`;
+        }
+
+        extraFields.push({
+            name: 'Assigned To',
+            value: assigned_text,
+            inline: true,
+        });
     }
 
     // Merge in intersting fields.
@@ -166,8 +256,6 @@ async function handleRequest(request) {
             },
         ],
     };
-
-    console.log(body);
 
     // Make the request to Discord and hope it works.
     try {
