@@ -32,3 +32,9 @@ set system name-server '{{ dns_server }}'
 {{ set_string }} description '{{ interface.description }}'
     {% endif %}
 {% endfor %}
+
+set service ssh disable-password-authentication
+{% for ssh_key in global_meta.ssh_keys %}
+set system login user vyos authentication public-keys {{ ssh_key.split(" ")[2] }} key {{ ssh_key.split(" ")[1] }}
+set system login user vyos authentication public-keys {{ ssh_key.split(" ")[2] }} type {{ ssh_key.split(" ")[0] }}
+{% endfor %}

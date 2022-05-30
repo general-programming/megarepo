@@ -3,6 +3,8 @@ global_meta:
   snmp_public: genprogllc
   snmp_contact: support@generalprogramming.org
   snmp_location: General Programming Virtual Infrastructure
+  ssh_keys:
+    - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
 hosts:
   fmt2-vpn-spine-1:
     address: 79.110.170.6
@@ -138,6 +140,7 @@ hosts:
     networks:
       - 10.64.17.0/24
   dfw1-vpn-leaf-1:
+    address: 161.129.155.187
     asn: 4280805531
     type: vyos
     role: vpn
@@ -145,7 +148,8 @@ hosts:
     interfaces:
       - name: eth0
         description: external
-        dhcp: true
+        address: 161.129.155.187
+        netmask: 28
       - name: eth1
         description: internal
         dhcp: true
