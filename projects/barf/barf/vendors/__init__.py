@@ -83,7 +83,7 @@ class HostInterface:
     name: str
     type: str
     mode: Optional[str] = None
-    description: Optional[str] = ""
+    _description: Optional[str] = ""
     enabled: bool = True
     address: Optional[str] = None
     netmask: Optional[str] = None
@@ -94,6 +94,20 @@ class HostInterface:
     lag_id: Optional[str] = None
     cable: Optional[Cable] = None
     vrf: Optional[str] = None
+
+    @property
+    def description(self) -> str:
+        result = self._description or ""
+
+        if self.cable:
+            result += f" ({ self.cable })"
+
+        result = result.strip()
+
+        if not result:
+            return None
+
+        return result.strip()
 
     @property
     def is_lag(self) -> bool:
@@ -227,7 +241,7 @@ class BaseHost:
                 HostInterface(
                     name=interface["name"],
                     type="VPNLink",
-                    description=interface.get("description"),
+                    _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
                     address=interface.get("address"),
                     netmask=interface.get("netmask"),
@@ -282,7 +296,7 @@ class BaseHost:
                     name=interface["name"],
                     type=interface["type"],
                     mode=interface["mode"],
-                    description=interface.get("description", None),
+                    _description=interface.get("description", None),
                     address=ipaddress.IPv4Address(ip_address) if ip_address else None,
                     netmask=netmask,
                     dhcp=False,

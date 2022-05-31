@@ -1,8 +1,4 @@
 {% for interface in device.interfaces %}
-    {% set description = interface["description"] or "" %}
-    {% if interface.cable %}
-        {% set description = interface.cable %}
-    {% endif %}
 interface {{ interface.cisco_name }}
     {% if interface.is_vlan %}
     {% elif interface.is_access %}
@@ -23,8 +19,8 @@ interface {{ interface.cisco_name }}
     {% if interface.lag_id %}
     channel-group {{ interface.lag_id }} mode active
     {% endif %}
-    {% if description | length %}
-    description {{ description }}
+    {% if interface.description %}
+    description {{ interface.description }}
     {% endif %}
     {% if interface.address %}
     ip address {{ interface.address }}
