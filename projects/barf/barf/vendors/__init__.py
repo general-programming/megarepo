@@ -57,16 +57,39 @@ class Cable:
 
 
 @dataclass
+class NetworkVLAN:
+    vid: int
+    name: Optional[str] = ""
+
+    def __hash__(self) -> int:
+        return self.vid ^ hash(self.name)
+
+    def __bool__(self) -> bool:
+        return self.vid is not None
+
+    @classmethod
+    def from_netbox(cls, data):
+        if not data:
+            return None
+
+        return cls(
+            vid=data["vid"],
+            name=data["name"],
+        )
+
+
+@dataclass
 class HostInterface:
     name: str
     type: str
+    mode: Optional[str] = None
     description: Optional[str] = ""
     enabled: bool = True
     address: Optional[str] = None
     netmask: Optional[str] = None
     dhcp: bool = False
-    untagged_vlan: Optional[int] = None
-    tagged_vlans: List[int] = field(default_factory=list)
+    untagged_vlan: Optional[NetworkVLAN] = None
+    tagged_vlans: List[NetworkVLAN] = field(default_factory=list)
     mtu: Optional[int] = None
     lag_id: Optional[str] = None
     cable: Optional[Cable] = None
@@ -80,12 +103,12 @@ class HostInterface:
     @property
     def is_trunk(self) -> bool:
         """Whether the interface is a trunk."""
-        return self.type in ["TAGGED", "TAGGED_ALL"]
+        return self.mode in ["TAGGED", "TAGGED_ALL"]
 
     @property
     def is_access(self) -> bool:
         """Whether the interface is an access port."""
-        return self.type == "ACCESS"
+        return self.mode == "ACCESS"
 
     @property
     def is_vlan(self) -> bool:
@@ -101,15 +124,6 @@ class HostInterface:
             result = "Port-Channel" + result
 
         return result
-
-
-@dataclass
-class NetworkVLAN:
-    vid: int
-    name: Optional[str] = ""
-
-    def __hash__(self) -> int:
-        return self.vid ^ hash(self.name)
 
 
 class BaseHost:
@@ -218,9 +232,10 @@ class BaseHost:
                     address=interface.get("address"),
                     netmask=interface.get("netmask"),
                     dhcp=interface.get("dhcp", False),
-                    untagged_vlan=interface.get("vlan"),
+                    untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
-                        vlan["vid"] for vlan in interface.get("tagged_vlans", [])
+                        NetworkVLAN(vid=vlan)
+                        for vlan in interface.get("tagged_vlans", [])
                     ],
                     mtu=interface.get("mtu", None),
                 )
@@ -262,17 +277,20 @@ class BaseHost:
                     "/", 1
                 )
 
-            untagged_vlan = interface.get("untagged_vlan") or {}
-
             interfaces.append(
                 HostInterface(
                     name=interface["name"],
                     type=interface["type"],
+                    mode=interface["mode"],
                     description=interface.get("description", None),
                     address=ipaddress.IPv4Address(ip_address) if ip_address else None,
                     netmask=netmask,
                     dhcp=False,
-                    untagged_vlan=untagged_vlan.get("vid", None),
+                    untagged_vlan=NetworkVLAN.from_netbox(interface["untagged_vlan"]),
+                    tagged_vlans=[
+                        NetworkVLAN.from_netbox(vlan)
+                        for vlan in interface["tagged_vlans"]
+                    ],
                     mtu=interface.get("mtu", None),
                     lag_id=lag_id,
                     cable=cable,

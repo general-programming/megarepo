@@ -8,16 +8,16 @@ interface {{ interface.cisco_name }}
     {% elif interface.is_access %}
     switchport mode access
         {% if interface.untagged_vlan %}
-    switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+    switchport access vlan {{ interface.untagged_vlan.vid }}
         {% endif %}
     {% elif interface.is_trunk %}
-    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface.untagged_vlan.vid }}{% endif %}
 
     {% endif %}
     {% if interface.vrf %}
     vrf {{ interface.vrf.name }}
     {% endif %}
-    {% if interface["type"] != "VIRTUAL" and device.devicetype == "eos" %}
+    {% if not interface.is_vlan and device.devicetype == "eos" %}
     switchport
     {% endif %}
     {% if interface.lag_id %}

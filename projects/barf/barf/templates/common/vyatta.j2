@@ -12,7 +12,7 @@ set system name-server '{{ dns_server }}'
 {% endfor %}
 {% for interface in device.interfaces %}
     {% if interface.untagged_vlan %}
-        {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.untagged_vlan %}
+        {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.untagged_vlan.vid %}
     {% else %}
         {% set set_string = 'set interfaces ethernet ' + interface.name %}
     {% endif %}
