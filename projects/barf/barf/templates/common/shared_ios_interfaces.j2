@@ -1,0 +1,38 @@
+{% for interface in device.interfaces %}
+    {% set description = interface["description"] or "" %}
+    {% if interface.cable %}
+        {% set description = interface.cable %}
+    {% endif %}
+interface {{ interface.cisco_name }}
+    {% if interface.is_vlan %}
+    {% elif interface.is_access %}
+    switchport mode access
+        {% if interface.untagged_vlan %}
+    switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
+        {% endif %}
+    {% elif interface.is_trunk %}
+    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
+
+    {% endif %}
+    {% if interface.vrf %}
+    vrf {{ interface.vrf.name }}
+    {% endif %}
+    {% if interface["type"] != "VIRTUAL" and device.devicetype == "eos" %}
+    switchport
+    {% endif %}
+    {% if interface.lag_id %}
+    channel-group {{ interface.lag_id }} mode active
+    {% endif %}
+    {% if description | length %}
+    description {{ description }}
+    {% endif %}
+    {% if interface.address %}
+    ip address {{ interface.address }}
+    {% endif %}
+    {% if interface.enabled %}
+    no shutdown
+    {% else %}
+    shutdown
+    {% endif %}
+!
+{% endfor %}
