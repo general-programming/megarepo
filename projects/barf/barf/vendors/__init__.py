@@ -12,6 +12,21 @@ vault = hvac.Client()
 
 
 @dataclass
+class WGKeypair:
+    """A keypair for a WireGuard tunnel."""
+
+    pubkey: str
+    privkey: str
+
+    def to_dict(self):
+        """Return a dict representation of this keypair for Vault."""
+        return {
+            "pubkey": self.pubkey,
+            "privkey": self.privkey,
+        }
+
+
+@dataclass
 class Cable:
     """A cable between two hosts.
 
@@ -185,32 +200,39 @@ class BaseHost:
 
     @property
     def is_templatable(self):
+        """Whether the host can be templated."""
         return self.TEMPLATABLE
 
     @cache
-    def wg_pubkey(self, port: int):
-        _, pubkey = get_wg_keys(self.hostname, port)
+    def wg_keys(self, port: int) -> WGKeypair:
+        """Return the WG keys for this host."""
+        return get_wg_keys(self.hostname, port)
 
-        return pubkey
+    @cache
+    def wg_pubkey(self, port: int):
+        """Return the WireGuard public key for this host."""
+        return self.wg_keys(port).pubkey
 
     @cache
     def wg_privkey(self, port: int):
-        privkey, _ = get_wg_keys(self.hostname, port)
-
-        return privkey
+        """Return the WireGuard private key for this host."""
+        return self.wg_keys(port).privkey
 
     @property
     @cache
     def tacacs_key(self):
+        """Return the TACACS+ key for this host."""
         return get_tacacs_key(self.hostname, self.address)
 
     @property
     def is_spine(self):
+        """Whether the host is a spine."""
         return "-spine-" in self.hostname
 
     @property
     @lru_cache
     def vlans(self):
+        """Return the VLANs for all interfaces this host."""
         all_vlans = set()
         for interface in self.interfaces:
             if interface.untagged_vlan and interface.untagged_vlan in self.vlan_map:
@@ -224,6 +246,7 @@ class BaseHost:
     @property
     @lru_cache
     def tacacs_servers(self):
+        """Return the TACACS+ servers from Consul."""
         hosts = set()
 
         resolver = dns.resolver.Resolver()
@@ -235,6 +258,7 @@ class BaseHost:
 
     @classmethod
     def from_meta(cls, hostname: str, meta: dict):
+        """Create a host from a VPN network.yaml metadata entry."""
         interfaces = []
         for interface in meta.get("interfaces", []):
             interfaces.append(
@@ -270,6 +294,7 @@ class BaseHost:
 
     @classmethod
     def from_netbox_meta(cls, netbox_meta: dict, netbox_vlans: dict):
+        """Create a host from a Netbox metadata entry."""
         interfaces = []
 
         for interface in netbox_meta["interfaces"]:
@@ -334,6 +359,8 @@ class BaseHost:
 
 @dataclass
 class NetworkLink:
+    """A link between two hosts."""
+
     link_id: int
 
     side_a: BaseHost
@@ -342,6 +369,8 @@ class NetworkLink:
 
 @dataclass
 class WGNetworkLink(NetworkLink):
+    """A link between two hosts using WireGuard."""
+
     network: str
     secret: Optional[str] = None
     ipsec: bool = False
@@ -355,7 +384,7 @@ class WGNetworkLink(NetworkLink):
             return side_b_ip
 
 
-def generate_wireguard_keys() -> Tuple[str, str]:
+def generate_wireguard_keys() -> WGKeypair:
     """Generate a WireGuard private & public key.
 
     Requires that the 'wg' command is available on PATH
@@ -370,10 +399,13 @@ def generate_wireguard_keys() -> Tuple[str, str]:
         .strip()
     )
 
-    return (privkey, pubkey)
+    return WGKeypair(
+        pubkey=pubkey,
+        privkey=privkey,
+    )
 
 
-def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, str]:
+def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
     """Get the WireGuard private, public keys for a host.
 
     Args:
@@ -382,9 +414,10 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
         generate_keys (bool): Whether to generate a new keypair if one doesn't exist.
 
     Returns:
-        Tuple[str, str]: Tuple of (private_key, public_key).
+        WGKeypair: The WireGuard keypair for the host.
     """
     secret_path = f"wg-{port}-{host}"
+
     try:
         response = vault.secrets.kv.v2.read_secret_version(
             mount_point="cluster-secrets",
@@ -392,20 +425,21 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> Tuple[str, 
         )["data"]["data"]
         private_key = response["private_key"]
         public_key = response["public_key"]
+        result = WGKeypair(
+            pubkey=public_key,
+            privkey=private_key,
+        )
     except hvac.exceptions.InvalidPath:
         if not generate_keys:
             raise ValueError(f"Secret '{secret_path}' does not exist.")
-        private_key, public_key = generate_wireguard_keys()
+        result = generate_wireguard_keys()
         vault.secrets.kv.v2.create_or_update_secret(
             mount_point="cluster-secrets",
             path=secret_path,
-            secret={
-                "public_key": public_key,
-                "private_key": private_key,
-            },
+            secret=result.to_dict(),
         )
 
-    return (private_key, public_key)
+    return result
 
 
 def generate_tacacs_key() -> str:
