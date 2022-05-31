@@ -2,20 +2,29 @@ hostname {{ device.hostname }}
 
 aaa new-model
 
-tacacs-server host {{ secrets.tacacs_host }} key {{ device.tacacs_key }}
+tacacs-server key {{ device.tacacs_key }}
+aaa group server tacacs consul
+{% for server in device.tacacs_servers %}
+    server {{ server }}
+{% endfor %}
+!
 
-aaa authentication login default group tacacs+ local
-aaa authentication enable default group tacacs+ enable
+{% for server in device.tacacs_servers %}
+tacacs-server host {{ server }}
+{% endfor %}
 
-aaa authorization exec default group tacacs+ local
-aaa authorization commands 0 default group tacacs+
-aaa authorization commands 1 default group tacacs+
-aaa authorization commands 15 default group tacacs+
+aaa authentication login default group consul local
+aaa authentication enable default group consul enable
 
-aaa accounting exec default start-stop group tacacs+
-aaa accounting commands 0 default start-stop group tacacs+
-aaa accounting commands 1 default start-stop group tacacs+
-aaa accounting commands 15 default start-stop group tacacs+
+aaa authorization exec default group consul local
+aaa authorization commands 0 default group consul local
+aaa authorization commands 1 default group consul local
+aaa authorization commands 15 default group consul local
+
+aaa accounting exec default start-stop group consul
+aaa accounting commands 0 default start-stop group consul
+aaa accounting commands 1 default start-stop group consul
+aaa accounting commands 15 default start-stop group consul
 
 {% for interface in device.interfaces %}
     {% if interface.cable %}

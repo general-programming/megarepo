@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from typing import List, Optional, Tuple
 
+import dns.resolver
 import hvac
 
 vault = hvac.Client()
@@ -142,7 +143,7 @@ class BaseHost:
     @property
     @cache
     def tacacs_key(self):
-        return get_tacacs_key(self.hostname)
+        return get_tacacs_key(self.hostname, self.address)
 
     @property
     def is_spine(self):
@@ -160,6 +161,18 @@ class BaseHost:
                     all_vlans.add(self.vlan_map[vlan])
 
         return list(all_vlans)
+
+    @property
+    @lru_cache
+    def tacacs_servers(self):
+        hosts = set()
+
+        resolver = dns.resolver.Resolver()
+        query = resolver.query("tacacs.service.fmt2.consul", "A")
+        for host in query:
+            hosts.add(host)
+
+        return list(hosts)
 
     @classmethod
     def from_meta(cls, hostname: str, meta: dict):
@@ -339,7 +352,7 @@ def generate_tacacs_key() -> str:
     return secrets.token_urlsafe(16)
 
 
-def get_tacacs_key(host: str, generate_keys: bool = True) -> str:
+def get_tacacs_key(host: str, device_address: str, generate_keys: bool = True) -> str:
     """Get the TACACS+ key for a host.
 
     Args:
@@ -358,15 +371,20 @@ def get_tacacs_key(host: str, generate_keys: bool = True) -> str:
         )["data"]["data"]
 
         try:
-            tacacs_key = response[host]
+            tacacs_key = response[host]["key"]
         except KeyError:
             tacacs_key = generate_tacacs_key()
 
-            vault.secrets.kv.v2.patch(
-                mount_point="cluster-secrets",
-                path=secret_path,
-                secret={host: tacacs_key},
-            )
+        vault.secrets.kv.v2.patch(
+            mount_point="cluster-secrets",
+            path=secret_path,
+            secret={
+                host: {
+                    "address": device_address,
+                    "key": tacacs_key,
+                }
+            },
+        )
     except hvac.exceptions.InvalidPath:
         if not generate_keys:
             raise ValueError(f"Secret '{secret_path}' does not exist.")
@@ -376,7 +394,12 @@ def get_tacacs_key(host: str, generate_keys: bool = True) -> str:
         vault.secrets.kv.v2.create_or_update_secret(
             mount_point="cluster-secrets",
             path=secret_path,
-            secret={host: tacacs_key},
+            secret={
+                host: {
+                    "address": device_address,
+                    "key": tacacs_key,
+                }
+            },
         )
 
     return tacacs_key
