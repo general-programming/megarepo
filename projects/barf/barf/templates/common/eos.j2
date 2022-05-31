@@ -38,22 +38,14 @@ vlan {{ vlan.vid }}
     {% if interface.cable %}
         {% set description = interface.cable %}
     {% endif %}
-    {% if interface["type"] == "LAG" %}
-        {% set interface_name =  "Port-Channel" + interface["name"] %}
-    {% else %}
-        {% set interface_name = interface["name"] %}
-    {% endif %}
-interface {{ interface_name }}
-    {% if interface["type"] == "VIRTUAL" %}
-    {% elif interface["mode"] == "ACCESS" %}
+interface {{ interface.cisco_name }}
+    {% if interface.is_vlan %}
+    {% elif interface.is_access %}
     switchport mode access
         {% if interface.untagged_vlan %}
     switchport access vlan {{ interface["untagged_vlan"]["vid"] }}
         {% endif %}
-    {% elif interface["mode"] == "TAGGED_ALL" %}
-    switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
-
-    {% elif interface["mode"] == "TAGGED" %}
+    {% elif interface.is_trunk %}
     switchport mode trunk {% if interface.untagged_vlan %}native vlan {{ interface["untagged_vlan"]["vid"] }}{% endif %}
 
     {% endif %}

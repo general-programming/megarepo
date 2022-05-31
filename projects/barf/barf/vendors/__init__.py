@@ -59,6 +59,7 @@ class Cable:
 @dataclass
 class HostInterface:
     name: str
+    type: str
     description: Optional[str] = ""
     enabled: bool = True
     address: Optional[str] = None
@@ -70,6 +71,36 @@ class HostInterface:
     lag_id: Optional[str] = None
     cable: Optional[Cable] = None
     vrf: Optional[str] = None
+
+    @property
+    def is_lag(self) -> bool:
+        """Whether the interface is a link aggregation group."""
+        return self.type == "LAG"
+
+    @property
+    def is_trunk(self) -> bool:
+        """Whether the interface is a trunk."""
+        return self.type in ["TAGGED", "TAGGED_ALL"]
+
+    @property
+    def is_access(self) -> bool:
+        """Whether the interface is an access port."""
+        return self.type == "ACCESS"
+
+    @property
+    def is_vlan(self) -> bool:
+        """Whether the interface is a VLAN."""
+        return self.type == "VIRTUAL"
+
+    @property
+    def cisco_name(self) -> str:
+        """Return the interface name in Cisco format."""
+        result = self.name
+
+        if self.is_lag:
+            result = "Port-Channel" + result
+
+        return result
 
 
 @dataclass
@@ -181,6 +212,7 @@ class BaseHost:
             interfaces.append(
                 HostInterface(
                     name=interface["name"],
+                    type="VPNLink",
                     description=interface.get("description"),
                     enabled=interface.get("enabled", True),
                     address=interface.get("address"),
@@ -235,6 +267,7 @@ class BaseHost:
             interfaces.append(
                 HostInterface(
                     name=interface["name"],
+                    type=interface["type"],
                     description=interface.get("description", None),
                     address=ipaddress.IPv4Address(ip_address) if ip_address else None,
                     netmask=netmask,
