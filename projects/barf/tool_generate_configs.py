@@ -111,7 +111,6 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
     # links
     links = []
     for link_id, link in network["links"].items():
-        print(link)
         side_a = next(host for host in hosts if host.hostname == link["side_a"])
         side_b = next(host for host in hosts if host.hostname == link["side_b"])
 
