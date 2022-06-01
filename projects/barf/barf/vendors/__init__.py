@@ -288,8 +288,6 @@ class BaseHost:
         if not secret_path:
             secret_path = f"host-{self.hostname}"
 
-        print(secret_path, key)
-
         try:
             response = self.vault.secrets.kv.v2.read_secret_version(
                 mount_point="cluster-secrets",
