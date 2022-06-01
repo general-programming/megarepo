@@ -1,4 +1,4 @@
-hostname {{ device.hostname }}
+{% include 'common/shared_ios_common.j2' %}
 service unsupported-transceiver wiprolabs f5047577
 
 {# AAA #}

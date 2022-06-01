@@ -7,7 +7,8 @@ import yaml
 from barf.actions import get_secret
 from barf.actions import push_config as f_push_config
 from barf.common import render_template
-from barf.vendors import VENDOR_MAP, BaseHost, WGNetworkLink
+from barf.model.wireguard import WGNetworkLink
+from barf.vendors import VENDOR_MAP, BaseHost
 from gql import gql
 from magic import logging
 

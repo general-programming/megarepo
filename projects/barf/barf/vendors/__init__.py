@@ -1,29 +1,19 @@
+from __future__ import annotations
+
+import functools
 import ipaddress
 import secrets
-import subprocess
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
-from typing import List, Optional, Tuple
+from typing import TYPE_CHECKING, Callable, List, Optional
 
 import dns.resolver
 import hvac
+from barf.model import get_vault
+from barf.model.wireguard import get_wg_keys
 
-vault = hvac.Client()
-
-
-@dataclass
-class WGKeypair:
-    """A keypair for a WireGuard tunnel."""
-
-    pubkey: str
-    privkey: str
-
-    def to_dict(self):
-        """Return a dict representation of this keypair for Vault."""
-        return {
-            "pubkey": self.pubkey,
-            "privkey": self.privkey,
-        }
+if TYPE_CHECKING:
+    from barf.model.wireguard import WGKeypair
 
 
 @dataclass
@@ -189,6 +179,8 @@ class BaseHost:
             vlan_map = {}
         self.vlan_map = vlan_map
 
+        self.vault = get_vault()
+
     @property
     def devicetype(self):
         return self.DEVICETYPE
@@ -204,7 +196,7 @@ class BaseHost:
         return self.TEMPLATABLE
 
     @cache
-    def wg_keys(self, port: int) -> WGKeypair:
+    def wg_keys(self, port: int) -> "WGKeypair":
         """Return the WG keys for this host."""
         return get_wg_keys(self.hostname, port)
 
@@ -219,10 +211,31 @@ class BaseHost:
         return self.wg_keys(port).privkey
 
     @property
+    def enable_password(self):
+        """Return the enable password for this host."""
+        return self.secret("enable-password", generate_tacacs_key)
+
+    @property
+    def admin_password(self):
+        """Return the admin password for this host."""
+        return self.secret("admin-password", generate_tacacs_key)
+
+    @property
     @cache
     def tacacs_key(self):
         """Return the TACACS+ key for this host."""
-        return get_tacacs_key(self.hostname, self.address)
+
+        def tacacs_generator(address: str):
+            return {
+                "address": address,
+                "key": generate_tacacs_key(),
+            }
+
+        return self.secret(
+            self.hostname,
+            functools.partial(tacacs_generator, self.address),
+            secret_path="tacacs-keys",
+        )["key"]
 
     @property
     def is_spine(self):
@@ -255,6 +268,54 @@ class BaseHost:
             hosts.add(host)
 
         return list(hosts)
+
+    def secret(
+        self,
+        key: str,
+        default_value: Optional[Callable] = None,
+        secret_path: Optional[str] = None,
+    ):
+        """Get a host specific secret.
+
+        Args:
+            key (str): The key to get.
+            default_value (Optional[Callable]): A function that returns a default value if not found.
+            secret_path (str): The path to the secret.
+
+        Returns:
+            str: The secret value.
+        """
+        if not secret_path:
+            secret_path = f"host-{self.hostname}"
+
+        print(secret_path, key)
+
+        try:
+            response = self.vault.secrets.kv.v2.read_secret_version(
+                mount_point="cluster-secrets",
+                path=secret_path,
+            )["data"]["data"]
+
+            try:
+                result = response[key]
+            except KeyError:
+                result = default_value()
+
+                self.vault.secrets.kv.v2.patch(
+                    mount_point="cluster-secrets",
+                    path=secret_path,
+                    secret={key: result},
+                )
+        except hvac.exceptions.InvalidPath:
+            result = default_value()
+
+            self.vault.secrets.kv.v2.create_or_update_secret(
+                mount_point="cluster-secrets",
+                path=secret_path,
+                secret={key: result},
+            )
+
+        return result
 
     @classmethod
     def from_meta(cls, hostname: str, meta: dict):
@@ -357,91 +418,6 @@ class BaseHost:
         )
 
 
-@dataclass
-class NetworkLink:
-    """A link between two hosts."""
-
-    link_id: int
-
-    side_a: BaseHost
-    side_b: BaseHost
-
-
-@dataclass
-class WGNetworkLink(NetworkLink):
-    """A link between two hosts using WireGuard."""
-
-    network: str
-    secret: Optional[str] = None
-    ipsec: bool = False
-
-    def get_ip(self, host: BaseHost):
-        side_a_ip, side_b_ip = list(ipaddress.IPv4Network(self.network).hosts())
-
-        if host == self.side_a:
-            return side_a_ip
-        else:
-            return side_b_ip
-
-
-def generate_wireguard_keys() -> WGKeypair:
-    """Generate a WireGuard private & public key.
-
-    Requires that the 'wg' command is available on PATH
-
-    Returns:
-        (str, str): (private_key, public_key)
-    """
-    privkey = subprocess.check_output("wg genkey", shell=True).decode("utf-8").strip()
-    pubkey = (
-        subprocess.check_output(f"echo '{privkey}' | wg pubkey", shell=True)
-        .decode("utf-8")
-        .strip()
-    )
-
-    return WGKeypair(
-        pubkey=pubkey,
-        privkey=privkey,
-    )
-
-
-def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
-    """Get the WireGuard private, public keys for a host.
-
-    Args:
-        host (str): The host to get the WireGuard keypair for.
-        port (int): The port to get the WireGuard keypair for.
-        generate_keys (bool): Whether to generate a new keypair if one doesn't exist.
-
-    Returns:
-        WGKeypair: The WireGuard keypair for the host.
-    """
-    secret_path = f"wg-{port}-{host}"
-
-    try:
-        response = vault.secrets.kv.v2.read_secret_version(
-            mount_point="cluster-secrets",
-            path=secret_path,
-        )["data"]["data"]
-        private_key = response["private_key"]
-        public_key = response["public_key"]
-        result = WGKeypair(
-            pubkey=public_key,
-            privkey=private_key,
-        )
-    except hvac.exceptions.InvalidPath:
-        if not generate_keys:
-            raise ValueError(f"Secret '{secret_path}' does not exist.")
-        result = generate_wireguard_keys()
-        vault.secrets.kv.v2.create_or_update_secret(
-            mount_point="cluster-secrets",
-            path=secret_path,
-            secret=result.to_dict(),
-        )
-
-    return result
-
-
 def generate_tacacs_key() -> str:
     """Generate a TACACS+ key.
 
@@ -449,59 +425,6 @@ def generate_tacacs_key() -> str:
         str: The TACACS+ key.
     """
     return secrets.token_urlsafe(16)
-
-
-def get_tacacs_key(host: str, device_address: str, generate_keys: bool = True) -> str:
-    """Get the TACACS+ key for a host.
-
-    Args:
-        host (str): The host to get the TACACS+ key for.
-        generate_keys (bool): Whether to generate a new key if one does not exist.
-
-    Returns:
-        str: The TACACS+ key.
-    """
-    secret_path = "tacacs-keys"
-
-    try:
-        response = vault.secrets.kv.v2.read_secret_version(
-            mount_point="cluster-secrets",
-            path=secret_path,
-        )["data"]["data"]
-
-        try:
-            tacacs_key = response[host]["key"]
-        except KeyError:
-            tacacs_key = generate_tacacs_key()
-
-        vault.secrets.kv.v2.patch(
-            mount_point="cluster-secrets",
-            path=secret_path,
-            secret={
-                host: {
-                    "address": device_address,
-                    "key": tacacs_key,
-                }
-            },
-        )
-    except hvac.exceptions.InvalidPath:
-        if not generate_keys:
-            raise ValueError(f"Secret '{secret_path}' does not exist.")
-
-        tacacs_key = generate_tacacs_key()
-
-        vault.secrets.kv.v2.create_or_update_secret(
-            mount_point="cluster-secrets",
-            path=secret_path,
-            secret={
-                host: {
-                    "address": device_address,
-                    "key": tacacs_key,
-                }
-            },
-        )
-
-    return tacacs_key
 
 
 from barf.vendors.arista import EosHost
