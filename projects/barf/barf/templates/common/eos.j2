@@ -1,4 +1,5 @@
 {% include 'common/shared_ios_common.j2' %}
+
 service unsupported-transceiver wiprolabs f5047577
 
 {# AAA #}
@@ -10,7 +11,6 @@ aaa group server tacacs consul
     server {{ server }} vrf internal
 {% endfor %}
 !
-tacacs-server host {{ secrets.tacacs_host }} vrf internal key {{ device.tacacs_key }}
 
 aaa authentication login default group tacacs+ local
 aaa authentication enable default group tacacs+ local
