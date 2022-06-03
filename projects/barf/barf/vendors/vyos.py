@@ -8,3 +8,7 @@ class VyOSHost(BaseHost):
     @property
     def can_bfd():
         return True
+
+    @property
+    def device_username(self):
+        return "vyos"
