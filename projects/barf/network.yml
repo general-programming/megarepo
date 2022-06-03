@@ -85,6 +85,7 @@ hosts:
     role: vpn
   iad1-vpn-leaf-1:
     asn: 4280805529
+    management_address: 10.64.16.2
     type: vyos
     role: vpn
     cloudinit: true
@@ -122,6 +123,7 @@ hosts:
     type: external
     role: vpn
   hel1-vpn-leaf-1:
+    management_address: 10.64.17.3
     asn: 4280805530
     type: vyos
     role: vpn

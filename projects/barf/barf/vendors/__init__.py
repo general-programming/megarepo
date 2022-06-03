@@ -154,6 +154,7 @@ class BaseHost:
         hostname: str,
         role: str,
         address: str = None,
+        management_address: str = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
@@ -165,6 +166,7 @@ class BaseHost:
         **kwargs,
     ):
         self.address = address
+        self.management_address = management_address
         self.hostname = hostname
         self.asn = asn
         self.snmp_location = snmp_location
@@ -346,6 +348,7 @@ class BaseHost:
             hostname=hostname,
             role=meta["role"],
             address=meta.get("address", None),
+            management_address=meta.get("management_address", None),
             asn=meta["asn"],
             nameservers=meta.get("nameservers", []),
             extra_config=meta.get("extra_config", []),

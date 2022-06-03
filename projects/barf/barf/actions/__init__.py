@@ -22,32 +22,72 @@ def get_secret(secret: str) -> str:
     return response["secret"]
 
 
+def open_connection(host: BaseHost, hostname: str):
+    """Open a connection to a host.
+
+    Args:
+        host (BaseHost): The host to connect to.
+
+    Returns:
+        netmiko.base_connection.BaseConnection: The connection to the host.
+    """
+    log = logging.getLogger("connection." + host.hostname)
+    extra_args = {}
+
+    driver = get_network_driver(host.DEVICETYPE)
+
+    if host.DEVICETYPE != "eos":
+        extra_args.update(
+            {
+                "port": 22,
+                "allow_agent": True,
+            }
+        )
+
+    napalm_device = driver(
+        hostname=hostname,
+        username=host.device_username,
+        password=host.admin_password,
+        optional_args=extra_args,
+    )
+    napalm_device.open()
+
+    log.info("Connected.")
+
+    return napalm_device
+
+
 def push_config(device: BaseHost, config: str):
     log = logging.getLogger("configpush." + device.hostname)
 
-    if device.DEVICETYPE not in ["vyos"]:
+    # These platforms are only supported for now.
+    if device.DEVICETYPE not in ["vyos", "eos"]:
         return
 
-    device_hostname = f"{device.hostname}.generalprogramming.org"
+    # Attempt to connect with the FQDN.
+    # If that fails, connect with the IP directly.
+    napalm_device = None
+    addresses = [
+        f"{device.hostname}.generalprogramming.org",
+        device.management_address,
+        device.address,
+    ]
 
-    driver = get_network_driver(device.DEVICETYPE)
-    vendor_secret_key = f"{device.DEVICETYPE}-password"
-    napalm_device = driver(
-        hostname=device_hostname,
-        username=device.DEVICETYPE,
-        password=get_secret(vendor_secret_key),
-        optional_args={
-            "port": 22,
-            "allow_agent": True,
-        },
-    )
-    try:
-        napalm_device.open()
-    except netmiko.ssh_exception.NetmikoTimeoutException as e:
-        log.error(e)
+    while addresses:
+        address = addresses.pop(0)
+        if not address:
+            continue
+
+        try:
+            napalm_device = open_connection(device, address)
+            break
+        except netmiko.ssh_exception.NetmikoTimeoutException as e:
+            log.error(e)
+            log.error("Failed to connect to %s", address)
+
+    if not napalm_device:
+        log.error("failed to connect to device")
         return
-
-    log.info("Connected.")
 
     if napalm_device.compare_config():
         log.error("Pending changes not commited, not pushing configs.")
