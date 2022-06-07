@@ -1,5 +1,13 @@
 {% include 'common/shared_ios_common.j2' %}
 
+{# VLANs #}
+vrf instance internal
+{% include 'common/shared_ios_vlans.j2' %}
+
+{# Interfaces #}
+{% include 'common/shared_ios_interfaces.j2' %}
+
+{# TACACS #}
 aaa new-model
 
 tacacs-server key {{ device.tacacs_key }}
@@ -25,5 +33,3 @@ aaa accounting exec default start-stop group consul
 aaa accounting commands 0 default start-stop group consul
 aaa accounting commands 1 default start-stop group consul
 aaa accounting commands 15 default start-stop group consul
-
-{% include 'common/shared_ios_interfaces.j2' %}

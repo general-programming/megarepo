@@ -1,0 +1,7 @@
+{% for vlan in device.vlans %}
+vlan {{ vlan.vid }}
+    {% if vlan.name %}
+    name {{ vlan.name }}
+    {% endif %}
+!
+{% endfor %}

@@ -23,14 +23,7 @@ aaa accounting commands 0-1,15 default start-stop group tacacs+
 
 {# VLANs #}
 vrf instance internal
-
-{% for vlan in device.vlans %}
-vlan {{ vlan.vid }}
-    {% if vlan.name %}
-    name {{ vlan.name }}
-    {% endif %}
-!
-{% endfor %}
+{% include 'common/shared_ios_vlans.j2' %}
 
 {# Interfaces #}
 {% include 'common/shared_ios_interfaces.j2' %}
