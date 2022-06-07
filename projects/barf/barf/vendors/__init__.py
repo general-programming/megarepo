@@ -162,6 +162,7 @@ class BaseHost:
         networks: List[str] = None,
         cloud_init: bool = False,
         vlan_map: Optional[NetworkVLAN] = None,
+        config_context: Optional[dict] = None,
         **kwargs,
     ):
         self.address = address
@@ -175,6 +176,7 @@ class BaseHost:
         self.extra_config = extra_config or []
         self.cloud_init = cloud_init
         self.role = role
+        self.config_context = config_context or {}
 
         if not vlan_map:
             vlan_map = {}
@@ -260,6 +262,15 @@ class BaseHost:
                     all_vlans.add(vlan)
 
         return list(all_vlans)
+
+    @property
+    @lru_cache
+    def default_route(self):
+        """Return the default route for this host."""
+        if "default-route" not in self.config_context:
+            return None
+
+        return ipaddress.IPv4Address(self.config_context.get("default-route"))
 
     @property
     @lru_cache
@@ -419,6 +430,7 @@ class BaseHost:
             address=ipaddress.IPv4Interface(netbox_meta["primary_ip4"]["address"]),
             interfaces=interfaces,
             vlan_map=parsed_vlans,
+            config_context=netbox_meta["config_context"] or {},
         )
 
 
