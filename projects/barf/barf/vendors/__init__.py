@@ -434,6 +434,7 @@ def generate_tacacs_key() -> str:
 
 from barf.vendors.arista import EosHost
 from barf.vendors.cisco import CiscoHost
+from barf.vendors.dell import DNOS6Host, DNOS9Host
 from barf.vendors.edgeos import EdgeOSHost
 from barf.vendors.external import ExternalHost
 from barf.vendors.linux import LinuxBirdHost
@@ -447,4 +448,8 @@ VENDOR_MAP = {
     "cisco": CiscoHost,
     "cisco-ios": CiscoHost,
     "eos": EosHost,
+    "dnos6": DNOS6Host,
+    "dnos-6": DNOS6Host,
+    "dnos9": DNOS9Host,
+    "dnos-9": DNOS9Host,
 }
