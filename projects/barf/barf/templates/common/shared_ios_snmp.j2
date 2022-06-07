@@ -1,0 +1,7 @@
+snmp-server community {{ global_meta.snmp_public }} ro
+{% if device.snmp_location %}
+snmp-server location {{ device.snmp_location }}
+{% endif %}
+{% if global_meta.snmp_contact %}
+snmp-server contact {{ global_meta.snmp_contact }}
+{% endif %}
