@@ -90,7 +90,7 @@ class HostInterface:
     mode: Optional[str] = None
     _description: Optional[str] = ""
     enabled: bool = True
-    address: Optional[str] = None
+    address: Optional[ipaddress.IPv4Address] = None
     netmask: Optional[str] = None
     dhcp: bool = False
     untagged_vlan: Optional[NetworkVLAN] = None
@@ -153,7 +153,7 @@ class BaseHost:
         self,
         hostname: str,
         role: str,
-        address: str = None,
+        address: ipaddress.IPv4Address = None,
         management_address: str = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
