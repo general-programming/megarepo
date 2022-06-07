@@ -90,8 +90,7 @@ class HostInterface:
     mode: Optional[str] = None
     _description: Optional[str] = ""
     enabled: bool = True
-    address: Optional[ipaddress.IPv4Address] = None
-    netmask: Optional[str] = None
+    address: Optional[ipaddress.IPv4Interface] = None
     dhcp: bool = False
     untagged_vlan: Optional[NetworkVLAN] = None
     tagged_vlans: List[NetworkVLAN] = field(default_factory=list)
@@ -153,7 +152,7 @@ class BaseHost:
         self,
         hostname: str,
         role: str,
-        address: ipaddress.IPv4Address = None,
+        address: ipaddress.IPv4Interface = None,
         management_address: str = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
@@ -254,11 +253,11 @@ class BaseHost:
         """Return the VLANs for all interfaces this host."""
         all_vlans = set()
         for interface in self.interfaces:
-            if interface.untagged_vlan and interface.untagged_vlan in self.vlan_map:
-                all_vlans.add(self.vlan_map[interface.untagged_vlan])
+            if interface.untagged_vlan and interface.untagged_vlan.vid in self.vlan_map:
+                all_vlans.add(interface.untagged_vlan)
             for vlan in interface.tagged_vlans:
-                if vlan in self.vlan_map:
-                    all_vlans.add(self.vlan_map[vlan])
+                if vlan.vid in self.vlan_map:
+                    all_vlans.add(vlan)
 
         return list(all_vlans)
 
@@ -326,14 +325,18 @@ class BaseHost:
         """Create a host from a VPN network.yaml metadata entry."""
         interfaces = []
         for interface in meta.get("interfaces", []):
+            address = None
+
+            if "address" in interface:
+                address = ipaddress.IPv4Interface(interface.get("address"))
+
             interfaces.append(
                 HostInterface(
                     name=interface["name"],
                     type="VPNLink",
                     _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
-                    address=interface.get("address"),
-                    netmask=interface.get("netmask"),
+                    address=address,
                     dhcp=interface.get("dhcp", False),
                     untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
@@ -375,12 +378,9 @@ class BaseHost:
 
             # XXX: This will break if there are multiple IPs for this interface.
             ip_address = None
-            netmask = None
 
             if "ip_addresses" in interface and interface["ip_addresses"]:
-                ip_address, netmask = interface["ip_addresses"][0]["address"].split(
-                    "/", 1
-                )
+                ip_address = interface["ip_addresses"][0]["address"]
 
             interfaces.append(
                 HostInterface(
@@ -388,8 +388,7 @@ class BaseHost:
                     type=interface["type"],
                     mode=interface["mode"],
                     _description=interface.get("description", None),
-                    address=ipaddress.IPv4Address(ip_address) if ip_address else None,
-                    netmask=netmask,
+                    address=ipaddress.IPv4Interface(ip_address) if ip_address else None,
                     dhcp=False,
                     untagged_vlan=NetworkVLAN.from_netbox(interface["untagged_vlan"]),
                     tagged_vlans=[
@@ -417,7 +416,7 @@ class BaseHost:
         return cls(
             hostname=netbox_meta["name"],
             role="network_devices",
-            address=netbox_meta["primary_ip4"]["address"],
+            address=ipaddress.IPv4Interface(netbox_meta["primary_ip4"]["address"]),
             interfaces=interfaces,
             vlan_map=parsed_vlans,
         )

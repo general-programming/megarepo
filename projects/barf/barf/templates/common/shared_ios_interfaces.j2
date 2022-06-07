@@ -20,10 +20,10 @@ interface {{ interface.cisco_name }}
     channel-group {{ interface.lag_id }} mode active
     {% endif %}
     {% if interface.description %}
-    description {{ interface.description }}
+    description "{{ interface.description }}"
     {% endif %}
     {% if interface.address %}
-    ip address {{ interface.address }}
+    ip address {{ interface.address.ip }} {{ interface.address.network.netmask.compressed }}
     {% endif %}
     {% if interface.enabled %}
     no shutdown
