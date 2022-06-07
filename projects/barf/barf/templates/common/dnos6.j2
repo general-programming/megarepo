@@ -1,0 +1,35 @@
+hostname {{ device.hostname }}
+enable password {{ device.enable_password }}
+username admin password {{ device.admin_password }} privilege 15
+!
+ip ssh server
+!
+aaa new-model
+
+tacacs-server key {{ device.tacacs_key }}
+{% for server in device.tacacs_servers %}
+tacacs-server host {{ server }}
+exit
+!
+{% endfor %}
+aaa authentication login default tacacs local
+aaa authentication enable default tacacs enable
+ip http authentication tacacs local
+ip https authentication tacacs local
+
+aaa authorization exec default tacacs local
+
+aaa accounting exec default start-stop tacacs
+aaa accounting commands default start-stop tacacs
+!
+{# VLANs #}
+{% include 'common/shared_ios_vlans.j2' %}
+{# Interfaces #}
+{% include 'common/shared_ios_interfaces.j2' %}
+{# Routing #}
+{% if device.default_route %}
+ip route default {{ device.default_route }}
+{% endif %}
+!
+{# SNMP #}
+{% include 'common/shared_ios_snmp.j2' %}
