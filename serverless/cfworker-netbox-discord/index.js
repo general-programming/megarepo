@@ -1,4 +1,4 @@
-import { INTERESTING_FIELDS, COLOR_MAX } from './constants';
+import { INTERESTING_FIELDS, DISPLAY_FIELDS, LABEL_FIELDS, COLOR_MAX } from './constants';
 
 const encoder = new TextEncoder();
 
@@ -70,33 +70,6 @@ async function handleRequest(request) {
         });
     }
 
-    // Add device name.
-    if (body.data['device']) {
-        extraFields.push({
-            name: 'Device',
-            value: body.data.device.display,
-            inline: true,
-        });
-    }
-
-    // Extract device type.
-    if (body.data.device_type && body.data.device_type.display) {
-        extraFields.push({
-            name: 'Device',
-            value: body.data.device_type.display,
-            inline: true,
-        });
-    }
-
-    // Extract airflow.
-    if (body.data.airflow) {
-        extraFields.push({
-            name: 'Airflow',
-            value: body.data.airflow.label,
-            inline: true,
-        });
-    }
-
     // Extract cable.
     if (body.data.termination_a && body.data.termination_b) {
         let side_a_name = (body.data.termination_a.device || body.data.termination_a.circuit).display;
@@ -146,42 +119,6 @@ async function handleRequest(request) {
         }
     }
 
-    // Extract Mode.
-    if (body.data.mode) {
-        extraFields.push({
-            name: 'Mode',
-            value: body.data.mode.label,
-            inline: true,
-        });
-    }
-
-    // Extract VRF.
-    if (body.data.vrf) {
-        extraFields.push({
-            name: 'VRF',
-            value: body.data.vrf.display,
-            inline: true,
-        });
-    }
-
-    // Extract Circuit.
-    if (body.data.circuit) {
-        extraFields.push({
-            name: 'Circuit',
-            value: body.data.circuit.display,
-            inline: true,
-        });
-    }
-
-    // Extract Site.
-    if (body.data.site) {
-        extraFields.push({
-            name: 'Site',
-            value: body.data.site.display,
-            inline: true,
-        });
-    }
-
     // Extract Assigned Object.
     if (body.data.assigned_object) {
         let assigned_device;
@@ -210,6 +147,28 @@ async function handleRequest(request) {
             extraFields.push({
                 name: INTERESTING_FIELDS[k],
                 value: String(body.data[k]),
+                inline: true,
+            });
+        }
+    }
+
+    // Merge in label fields.
+    for (const k in LABEL_FIELDS) {
+        if (body.data[k] && body.data[k].label) {
+            extraFields.push({
+                name: LABEL_FIELDS[k],
+                value: String(body.data[k].label),
+                inline: true,
+            });
+        }
+    }
+
+    // Merge in display fields.
+    for (const k in DISPLAY_FIELDS) {
+        if (body.data[k] && body.data[k].display) {
+            extraFields.push({
+                name: DISPLAY_FIELDS[k],
+                value: String(body.data[k].display),
                 inline: true,
             });
         }
