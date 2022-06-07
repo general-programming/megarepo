@@ -239,7 +239,7 @@ class BaseHost:
 
         return self.secret(
             self.hostname,
-            functools.partial(tacacs_generator, self.address),
+            functools.partial(tacacs_generator, f"{self.address.compressed}/32"),
             secret_path="tacacs-keys",
         )["key"]
 
