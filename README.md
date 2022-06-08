@@ -1,11 +1,28 @@
 # megarepo
+
 Mega repo for General Programming business operations.
 
-## Repos
-* Infrastructure - Dockerfiles and Ansible playbooks to setup "important" services
-* Bankwatch - Watches bank accounts and pushes out Discord notifications for new transactions and daily total balance updates.
+## Folders
+
+* automation/ - Ansible + PyInfra playbooks for automating deployments and managements to core systems and disposable fleet.
+* common/ - Files shared between automation playbooks and other scripts.
+* infrastructure/ - Dockerfiles and Ansible playbooks to setup "important" services
+* serverless/ - Various webhooks that handle events fired by other services.
+
+## Points of Presence
+
+We have many points of presence in our space.
+
+* SEA420 - A single server colocated installed at Wobscale's (AS64241) colocation.
+* SEA69 - @nepeat home network infrastructure.
+* FMT2 - Partnership with Lasagna, Ltd (AS208590) and many others with shared management of many resources.
+* IAD1 - Virtual router running on Hetzner Cloud, America Region.
+* HEL1 - Virtual router running on Hetzner Cloud, Europe Region.
+* DFW1 - Virtual router running at a colocation facility in Dallas, Texas, USA.
+
 
 ## Vault setup
+
 ```sh
 
 # Create PKI engines.
