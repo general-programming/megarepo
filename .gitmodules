@@ -1,6 +1,3 @@
-[submodule "services/requestbin"]
-	path = services/requestbin
-	url = git@github.com:general-programming/requestbin.git
 [submodule "services/mailapis"]
 	path = services/mailapis
 	url = git@github.com:general-programming/mailapis.git
