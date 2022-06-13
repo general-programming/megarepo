@@ -6,11 +6,17 @@
 {# Interfaces #}
 {% include 'common/shared_ios_interfaces.j2' %}
 
+{# Routing #}
+{% if device.default_route %}
+ip route 0.0.0.0 0.0.0.0 {{ device.default_route }}
+ip default-gateway {{ device.default_route }}
+{% endif %}
+
 {# TACACS #}
 aaa new-model
 
 tacacs-server key {{ device.tacacs_key }}
-aaa group server tacacs consul
+aaa group server tacacs+ consul
 {% for server in device.tacacs_servers %}
     server {{ server }}
 {% endfor %}
@@ -32,3 +38,12 @@ aaa accounting exec default start-stop group consul
 aaa accounting commands 0 default start-stop group consul
 aaa accounting commands 1 default start-stop group consul
 aaa accounting commands 15 default start-stop group consul
+
+{# Time #}
+ntp server 0.pool.ntp.org
+ntp server 1.pool.ntp.org
+
+{# Misc #}
+cdp run
+lldp run
+ip scp server enable
