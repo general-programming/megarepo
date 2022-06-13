@@ -1,4 +1,5 @@
 import logging
+from typing import Tuple
 
 import hvac
 import netmiko
@@ -6,7 +7,7 @@ from barf.vendors import BaseHost
 from napalm import get_network_driver
 
 
-def get_secret(secret: str) -> str:
+def get_secret(secret: str, key: str = "secret") -> str:
     """Vault secret fetcher.
 
     Args:
@@ -19,7 +20,20 @@ def get_secret(secret: str) -> str:
     response = vault.secrets.kv.v2.read_secret_version(path=secret,)[
         "data"
     ]["data"]
-    return response["secret"]
+
+    if key:
+        return response[key]
+    else:
+        return response
+
+
+def get_supertech_creditentials(host: BaseHost) -> Tuple[str, str]:
+    credentials = get_secret(
+        "supertech-credentials",
+        key=None,
+    )
+
+    return credentials["username"], credentials["password"]
 
 
 def open_connection(host: BaseHost, hostname: str):
@@ -34,9 +48,11 @@ def open_connection(host: BaseHost, hostname: str):
     log = logging.getLogger("connection." + host.hostname)
     extra_args = {}
 
-    driver = get_network_driver(host.DEVICETYPE)
-
-    if host.DEVICETYPE != "eos":
+    # Get NAPALM driver for the device.
+    device_driver = host.DEVICETYPE
+    if device_driver == "cisco":
+        device_driver = "ios"
+    elif device_driver == "eos":
         extra_args.update(
             {
                 "port": 22,
@@ -44,10 +60,13 @@ def open_connection(host: BaseHost, hostname: str):
             }
         )
 
+    driver = get_network_driver(device_driver)
+    username, password = get_supertech_creditentials(host)
+
     napalm_device = driver(
         hostname=hostname,
-        username=host.device_username,
-        password=host.admin_password,
+        username=username,
+        password=password,
         optional_args=extra_args,
     )
     napalm_device.open()
@@ -61,7 +80,7 @@ def push_config(device: BaseHost, config: str):
     log = logging.getLogger("configpush." + device.hostname)
 
     # These platforms are only supported for now.
-    if device.DEVICETYPE not in ["vyos", "eos"]:
+    if device.DEVICETYPE not in ["vyos", "eos", "cisco"]:
         return
 
     # Attempt to connect with the FQDN.
@@ -87,10 +106,6 @@ def push_config(device: BaseHost, config: str):
 
     if not napalm_device:
         log.error("failed to connect to device")
-        return
-
-    if napalm_device.compare_config():
-        log.error("Pending changes not commited, not pushing configs.")
         return
 
     napalm_device.load_merge_candidate(config=config)
