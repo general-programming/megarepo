@@ -65,8 +65,7 @@ async def upload_file(data: bytes, file_name: str):
     ))
 
 async def check_auth(key: str) -> bool:
-    # very secure
-    return True
+    return key == os.environ["API_KEY"]
 
 @routes.post('/render')
 async def render_post(request):
@@ -81,7 +80,7 @@ async def render_post(request):
         return web.json_response({"error": "bad_auth"})
 
     # Grab options from the payload.
-    save_html = data.get("save_html", False)  # XXX: strict checking later
+    save_html = data.get("save_html", True)  # XXX: strict checking later
     output = data.get("output", "upload")
 
     # Check for the HTML in data by popping it.
@@ -101,7 +100,7 @@ async def render_post(request):
 
     # Launch the Chromium instance.
     browser = await launch_pyppeteer(
-        # executablePath="/usr/bin/chromium-browser",
+        executablePath="/usr/bin/chromium-browser",
         args=[
             # "By default, Docker runs a container with a /dev/shm shared memory space 64MB.
             # This is typically too small for Chrome and will cause Chrome to crash when rendering large pages.
@@ -134,7 +133,7 @@ async def render_post(request):
 
             return Math.max(
                 body.scrollHeight,
-                body.offsetHeight, 
+                body.offsetHeight,
                 html.clientHeight,
                 html.scrollHeight,
                 html.offsetHeight

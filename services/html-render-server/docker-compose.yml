@@ -1,0 +1,10 @@
+# Production Compose
+version: "3.6"
+services:
+  webhooks:
+    build: .
+    image: registry.generalprogramming.org/html_render_server
+    env_file: .env
+    command: python3 api.py
+    ports:
+      - '8080:8080'

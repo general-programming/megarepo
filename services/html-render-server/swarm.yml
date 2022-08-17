@@ -2,8 +2,8 @@
 version: "3.6"
 services:
   webhooks:
-    build: webhooks
-    image: registry.generalprogramming.org/mailapi_webhooks
+    build: .
+    image: registry.generalprogramming.org/html_render_server
     env_file: .env
     command: python3 api.py
     networks:
@@ -14,13 +14,12 @@ services:
         - traefik.port=8080
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:mailhook.generalprogramming.org
+        - traefik.frontend.rule=Host:htmlrender.generalprogramming.org
         # Traefik 2
-        - traefik.http.routers.mailhook.rule=Host(`mailhook.generalprogramming.org`)
-        - traefik.http.services.mailhook.loadbalancer.server.port=8080
+        - traefik.http.routers.htmlrender.rule=Host(`htmlrender.generalprogramming.org`)
+        - traefik.http.services.htmlrender.loadbalancer.server.port=8080
       restart_policy:
         condition: on-failure
-
 networks:
   publicweb:
     driver: overlay

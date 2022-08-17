@@ -1,9 +1,9 @@
-import os
-import logging
 import email
 import email.policy
+import logging
+import os
 
-from aiohttp import web, ClientSession
+from aiohttp import ClientSession, web
 
 from common import push_mail
 
@@ -18,11 +18,13 @@ log = logging.getLogger(__name__)
 
 routes = web.RouteTableDef()
 
-@routes.get('/')
+
+@routes.get("/")
 async def rootpage(request):
     return web.Response(text="mail webhook api")
 
-@routes.post('/inbound')
+
+@routes.post("/inbound")
 async def inbound_post(request):
     # Parse data.
     data = await request.post()
@@ -49,10 +51,10 @@ async def inbound_post(request):
 
     # Render mail
     async with ClientSession() as session:
-        async with session.post("http://render:8080/render", json={
-            "auth": "jesus2018",
-            "html": mail_body
-        }) as response:
+        async with session.post(
+            "https://htmlrender.generalprogramming.org/render",
+            json={"auth": os.environ["AUTH_KEY"], "html": mail_body},
+        ) as response:
             try:
                 reply = await response.json()
             except:
@@ -68,12 +70,13 @@ async def inbound_post(request):
             mail_raw = reply["raw_url"]
 
     # Push to Discord
+    print(data)
     push_status, push_response = await push_mail(
         mail_image=mail_image,
         mail_raw=mail_raw,
         subject=data.get("subject", None),
         sent_from=data.get("from", None),
-        sent_to=message.get_unixfrom(),
+        sent_to=data.get("to", message.get_unixfrom()),
     )
 
     if push_status != 204:
@@ -81,8 +84,11 @@ async def inbound_post(request):
 
     return web.json_response("ok")
 
+
 app = web.Application(
-    client_max_size=1024*1024*16  # Default of 2MB crippled some emails. 16MB should be "enough"
+    client_max_size=1024
+    * 1024
+    * 16  # Default of 2MB crippled some emails. 16MB should be "enough"
 )
 app.add_routes(routes)
 
