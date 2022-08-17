@@ -42,9 +42,8 @@ scrape_configs:
 alerting:
   alertmanagers:
     - static_configs:
-      - targets:
-        # Alertmanager's default port is 9093
-        - alertmanager:9093
-
+        - targets:
+            # Alertmanager's default port is 9093
+            - alertmanager:9093
 rule_files:
   - alerts.yml
