@@ -134,6 +134,11 @@ class HostInterface:
         return self.type == "VIRTUAL"
 
     @property
+    def is_port_channel(self) -> bool:
+        """Alias for is_lag."""
+        return self.is_lag
+
+    @property
     def cisco_name(self) -> str:
         """Return the interface name in Cisco format."""
         result = self.name

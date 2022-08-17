@@ -1,3 +1,6 @@
 hostname {{ device.hostname }}
+{% if device.DEVICETYPE != "eos" %}
+ip domain-name generalprogramming.org
+{% endif %}
 enable password {{ device.admin_password }}
-user admin secret {{ device.admin_password }}
+user admin secret {{ device.admin_password }} privilege 15

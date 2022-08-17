@@ -52,7 +52,7 @@ def open_connection(host: BaseHost, hostname: str):
     device_driver = host.DEVICETYPE
     if device_driver == "cisco":
         device_driver = "ios"
-    elif device_driver == "eos":
+    elif device_driver != "eos":
         extra_args.update(
             {
                 "port": 22,

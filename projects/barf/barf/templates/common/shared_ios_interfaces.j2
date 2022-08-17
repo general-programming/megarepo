@@ -13,7 +13,7 @@ interface {{ interface.cisco_name }}
     {% if interface.vrf %}
     vrf {{ interface.vrf.name }}
     {% endif %}
-    {% if not interface.is_vlan and device.devicetype == "eos" %}
+    {% if device.devicetype == "eos" and not (interface.is_vlan) %}
     switchport
     {% endif %}
     {% if interface.lag_id %}
