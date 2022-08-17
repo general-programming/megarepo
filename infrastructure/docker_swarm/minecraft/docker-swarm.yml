@@ -10,10 +10,10 @@ services:
   #   ports:
   #     - target: 22
   #       published: 2222
-  #       mode: host
+  #       mode: ingress
   #     - target: 25565
   #       published: 25567
-  #       mode: host
+  #       mode: ingress
   #   deploy:
   #     labels:
   #       - traefik.enable=true
@@ -37,10 +37,10 @@ services:
   #   ports:
   #     - target: 22
   #       published: 2223
-  #       mode: host
+  #       mode: ingress
   #     - target: 25565
   #       published: 25568
-  #       mode: host
+  #       mode: ingress
   #   deploy:
   #     labels:
   #       - traefik.enable=true
@@ -64,13 +64,13 @@ services:
   #   ports:
   #     - target: 22
   #       published: 2224
-  #       mode: host
+  #       mode: ingress
   #     - target: 25565
   #       published: 25569
-  #       mode: host
+  #       mode: ingress
   #     - target: 25566
   #       published: 25570
-  #       mode: host
+  #       mode: ingress
   #   networks:
   #     - minecraft
 
@@ -84,10 +84,10 @@ services:
   #   ports:
   #     - target: 22
   #       published: 2225
-  #       mode: host
+  #       mode: ingress
   #     - target: 25565
   #       published: 25571
-  #       mode: host
+  #       mode: ingress
   #   networks:
   #     - minecraft
 
@@ -101,10 +101,10 @@ services:
     ports:
       - target: 22
         published: 2226
-        mode: host
+        mode: ingress
       - target: 25565
         published: 25577
-        mode: host
+        mode: ingress
     networks:
       - minecraft
 
@@ -120,10 +120,10 @@ services:
     ports:
       - target: 22
         published: 2227
-        mode: host
+        mode: ingress
       - target: 25565
         published: 25578
-        mode: host
+        mode: ingress
     networks:
       - minecraft
 
@@ -137,10 +137,10 @@ services:
     ports:
       - target: 22
         published: 2228
-        mode: host
+        mode: ingress
       - target: 25565
         published: 25579
-        mode: host
+        mode: ingress
     networks:
       - minecraft
 
@@ -156,10 +156,10 @@ services:
     ports:
       - target: 22
         published: 2229
-        mode: host
+        mode: ingress
       - target: 25565
         published: 25580
-        mode: host
+        mode: ingress
     networks:
       - minecraft
 
@@ -173,10 +173,10 @@ services:
     ports:
       - target: 22
         published: 2230
-        mode: host
+        mode: ingress
       - target: 25565
         published: 25581
-        mode: host
+        mode: ingress
     networks:
       - minecraft
 
