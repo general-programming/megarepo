@@ -4,7 +4,11 @@ from pyinfra import host
 from pyinfra.facts.server import LinuxName
 from pyinfra.operations import files, server, systemd
 
-approle_name = host.data.vault_role or "cluster-node"
+if "vault_role" in host.data:
+    approle_name = host.data.vault_role
+else:
+    approle_name = "cluster-node"
+
 if "APPROLE_EXISTS" in os.environ:
     approle_id = None
     approle_secret = None

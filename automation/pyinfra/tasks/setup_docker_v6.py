@@ -3,7 +3,7 @@ import random
 
 from pyinfra import host
 from pyinfra.facts.hardware import NetworkDevices
-from pyinfra.operations import files, network, server, systemd
+from pyinfra.operations import files, server
 
 v6_addr = None
 v6_device = None

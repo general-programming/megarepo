@@ -33,7 +33,7 @@ dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install fail2ban docker.io mo
 
 # Install pyinfra in /root
 virtualenv -p python3 /root/pyenv
-/root/pyenv/bin/pip install pyinfra
+/root/pyenv/bin/pip install pyinfra hvac
 
 # Setup consul folders
 mkdir /var/lib/consul

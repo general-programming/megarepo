@@ -6,7 +6,10 @@ from pyinfra import host
 from pyinfra.facts.hardware import NetworkDevices
 from pyinfra.operations import files, server, systemd
 
-approle_name = host.data.vault_role or "cluster-node"
+if "vault_role" in host.data:
+    approle_name = host.data.vault_role
+else:
+    approle_name = "cluster-node"
 is_server = approle_name == "cluster-server"
 
 # Public IP, used only for servers.
