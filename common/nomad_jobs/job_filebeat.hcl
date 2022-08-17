@@ -47,7 +47,6 @@ filebeat.inputs:
 
 output.redis:
   hosts: ["{{with secret "cluster-secrets/data/filebeat_redis"}}{{.Data.data.host}}{{end}}"]
-  password: "{{with secret "cluster-secrets/data/filebeat_redis"}}{{.Data.data.password}}{{end}}"
   key: "filebeat"
   db: 0
   datatype: "channel"
@@ -67,7 +66,7 @@ processors:
                     "-e",
                     "-strict.perms=false"
                 ]
-                image = "docker.elastic.co/beats/filebeat:8.1.1"
+                image = "docker.elastic.co/beats/filebeat:8.2.3"
                 network_mode = "host"
                 volumes = [
                     "local/filebeat.yml:/usr/share/filebeat/filebeat.yml:ro",
