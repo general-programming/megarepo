@@ -1,0 +1,17 @@
+http:
+  routers:
+    proxmox:
+      rule: Host(`proxmox.catgirls.dev`)
+      service: proxmox
+    plex:
+      rule: Host(`plex.egg.party`)
+      service: plex
+  services:
+    proxmox:
+      loadBalancer:
+        servers:
+          - url: https://hv0-egg-irl.hosts.nepeat.com:8006
+    plex:
+      loadBalancer:
+        servers:
+          - url: http://192.168.3.234:32400
