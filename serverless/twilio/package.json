@@ -8,16 +8,16 @@
     "deploy": "twilio-run deploy"
   },
   "dependencies": {
-    "@twilio/runtime-handler": "1.2.1",
-    "axios": "^0.24.0",
-    "file-type": "^17.1.0",
+    "@twilio/runtime-handler": "1.2.4",
+    "axios": "^0.27.2",
+    "file-type": "^17.1.6",
     "form-data": "^4.0.0",
-    "twilio": "^3.56"
+    "twilio": "^3.80.1"
   },
   "devDependencies": {
-    "twilio-run": "^3.4.0"
+    "twilio-run": "^3.4.3"
   },
   "engines": {
-    "node": "12"
+    "node": "18"
   }
 }

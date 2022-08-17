@@ -1,11 +1,11 @@
 const axios = require("axios").default;
 const FormData = require("form-data");
-const FileType = require("file-type");
 
 const CALL_FIELDS = {
     FromCity: "City",
     FromState: "State",
     FromCountry: "Country",
+    FromZip: "ZIP",
 };
 
 /**
@@ -23,6 +23,8 @@ function checkIfSMS(event) {
  * @param {string} url
  */
 async function getImage(url) {
+    const FileType = await import("file-type");
+
     const response = await axios({
         method: "GET",
         url: url,
@@ -30,7 +32,7 @@ async function getImage(url) {
     });
 
     return {
-        extension: (await FileType.fromBuffer(response.data)).ext,
+        extension: (await FileType.fileTypeFromBuffer(response.data)).ext,
         data: response.data,
     };
 }
@@ -50,7 +52,7 @@ async function buildDiscordWebhookPayloads(event) {
 
     // Determine if this is a call, SMS, or MMS;
     const isSMS = checkIfSMS(event);
-    const isCall = false; // TODO/XXX Some field does calls.
+    const isCall = !isSMS; // XXX: Is this the best way to determine if the payload is a call?.
 
     // Call field mapping
     for (const callField in CALL_FIELDS) {
@@ -76,10 +78,11 @@ async function buildDiscordWebhookPayloads(event) {
     }
 
     /* Get the event type first. */
+    console.log(event);
     if (isSMS) {
         username += " Message";
     } else if (isCall) {
-        username += " Voice";
+        username += " Voice (Function)";
         title = `Incoming call from ${event.From}`;
         footer = `Call to ${event.To}`;
     }
@@ -100,6 +103,7 @@ async function buildDiscordWebhookPayloads(event) {
             },
         ],
     };
+    console.log(messagePayload);
     messageForm.append("payload_json", JSON.stringify(messagePayload));
     payloads.push(messageForm);
 
@@ -124,7 +128,8 @@ async function buildDiscordWebhookPayloads(event) {
 
 exports.handler = async function (context, event, callback) {
     const payloads = await buildDiscordWebhookPayloads(event);
-    const webhookURI = checkIfSMS(event)
+    const isSMS = checkIfSMS(event);
+    const webhookURI = isSMS
         ? context.DISCORD_WEBHOOK_SMS
         : context.DISCORD_WEBHOOK_VOICE;
 
@@ -142,5 +147,19 @@ exports.handler = async function (context, event, callback) {
         await new Promise((_) => setTimeout(_, 200));
     }
 
-    callback();
+    if (isSMS) {
+        callback();
+    } else {
+        const twiml = new Twilio.twiml.VoiceResponse();
+        const dial = twiml.dial({ callerId: event.From });
+        dial.sip(
+            {
+                username: context.SIP_USERNAME,
+                password: context.SIP_PASSWORD,
+            },
+            `sip:${event.To}@${context.SIP_DOMAIN}`
+        );
+        console.log(twiml);
+        return callback(null, twiml);
+    }
 };
