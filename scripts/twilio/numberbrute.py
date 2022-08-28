@@ -1,21 +1,23 @@
-import twilio
 import sys
+
+import twilio
 
 from common import create_twilio
 
 PHONE_NUMBERPAD = [
-    ('abc', 2),
-    ('def', 3),
-    ('ghi', 4),
-    ('jkl', 5),
-    ('mno', 6),
-    ('pqrs', 7),
-    ('tuv', 8),
-    ('wxyz', 9)
+    ("abc", 2),
+    ("def", 3),
+    ("ghi", 4),
+    ("jkl", 5),
+    ("mno", 6),
+    ("pqrs", 7),
+    ("tuv", 8),
+    ("wxyz", 9),
 ]
 PHONE_NUMBERPAD_MAP = {c: v for k, v in PHONE_NUMBERPAD for c in k}
 
 twilio_client = create_twilio()
+
 
 def get_countries():
     result = []
@@ -25,6 +27,7 @@ def get_countries():
             result.append(record.country_code)
 
     return result
+
 
 def map_to_keypad(input: str) -> str:
     input = input.lower()
@@ -54,8 +57,7 @@ for country in countries:
 
     try:
         numbers = twilio_client.available_phone_numbers(country).local.list(
-            beta=True,
-            contains=thing_to_search
+            beta=True, contains=thing_to_search
         )
     except twilio.base.exceptions.TwilioException as e:
         print(e)
