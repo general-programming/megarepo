@@ -59,6 +59,7 @@ def create_embed(
     status: str,
     image: str = None,
     fields: List[dict] = None,
+    footer_text: str = None,
 ):
     """Generates an embed.
 
@@ -67,7 +68,8 @@ def create_embed(
         description (str): The description of the embed.
         status (str): User given status. Valid values are "success", and "failure".
         image (str, optional): The image URL. Defaults to None.
-        fields (List[dict], optional): The fields of the embed. Defaults to None.
+        fields (List[dict], optional): The fields of the embed.
+        footer_text (str, optional): The footer text of the embed.
 
     Returns:
         dict: The embed.
@@ -81,10 +83,10 @@ def create_embed(
         "title": title,
         "description": description,
         "color": color,
-        "footer": {
-            "text": f"lambda version {os.environ.get('AWS_LAMBDA_FUNCTION_VERSION', 'unknown')}"
-        },
     }
+
+    if footer_text:
+        output["footer"] = {"text": footer_text}
 
     if fields:
         output["fields"] = fields
@@ -191,7 +193,10 @@ def handle_sms(options, payload):
         return create_embed("Error", "No message or attachment is provided.", "failure")
 
     try:
-        fields = []
+        fields = [
+            create_field("From", twilio.from_number),
+        ]
+
         if message:
             fields.append(create_field("Message", message))
 

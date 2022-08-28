@@ -11,7 +11,7 @@ class Twilio:
     """
 
     def __init__(self, from_number: str, sid: str, token: str):
-        self.from_ = from_number
+        self.from_number = from_number
         self.client = Client(sid, token)
 
     def verify_token(self) -> bool:
@@ -58,7 +58,7 @@ class Twilio:
         """
         self.client.messages.create(
             body=message,
-            from_=from_ if from_ is not None else self.from_,
+            from_=from_ if from_ is not None else self.from_number,
             to=to,
         )
 
@@ -73,7 +73,7 @@ class Twilio:
         """
         self.client.messages.create(
             body=message,
-            from_=from_ if from_ is not None else self.from_,
+            from_=from_ if from_ is not None else self.from_number,
             to=to,
             media_url=media,
         )
