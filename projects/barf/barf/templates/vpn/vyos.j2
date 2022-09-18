@@ -70,7 +70,7 @@ set protocols bgp neighbor {{ link.get_ip(other_peer) }} bfd
 set protocols bgp address-family ipv4-unicast network {{ network }}
 {% endfor -%}
 
-set protocols bgp local-as '{{ device.asn }}'
+set protocols bgp system-as '{{ device.asn }}'
 set protocols bgp peer-group leaf address-family ipv4-unicast
 set protocols bgp peer-group leaf ebgp-multihop '6'
 set protocols bgp peer-group spine address-family ipv4-unicast

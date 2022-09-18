@@ -1,6 +1,6 @@
 set system host-name '{{ device.hostname }}'
 set system domain-name '{{ global_meta.search_domain }}'
-set system login user vyos authentication plaintext-password '{{ device.admin_password }}'
+set system login user supertech authentication plaintext-password '{{ device.admin_password }}'
 set service snmp community '{{ global_meta.snmp_public }}' authorization 'ro'
 {% if device.snmp_location %}
 set service snmp location '{{ device.snmp_location }}'
@@ -35,6 +35,6 @@ set system name-server '{{ dns_server }}'
 
 set service ssh disable-password-authentication
 {% for ssh_key in global_meta.ssh_keys %}
-set system login user vyos authentication public-keys {{ ssh_key.split(" ")[2] }} key {{ ssh_key.split(" ")[1] }}
-set system login user vyos authentication public-keys {{ ssh_key.split(" ")[2] }} type {{ ssh_key.split(" ")[0] }}
+set system login user supertech authentication public-keys {{ ssh_key.split(" ")[2] }} key {{ ssh_key.split(" ")[1] }}
+set system login user supertech authentication public-keys {{ ssh_key.split(" ")[2] }} type {{ ssh_key.split(" ")[0] }}
 {% endfor %}
