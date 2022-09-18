@@ -15,12 +15,12 @@
 - name: dns - Update default config
   template:
     src: 00-default.j2
-    dest: /etc/dnsmasq.d/00-default
+    dest: /etc/dnsmasq.d/00-default.conf
 
 - name: dns - Update static config
   template:
     src: 99-dns.j2
-    dest: /etc/dnsmasq.d/99-dns
+    dest: /etc/dnsmasq.d/99-dns.conf
 
 - name: dns - Reload
   service:
