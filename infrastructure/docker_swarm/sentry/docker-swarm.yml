@@ -13,7 +13,7 @@ x-healthcheck-defaults: &healthcheck_defaults
   retries: 5
   start_period: 10s
 x-sentry-defaults: &sentry_defaults
-  << : *restart_policy
+  <<: *restart_policy
   image: "$SENTRY_IMAGE"
   depends_on:
     - redis
@@ -54,7 +54,7 @@ x-sentry-defaults: &sentry_defaults
   networks:
     - sentry
 x-snuba-defaults: &snuba_defaults
-  << : *restart_policy
+  <<: *restart_policy
   depends_on:
     - clickhouse
     - kafka
@@ -75,19 +75,19 @@ x-snuba-defaults: &snuba_defaults
 
 services:
   memcached:
-    << : *restart_policy
+    <<: *restart_policy
     image: "memcached:alpine"
     healthcheck:
-      << : *healthcheck_defaults
+      <<: *healthcheck_defaults
       # From: https://stackoverflow.com/a/31877626/5155484
       test: echo stats | nc 127.0.0.1 11211
     networks:
       - sentry
   redis:
-    << : *restart_policy
+    <<: *restart_policy
     image: "redis:6.2.6-alpine"
     healthcheck:
-      << : *healthcheck_defaults
+      <<: *healthcheck_defaults
       test: redis-cli ping
     volumes:
       - "/srv/var/sentry/redis:/data"
@@ -98,7 +98,7 @@ services:
     networks:
       - sentry
   zookeeper:
-    << : *restart_policy
+    <<: *restart_policy
     image: "confluentinc/cp-zookeeper:6.2.0"
     environment:
       ZOOKEEPER_CLIENT_PORT: "2181"
@@ -111,13 +111,13 @@ services:
       - "/srv/var/sentry/zookeeper-log:/var/lib/zookeeper/log"
       - "/srv/var/sentry/secrets:/etc/zookeeper/secrets"
     healthcheck:
-      << : *healthcheck_defaults
+      <<: *healthcheck_defaults
       test:
         ["CMD-SHELL", 'echo "ruok" | nc -w 2 -w 2 localhost 2181 | grep imok']
     networks:
       - sentry
   kafka:
-    << : *restart_policy
+    <<: *restart_policy
     depends_on:
       - zookeeper
     image: "confluentinc/cp-kafka:6.2.0"
@@ -138,13 +138,17 @@ services:
       - "/srv/var/sentry/kafka-log:/var/lib/kafka/log"
       - "/srv/var/sentry/secrets:/etc/kafka/secrets"
     healthcheck:
-      << : *healthcheck_defaults
+      <<: *healthcheck_defaults
       test: ["CMD-SHELL", "nc -z localhost 9092"]
     networks:
       - sentry
   clickhouse:
-    << : *restart_policy
-    image: "yandex/clickhouse-server:20.3.9.70"
+    <<: *restart_policy
+    image: clickhouse-self-hosted-local
+    build:
+      context: ./clickhouse
+      args:
+        BASE_IMAGE: "${CLICKHOUSE_IMAGE:-}"
     ulimits:
       nofile:
         soft: 262144
@@ -162,10 +166,12 @@ services:
       # You might want to change this to a higher value (and ensure your host has enough memory)
       MAX_MEMORY_USAGE_RATIO: 0.3
     healthcheck:
-      test:
-        [
+      test: [
           "CMD-SHELL",
-          "wget -nv -t1 --spider 'http://localhost:8123/' || exit 1",
+          # Manually override any http_proxy envvar that might be set, because
+          # this wget does not support no_proxy. See:
+          # https://github.com/getsentry/self-hosted/issues/1537
+          "http_proxy='' wget -nv -t1 --spider 'http://localhost:8123/' || exit 1",
         ]
       interval: 3s
       timeout: 600s
@@ -182,52 +188,52 @@ services:
   #   volumes:
   #     - "/srv/var/sentry/geoip:/sentry"
   snuba-api:
-    << : *snuba_defaults
+    <<: *snuba_defaults
   # Kafka consumer responsible for feeding events into Clickhouse
   snuba-consumer:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
   # Kafka consumer responsible for feeding outcomes into Clickhouse
   # Use --auto-offset-reset=earliest to recover up to 7 days of TSDB data
   # since we did not do a proper migration
   snuba-outcomes-consumer:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
   # Kafka consumer responsible for feeding session data into Clickhouse
   snuba-sessions-consumer:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     command: consumer --storage sessions_raw --auto-offset-reset=latest --max-batch-time-ms 750
   # Kafka consumer responsible for feeding transactions data into Clickhouse
   snuba-transactions-consumer:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     command: consumer --storage transactions --consumer-group transactions_group --auto-offset-reset=latest --max-batch-time-ms 750 --commit-log-topic=snuba-commit-log
   snuba-replacer:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     command: replacer --storage errors --auto-offset-reset=latest --max-batch-size 3
   snuba-subscription-consumer-events:
-    << : *snuba_defaults
-    command: subscriptions --auto-offset-reset=latest --consumer-group=snuba-events-subscriptions-consumers --topic=events --result-topic=events-subscription-results --dataset=events --commit-log-topic=snuba-commit-log --commit-log-group=snuba-consumers --delay-seconds=60 --schedule-ttl=60
+    <<: *snuba_defaults
+    command: subscriptions-scheduler-executor --dataset events --entity events --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-events-subscriptions-consumers --followed-consumer-group=snuba-consumers --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
   snuba-subscription-consumer-transactions:
-    << : *snuba_defaults
-    command: subscriptions --auto-offset-reset=latest --consumer-group=snuba-transactions-subscriptions-consumers --topic=events --result-topic=transactions-subscription-results --dataset=transactions --commit-log-topic=snuba-commit-log --commit-log-group=transactions_group --delay-seconds=60 --schedule-ttl=60
+    <<: *snuba_defaults
+    command: subscriptions-scheduler-executor --dataset transactions --entity transactions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-transactions-subscriptions-consumers --followed-consumer-group=transactions_group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
   snuba-cleanup:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     image: registry.generalprogramming.org/snuba-cleanup-self-hosted-local
     build:
       context: ./cron
       args:
         BASE_IMAGE: "$SNUBA_IMAGE"
-    command: '"*/5 * * * * gosu snuba snuba cleanup --storage errors --dry-run False"'
+    command: '"*/5 * * * * snuba snuba cleanup --storage errors --dry-run False"'
   snuba-transactions-cleanup:
-    << : *snuba_defaults
+    <<: *snuba_defaults
     image: registry.generalprogramming.org/snuba-cleanup-self-hosted-local
     build:
       context: ./cron
       args:
         BASE_IMAGE: "$SNUBA_IMAGE"
-    command: '"*/5 * * * * gosu snuba snuba cleanup --storage transactions --dry-run False"'
+    command: '"*/5 * * * * snuba snuba cleanup --storage transactions --dry-run False"'
   symbolicator:
-    << : *restart_policy
+    <<: *restart_policy
     image: "$SYMBOLICATOR_IMAGE"
     volumes:
       - "/srv/var/sentry/symbolicator:/data"
@@ -239,7 +245,7 @@ services:
     networks:
       - sentry
   symbolicator-cleanup:
-    << : *restart_policy
+    <<: *restart_policy
     image: registry.generalprogramming.org/symbolicator-cleanup-self-hosted-local
     build:
       context: ./cron
@@ -251,9 +257,9 @@ services:
     networks:
       - sentry
   web:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     healthcheck:
-      << : *healthcheck_defaults
+      <<: *healthcheck_defaults
       test:
         - "CMD"
         - "/bin/bash"
@@ -261,26 +267,26 @@ services:
         # Courtesy of https://unix.stackexchange.com/a/234089/108960
         - 'exec 3<>/dev/tcp/127.0.0.1/9000 && echo -e "GET /_health/ HTTP/1.1\r\nhost: 127.0.0.1\r\n\r\n" >&3 && grep ok -s -m 1 <&3'
   cron:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     command: run cron
   worker:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     command: run worker
   ingest-consumer:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     command: run ingest-consumer --all-consumer-types
   post-process-forwarder:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     # Increase `--commit-batch-size 1` below to deal with high-load environments.
     command: run post-process-forwarder --commit-batch-size 1
   subscription-consumer-events:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     command: run query-subscription-consumer --commit-batch-size 1 --topic events-subscription-results
   subscription-consumer-transactions:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     command: run query-subscription-consumer --commit-batch-size 1 --topic transactions-subscription-results
   sentry-cleanup:
-    << : *sentry_defaults
+    <<: *sentry_defaults
     image: registry.generalprogramming.org/sentry-cleanup-self-hosted-local
     build:
       context: ./cron
@@ -289,7 +295,7 @@ services:
     entrypoint: "/entrypoint.sh"
     command: '"0 0 * * * gosu sentry sentry cleanup --days $SENTRY_EVENT_RETENTION_DAYS"'
   nginx:
-    << : *restart_policy
+    <<: *restart_policy
     networks:
       - sentry
       - publicweb
@@ -303,17 +309,20 @@ services:
         # Traefik 2
         - traefik.http.routers.sentry.rule=Host(`sentry.generalprogramming.org`)
         - traefik.http.services.sentry.loadbalancer.server.port=80
-    image: "nginx:1.21.5-alpine"
+    image: "nginx:1.22.0-alpine"
     volumes:
       - type: bind
         read_only: true
         source: /srv/var/sentry/nginx
         target: /etc/nginx
+      - type: bind
+        source: /srv/var/sentry/nginx_cache
+        target: /var/cache/nginx
     depends_on:
       - web
       - relay
   relay:
-    << : *restart_policy
+    <<: *restart_policy
     image: "$RELAY_IMAGE"
     volumes:
       - type: bind
