@@ -31,6 +31,7 @@ class IPAMHost:
     ipv4: str = None
     ipv6: str = None
     mac: str = None
+    ipmi_ip: str = None
 
     @property
     def clean_hostname(self):

@@ -5,3 +5,4 @@ hvac
 python-magic
 gql
 aiohttp
+dnspython

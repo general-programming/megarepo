@@ -26,6 +26,11 @@ def create_zone(leases) -> Generator[IPAMHost, None, None]:
             yield f"address=/{fqdn}/{lease.ipv4}"
             yield f"ptr-record={reverse_arpa},{fqdn}"
 
+        if lease.ipmi_ip:
+            reverse_arpa = ".".join(lease.ipmi_ip.split(".")[::-1]) + ".in-addr.arpa"
+            yield f"address=/ipmi.{fqdn}/{lease.ipmi_ip}"
+            yield f"ptr-record={reverse_arpa},{fqdn}"
+
 
 def non_static_host(hostname: str) -> bool:
     result = False
@@ -51,6 +56,12 @@ query {
     }
     primary_ip6 {
       address
+    }
+    interfaces {
+      name
+      ip_addresses {
+        address
+      }
     }
   }
 
@@ -91,12 +102,30 @@ if __name__ == "__main__":
         ipv4 = (host.get("primary_ip4") or {}).get("address", "").split("/")[0]
         ipv6 = (host.get("primary_ip6") or {}).get("address", "").split("/")[0]
 
+        # Get the IPMI IP address.
+        ipmi_ip = None
+        for interface in host.get("interfaces", []):
+            if interface["name"].lower() in [
+                "ipmi",
+                "idrac",
+                "ilo",
+                "drac",
+                "bmc",
+                "imm",
+            ]:
+                if not interface["ip_addresses"]:
+                    log.warn("No IPMI IP for %s", host_name)
+                    continue
+                ipmi_ip = interface["ip_addresses"][0]["address"].split("/")[0]
+                break
+
         # Create host dataclass.
         leases.append(
             IPAMHost(
                 hostname=host_name,
                 ipv4=ipv4,
                 ipv6=ipv6,
+                ipmi_ip=ipmi_ip,
             )
         )
 
