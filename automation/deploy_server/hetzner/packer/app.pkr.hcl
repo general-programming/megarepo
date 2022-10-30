@@ -1,6 +1,6 @@
 source "hcloud" "test" {
   token        = "${var.token}"
-  image        = "ubuntu-20.04"
+  image        = "ubuntu-22.04"
   location     = "ash"
   server_type  = "cpx11"
   ssh_username = "root"
