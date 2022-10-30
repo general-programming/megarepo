@@ -17,6 +17,7 @@ web/
 .envrc
 .env
 *.retry
+secret/
 
 # Gitsecret
 .gitsecret/keys/random_seed
