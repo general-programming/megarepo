@@ -151,7 +151,11 @@ exports.handler = async function (context, event, callback) {
         callback();
     } else {
         const twiml = new Twilio.twiml.VoiceResponse();
-        const dial = twiml.dial({ callerId: event.From });
+        const dial = twiml.dial({
+            callerId: event.From,
+            recordingStatusCallback: "",
+            recordingStatusCallbackMethod: "POST",
+        });
         dial.sip(
             {
                 username: context.SIP_USERNAME,
