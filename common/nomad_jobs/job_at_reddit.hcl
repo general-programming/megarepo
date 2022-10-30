@@ -29,11 +29,14 @@ job "at_reddit" {
                     "10",
                     "nepeat"
                 ]
-                logging = {
+                logging {
                     type = "loki"
-                    "loki-url" = "http://loki.service.fmt2.consul:3100/loki/api/v1/push"
-                    "loki-retries" = "5"
-                    "loki-batch-size" = "400"
+                    config {
+                        loki-url = "http://loki.service.fmt2.consul:3100/loki/api/v1/push"
+                        loki-retries = "5"
+                        loki-batch-size = "400"
+                        loki-external-labels = "container_name={{.Name}},group=archiveteam,job=${NOMAD_JOB_NAME}"
+                    }
                 }
                 labels = {
                     "com.centurylinklabs.watchtower.enable" = "true"
