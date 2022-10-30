@@ -46,7 +46,10 @@ def open_connection(host: BaseHost, hostname: str):
         netmiko.base_connection.BaseConnection: The connection to the host.
     """
     log = logging.getLogger("connection." + host.hostname)
-    extra_args = {}
+    extra_args = {
+        "allow_agent": True,
+        "use_keys": True,
+    }
 
     # Get NAPALM driver for the device.
     device_driver = host.DEVICETYPE
@@ -56,12 +59,14 @@ def open_connection(host: BaseHost, hostname: str):
         extra_args.update(
             {
                 "port": 22,
-                "allow_agent": True,
             }
         )
 
     driver = get_network_driver(device_driver)
     username, password = get_supertech_creditentials(host)
+
+    if device_driver == "vyos":
+        username = "vyos"
 
     napalm_device = driver(
         hostname=hostname,
