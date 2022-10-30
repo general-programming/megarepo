@@ -2,6 +2,12 @@ job "at_reddit" {
     type = "system"
     datacenters = ["dc1"]
 
+    constraint {
+        attribute = "${node.class}"
+        operator  = "=="
+        value = "bigbiglarge"
+    }
+
     group "reddit" {
         restart {
             mode = "delay"
@@ -20,11 +26,17 @@ job "at_reddit" {
             config {
                 args = [
                     "--concurrent",
-                    "15",
+                    "10",
                     "nepeat"
                 ]
+                logging = {
+                    type = "loki"
+                    "loki-url" = "http://loki.service.fmt2.consul:3100/loki/api/v1/push"
+                    "loki-retries" = "5"
+                    "loki-batch-size" = "400"
+                }
                 labels = {
-                    com.centurylinklabs.watchtower.enable = "true"
+                    "com.centurylinklabs.watchtower.enable" = "true"
                 }
                 image = "atdr.meo.ws/archiveteam/reddit-grab"
                 force_pull = true
