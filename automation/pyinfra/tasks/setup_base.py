@@ -1,4 +1,4 @@
-from pyinfra.operations import files, server
+from pyinfra.operations import files, server, systemd
 
 files.put(
     name="Install HSM root CA.",
@@ -13,4 +13,25 @@ server.packages(
         "gnupg",
         "software-properties-common",
     ],
+)
+
+# Systemd is the world's most OK launch daemon.
+files.directory(
+    "/etc/systemd/resolved.conf.d",
+    present=True,
+)
+
+files.put(
+    name="Install Consul resolved config.",
+    src="files/resolved/consul.conf",
+    dest="/etc/systemd/resolved.conf.d/consul.conf",
+    mode="644",
+)
+
+systemd.service(
+    name="Restart and resolved",
+    service="systemd-resolved.service",
+    running=True,
+    restarted=True,
+    enabled=True,
 )
