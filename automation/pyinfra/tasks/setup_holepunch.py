@@ -1,7 +1,10 @@
 from pyinfra import host
 from pyinfra.operations import apt, server
 
-holepunch_command = f"curl -L -X POST '{host.data.holepunch_url}' -H 'Content-Type: application/json' --data-raw '{{\"key\": \"{host.data.holepunch_key}\"}}'"
+holepunch_url = host.data.holepunch_url
+holepunch_key = host.data.holepunch_key
+
+holepunch_command = f"curl -L -X POST '{holepunch_url}' -H 'Content-Type: application/json' --data-raw '{{\"key\": \"{holepunch_key}\"}}'"
 
 apt.packages(
     name="Install Curl.",

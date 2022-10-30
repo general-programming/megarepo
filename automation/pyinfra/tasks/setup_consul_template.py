@@ -7,10 +7,9 @@ from pyinfra.operations import files, server, systemd
 def generate_vault_token():
     hvac_client = hvac.Client()
 
-    return hvac_client.create_token(
+    return hvac_client.auth.token.create_orphan(
         policies=["vault-consul-tls-policy"],
         period="168h",
-        orphan=True,
     )["auth"]["client_token"]
 
 

@@ -65,8 +65,9 @@ if is_server:
 
     hvac_client = hvac.Client()
 
-    vault_token = hvac_client.create_token(
-        policies=["nomad-server"], period="72h", orphan=True
+    vault_token = hvac_client.auth.token.create_orphan(
+        policies=["nomad-server"],
+        period="72h",
     )["auth"]["client_token"]
 else:
     vault_token = None
