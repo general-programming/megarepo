@@ -17,7 +17,7 @@ dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 update
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y dist-upgrade
 
 # Install software-properties-common and other apt goodies.
-dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install apt-transport-https gnupg-agent software-properties-common ca-certificates curl
+dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install apt-transport-https gnupg-agent software-properties-common ca-certificates curl git
 
 # Install HashiCorp repo
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -

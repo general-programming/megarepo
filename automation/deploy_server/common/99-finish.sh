@@ -2,11 +2,20 @@
 set -x
 set -e
 
+# Shared
+dpkg_waitlock () {
+    while fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
+        sleep 1
+    done
+
+    eval "$@"
+}
+
 # Dpkg based
 if [ -x "$(command -v apt-get)" ]; then
-    apt-get -y autoremove
+    dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y autoremove
     # Cleanup apt packages.
-    apt-get clean
+    dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 clean
 fi
 
 # Systemd
