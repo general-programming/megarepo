@@ -24,6 +24,9 @@ if [ -x "$(command -v systemctl)" ]; then
     systemctl enable --now docker
     systemctl enable nomad
     systemctl enable consul
+
+    # Enable misc services
+    systemctl enable --now fail2ban
 fi
 
 # Create folders for support services.
