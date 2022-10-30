@@ -21,7 +21,7 @@ fi
 # Systemd
 if [ -x "$(command -v systemctl)" ]; then
     # Enable docker + nomad
-    systemctl enable docker
+    systemctl enable --now docker
     systemctl enable nomad
     systemctl enable consul
 fi

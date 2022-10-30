@@ -38,3 +38,12 @@ virtualenv -p python3 /root/pyenv
 # Setup consul folders
 mkdir /var/lib/consul
 chown consul:consul /var/lib/consul
+
+# Systemd enable services now
+if [ -x "$(command -v systemctl)" ]; then
+    # Enable docker for plugin install
+    systemctl enable --now docker
+fi
+
+# Install Docker plugins
+docker plugin install grafana/loki-docker-driver:latest --alias loki --grant-all-permissions
