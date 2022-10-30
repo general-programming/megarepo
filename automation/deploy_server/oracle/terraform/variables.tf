@@ -8,7 +8,7 @@ variable "app-scaling" {
 }
 
 variable "platform_config_instance_shape" {
-  default = "VM.Standard.E3.Flex"
+  default = "VM.Standard.E4.Flex"
 }
 
 variable region {
