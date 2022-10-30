@@ -3,7 +3,7 @@ services:
   znc:
     image: znc:1.8.2
     volumes:
-      - /srv/var/znc:/znc-data
+      - /mnt/ceph/var/znc:/znc-data
     ports:
       - target: 6667
         published: 6667
