@@ -1,6 +1,12 @@
 data_dir = "/opt/nomad/data"
 bind_addr = "0.0.0.0"
 
+{% raw %}
+advertise = {
+  http = "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}"
+}
+{% endraw %}
+
 tls {
   http = true
   rpc  = true
