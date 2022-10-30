@@ -4,7 +4,7 @@ variable "public_key" {
 }
 
 variable "app-scaling" {
-  default = 1
+  default = 32
 }
 
 variable "platform_config_instance_shape" {
