@@ -1,0 +1,6 @@
+- hosts: all
+  strategy: free
+  roles:
+    - role: cloudalchemy.node_exporter
+    - role: update_configs
+    - role: update_firewall

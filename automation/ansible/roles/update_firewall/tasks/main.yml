@@ -42,6 +42,14 @@
       - 22
     jump: ACCEPT
 
+- name: Allow node_exporter connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 9100
+    jump: ACCEPT
+
 - name: Allow HTTP connections
   ansible.builtin.iptables:
     chain: INPUT
