@@ -6,3 +6,7 @@ client {
   enabled = true
   node_class = "bigbiglarge"
 }
+
+advertise = {
+  http = "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}"
+}
