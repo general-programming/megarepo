@@ -1,0 +1,18 @@
+{
+    "startup_scripts": [
+        {
+            "id": "2ff7e20e-d0a3-47e0-b212-cf755400fc3a",
+            "date_created": "2021-02-05T12:46:35+00:00",
+            "date_modified": "2021-02-05T12:46:35+00:00",
+            "name": "cloud-init",
+            "type": "boot"
+        }
+    ],
+    "meta": {
+        "total": 1,
+        "links": {
+            "next": "",
+            "prev": ""
+        }
+    }
+}

@@ -1,0 +1,71 @@
+{
+    "instances": [
+        {
+            "id": "257b8316-5bdd-4ce7-950f-1c403d8768a7",
+            "os": "Ubuntu 20.04 x64",
+            "ram": 1024,
+            "disk": 25,
+            "main_ip": "149.28.222.42",
+            "vcpu_count": 1,
+            "region": "sjc",
+            "plan": "vc2-1c-1gb",
+            "date_created": "2021-01-22T17:01:21+00:00",
+            "status": "active",
+            "allowed_bandwidth": 1000,
+            "netmask_v4": "255.255.254.0",
+            "gateway_v4": "149.28.222.1",
+            "power_status": "running",
+            "server_status": "ok",
+            "v6_network": "2001:19f0:ac01:849::",
+            "v6_main_ip": "2001:19f0:ac01:0849:5400:03ff:fe29:5f24",
+            "v6_network_size": 64,
+            "label": "",
+            "internal_ip": "",
+            "kvm": "https://my.vultr.com/subs/vps/novnc/api.php?data=djJ8c3lLQkpFb2JFWlZ2blo2LW9KUnVxZUJpWGZWcUVYdDh8OxToxuDBmHzvse7x-bh07hSsOzWneJGrw5zSa9SiFSzrtCOXmgfPoxMGzIIQOS5WDVgBPZAIHoXsNHGTm3yUSckrtGFD7vLeVRsgfBjTrgPfK7GUWIlEjA-8Vpi66qCerNV7fc5a1SICDfhsj2_zD7fwYgBR9fxOHzkgFCWj-x3gZpG0P7QRtnc_NRFyGg",
+            "tag": "project_erin_archiveteam",
+            "os_id": 387,
+            "app_id": 0,
+            "firewall_group_id": "",
+            "features": [
+                "ipv6"
+            ]
+        },
+        {
+            "id": "ffc61a83-2294-4667-a46c-5c53ff2651cd",
+            "os": "Ubuntu 20.04 x64",
+            "ram": 1024,
+            "disk": 25,
+            "main_ip": "104.238.152.204",
+            "vcpu_count": 1,
+            "region": "sea",
+            "plan": "vc2-1c-1gb",
+            "date_created": "2021-01-22T17:01:21+00:00",
+            "status": "active",
+            "allowed_bandwidth": 1000,
+            "netmask_v4": "255.255.254.0",
+            "gateway_v4": "104.238.152.1",
+            "power_status": "running",
+            "server_status": "ok",
+            "v6_network": "2001:19f0:8001:1cd6::",
+            "v6_main_ip": "2001:19f0:8001:1cd6:5400:03ff:fe29:5f26",
+            "v6_network_size": 64,
+            "label": "",
+            "internal_ip": "",
+            "kvm": "https://my.vultr.com/subs/vps/novnc/api.php?data=djJ8LVYyOHFaYlFkVEd5VkxHTFZxaEk1YURBelNqNW5neVF8AvgLmxb4zyYr8XjDT80BQ039103crONb1e99yYVrQjtZfZSuDJloCRAqDNV5iXO_A_gowrw7Gd5UgeUkYQJIA37tRcG8wEtzrYZQ4xMLqGwJ9hZbJjgnuooImqydwttsyvttDWrBU_Pygm9LrpGHuzwrWYklwl-DTR3AdTZwLOEljlia8s17FDRfG1RPZQ",
+            "tag": "project_erin_archiveteam",
+            "os_id": 387,
+            "app_id": 0,
+            "firewall_group_id": "",
+            "features": [
+                "ipv6"
+            ]
+        }
+    ],
+    "meta": {
+        "total": 2,
+        "links": {
+            "next": "",
+            "prev": ""
+        }
+    }
+}

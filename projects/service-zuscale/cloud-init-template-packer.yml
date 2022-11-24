@@ -1,0 +1,13 @@
+system_info:
+  default_user:
+    groups:
+      - docker
+
+groups:
+  - docker
+
+runcmd:
+  # Run pyinfra playbooks
+  - 'git clone https://github.com/general-programming/megarepo.git /root/megarepo'
+  - 'cp /tmp/pyinfra_all.py /root/megarepo/automation/pyinfra/group_data/all.py'
+  - '/bin/bash -c "cd /root/megarepo/automation/pyinfra && APPROLE_EXISTS=1 /root/pyenv/bin/pyinfra -vv @local deploy_all.py"'

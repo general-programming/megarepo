@@ -1,0 +1,194 @@
+{
+    "images": [
+      {
+        "id": 1,
+        "type": "system",
+        "status": "available",
+        "name": "ubuntu-16.04",
+        "description": "Ubuntu 16.04",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2018-01-15T11:34:45+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "ubuntu",
+        "os_version": "16.04",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 2,
+        "type": "system",
+        "status": "available",
+        "name": "debian-9",
+        "description": "Debian 9",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2018-01-15T11:34:45+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "debian",
+        "os_version": "9",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 3,
+        "type": "system",
+        "status": "available",
+        "name": "centos-7",
+        "description": "CentOS 7",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2018-01-15T11:34:45+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "centos",
+        "os_version": "7",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 168855,
+        "type": "system",
+        "status": "available",
+        "name": "ubuntu-18.04",
+        "description": "Ubuntu 18.04",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2018-05-02T11:02:30+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "ubuntu",
+        "os_version": "18.04",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 5924233,
+        "type": "system",
+        "status": "available",
+        "name": "debian-10",
+        "description": "Debian 10",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2019-07-08T06:35:48+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "debian",
+        "os_version": "10",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 8356453,
+        "type": "system",
+        "status": "available",
+        "name": "centos-8",
+        "description": "CentOS 8",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2019-10-07T13:18:43+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "centos",
+        "os_version": "8",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 15512617,
+        "type": "system",
+        "status": "available",
+        "name": "ubuntu-20.04",
+        "description": "Ubuntu 20.04",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2020-04-23T17:55:14+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "ubuntu",
+        "os_version": "20.04",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 15759618,
+        "type": "system",
+        "status": "available",
+        "name": "fedora-32",
+        "description": "Fedora 32",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2020-04-29T10:32:02+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "fedora",
+        "os_version": "32",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      },
+      {
+        "id": 25369365,
+        "type": "system",
+        "status": "available",
+        "name": "fedora-33",
+        "description": "Fedora 33",
+        "image_size": null,
+        "disk_size": 5,
+        "created": "2020-11-02T14:36:04+00:00",
+        "created_from": null,
+        "bound_to": null,
+        "os_flavor": "fedora",
+        "os_version": "33",
+        "rapid_deploy": true,
+        "protection": {
+          "delete": false
+        },
+        "deprecated": null,
+        "labels": {}
+      }
+    ],
+    "meta": {
+      "pagination": {
+        "page": 1,
+        "per_page": 25,
+        "previous_page": null,
+        "next_page": null,
+        "last_page": 1,
+        "total_entries": 9
+      }
+    }
+  }

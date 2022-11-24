@@ -1,0 +1,11 @@
+{
+    "task": {
+      "id": "d805452a-0b9d-4aa3-86b3-521f8f23df9a",
+      "description": "server_batch_poweron",
+      "status": "pending",
+      "href_from": "/servers/040dc905-11b4-4a72-82e7-e20838a51e8d/action",
+      "href_result": "/servers/040dc905-11b4-4a72-82e7-e20838a51e8d",
+      "started_at": "2021-01-18T20:07:27.165228+00:00",
+      "terminated_at": null
+    }
+}

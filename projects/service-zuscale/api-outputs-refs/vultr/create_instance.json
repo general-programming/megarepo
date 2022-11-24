@@ -1,0 +1,31 @@
+{
+    "instance": {
+      "id": "ffc61a83-2294-4667-a46c-5c53ff2651cd",
+      "os": "Ubuntu 20.04 x64",
+      "ram": 1024,
+      "disk": 0,
+      "main_ip": "0.0.0.0",
+      "vcpu_count": 1,
+      "region": "sea",
+      "plan": "vc2-1c-1gb",
+      "date_created": "2021-01-22T17:01:21+00:00",
+      "status": "pending",
+      "allowed_bandwidth": 1000,
+      "netmask_v4": "",
+      "gateway_v4": "0.0.0.0",
+      "power_status": "running",
+      "server_status": "none",
+      "v6_network": "",
+      "v6_main_ip": "",
+      "v6_network_size": 0,
+      "label": "",
+      "internal_ip": "",
+      "kvm": "",
+      "tag": "project_erin_archiveteam",
+      "os_id": 387,
+      "app_id": 0,
+      "firewall_group_id": "",
+      "features": [],
+      "default_password": "Y4d_xftTb%wjWW6-"
+    }
+  }

@@ -1,0 +1,34 @@
+{
+    "project": "erin_archiveteam",
+    "providers": {
+        "scaleway": {
+            "image": "image-packer-1632899658",
+            "amount": 0
+        },
+        "hetzner_cloud": {
+            "image": "packer-1667128691",
+            "amount": 25,
+            "meta": {
+                "amd": true,
+                "region": "hel1",
+                "network": 1492409,
+                "network_iad": 1309524
+            },
+            "cloud_init_template": "../cloud-init-hetzner-packer.yml"
+        },
+        "vultr": {
+            "image": "ubuntu_20.04_x64",
+            "amount": 0,
+            "meta": {
+                "startup_script": "2ff7e20e-d0a3-47e0-b212-cf755400fc3a"
+            }
+        }
+    },
+    "specs": {
+        "ram": 1024,
+        "cpu": 2,
+        "price": 0.01
+    },
+    "cloud_init": "builder",
+    "cloud_init_template": "../cloud-init-template-packer.yml"
+}

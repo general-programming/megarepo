@@ -1,0 +1,17 @@
+{
+    "action": {
+      "id": 133213561,
+      "command": "delete_server",
+      "status": "success",
+      "progress": 100,
+      "started": "2021-01-16T00:52:20+00:00",
+      "finished": "2021-01-16T00:52:20+00:00",
+      "resources": [
+        {
+          "id": 9576379,
+          "type": "server"
+        }
+      ],
+      "error": null
+    }
+  }

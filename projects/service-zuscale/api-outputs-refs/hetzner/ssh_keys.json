@@ -1,0 +1,22 @@
+{
+  "ssh_keys": [
+    {
+      "id": 2713094,
+      "name": "erin",
+      "fingerprint": "97:c4:cd:ee:56:cc:88:56:14:0b:8f:22:d0:be:40:7c",
+      "public_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin",
+      "labels": {},
+      "created": "2021-01-10T23:15:21+00:00"
+    }
+  ],
+  "meta": {
+    "pagination": {
+      "page": 1,
+      "per_page": 25,
+      "previous_page": null,
+      "next_page": null,
+      "last_page": 1,
+      "total_entries": 1
+    }
+  }
+}
