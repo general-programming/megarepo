@@ -6,7 +6,7 @@
             "amount": 0
         },
         "hetzner_cloud": {
-            "image": "packer-1667128691",
+            "image": "packer-1669439045",
             "amount": 25,
             "meta": {
                 "amd": true,
@@ -14,7 +14,7 @@
                 "network": 1492409,
                 "network_iad": 1309524
             },
-            "cloud_init_template": "../cloud-init-hetzner-packer.yml"
+            "cloud_init_template": "cloud-init-hetzner-packer.yml"
         },
         "vultr": {
             "image": "ubuntu_20.04_x64",
@@ -30,5 +30,5 @@
         "price": 0.01
     },
     "cloud_init": "builder",
-    "cloud_init_template": "../cloud-init-template-packer.yml"
+    "cloud_init_template": "cloud-init-template-packer.yml"
 }

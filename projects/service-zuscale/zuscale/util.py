@@ -165,7 +165,7 @@ def get_from_vault(client: hvac.Client, key: str) -> str:
 def build_cloud_init(template_name: str) -> str:
     # Open the template YAML and load it.
     with open(template_name, "r") as f:
-        output = yaml.load(f)
+        output = yaml.load(f, yaml.SafeLoader)
 
     # Get the base dir of the template.
     template_base_dir = os.path.dirname(os.path.abspath(template_name))
