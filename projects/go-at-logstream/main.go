@@ -6,16 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"sync"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
 	"go.uber.org/zap"
-	"go.uber.org/zap/zapcore"
 )
 
 type ATProjects struct {
@@ -97,33 +96,9 @@ func GetLogSocketNameFromLeaderboard(link string) string {
 	return last
 }
 
-func logInit(d bool) *zap.Logger {
-
-	pe := zap.NewProductionEncoderConfig()
-
-	// fileEncoder := zapcore.NewJSONEncoder(pe)
-
-	pe.EncodeTime = zapcore.ISO8601TimeEncoder
-	consoleEncoder := zapcore.NewConsoleEncoder(pe)
-
-	level := zap.InfoLevel
-	if d {
-		level = zap.DebugLevel
-	}
-
-	core := zapcore.NewTee(
-		// zapcore.NewCore(fileEncoder, zapcore.AddSync(f), level),
-		zapcore.NewCore(consoleEncoder, zapcore.AddSync(os.Stdout), level),
-	)
-
-	l := zap.New(core)
-
-	return l
-}
-
 func OpenLogSocket(project string) {
 	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + project + "-log")
-	logger := logInit(false)
+	logger := util.CreateLogger(false)
 	defer logger.Sync()
 
 	if err != nil {
@@ -135,48 +110,58 @@ func OpenLogSocket(project string) {
 	}
 
 	client.On("connect", func(ns *socketio.NameSpace) {
-		logger.Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
+		ctx := util.CreateContext()
+		OnSocketConnect(ctx, ns)
 	})
 
 	client.On("log_message", func(ns *socketio.NameSpace, message string) {
-		ctx := context.TODO()
-
-		parsed := &ATTrackerUpdate{}
-		err := sonic.UnmarshalString(message, parsed)
-		if err != nil {
-			logger.Error("Failed to unmarshal message", zap.String("msg", message), zap.Error(err))
-			return
-		}
-
-		// create item text
-		var itemsText string
-		if len(parsed.Items) > 1 {
-			itemsText = fmt.Sprintf("%d items", len(parsed.Items))
-		} else {
-			itemsText = parsed.Item
-		}
-
-		// create size text
-		size, _ := parsed.SizeMB.Float64()
-		sizeText := fmt.Sprintf("%.2fMB", size)
-
-		logger.Debug("log_message",
-			zap.String("project", parsed.Project),
-			zap.String("downloader", parsed.Downloader),
-			zap.String("items", itemsText),
-			zap.String("size", sizeText),
-		)
-
-		// append to redis
-		if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
-			"project": parsed.Project,
-			"message": message,
-		}); err != nil {
-			logger.Error("Failed to append to redis", zap.Error(err))
-		}
+		ctx := util.CreateContext()
+		gopool.Go(func() {
+			OnMessage(ctx, ns, message)
+		})
 	})
 
 	client.Run()
+}
+
+func OnSocketConnect(ctx context.Context, ns *socketio.NameSpace) {
+	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
+}
+
+func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
+	parsed := &ATTrackerUpdate{}
+	err := sonic.UnmarshalString(message, parsed)
+	if err != nil {
+		util.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", message), zap.Error(err))
+		return
+	}
+
+	// create item text
+	var itemsText string
+	if len(parsed.Items) > 1 {
+		itemsText = fmt.Sprintf("%d items", len(parsed.Items))
+	} else {
+		itemsText = parsed.Item
+	}
+
+	// create size text
+	size, _ := parsed.SizeMB.Float64()
+	sizeText := fmt.Sprintf("%.2fMB", size)
+
+	util.LogWithCtx(ctx).Debug("log_message",
+		zap.String("project", parsed.Project),
+		zap.String("downloader", parsed.Downloader),
+		zap.String("items", itemsText),
+		zap.String("size", sizeText),
+	)
+
+	// append to redis
+	if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
+		"project": parsed.Project,
+		"message": message,
+	}); err != nil {
+		util.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+	}
 }
 
 func main() {
@@ -185,7 +170,7 @@ func main() {
 	storage.InitRedis()
 
 	// TODO(erin) actual app, please split this up.
-	logger := logInit(false)
+	logger := util.CreateLogger(false)
 	defer logger.Sync()
 
 	var wg sync.WaitGroup
