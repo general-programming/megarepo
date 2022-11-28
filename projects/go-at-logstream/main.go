@@ -157,13 +157,16 @@ func OpenLogSocket(project string) {
 }
 
 func main() {
+	logger := logInit(false)
+	defer logger.Sync()
+
 	var wg sync.WaitGroup
 	projects := FetchProjects()
-	println(len(projects.Projects), "projects")
+	logger.Info("got tracker projects", zap.Int("count", len(projects.Projects)))
 
 	counter := 0
 	for _, project := range projects.Projects {
-		println("Opening socket for", project.ProjectName)
+		logger.Info("opening log socket", zap.String("project", project.ProjectName))
 		wg.Add(1)
 		go func(project ATProject) {
 			defer wg.Done()
