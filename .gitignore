@@ -51,3 +51,5 @@ infrastructure/docker_swarm/traefik/config-fmt2/traefik.yml
 infrastructure/docker_swarm/logging/alertmanager.yml
 automation/deploy_server/misc/tf-nlsd/mod_nlsd/user_data.tmpl
 infrastructure/docker_swarm/traefik/config-wob/traefik.yml
+
+*autogen.yml
