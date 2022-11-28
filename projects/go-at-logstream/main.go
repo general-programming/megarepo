@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
+	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
 	"go.uber.org/zap"
@@ -137,6 +139,8 @@ func OpenLogSocket(project string) {
 	})
 
 	client.On("log_message", func(ns *socketio.NameSpace, message string) {
+		ctx := context.TODO()
+
 		parsed := &ATTrackerUpdate{}
 		err := sonic.UnmarshalString(message, parsed)
 		if err != nil {
@@ -156,19 +160,31 @@ func OpenLogSocket(project string) {
 		size, _ := parsed.SizeMB.Float64()
 		sizeText := fmt.Sprintf("%.2fMB", size)
 
-		logger.Info("log_message",
+		logger.Debug("log_message",
 			zap.String("project", parsed.Project),
 			zap.String("downloader", parsed.Downloader),
 			zap.String("items", itemsText),
 			zap.String("size", sizeText),
 		)
+
+		// append to redis
+		if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
+			"project": parsed.Project,
+			"message": message,
+		}); err != nil {
+			logger.Error("Failed to append to redis", zap.Error(err))
+		}
 	})
 
 	client.Run()
 }
 
 func main() {
+	// do init
 	util.StartDebugServer()
+	storage.InitRedis()
+
+	// TODO(erin) actual app, please split this up.
 	logger := logInit(false)
 	defer logger.Sync()
 
