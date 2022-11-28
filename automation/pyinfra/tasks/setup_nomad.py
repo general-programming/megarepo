@@ -98,5 +98,9 @@ server.service(
 )
 
 server.service(
-    name="Restart Nomad.", service="nomad", running=True, enabled=True, restarted=True
+    name="Restart Nomad.",
+    service="nomad",
+    running=True,
+    enabled=True,
+    restarted=True,
 )
