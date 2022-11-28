@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"github.com/bytedance/sonic"
+	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
@@ -28,13 +29,19 @@ type ATProject struct {
 	LeaderboardLink string `json:"leaderboard"`
 }
 
-type ATTrackerUpdate struct {
-	Project    string `json:"project"`
-	Downloader string `json:"downloader"`
+type ATStats struct {
+	Values map[string]json.Number `json:"values"`
+	Queues map[string]json.Number `json:"queues"`
+}
 
-	Bytes       int64 `json:"bytes"`
-	Valid       bool  `json:"valid"`
-	IsDuplicate bool  `json:"is_duplicate"`
+type ATTrackerUpdate struct {
+	Project    string      `json:"project"`
+	Downloader string      `json:"downloader"`
+	Timestamp  json.Number `json:"timestamp"`
+
+	Bytes       json.Number `json:"bytes"`
+	Valid       bool        `json:"valid"`
+	IsDuplicate bool        `json:"is_duplicate"`
 
 	Items     []string `json:"items"`
 	MoveItems []string `json:"move_items"`
@@ -46,6 +53,10 @@ type ATTrackerUpdate struct {
 	WarriorVersion   string `json:"version"`
 
 	SizeMB json.Number `json:"megabytes"`
+
+	QueueStats map[string]json.Number `json:"queuestats"`
+	Stats      ATStats                `json:"stats"`
+	Counts     map[string]json.Number `json:"counts"`
 }
 
 func FetchProjects() *ATProjects {
@@ -157,6 +168,7 @@ func OpenLogSocket(project string) {
 }
 
 func main() {
+	util.StartDebugServer()
 	logger := logInit(false)
 	defer logger.Sync()
 
