@@ -23,11 +23,20 @@ job "at_grab" {
             config {
                 args = [
                     "--concurrent",
-                    "20",
+                    "15",
                     "nepeat"
                 ]
                 labels = {
                     "com.centurylinklabs.watchtower.enable" = "true"
+                }
+                logging {
+                    type = "loki"
+                    config {
+                        loki-url = "http://loki.service.fmt2.consul:3100/loki/api/v1/push"
+                        loki-retries = "5"
+                        loki-batch-size = "400"
+                        loki-external-labels = "container_name={{.Name}},group=archiveteam,job=${NOMAD_JOB_NAME}"
+                    }
                 }
                 image = "atdr.meo.ws/archiveteam/grab-grab"
                 force_pull = true
