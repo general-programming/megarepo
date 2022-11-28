@@ -1,12 +1,13 @@
 const io = require("socket.io-client");
 const filesize = require("filesize");
 
-let addLog = (msg)  => {
-    var itemText = msg.items.length > 1 ? msg.items.length + ' items' : msg.item;
-    var size = filesize(msg.bytes, {standard: 'iec', unix: false});
+let addLog = (msg) => {
+    var itemText =
+        msg.items.length > 1 ? msg.items.length + " items" : msg.item;
+    var size = filesize(msg.bytes, { standard: "iec", unix: false });
 
     console.log(`[${msg.downloader}@${msg.project}] ${itemText}, ${size}`);
-}
+};
 
 let createSocket = (url) => {
     let socket = io.connect(url);
