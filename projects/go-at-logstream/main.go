@@ -5,15 +5,18 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
+	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"go.uber.org/zap"
 )
 
@@ -36,9 +39,10 @@ type ATStats struct {
 }
 
 type ATTrackerUpdate struct {
-	Project    string      `json:"project"`
-	Downloader string      `json:"downloader"`
-	Timestamp  json.Number `json:"timestamp"`
+	Project    string `json:"project"`
+	Downloader string `json:"downloader"`
+	// Timestamp is a unix timestamp in seconds
+	Timestamp json.Number `json:"ts"`
 
 	Bytes       json.Number `json:"bytes"`
 	Valid       bool        `json:"valid"`
@@ -165,12 +169,42 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	}); err != nil {
 		util.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
 	}
+
+	// send to influx
+	tags := map[string]string{
+		"project":         parsed.Project,
+		"downloader":      parsed.Downloader,
+		"warrior_version": parsed.WarriorVersion,
+	}
+
+	fields := map[string]interface{}{
+		"size":  size,
+		"items": len(parsed.Items),
+	}
+
+	timestampFloat, err := parsed.Timestamp.Float64()
+	if err != nil {
+		util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+		return
+	}
+	timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
+
+	org := "genprog"
+	bucket := "archiveteam-tracker"
+	writeAPI := storage.InfluxClient.WriteAPIBlocking(org, bucket)
+
+	point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
+
+	if err := writeAPI.WritePoint(ctx, point); err != nil {
+		util.LogWithCtx(ctx).Error("Failed to write to influx", zap.Error(err))
+	}
 }
 
 func main() {
 	// do init
 	util.StartDebugServer()
 	storage.InitRedis()
+	storage.InitInflux()
 
 	// TODO(erin) actual app, please split this up.
 	logger := util.CreateLogger(false)
