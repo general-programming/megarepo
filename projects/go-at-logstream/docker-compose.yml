@@ -8,5 +8,6 @@ services:
     build: .
     environment:
       REDIS_URL: redis://redis:6379
+    restart: always
 volumes:
   redis-data:
