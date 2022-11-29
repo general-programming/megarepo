@@ -227,6 +227,8 @@ func main() {
 			socketName := GetLogSocketNameFromLeaderboard(project.LeaderboardLink)
 			for {
 				OpenLogSocket(socketName)
+				logger.Warn("socket closed, reconnecting", zap.String("project", project.ProjectName))
+				time.Sleep(1 * time.Second)
 			}
 		}(project)
 		counter += 1
