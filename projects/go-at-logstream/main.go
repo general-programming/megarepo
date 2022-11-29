@@ -171,6 +171,13 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	}
 
 	// send to influx
+	timestampFloat, err := parsed.Timestamp.Float64()
+	if err != nil {
+		util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+		return
+	}
+	timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
+
 	tags := map[string]string{
 		"project":         parsed.Project,
 		"downloader":      parsed.Downloader,
@@ -182,22 +189,8 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 		"items": len(parsed.Items),
 	}
 
-	timestampFloat, err := parsed.Timestamp.Float64()
-	if err != nil {
-		util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
-		return
-	}
-	timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
-
-	org := "genprog"
-	bucket := "archiveteam-tracker"
-	writeAPI := storage.InfluxClient.WriteAPIBlocking(org, bucket)
-
 	point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
-
-	if err := writeAPI.WritePoint(ctx, point); err != nil {
-		util.LogWithCtx(ctx).Error("Failed to write to influx", zap.Error(err))
-	}
+	storage.WrappedInflux.Writer.WritePoint(point)
 }
 
 func main() {

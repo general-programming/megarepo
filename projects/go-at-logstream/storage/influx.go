@@ -4,12 +4,17 @@ import (
 	"os"
 
 	influxdb2 "github.com/influxdata/influxdb-client-go/v2"
-	// "github.com/influxdata/influxdb-client-go/v2/api/write"
+	influxapi "github.com/influxdata/influxdb-client-go/v2/api"
 )
 
 var (
-	InfluxClient influxdb2.Client
+	WrappedInflux InfluxClient
 )
+
+type InfluxClient struct {
+	Client influxdb2.Client
+	Writer influxapi.WriteAPI
+}
 
 func InitInflux() {
 	token := os.Getenv("INFLUXDB_TOKEN")
@@ -19,5 +24,12 @@ func InitInflux() {
 		return
 	}
 	url := os.Getenv("INFLUXDB_HOST")
-	InfluxClient = influxdb2.NewClient(url, token)
+	WrappedInflux = InfluxClient{
+		Client: influxdb2.NewClient(url, token),
+	}
+
+	// setup writer
+	org := "genprog"
+	bucket := "archiveteam-tracker"
+	WrappedInflux.Writer = WrappedInflux.Client.WriteAPI(org, bucket)
 }
