@@ -86,7 +86,7 @@ func GetLogSocketNameFromLeaderboard(link string) string {
 
 	// this is done by getting the last part of the link, and removing the query parameters
 	// (if there are any)
-	split := strings.Split(link, "/")
+	split := strings.Split(strings.TrimRight(link, "/"), "/")
 	last := split[len(split)-1]
 	if strings.Contains(last, "?") {
 		split = strings.Split(last, "?")
@@ -97,9 +97,12 @@ func GetLogSocketNameFromLeaderboard(link string) string {
 }
 
 func OpenLogSocket(project string) {
-	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + project + "-log")
 	logger := util.CreateLogger(false)
 	defer logger.Sync()
+
+	logger.Info("opening log socket", zap.String("project", project))
+
+	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + project + "-log")
 
 	if err != nil {
 		logger.Error("Failed to connect to socket",
@@ -179,11 +182,18 @@ func main() {
 
 	counter := 0
 	for _, project := range projects.Projects {
-		logger.Info("opening log socket", zap.String("project", project.ProjectName))
+		// special case to ignore urlteam
+		if project.ProjectName == "urlteam2" {
+			continue
+		}
+
 		wg.Add(1)
 		go func(project ATProject) {
 			defer wg.Done()
-			OpenLogSocket(GetLogSocketNameFromLeaderboard(project.LeaderboardLink))
+			socketName := GetLogSocketNameFromLeaderboard(project.LeaderboardLink)
+			for {
+				OpenLogSocket(socketName)
+			}
 		}(project)
 		counter += 1
 	}
