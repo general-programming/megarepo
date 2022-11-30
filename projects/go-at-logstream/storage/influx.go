@@ -25,7 +25,7 @@ func InitInflux() {
 	}
 	url := os.Getenv("INFLUXDB_HOST")
 	WrappedInflux = InfluxClient{
-		Client: influxdb2.NewClient(url, token),
+		Client: influxdb2.NewClientWithOptions(url, token, influxdb2.DefaultOptions().SetUseGZip(true)),
 	}
 
 	// setup writer
