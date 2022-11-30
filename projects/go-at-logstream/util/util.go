@@ -1,6 +1,9 @@
 package util
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 func IsDocker() bool {
 	_, err := os.Stat("/.dockerenv")
@@ -15,4 +18,14 @@ func GetEnvWithDefault(key string, defaultValue string) string {
 	}
 
 	return value
+}
+
+func GetBoolEnvWithDefault(key string, defaultValue bool) bool {
+	value := strings.ToLower(os.Getenv(key))
+
+	if value == "" {
+		return defaultValue
+	}
+
+	return value == "true"
 }

@@ -163,34 +163,38 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	)
 
 	// append to redis
-	if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
-		"project": parsed.Project,
-		"message": message,
-	}); err != nil {
-		util.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+	if PushRedis {
+		if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
+			"project": parsed.Project,
+			"message": message,
+		}); err != nil {
+			util.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+		}
 	}
 
 	// send to influx
-	timestampFloat, err := parsed.Timestamp.Float64()
-	if err != nil {
-		util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
-		return
-	}
-	timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
+	if PushInflux {
+		timestampFloat, err := parsed.Timestamp.Float64()
+		if err != nil {
+			util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+			return
+		}
+		timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
 
-	tags := map[string]string{
-		"project":         parsed.Project,
-		"downloader":      parsed.Downloader,
-		"warrior_version": parsed.WarriorVersion,
-	}
+		tags := map[string]string{
+			"project":         parsed.Project,
+			"downloader":      parsed.Downloader,
+			"warrior_version": parsed.WarriorVersion,
+		}
 
-	fields := map[string]interface{}{
-		"size":  size,
-		"items": len(parsed.Items),
-	}
+		fields := map[string]interface{}{
+			"size":  size,
+			"items": len(parsed.Items),
+		}
 
-	point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
-	storage.WrappedInflux.Writer.WritePoint(point)
+		point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
+		storage.WrappedInflux.Writer.WritePoint(point)
+	}
 }
 
 func TrackerMain() {
