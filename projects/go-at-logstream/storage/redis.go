@@ -31,7 +31,7 @@ func (r *RedisClient) AppendLog(ctx context.Context, key string, values map[stri
 	// the minimum age of events is 1 hour ago.
 	// we set the minimum ID to that in order to allow for trimming based on that time stamp.
 	// the volume of data is high enough that only an hour of data can be kept in ram buffer
-	minAge := strconv.FormatInt(time.Now().AddDate(0, 0, -1).Unix(), 10)
+	minAge := strconv.FormatInt(time.Now().Add(time.Duration(-1)*time.Hour).UnixMilli(), 10)
 
 	_, err := r.Client.XAdd(ctx, &redis.XAddArgs{
 		Stream: key,
