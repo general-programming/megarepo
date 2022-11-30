@@ -7,6 +7,7 @@ require (
 	github.com/bytedance/sonic v1.5.0
 	github.com/go-redis/redis/v9 v9.0.0-rc.2
 	github.com/googollee/go-socket.io v0.9.1
+	github.com/gorilla/websocket v1.5.0
 	github.com/influxdata/influxdb-client-go/v2 v2.12.0
 	github.com/klauspost/compress v1.15.12
 	go.uber.org/zap v1.23.0

@@ -12,5 +12,12 @@ func main() {
 	storage.InitRedis()
 	storage.InitInflux()
 
-	workers.TrackerMain()
+	workerType := util.GetEnvWithDefault("WORKER_TYPE", "tracker")
+	if workerType == "tracker" {
+		workers.TrackerMain()
+	} else if workerType == "archivebot" {
+		workers.ArchiveBotMain()
+	} else {
+		panic("invalid worker type: " + workerType)
+	}
 }
