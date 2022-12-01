@@ -8,10 +8,9 @@ services:
     build: .
     environment:
       REDIS_URL: redis://redis:6379
-    restart: always
-    environment:
       PUSH_REDIS: "true"
       PUSH_INFLUX: "true"
+    restart: always
     env_file:
       - .env
 volumes:

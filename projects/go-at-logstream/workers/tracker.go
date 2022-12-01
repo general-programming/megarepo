@@ -155,7 +155,7 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	size, _ := parsed.SizeMB.Float64()
 	sizeText := fmt.Sprintf("%.2fMB", size)
 
-	util.LogWithCtx(ctx).Debug("log_message",
+	util.LogWithCtx(ctx).Info("log_message",
 		zap.String("project", parsed.Project),
 		zap.String("downloader", parsed.Downloader),
 		zap.String("items", itemsText),

@@ -1,18 +1,22 @@
 package workers
 
 import (
+	"context"
 	"encoding/json"
-	"fmt"
 	"log"
+	"math"
 	"net/url"
 	"os"
 	"os/signal"
 	"time"
 
+	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	"github.com/gorilla/websocket"
+	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"go.uber.org/zap"
 
+	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
 )
 
@@ -119,6 +123,51 @@ type ArchiveBotJobInfo struct {
 	Ident           string `json:"ident"`
 }
 
+func HandleArchiveBotMessage(ctx context.Context, message []byte) {
+	parsed := &ArchiveBotMessage{}
+	err := sonic.Unmarshal(message, parsed)
+	if err != nil {
+		util.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", string(message)), zap.Error(err))
+		return
+	}
+
+	// append to redis
+	if PushRedis {
+		if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.archivebot", map[string]string{
+			"job":     parsed.JobInfo.Url,
+			"message": string(message),
+		}); err != nil {
+			util.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+		}
+	}
+
+	// send to influx
+	if PushInflux {
+		timestampFloat, err := parsed.Timestamp.Float64()
+		if err != nil {
+			util.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+			return
+		}
+		timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
+
+		tags := map[string]interface{}{
+			"count":         1,
+			"job":           parsed.JobInfo.Url,
+			"response_code": parsed.ResponseCode,
+			"wget_code":     parsed.WgetCode,
+		}
+
+		fields := map[string]interface{}{
+			"is_error":   parsed.IsError,
+			"is_warning": parsed.IsWarning,
+			"type":       parsed.Type,
+		}
+
+		point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
+		storage.WrappedInflux.Writer.WritePoint(point)
+	}
+}
+
 func ArchiveBotMain() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
@@ -134,7 +183,7 @@ func ArchiveBotMain() {
 
 	done := make(chan struct{})
 
-	go func() {
+	gopool.Go(func() {
 		defer close(done)
 		for {
 			ctx := util.CreateContext()
@@ -144,15 +193,9 @@ func ArchiveBotMain() {
 				return
 			}
 
-			parsed := &ArchiveBotMessage{}
-			err = sonic.Unmarshal(message, parsed)
-			if err != nil {
-				util.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", string(message)), zap.Error(err))
-				return
-			}
-			fmt.Printf("%v", parsed)
+			HandleArchiveBotMessage(ctx, message)
 		}
-	}()
+	})
 
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
