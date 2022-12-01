@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
@@ -150,20 +151,20 @@ func HandleArchiveBotMessage(ctx context.Context, message []byte) {
 		}
 		timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
 
-		tags := map[string]interface{}{
-			"count":         1,
+		tags := map[string]string{
 			"job":           parsed.JobInfo.Url,
-			"response_code": parsed.ResponseCode,
+			"response_code": strconv.Itoa(parsed.ResponseCode),
+			"type":          parsed.Type,
 			"wget_code":     parsed.WgetCode,
+			"is_error":      strconv.FormatBool(parsed.IsError),
+			"is_warning":    strconv.FormatBool(parsed.IsWarning),
 		}
 
 		fields := map[string]interface{}{
-			"is_error":   parsed.IsError,
-			"is_warning": parsed.IsWarning,
-			"type":       parsed.Type,
+			"size": 1,
 		}
 
-		point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
+		point := write.NewPoint("archiveteam.archivebot.event", tags, fields, timestamp)
 		storage.WrappedInflux.Writer.WritePoint(point)
 	}
 }
