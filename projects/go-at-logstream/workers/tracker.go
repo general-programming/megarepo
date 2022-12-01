@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -185,6 +186,8 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 			"project":         parsed.Project,
 			"downloader":      parsed.Downloader,
 			"warrior_version": parsed.WarriorVersion,
+			"valid":           strconv.FormatBool(parsed.Valid),
+			"duplicate":       strconv.FormatBool(parsed.IsDuplicate),
 		}
 
 		fields := map[string]interface{}{
