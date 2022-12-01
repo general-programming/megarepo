@@ -4,9 +4,20 @@ services:
     image: redis:alpine
     volumes:
       - redis-data:/data
-  logstream:
+  stream-tracker:
     build: .
     environment:
+      WORKER_TYPE: tracker
+      REDIS_URL: redis://redis:6379
+      PUSH_REDIS: "true"
+      PUSH_INFLUX: "true"
+    restart: always
+    env_file:
+      - .env
+  stream-archivebot:
+    build: .
+    environment:
+      WORKER_TYPE: archivebot
       REDIS_URL: redis://redis:6379
       PUSH_REDIS: "true"
       PUSH_INFLUX: "true"
