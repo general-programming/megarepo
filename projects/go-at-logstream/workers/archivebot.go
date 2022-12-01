@@ -190,16 +190,13 @@ func ArchiveBotMain() {
 			ctx := util.CreateContext()
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				log.Println("read:", err)
+				util.LogWithCtx(ctx).Error("Failed to read message", zap.Error(err))
 				return
 			}
 
 			HandleArchiveBotMessage(ctx, message)
 		}
 	})
-
-	ticker := time.NewTicker(time.Second)
-	defer ticker.Stop()
 
 	for {
 		select {
