@@ -129,10 +129,14 @@ func (sock TrackerSocket) Connect() {
 }
 
 func (sock TrackerSocket) OnConnect(ctx context.Context, ns *socketio.NameSpace) {
+	defer util.RecoverFunction("TrackerSocket.OnConnect")
+
 	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
 func (sock TrackerSocket) OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
+	defer util.RecoverFunction("TrackerSocket.OnMessage")
+
 	parsed := &ATTrackerUpdate{}
 	err := sonic.UnmarshalString(message, parsed)
 	if err != nil {
