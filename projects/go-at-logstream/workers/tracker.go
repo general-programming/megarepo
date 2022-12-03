@@ -101,42 +101,38 @@ func GetLogSocketNameFromLeaderboard(link string) string {
 	return last
 }
 
-func OpenLogSocket(project string) {
+type TrackerSocket struct {
+	Worker  TrackerWorker
+	Project string
+}
+
+func (sock TrackerSocket) Connect() {
 	logger := util.CreateLogger(false)
 	defer logger.Sync()
+	defer util.RecoverFunction("TrackerSocket.Connect")
 
-	logger.Info("opening log socket", zap.String("project", project))
+	logger.Info("opening log socket", zap.String("project", sock.Project))
 
-	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + project + "-log")
+	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + sock.Project + "-log")
 
 	if err != nil {
 		logger.Error("Failed to connect to socket",
-			zap.String("project", project),
+			zap.String("project", sock.Project),
 			zap.Error(err),
 		)
 		return
 	}
 
-	client.On("connect", func(ns *socketio.NameSpace) {
-		ctx := util.CreateContext()
-		OnSocketConnect(ctx, ns)
-	})
-
-	client.On("log_message", func(ns *socketio.NameSpace, message string) {
-		ctx := util.CreateContext()
-		gopool.Go(func() {
-			OnMessage(ctx, ns, message)
-		})
-	})
-
+	client.On("connect", sock.OnConnect)
+	client.On("log_message", sock.OnMessage)
 	client.Run()
 }
 
-func OnSocketConnect(ctx context.Context, ns *socketio.NameSpace) {
+func (sock TrackerSocket) OnConnect(ctx context.Context, ns *socketio.NameSpace) {
 	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
-func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
+func (sock TrackerSocket) OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	parsed := &ATTrackerUpdate{}
 	err := sonic.UnmarshalString(message, parsed)
 	if err != nil {
@@ -200,34 +196,65 @@ func OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	}
 }
 
-func TrackerMain() {
+type TrackerWorker struct {
+	wg      sync.WaitGroup
+	sockets sync.Map
+}
+
+func (worker TrackerWorker) LaunchSocket(project ATProject) {
+	logger := util.CreateLogger(false)
+
+	// special case to ignore urlteam
+	if project.ProjectName == "urlteam2" {
+		return
+	}
+
+	socketName := GetLogSocketNameFromLeaderboard(project.LeaderboardLink)
+	newSocket := TrackerSocket{Project: project.ProjectName}
+	worker.sockets.Store(socketName, newSocket)
+
+	go func(project ATProject) {
+		defer worker.wg.Done()
+
+		for {
+			newSocket.Connect()
+			logger.Warn("socket closed, reconnecting", zap.String("project", project.ProjectName))
+			time.Sleep(1 * time.Second)
+		}
+	}(project)
+}
+
+func (worker TrackerWorker) Init() {
 	// TODO(erin) actual app, please split this up.
 	logger := util.CreateLogger(false)
 	defer logger.Sync()
 
-	var wg sync.WaitGroup
-	projects := FetchProjects()
-	logger.Info("got tracker projects", zap.Int("count", len(projects.Projects)))
+	worker.wg.Add(1)
 
-	counter := 0
-	for _, project := range projects.Projects {
-		// special case to ignore urlteam
-		if project.ProjectName == "urlteam2" {
-			continue
-		}
+	gopool.Go(func() {
+		defer worker.wg.Done()
 
-		wg.Add(1)
-		go func(project ATProject) {
-			defer wg.Done()
-			socketName := GetLogSocketNameFromLeaderboard(project.LeaderboardLink)
-			for {
-				OpenLogSocket(socketName)
-				logger.Warn("socket closed, reconnecting", zap.String("project", project.ProjectName))
-				time.Sleep(1 * time.Second)
+		for {
+			// fetch the projects every 5 minutes
+			projects := FetchProjects()
+			logger.Info("got tracker projects", zap.Int("count", len(projects.Projects)))
+
+			// create a new socket for each project we haven't already launched
+			for _, project := range projects.Projects {
+				if _, ok := worker.sockets.Load(project.ProjectName); !ok {
+					worker.wg.Add(1)
+					worker.LaunchSocket(project)
+				}
 			}
-		}(project)
-		counter += 1
-	}
 
-	wg.Wait()
+			time.Sleep(5 * time.Minute)
+		}
+	})
+
+	worker.wg.Wait()
+}
+
+func TrackerMain() {
+	worker := TrackerWorker{}
+	worker.Init()
 }

@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"strings"
 )
@@ -28,4 +29,10 @@ func GetBoolEnvWithDefault(key string, defaultValue bool) bool {
 	}
 
 	return value == "true"
+}
+
+func RecoverFunction(funcName string) {
+	if r := recover(); r != nil {
+		println("[panic] " + funcName + ": " + fmt.Sprintf("%s", r))
+	}
 }
