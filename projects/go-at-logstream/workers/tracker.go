@@ -1,7 +1,6 @@
 package workers
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -108,7 +107,6 @@ type TrackerSocket struct {
 
 func (sock *TrackerSocket) Connect() {
 	logger := util.CreateLogger(false)
-	defer logger.Sync()
 	defer util.RecoverFunction("TrackerSocket.Connect")
 
 	logger.Info("opening log socket", zap.String("project", sock.Project))
@@ -125,17 +123,20 @@ func (sock *TrackerSocket) Connect() {
 
 	client.On("connect", sock.OnConnect)
 	client.On("log_message", sock.OnMessage)
+
 	client.Run()
 }
 
-func (sock *TrackerSocket) OnConnect(ctx context.Context, ns *socketio.NameSpace) {
+func (sock *TrackerSocket) OnConnect(ns *socketio.NameSpace) {
 	defer util.RecoverFunction("TrackerSocket.OnConnect")
+	ctx := util.CreateContext()
 
 	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
-func (sock *TrackerSocket) OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
+func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
 	defer util.RecoverFunction("TrackerSocket.OnMessage")
+	ctx := util.CreateContext()
 
 	parsed := &ATTrackerUpdate{}
 	err := sonic.UnmarshalString(message, parsed)
