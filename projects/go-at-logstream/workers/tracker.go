@@ -106,7 +106,7 @@ type TrackerSocket struct {
 	Project string
 }
 
-func (sock TrackerSocket) Connect() {
+func (sock *TrackerSocket) Connect() {
 	logger := util.CreateLogger(false)
 	defer logger.Sync()
 	defer util.RecoverFunction("TrackerSocket.Connect")
@@ -128,13 +128,13 @@ func (sock TrackerSocket) Connect() {
 	client.Run()
 }
 
-func (sock TrackerSocket) OnConnect(ctx context.Context, ns *socketio.NameSpace) {
+func (sock *TrackerSocket) OnConnect(ctx context.Context, ns *socketio.NameSpace) {
 	defer util.RecoverFunction("TrackerSocket.OnConnect")
 
 	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
-func (sock TrackerSocket) OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
+func (sock *TrackerSocket) OnMessage(ctx context.Context, ns *socketio.NameSpace, message string) {
 	defer util.RecoverFunction("TrackerSocket.OnMessage")
 
 	parsed := &ATTrackerUpdate{}
@@ -205,7 +205,7 @@ type TrackerWorker struct {
 	sockets sync.Map
 }
 
-func (worker TrackerWorker) LaunchSocket(project ATProject) {
+func (worker *TrackerWorker) LaunchSocket(project ATProject) {
 	logger := util.CreateLogger(false)
 
 	// special case to ignore urlteam
@@ -214,8 +214,8 @@ func (worker TrackerWorker) LaunchSocket(project ATProject) {
 	}
 
 	socketName := GetLogSocketNameFromLeaderboard(project.LeaderboardLink)
-	newSocket := TrackerSocket{Project: project.ProjectName}
-	worker.sockets.Store(socketName, newSocket)
+	newSocket := TrackerSocket{Project: socketName}
+	worker.sockets.Store(project.ProjectName, newSocket)
 
 	go func(project ATProject) {
 		defer worker.wg.Done()
@@ -228,7 +228,7 @@ func (worker TrackerWorker) LaunchSocket(project ATProject) {
 	}(project)
 }
 
-func (worker TrackerWorker) Init() {
+func (worker *TrackerWorker) Init() {
 	// TODO(erin) actual app, please split this up.
 	logger := util.CreateLogger(false)
 	defer logger.Sync()
