@@ -22,7 +22,7 @@ dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install apt-transport-https g
 # Install HashiCorp repo
 curl -fsSL https://apt.releases.hashicorp.com/gpg | apt-key add -
 # TODO(erin) add arm64 support since it is supported https://github.com/hashicorp/consul/issues/9542
-echo "deb [arch=arm64] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list
+echo "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main" > /etc/apt/sources.list.d/hashicorp.list
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 update
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install nomad vault consul
 
