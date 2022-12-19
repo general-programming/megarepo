@@ -26,7 +26,7 @@ job "at_vlive" {
             config {
                 args = [
                     "--concurrent",
-                    "5",
+                    "10",
                     "nepeat"
                 ]
                 logging {
