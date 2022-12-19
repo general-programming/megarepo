@@ -12,7 +12,7 @@ server = false
 datacenter = "{{ consul_datacenter }}"
 data_dir = "/opt/consul"
 client_addr = "127.0.0.1"
-bind_addr = {{ '"{{ GetPrivateInterfaces | include \\"network\\" \\"10.0.0.0/8\\" | attr \\"address\\" }}"'}}
+bind_addr = {{ '"{{ GetPrivateInterfaces | include \\"network\\" \\"10.101.0.0/8\\" \\"10.65.67.0/24\\" | attr \\"address\\" }}"'}}
 retry_join = {{ consul_servers }}
 
 ports {

@@ -2,7 +2,7 @@ data_dir = "/opt/nomad/data"
 bind_addr = "0.0.0.0"
 
 advertise = {
-  http = "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}"
+  http = "{{ GetPrivateInterfaces | include \"network\" \"10.100.0.0/24\" \"10.65.67.0/24\"  | attr \"address\" }}"
 }
 
 tls {
