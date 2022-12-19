@@ -56,11 +56,12 @@ query ($tag: [String]) {
       }
 
       cable {
-        _termination_a_device {
-          name
-        }
-        _termination_b_device {
-          name
+        id
+        terminations {
+          cable_end
+          _device {
+            name
+          }
         }
       }
 

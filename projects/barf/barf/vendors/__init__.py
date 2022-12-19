@@ -51,13 +51,29 @@ class Cable:
             ValueError: If the cable data is invalid.
         """
 
-        if not data["_termination_a_device"] or not data["_termination_b_device"]:
-            raise ValueError("Cable does not have both device ends.")
+        if not data["cable"]:
+            raise ValueError("Cable does not exist.")
+        cable: List[dict] = data["cable"]
+
+        # find cable_end in cables list that matches "a"
+        termination_a, termination_b = None, None
+
+        for termination in cable:
+            if termination["cable_end"] == "a":
+                termination_a = termination
+            elif termination["cable_end"] == "b":
+                termination_b = termination
+
+        if not termination_a:
+            raise KeyError("Cable termination A not found.")
+
+        if not termination_b:
+            raise KeyError("Cable termination B not found.")
 
         return cls(
             name=data["id"],
-            host_a_name=data["_termination_a_device"]["name"],
-            host_b_name=data["_termination_b_device"]["name"],
+            host_a_name=termination_a["_device"]["name"],
+            host_b_name=termination_b["_device"]["name"],
         )
 
 
@@ -215,12 +231,12 @@ class BaseHost:
     @cache
     def wg_pubkey(self, port: int):
         """Return the WireGuard public key for this host."""
-        return self.wg_keys(port).pubkey
+        return self.wg_keys(port).public_key
 
     @cache
     def wg_privkey(self, port: int):
         """Return the WireGuard private key for this host."""
-        return self.wg_keys(port).privkey
+        return self.wg_keys(port).private_key
 
     @property
     def enable_password(self):

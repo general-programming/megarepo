@@ -17,14 +17,14 @@ if TYPE_CHECKING:
 class WGKeypair:
     """A keypair for a WireGuard tunnel."""
 
-    pubkey: str
-    privkey: str
+    public_key: str
+    private_key: str
 
     def to_dict(self):
         """Return a dict representation of this keypair for Vault."""
         return {
-            "pubkey": self.pubkey,
-            "privkey": self.privkey,
+            "public_key": self.public_key,
+            "private_key": self.private_key,
         }
 
 
@@ -56,6 +56,7 @@ def generate_wireguard_keys() -> WGKeypair:
     Returns:
         (str, str): (private_key, public_key)
     """
+
     privkey = subprocess.check_output("wg genkey", shell=True).decode("utf-8").strip()
     pubkey = (
         subprocess.check_output(f"echo '{privkey}' | wg pubkey", shell=True)
@@ -64,8 +65,8 @@ def generate_wireguard_keys() -> WGKeypair:
     )
 
     return WGKeypair(
-        pubkey=pubkey,
-        privkey=privkey,
+        public_key=pubkey,
+        private_key=privkey,
     )
 
 
@@ -88,11 +89,12 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
             mount_point="cluster-secrets",
             path=secret_path,
         )["data"]["data"]
+        print(response, secret_path)
         private_key = response["private_key"]
         public_key = response["public_key"]
         result = WGKeypair(
-            pubkey=public_key,
-            privkey=private_key,
+            public_key=public_key,
+            private_key=private_key,
         )
     except hvac.exceptions.InvalidPath:
         if not generate_keys:
