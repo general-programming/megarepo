@@ -1,0 +1,3 @@
+#!/usr/bin/env sh
+
+ddrescue -d -vv -r3 /dev/fd0 $1.img $1.log
