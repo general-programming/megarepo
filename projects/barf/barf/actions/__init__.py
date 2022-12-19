@@ -105,6 +105,7 @@ def push_config(device: BaseHost, config: str):
         try:
             napalm_device = open_connection(device, address)
             break
+        except netmiko.exceptions.NetmikoTimeoutException as e:
             log.error(e)
             log.error("Failed to connect to %s", address)
 
