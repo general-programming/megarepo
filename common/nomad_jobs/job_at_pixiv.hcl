@@ -3,9 +3,9 @@ job "at_pixiv" {
     datacenters = ["dc1"]
 
     constraint {
-        attribute = "${node.name}"
+        attribute = "${attr.unique.hostname}"
         operator  = "regexp"
-        value = "oracle"
+        value = "oracle.+"
     }
 
     group "pixiv" {
