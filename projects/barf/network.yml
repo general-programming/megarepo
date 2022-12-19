@@ -81,25 +81,6 @@ hosts:
     asn: 4280805528
     type: linux
     role: vpn
-  iad1-vpn-leaf-1:
-    asn: 4280805529
-    management_address: 10.64.16.2
-    type: vyos
-    role: vpn
-    cloudinit: true
-    interfaces:
-      - name: eth0
-        description: hetzner external
-        dhcp: true
-      - name: eth1
-        description: hetzner internal
-        dhcp: true
-        mtu: 1450
-    nameservers:
-      - 1.1.1.1
-      - 1.0.0.1
-    networks:
-      - 10.64.16.0/24
   oracle-vpn-1-1:
     address: 193.122.165.81
     asn: 31898
@@ -120,25 +101,6 @@ hosts:
     asn: 31898
     type: external
     role: vpn
-  hel1-vpn-leaf-1:
-    management_address: 10.64.17.3
-    asn: 4280805530
-    type: vyos
-    role: vpn
-    cloudinit: true
-    interfaces:
-      - name: eth0
-        description: hetzner external
-        dhcp: true
-      - name: eth1
-        description: hetzner internal
-        dhcp: true
-        mtu: 1450
-    nameservers:
-      - 1.1.1.1
-      - 1.0.0.1
-    networks:
-      - 10.64.17.0/24
   dfw1-vpn-leaf-1:
     address: 161.129.155.187
     asn: 4280805531
@@ -190,14 +152,6 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-leaf-2
     network: 172.31.255.14/31
-  51829:
-    side_a: fmt2-vpn-spine-1
-    side_b: iad1-vpn-leaf-1
-    network: 172.31.255.16/31
-  51830:
-    side_a: fmt2-vpn-spine-2
-    side_b: iad1-vpn-leaf-1
-    network: 172.31.255.18/31
   51831:
     side_a: fmt2-vpn-spine-1
     side_b: oracle-vpn-1-1
@@ -222,14 +176,6 @@ links:
     network: 172.31.255.26/31
     secret: fmt2-oracle-vpn-4
     ipsec: true
-  51835:
-    side_a: fmt2-vpn-spine-1
-    side_b: hel1-vpn-leaf-1
-    network: 172.31.255.28/31
-  51836:
-    side_a: fmt2-vpn-spine-2
-    side_b: hel1-vpn-leaf-1
-    network: 172.31.255.30/31
   51837:
     side_a: fmt2-vpn-spine-1
     side_b: dfw1-vpn-leaf-1
