@@ -4,7 +4,7 @@ services:
     build: .
     image: registry.nepeat.com/nginx-web
     volumes:
-      - /srv/www:/var/www
+      - /mnt/ceph/var/www:/var/www
     networks:
       - publicweb
     deploy:
