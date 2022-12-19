@@ -5,7 +5,7 @@ variable "public_key" {
 
 variable "image" {
   type = string
-  default = "linode/ubuntu20.04"
+  default = "linode/ubuntu22.04"
 }
 
 variable "app-scaling" {

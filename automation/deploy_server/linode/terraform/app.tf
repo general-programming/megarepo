@@ -16,7 +16,7 @@ cloud-init -d init
 cloud-init -d modules --mode config
 cloud-init -d modules --mode final
 EOF
-  images = ["linode/ubuntu20.04"]
+  images = ["linode/ubuntu22.04"]
   rev_note = "initial version"
 }
 
