@@ -6,14 +6,6 @@ holepunch_key = host.data.holepunch_key
 
 holepunch_command = f"curl -L -X POST '{holepunch_url}' -H 'Content-Type: application/json' --data-raw '{{\"key\": \"{holepunch_key}\"}}'"
 
-apt.packages(
-    name="Install Curl.",
-    packages=[
-        "curl",
-    ],
-    update=True,
-)
-
 server.shell(
     name="Punch hole.",
     commands=holepunch_command,

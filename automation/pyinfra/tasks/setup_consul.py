@@ -8,19 +8,6 @@ from pyinfra.operations import apt, files, server, systemd
 consul_datacenter = host.data.consul_datacenter
 
 if host.get_fact(LinuxName) in ["Debian", "Ubuntu"]:
-    server.shell(
-        name="Install HashiCorp repo",
-        commands='apt-add-repository "deb [arch=amd64] https://apt.releases.hashicorp.com $(lsb_release -cs) main"',
-    )
-
-    apt.packages(
-        name="Install Consul.",
-        packages=[
-            "consul",
-        ],
-        update=True,
-    )
-
     for cert_file in ["server.crt", "server.key", "ca.crt"]:
         files.file(
             name="Touch Consul TLS files.",
