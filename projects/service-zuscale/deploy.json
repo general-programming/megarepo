@@ -6,15 +6,13 @@
             "amount": 0
         },
         "hetzner_cloud": {
-            "image": "packer-1669439045",
-            "amount": 25,
+            "image": "packer-1671416277",
+            "amount": 1,
             "meta": {
                 "amd": true,
-                "region": "hel1",
-                "network": 1492409,
-                "network_iad": 1309524
+                "region": "pdx"
             },
-            "cloud_init_template": "cloud-init-hetzner-packer.yml"
+            "cloud_init_template": "cloud-init-template-packer-netmaker.yml"
         },
         "vultr": {
             "image": "ubuntu_20.04_x64",
