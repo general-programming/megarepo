@@ -24,7 +24,7 @@ files.directory(
 files.put(
     name="Install Consul resolved config.",
     src="files/resolved/consul.conf",
-    dest="/etc/systemd/resolved.conf.d/consul.conf",
+    dest="/etc/systemd/resolved.conf.d/00-consul.conf",
     mode="644",
 )
 
