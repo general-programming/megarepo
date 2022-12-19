@@ -1,0 +1,1 @@
+nomad node status -verbose | grep ready | grep oracle | awk '{print $5}' | xargs -P 8 -n1 -I{} ssh -o StrictHostKeychecking=no  ubuntu@{} sudo bash -c "'cd /root/megarepo/automation/ansible && git pull && ansible-galaxy install -r roles.yml && ansible-playbook -c local -i inventory/localhost_app provision_node_exporter.yml'"
