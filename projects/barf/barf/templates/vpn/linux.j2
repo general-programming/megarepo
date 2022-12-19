@@ -18,6 +18,7 @@ PrivateKey = {{ our_side.wg_privkey(port) }}
 PublicKey = {{ other_peer.wg_pubkey(port) }}
 AllowedIPs = 0.0.0.0/0
     {%- if other_peer.address %}
+
 Endpoint = {{ other_peer.address }}:{{ port }}
 PersistentKeepalive = 10
     {% endif %}
