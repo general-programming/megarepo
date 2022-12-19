@@ -48,7 +48,6 @@ def open_connection(host: BaseHost, hostname: str):
     log = logging.getLogger("connection." + host.hostname)
     extra_args = {
         "allow_agent": True,
-        "use_keys": True,
     }
 
     # Get NAPALM driver for the device.
