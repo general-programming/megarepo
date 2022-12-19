@@ -6,5 +6,5 @@ enable_local_script_checks = true
 datacenter = "{{ consul_datacenter }}"
 retry_join = {{ consul_servers }}
 {% raw %}
-bind_addr = "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}"
+bind_addr = "{{ GetPrivateInterfaces | include \"network\" \"10.101.0.0/24\" | attr \"address\" }}"
 {% endraw %}
