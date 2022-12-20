@@ -4,6 +4,10 @@ source "hcloud" "test" {
   location     = "ash"
   server_type  = "cpx11"
   ssh_username = "root"
+
+  snapshot_labels = {
+    app = "zuscale"
+  }
 }
 
 build {
