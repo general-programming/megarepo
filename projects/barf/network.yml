@@ -18,7 +18,10 @@ hosts:
       - name: eth1
         description: management vlan
         address: 10.255.1.21/24
-    management_address: 10.255.2.1
+      - name: dum0
+        description: underlay loopback
+        address: 10.255.2.1/32
+        management: true
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
@@ -34,7 +37,10 @@ hosts:
       - name: eth1
         description: management vlan
         address: 10.255.1.22/24
-    management_address: 10.255.2.2
+      - name: dum0
+        description: underlay loopback
+        address: 10.255.2.2/32
+        management: true
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
@@ -48,7 +54,11 @@ hosts:
     networks:
       - 10.65.67.0/24
       - 10.255.0.0/24
-    management_address: 10.255.2.3
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 10.255.2.3/32
+        management: true
     extra_config:
       - set protocols ospf area 0 network 10.65.67.0/24
       - set protocols ospf redistribute bgp metric-type 2
@@ -65,7 +75,11 @@ hosts:
     networks:
       - 10.65.67.0/24
       - 10.255.0.0/24
-    management_address: 10.255.2.4
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 10.255.2.4/32
+        management: true
     extra_config:
       - set protocols ospf area 0 network 10.65.67.0/24
       - set protocols ospf redistribute bgp metric-type 2
@@ -78,7 +92,13 @@ hosts:
     role: vpn
     networks:
       - 192.168.8.0/23
-    management_address: 10.255.2.5
+    interfaces:
+      # EdgeOS is awful and does not have a good way to have multiple loopbacks.
+      # This exists only as a dummy entry for the dummy interface.
+      - name: dum0
+        description: underlay loopback
+        address: 10.36.75.2/32
+        management: true
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
@@ -108,12 +128,15 @@ hosts:
     role: vpn
   dfw1-vpn-leaf-1:
     address: 161.129.155.187
-    management_address: 10.255.2.8
     asn: 4280805531
     type: vyos
     role: vpn
     cloudinit: true
     interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 10.255.2.8/32
+        management: true
       - name: eth0
         description: external
         address: 161.129.155.187/28

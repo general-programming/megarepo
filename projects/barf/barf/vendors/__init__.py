@@ -114,6 +114,7 @@ class HostInterface:
     lag_id: Optional[str] = None
     cable: Optional[Cable] = None
     vrf: Optional[str] = None
+    management: Optional[bool] = False
 
     @property
     def description(self) -> str:
@@ -174,7 +175,6 @@ class BaseHost:
         hostname: str,
         role: str,
         address: ipaddress.IPv4Interface = None,
-        management_address: str = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
@@ -187,7 +187,6 @@ class BaseHost:
         **kwargs,
     ):
         self.address = address
-        self.management_address = management_address
         self.hostname = hostname
         self.asn = asn
         self.snmp_location = snmp_location
@@ -306,6 +305,15 @@ class BaseHost:
 
         return list(hosts)
 
+    @property
+    def management_address(self) -> Optional[ipaddress.IPv4Interface]:
+        """Return the management address for this host."""
+        for interface in self.interfaces:
+            if interface.management:
+                return interface.address
+
+        return None
+
     def secret(
         self,
         key: str,
@@ -376,6 +384,7 @@ class BaseHost:
                         for vlan in interface.get("tagged_vlans", [])
                     ],
                     mtu=interface.get("mtu", None),
+                    management=interface.get("management", False),
                 )
             )
 
@@ -383,7 +392,6 @@ class BaseHost:
             hostname=hostname,
             role=meta["role"],
             address=meta.get("address", None),
-            management_address=meta.get("management_address", None),
             asn=meta["asn"],
             nameservers=meta.get("nameservers", []),
             extra_config=meta.get("extra_config", []),

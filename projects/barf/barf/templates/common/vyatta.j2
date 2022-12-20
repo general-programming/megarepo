@@ -11,25 +11,20 @@ set service snmp contact '{{ global_meta.snmp_contact }}'
 set system name-server '{{ dns_server }}'
 {% endfor %}
 {% for interface in device.interfaces %}
-    {% if interface.untagged_vlan %}
-        {% set set_string = 'set interfaces ethernet ' + interface.name + ' vif ' + interface.untagged_vlan.vid %}
-    {% else %}
-        {% set set_string = 'set interfaces ethernet ' + interface.name %}
-    {% endif %}
     {# DHCP interfaces. #}
     {% if interface.dhcp %}
-{{ set_string }} address dhcp
+{{ device.interface_prefix(interface) }} address dhcp
     {% endif %}
     {# Interface IP #}
     {% if interface.address %}
-{{ set_string }} address {{ interface.address.with_prefixlen }}
+{{ device.interface_prefix(interface) }} address {{ interface.address.with_prefixlen }}
     {% endif %}
     {# Interface MTU. #}
     {% if interface.mtu %}
-{{ set_string }} mtu {{ interface.mtu }}
+{{ device.interface_prefix(interface) }} mtu {{ interface.mtu }}
     {% endif %}
     {% if interface.description %}
-{{ set_string }} description '{{ interface.description }}'
+{{ device.interface_prefix(interface) }} description '{{ interface.description }}'
     {% endif %}
 {% endfor %}
 

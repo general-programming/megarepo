@@ -55,7 +55,7 @@ set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} per
     {% endif %}
 
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ device.management_address.ip }}
     {% if other_peer.is_spine %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group spine
     {% else %}
@@ -69,6 +69,7 @@ set protocols bgp neighbor {{ link.get_ip(other_peer) }} bfd
 {% for network in device.networks %}
 set protocols bgp address-family ipv4-unicast network {{ network }}
 {% endfor -%}
+set protocols bgp address-family ipv4-unicast network {{ device.management_address }}
 
 set protocols bgp system-as '{{ device.asn }}'
 set protocols bgp peer-group leaf address-family ipv4-unicast

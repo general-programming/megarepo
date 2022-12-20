@@ -87,12 +87,17 @@ def push_config(device: BaseHost, config: str):
     if device.DEVICETYPE not in ["vyos", "eos", "cisco"]:
         return
 
+    # Check for the management IP, if it's not set, we can't do anything.
+    if not device.management_address:
+        log.error("No management IP set for device.")
+        return
+
     # Attempt to connect with the FQDN.
     # If that fails, connect with the IP directly.
     napalm_device = None
     addresses = [
         f"{device.hostname}.generalprogramming.org",
-        device.management_address,
+        device.management_address.ip.compressed,
         device.address,
     ]
 

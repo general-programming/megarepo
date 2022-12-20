@@ -22,13 +22,18 @@ set interfaces wireguard {{ interface_name }} peer {{ other_peer.wg_pubkey(port)
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.wg_pubkey(port) }} persistent-keepalive 10
     {% endif %}
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
-set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} update-source {{ interface_name }}
+set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} update-source {{ device.management_address.ip }}
 {% if other_peer.is_spine -%}
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group spine
 {% else %}
 set protocols bgp {{ device.asn }} neighbor {{ link.get_ip(other_peer) }} peer-group leaf
 {% endif %}
 {% endfor -%}
+
+{% for network in device.networks %}
+set protocols bgp {{ device.asn }} network {{ network }}
+{% endfor -%}
+set protocols bgp {{ device.asn }} network {{ device.management_address }}
 
 set protocols bgp {{ device.asn }} peer-group leaf ebgp-multihop '6'
 set protocols bgp {{ device.asn }} peer-group spine ebgp-multihop '6'
