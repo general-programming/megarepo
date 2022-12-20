@@ -5,7 +5,7 @@ data "oci_core_images" "supported_platform_config_shape_images" {
   operating_system = "Canonical Ubuntu"
   filter {
     name   = "display_name"
-    values = ["^Canonical-Ubuntu-22.04-([\\.0-9-]+)$"]
+    values = ["zuscale", "^zuscale-([\\.0-9-]+)$"]
     regex  = true
   }
 }
