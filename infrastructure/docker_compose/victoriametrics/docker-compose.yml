@@ -5,7 +5,10 @@ services:
     restart: always
     command:
       - "-retentionPeriod=12"
+      - "-usePromCompatibleNaming"
     volumes:
       - /var/lib/victoria-metrics-data:/victoria-metrics-data
+    env_file:
+      - .env
     ports:
-      - 8428:8428
+      - $PRIVATE_IP:8428:8428
