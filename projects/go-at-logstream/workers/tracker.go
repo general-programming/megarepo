@@ -16,7 +16,6 @@ import (
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
-	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"go.uber.org/zap"
 )
 
@@ -270,8 +269,12 @@ func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
 			"items": len(parsed.Items),
 		}
 
-		point := write.NewPoint("archiveteam.tracker.event", tags, fields, timestamp)
-		storage.WrappedInflux.Writer.WritePoint(point)
+		storage.MetricsClient.Emit(ctx, storage.Metric{
+			Name:      "archiveteam.tracker.event",
+			Tags:      tags,
+			Values:    fields,
+			Timestamp: &timestamp,
+		})
 	}
 }
 

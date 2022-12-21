@@ -9,8 +9,7 @@ import (
 func main() {
 	// do init
 	util.StartDebugServer()
-	storage.InitRedis()
-	storage.InitInflux()
+	storage.InitStorage()
 
 	workerType := util.GetEnvWithDefault("WORKER_TYPE", "tracker")
 	if workerType == "tracker" {

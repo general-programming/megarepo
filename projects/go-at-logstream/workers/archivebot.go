@@ -14,7 +14,6 @@ import (
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	"github.com/gorilla/websocket"
-	"github.com/influxdata/influxdb-client-go/v2/api/write"
 	"go.uber.org/zap"
 
 	"github.com/bytedance/gopkg/util/gopool"
@@ -164,8 +163,12 @@ func HandleArchiveBotMessage(ctx context.Context, message []byte) {
 			"size": 1,
 		}
 
-		point := write.NewPoint("archiveteam.archivebot.event", tags, fields, timestamp)
-		storage.WrappedInflux.Writer.WritePoint(point)
+		storage.MetricsClient.Emit(ctx, storage.Metric{
+			Name:      "archiveteam.archivebot.event",
+			Tags:      tags,
+			Values:    fields,
+			Timestamp: &timestamp,
+		})
 	}
 }
 
