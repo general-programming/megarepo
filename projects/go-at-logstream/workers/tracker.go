@@ -1,7 +1,6 @@
 package workers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -14,131 +13,14 @@ import (
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
+	"github.com/general-programming/megarepo/projects/go-at-logstream/model"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
 	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
 	"go.uber.org/zap"
 )
 
-type ATProjects struct {
-	WarriorProject string      `json:"auto_project"`
-	Projects       []ATProject `json:"projects"`
-}
-
-type ATProject struct {
-	Description     string `json:"description"`
-	ProjectName     string `json:"name"`
-	Title           string `json:"title"`
-	Repository      string `json:"repository"`
-	LeaderboardLink string `json:"leaderboard"`
-}
-
-type ATStats struct {
-	Values map[string]json.Number `json:"values"`
-	Queues map[string]json.Number `json:"queues"`
-}
-
-/*
-	AtTrackerUpdate is a struct representing a single update from the tracker.
-
-Example item:
-{
-project: "vlive",
-bytes: 885096,
-stats: {
-values: {
-reclaim_rate: 0,
-reclaim_serve_rate: 0,
-rtt_real: 20.578742661713,
-rtt: 22.190385926599,
-rtt_count_pre: 2351,
-filtered_count: 0,
-rtt_count: 2130,
-item_fail_rate: 0,
-item_filter_rate: 0,
-done_counter: 2117536,
-item_request_serve_rate: 0.9999999999995
-},
-queues: {
-done: 2067253,
-unretrievable: 0,
-todo:secondary: 0,
-claims: 6725227,
-todo:redo: 0,
-todo:backfeed: 6131683,
-todo: 0
-}
-},
-move_items: [
-"vphinf:20210806_92/1628244212994m8tOu_JPEG/141032582979787015ea43a6b8-4ddb-44ae-93af-ffac36db759a.jpg"
-],
-uncached: null,
-item_rtts: [
-20.350000143051
-],
-items: [
-"vphinf:20210806_92/1628244212994m8tOu_JPEG/141032582979787015ea43a6b8-4ddb-44ae-93af-ffac36db759a.jpg"
-],
-item: "vphinf:20210806_92/1628244212994m8tOu_JPEG/141032582979787015ea43a6b8-4ddb-44ae-93af-ffac36db759a.jpg",
-version: "20221201.01",
-user_agent: "ArchiveTeam Warrior/0.10.3 Standalone",
-megabytes: 0.84409332275391,
-domain_bytes: {
-data: 885096
-},
-log_channel: "vlive-log",
-is_duplicate: false,
-ts: 1670255906.368,
-queuestats: {
-done: 2067253,
-unretrievable: 0,
-todo:secondary: 0,
-claims: 6725227,
-todo:redo: 0,
-todo:backfeed: 6131683,
-todo: 0
-},
-counts: {
-ifar: 0,
-rcsr: 0,
-ifir: 0,
-irsr: 0.9999999999995,
-out: 6725227,
-done: 2117536,
-todo: 6131683,
-rcr: 0
-},
-downloader: "datechnoman",
-valid: true
-}
-*/
-type ATTrackerUpdate struct {
-	Project    string `json:"project"`
-	Downloader string `json:"downloader"`
-	// Timestamp is a unix timestamp in seconds
-	Timestamp json.Number `json:"ts"`
-
-	Bytes       json.Number `json:"bytes"`
-	Valid       bool        `json:"valid"`
-	IsDuplicate bool        `json:"is_duplicate"`
-
-	Items     []string `json:"items"`
-	MoveItems []string `json:"move_items"`
-
-	Item     string        `json:"item"`
-	ItemRTTs []json.Number `json:"item_rtts"`
-
-	WarriorUserAgent string `json:"user_agent"`
-	WarriorVersion   string `json:"version"`
-
-	SizeMB json.Number `json:"megabytes"`
-
-	QueueStats map[string]json.Number `json:"queuestats"`
-	Stats      ATStats                `json:"stats"`
-	Counts     map[string]json.Number `json:"counts"`
-}
-
-func FetchProjects() (*ATProjects, error) {
+func FetchProjects() (*model.ATTrackerProjects, error) {
 	resp, err := http.Get("https://warriorhq.archiveteam.org/projects.json")
 	if err != nil {
 		return nil, errors.New("Failed to fetch projects")
@@ -149,7 +31,7 @@ func FetchProjects() (*ATProjects, error) {
 		return nil, errors.New("Failed to read response body")
 	}
 
-	result := &ATProjects{}
+	result := &model.ATTrackerProjects{}
 	err = sonic.Unmarshal(body, result)
 	if err != nil {
 		return nil, fmt.Errorf("Failed to unmarshal response body: %w", err)
@@ -195,8 +77,8 @@ func (sock *TrackerSocket) Connect() {
 		return
 	}
 
-	client.On("connect", sock.OnConnect)
-	client.On("log_message", sock.OnMessage)
+	_ = client.On("connect", sock.OnConnect)
+	_ = client.On("log_message", sock.OnMessage)
 
 	client.Run()
 }
@@ -212,7 +94,7 @@ func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
 	defer util.RecoverFunction("TrackerSocket.OnMessage")
 	ctx := util.CreateContext()
 
-	parsed := &ATTrackerUpdate{}
+	parsed := &model.ATTrackerUpdate{}
 	err := sonic.UnmarshalString(message, parsed)
 	if err != nil {
 		util.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", message), zap.Error(err))
@@ -270,12 +152,15 @@ func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
 			"items": len(parsed.Items),
 		}
 
-		storage.MetricsClient.Emit(ctx, storage.Metric{
+		err = storage.MetricsClient.Emit(ctx, storage.Metric{
 			Name:      "archiveteam.tracker.event",
 			Tags:      tags,
 			Values:    fields,
 			Timestamp: &timestamp,
 		})
+		if err != nil {
+			util.LogWithCtx(ctx).Error("Failed to emit metric", zap.Error(err))
+		}
 	}
 }
 
@@ -284,10 +169,12 @@ type TrackerWorker struct {
 	sockets sync.Map
 }
 
-func (worker *TrackerWorker) LaunchSocket(project ATProject) {
+func (worker *TrackerWorker) LaunchSocket(project model.ATTrackerProject) {
 	logger := util.CreateLogger(false)
 
 	// special case to ignore urlteam
+	// TODO(erin) one day I'll make this work
+	// 		for now it's just a waste of resources and it'd be silly to have the URLs
 	if project.ProjectName == "urlteam2" {
 		return
 	}
@@ -296,7 +183,7 @@ func (worker *TrackerWorker) LaunchSocket(project ATProject) {
 	newSocket := TrackerSocket{Project: socketName}
 	worker.sockets.Store(project.ProjectName, newSocket)
 
-	go func(project ATProject) {
+	go func(project model.ATTrackerProject) {
 		defer worker.wg.Done()
 
 		for {
