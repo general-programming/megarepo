@@ -2,6 +2,7 @@ package workers
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -137,24 +138,24 @@ type ATTrackerUpdate struct {
 	Counts     map[string]json.Number `json:"counts"`
 }
 
-func FetchProjects() *ATProjects {
+func FetchProjects() (*ATProjects, error) {
 	resp, err := http.Get("https://warriorhq.archiveteam.org/projects.json")
 	if err != nil {
-		panic("Failed to fetch projects")
+		return nil, errors.New("Failed to fetch projects")
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		panic("Failed to read response body")
+		return nil, errors.New("Failed to read response body")
 	}
 
 	result := &ATProjects{}
 	err = sonic.Unmarshal(body, result)
 	if err != nil {
-		panic(fmt.Sprintf("Failed to unmarshal response body: %v", err))
+		return nil, fmt.Errorf("Failed to unmarshal response body: %w", err)
 	}
 
-	return result
+	return result, nil
 }
 
 func GetLogSocketNameFromLeaderboard(link string) string {
@@ -318,7 +319,13 @@ func (worker *TrackerWorker) Init() {
 
 		for {
 			// fetch the projects every 5 minutes
-			projects := FetchProjects()
+			projects, err := FetchProjects()
+			if err != nil {
+				logger.Error("Failed to fetch projects", zap.Error(err))
+				time.Sleep(15 * time.Second)
+				continue
+			}
+
 			logger.Info("got tracker projects", zap.Int("count", len(projects.Projects)))
 
 			// create a new socket for each project we haven't already launched
