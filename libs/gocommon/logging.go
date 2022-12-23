@@ -12,12 +12,12 @@ const (
 	LoggerKey = "K_LOGGER"
 )
 
-func CreateLogger(d bool) *zap.Logger {
+func CreateLogger(debug bool) *zap.Logger {
 	pe := zap.NewProductionEncoderConfig()
 	pe.EncodeTime = zapcore.ISO8601TimeEncoder
 
 	level := zap.InfoLevel
-	if d {
+	if debug {
 		level = zap.DebugLevel
 	}
 
@@ -35,6 +35,10 @@ func CreateLogger(d bool) *zap.Logger {
 	l := zap.New(core)
 
 	return l
+}
+
+func CtxWithLogger(ctx context.Context) context.Context {
+	return context.WithValue(ctx, LoggerKey, CreateLogger(false))
 }
 
 func LogWithCtx(ctx context.Context) *zap.Logger {
