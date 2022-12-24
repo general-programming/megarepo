@@ -224,13 +224,10 @@ def build_cloud_init(template_name: str) -> str:
     )
 
     # Build the ansible vars file
-    f_infraout = StringIO()
     infra_vars = get_from_vault(hvac_client, "ansible_vars", False)
-    infra_vars_yml = yaml.dump(infra_vars, f_infraout)
-
     add_file(
-        "/tmp/infra_jars.yml",
-        f_infraout.getvalue(),
+        "/tmp/infra_vars.yml",
+        yaml.dump(infra_vars),
         permissions="0644",
     )
 
@@ -250,8 +247,4 @@ def build_cloud_init(template_name: str) -> str:
     output["write_files"].extend(files)
 
     # Create the actual cloud-init.
-    outf = StringIO()
-    outf.write("#cloud-config\n")
-    yaml.dump(output, outf)
-
-    return outf.getvalue()
+    return "#cloud-config\n" + yaml.dump(output)
