@@ -15,6 +15,7 @@ import (
 	"github.com/go-redis/redis/v9"
 	"github.com/hertz-contrib/pprof"
 	"github.com/hertz-contrib/websocket"
+	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 )
 
@@ -45,17 +46,15 @@ type ConnectionHandler struct {
 
 func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error) {
 	gocommon.LogWithCtx(ctx).Info("Starting up, got redis client")
-
+	rl := ratelimit.New(5)
 	last := "$"
-	//unmarsheler := protojson.UnmarshalOptions{
-	//	DiscardUnknown: true,
-	//}
 
 	for {
+		rl.Take()
 		items, err := RedisClient.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{"archiveteam.tracker", last},
-			Count:   100,
-			Block:   500,
+			Count:   512,
+			Block:   1000,
 		}).Result()
 
 		if err != nil {
@@ -67,31 +66,39 @@ func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error)
 			for _, entry := range item.Messages {
 				last = entry.ID
 
+				projectString, ok := entry.Values["project"].(string)
+				if !ok {
+					gocommon.LogWithCtx(ctx).Error("Project is missing")
+					continue
+				}
+
 				msgString, ok := entry.Values["message"].(string)
 				if !ok {
 					gocommon.LogWithCtx(ctx).Error(
-						"Failed to get message string",
+						"Failed to get message bytes",
 						zap.Any("entry", entry),
 					)
 				}
+
 				msg := fastpb_gen.TrackerEvent{}
 				err = gocommon.Unmarshal(msgString, &msg)
-				//err = unmarsheler.Unmarshal([]byte(msgString), &msg)
 				if err != nil {
 					gocommon.LogWithCtx(ctx).Error(
 						"Failed to unmarshal message",
 						zap.String("msg", msgString),
 						zap.Error(err),
 					)
+					continue
 				}
 
-				if !c.Projects[msg.Project] && !c.Projects["all"] {
+				if !c.Projects[projectString] && !c.Projects["all"] {
 					continue
 				}
 
 				encoded := Marshal(&msg)
 				encoded = gocommon.Compress(encoded)
 				err = c.Connection.WriteMessage(websocket.BinaryMessage, encoded)
+
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 						gocommon.LogWithCtx(ctx).Error(
@@ -139,11 +146,7 @@ func (c *ConnectionHandler) HandleClientMessage(ctx context.Context, message []b
 
 	// handle the message types
 	gocommon.Unmarshal(string(message), &parsed.Args)
-	gocommon.LogWithCtx(ctx).Info(
-		"Got message",
-		zap.Any("parsed", parsed),
-		zap.Any("args", parsed.Args),
-	)
+
 	switch parsed.Type {
 	case "subscribe":
 		project, ok := parsed.Args["project"]
@@ -164,7 +167,7 @@ func (c *ConnectionHandler) HandleClientMessage(ctx context.Context, message []b
 	}
 }
 
-func items(ctx context.Context, c *app.RequestContext) {
+func SocketHandler(ctx context.Context, c *app.RequestContext) {
 	ctx = gocommon.CtxWithLogger(ctx)
 
 	err := upgrader.Upgrade(c, func(conn *websocket.Conn) {
@@ -191,7 +194,7 @@ func main() {
 		ctx.JSON(consts.StatusOK, utils.H{"message": "pong"})
 	})
 
-	h.GET("/ws", items)
+	h.GET("/ws", SocketHandler)
 
 	h.Spin()
 }

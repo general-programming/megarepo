@@ -9,11 +9,13 @@ require (
 	github.com/go-redis/redis/v9 v9.0.0-rc.2
 	github.com/hertz-contrib/pprof v0.1.0
 	github.com/hertz-contrib/websocket v0.0.1
+	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.24.0
 	google.golang.org/protobuf v1.28.0
 )
 
 require (
+	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/bytedance/go-tagexpr/v2 v2.9.2 // indirect
 	github.com/bytedance/gopkg v0.0.0-20220413063733-65bf48ffb3a7 // indirect
 	github.com/bytedance/sonic v1.5.0 // indirect
