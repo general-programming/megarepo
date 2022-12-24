@@ -18,9 +18,12 @@
   when: holepunch_key != "" and holepunch_url != ""
 
 - name: "Verify if Consul is pingable."
-  ansible.builtin.command: "ping -c 3 {{ consul_servers[0] }}"
+  ansible.builtin.command:
+    cmd: "ping -c 3 {{ consul_servers[0] }}"
+  ignore_errors: true
   register: _consul_ping
 
 - name: "Conenct via Netmaker if not pingable."
-  ansible.builtin.command: "netclient join -vvvv -t {{ netmaker_token }}"
+  ansible.builtin.command:
+    cmd: "netclient join -vvvv -t {{ netmaker_token }}"
   when: _consul_ping.rc != 0 and netmaker_token != ""
