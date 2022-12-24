@@ -1,4 +1,9 @@
 ---
+- name: "Delete OS nomad config"
+  ansible.builtin.file:
+    path: /etc/nomad.d/nomad.hcl
+    state: absent
+    
 # Generate all the base configs
 - name: "Copy Nomad static configs"
   ansible.builtin.copy:
