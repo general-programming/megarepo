@@ -18,7 +18,7 @@
 
 - name: "Convert consul_servers to JSON"
   ansible.builtin.set_fact:
-    _consul_servers: "{{ consul_servers | to_json }}"
+    _consul_servers: " {{ consul_servers | to_json }}"
 
 - name: "Generate Consul Template base config"
   ansible.builtin.template:
