@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from io import StringIO
-from typing import List
+from typing import List, Union
 
 import hvac
 import yaml
@@ -153,11 +153,14 @@ def get_hvac() -> hvac.Client:
     return client
 
 
-def get_from_vault(client: hvac.Client, key: str) -> str:
+def get_from_vault(client: hvac.Client, key: str, get_file: bool=True) -> Union[str, dict]:
     response = client.secrets.kv.v2.read_secret_version(
         path=key,
         mount_point="webscale-scrape",
-    )["data"]["data"]["file"]
+    )["data"]["data"]
+
+    if get_file:
+        return response["file"]
 
     return response
 
@@ -217,6 +220,17 @@ def build_cloud_init(template_name: str) -> str:
     add_file(
         "/tmp/pyinfra_all.py",
         get_from_vault(hvac_client, "pyinfra_all"),
+        permissions="0644",
+    )
+
+    # Build the ansible vars file
+    f_infraout = StringIO()
+    infra_vars = get_from_vault(hvac_client, "ansible_vars", False)
+    infra_vars_yml = yaml.dump(infra_vars, f_infraout)
+
+    add_file(
+        "/tmp/infra_jars.yml",
+        f_infraout.getvalue(),
         permissions="0644",
     )
 

@@ -5,7 +5,7 @@ ui = false
 enable_local_script_checks = true
 datacenter = "{{ consul_datacenter }}"
 retry_join = {{ consul_servers }}
-{% if in_cluster_cidr %}
+{% if ansible_all_ipv4_addresses | ipaddr('10.101.0.0/24') %}
 {% raw %}
 bind_addr = "{{ GetPrivateInterfaces | include \"network\" \"10.101.0.0/24\" | attr \"address\" }}"
 {% endraw %}

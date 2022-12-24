@@ -1,4 +1,4 @@
-{% if approle_name == "cluster-server" %}
+{% if is_server %}
 template {
     source = "/etc/consul-template/templates/nomad/server-ca.tpl"
     destination = "/etc/nomad.d/ca.crt"

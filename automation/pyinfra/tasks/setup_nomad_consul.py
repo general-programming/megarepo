@@ -27,19 +27,12 @@ for dev, dev_config in host.get_fact(NetworkDevices).items():
 
 files.template(
     name="Create Consul config.",
-    src="templates/consul/node.j2",
+    src="templates/consul/consul.hcl.j2",
     dest="/etc/consul.d/consul.hcl",
     mode="644",
     consul_datacenter=host.data.consul_datacenter,
     consul_servers=json.dumps(host.data.consul_servers),
     in_cluster_cidr=in_cluster_cidr,
-)
-
-files.put(
-    name="Consul node_exporter template.",
-    src="common/consul_configs/service_node_exporter.json",
-    dest="/etc/consul.d/service_node_exporter.json",
-    mode="644",
 )
 
 server.service(

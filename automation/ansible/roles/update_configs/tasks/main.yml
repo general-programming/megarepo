@@ -35,6 +35,11 @@
     path: "/etc/consul.d/"
   register: consul_folder
 
+- name: "Settings - Check if node exporter is installed"
+  stat:
+    path: "/usr/local/bin/node_exporter"
+  register: node_exporter_bin
+
 - name: "Settings - Add node_exporter Consul service."
   copy:
     src: consul_node_exporter.json
@@ -42,4 +47,4 @@
     owner: root
     group: root
     mode: 0644
-  when: consul_folder.stat.exists and consul_folder.stat.isdir
+  when: node_exporter_bin.stat.exists and consul_folder.stat.exists and consul_folder.stat.isdir

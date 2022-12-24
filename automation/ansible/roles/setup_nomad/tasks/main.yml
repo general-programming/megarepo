@@ -1,0 +1,50 @@
+---
+- name: "Generate Nomad config"
+  ansible.builtin.template:
+    src: hostclass.hcl.j2
+    dest: /etc/nomad.d/01-hostclass.hcl
+    mode: 0644
+
+- name: "Generate Nomad Consul Template config"
+  ansible.builtin.template:
+    src: consul-template.hcl.j2
+    dest: /etc/consul-template/config/10-nomad.hcl
+    mode: 0644
+
+# Generate a vault token if we are a server.
+- name: "Generate Vault token for Nomad server"
+  ansible.builtin.set_fact:
+    nomad_server_vault_token: "{{ lookup('community.hashi_vault.vault_token_create', orphan=True, policies=['nomad-server'], ttl='72h') }}"
+  register: nomad_server_vault_token
+  when: is_server
+
+- name: "Generate Nomad Vault config"
+  ansible.builtin.template:
+    src: vault.hcl.j2
+    dest: /etc/nomad.d/20-vault.hcl
+
+- name: "Copy Nomad systemd unit file"
+  ansible.builtin.copy:
+    src: nomad.service
+    dest: /etc/systemd/system/nomad.service
+    mode: 0644
+
+- name: "Generate Consul config"
+  ansible.builtin.template:
+    src: consul.hcl.j2
+    dest: /etc/consul.d/consul.hcl
+    mode: 0644
+
+- name: "Reload systemd"
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: "Restart Nomad and consul-template"
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop:
+    - nomad
+    - consul-template
+    - consul

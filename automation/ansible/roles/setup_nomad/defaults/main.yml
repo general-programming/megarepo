@@ -1,0 +1,4 @@
+---
+is_server: false
+consul_datacenter: fmt2
+consul_servers: []

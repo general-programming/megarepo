@@ -1,6 +1,9 @@
 - hosts: all
   strategy: free
   roles:
+    - role: setup_nomad
     - role: cloudalchemy.node_exporter
     - role: update_configs
     - role: update_firewall
+  vars_files:
+    - /tmp/infra_vars.yml
