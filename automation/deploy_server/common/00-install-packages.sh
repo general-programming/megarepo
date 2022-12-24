@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -xe
 
 # Shared
@@ -34,6 +34,23 @@ dpkg_waitlock () {
 
 export DEBIAN_FRONTEND=noninteractive
 
+# Get the Debian arch from uname
+case $(uname -m) in
+    x86_64)
+        DEBIAN_ARCH=amd64
+        ;;
+    i386|i686)
+        DEBIAN_ARCH=i386
+        ;;
+    arm64|aarch64)
+        DEBIAN_ARCH=arm64
+        ;;
+    *)
+        echo "Unsupported architecture: $(uname -m)"
+        exit 1
+        ;;
+esac
+
 # Get apt sources.list pre-install
 cat /etc/apt/sources.list
 
@@ -59,11 +76,7 @@ curl -sL 'https://apt.netmaker.org/debian.deb.txt' | sudo tee /etc/apt/sources.l
 # Install our packages
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 update
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install netclient nomad vault consul fail2ban docker.io mosh \
-  python3-virtualenv ndppd git mosh traceroute htop cloud-init byobu ansible wireguard dnsutils python3-netaddr
-
-# Install pyinfra in /root
-virtualenv -p python3 /root/pyenv
-/root/pyenv/bin/pip install pyinfra hvac
+  ndppd git mosh traceroute htop cloud-init byobu ansible wireguard dnsutils python3-netaddr
 
 # Setup consul folders
 mkdir /var/lib/consul

@@ -1,14 +1,31 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -x
 set -e
 
 # Shared
+retry () {
+  local n=1
+  local max=5
+  local delay=15
+  while true; do
+    "$@" && break || {
+      if [[ $n -lt $max ]]; then
+        ((n++))
+        echo "Command failed. Attempt $n/$max:"
+        sleep $delay;
+      else
+        fail "The command has failed after $n attempts."
+      fi
+    }
+  done
+}
+
 dpkg_waitlock () {
     while fuser /var/{lib/{dpkg,apt/lists},cache/apt/archives}/lock >/dev/null 2>&1; do
         sleep 1
     done
 
-    eval "$@"
+    eval "retry $@"
 }
 
 # Dpkg based

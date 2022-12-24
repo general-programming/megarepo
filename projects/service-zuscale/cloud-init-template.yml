@@ -13,9 +13,7 @@ runcmd:
   - /root/megarepo/automation/deploy_server/common/00-install-packages.sh
   - /root/megarepo/automation/deploy_server/common/01-setup-swap.sh
   - /root/megarepo/automation/deploy_server/common/10-sysctl.sh
-  # pyinfra stuff
-  - 'cp /tmp/pyinfra_all.py /root/megarepo/automation/pyinfra/group_data/all.py'
-  - '/bin/bash -c "cd /root/megarepo/automation/pyinfra && APPROLE_EXISTS=1 /root/pyenv/bin/pyinfra -vv @local deploy_all.py"'
+  # provisioning
   - '/bin/bash -c "cd /root/megarepo/automation/ansible && git pull && ansible-galaxy install -r roles.yml && ansible-playbook -c local -i inventory/localhost_app oneoff_cluster.yml"'
   # Final step
   - /root/megarepo/automation/deploy_server/common/99-finish.sh

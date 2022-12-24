@@ -216,13 +216,6 @@ def build_cloud_init(template_name: str) -> str:
     add_file("/opt/vault/approle_id", approle_id, permissions="0644")
     add_file("/opt/vault/approle_secret", approle_secret, permissions="0644")
 
-    # Build the group data file.
-    add_file(
-        "/tmp/pyinfra_all.py",
-        get_from_vault(hvac_client, "pyinfra_all"),
-        permissions="0644",
-    )
-
     # Build the ansible vars file
     infra_vars = get_from_vault(hvac_client, "ansible_vars", False)
     add_file(
