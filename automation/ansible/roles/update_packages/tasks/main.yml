@@ -23,6 +23,7 @@
     - nfs-common
     - nload
     - mtr
+    - gnupg
 
 - name: "Packages - GPG keys"
   apt_key:

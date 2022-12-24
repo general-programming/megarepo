@@ -1,0 +1,34 @@
+---
+# _vault_token.login.auth.client_token
+- name: "Generate Vault token"
+  community.hashi_vault.vault_token_create:
+    orphan: true
+    policies:
+      - vault-consul-tls-policy
+    ttl: 168h
+  register: _vault_token
+  when: vault_role in ["vault-server", "cluster-server"]
+
+# Node Vault Agent config
+- name: "Generate Consul Template base config"
+  ansible.builtin.template:
+    src: base.j2
+    dest: /etc/consul-template/config/00-base.hcl
+    mode: 0644
+
+# Service bits
+- name: "Copy Consul Template systemd unit file"
+  ansible.builtin.copy:
+    src: consul-template.service
+    dest: /etc/systemd/system/consul-template.service
+    mode: 0644
+
+- name: "Reload systemd"
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: "Restart consul-template"
+  ansible.builtin.service:
+    name: "consul-template"
+    state: started
+    enabled: true

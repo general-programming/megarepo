@@ -1,14 +1,15 @@
 ---
-- name: "Generate Nomad config"
+# Generate all the base configs
+- name: "Copy Nomad static configs"
+  ansible.builtin.copy:
+    src: config/
+    dest: /etc/nomad.d/
+    mode: 0644
+
+- name: "Generate Nomad host specific config"
   ansible.builtin.template:
     src: hostclass.hcl.j2
     dest: /etc/nomad.d/01-hostclass.hcl
-    mode: 0644
-
-- name: "Generate Nomad Consul Template config"
-  ansible.builtin.template:
-    src: consul-template.hcl.j2
-    dest: /etc/consul-template/config/10-nomad.hcl
     mode: 0644
 
 # Generate a vault token if we are a server.
@@ -26,18 +27,45 @@
     src: vault.hcl.j2
     dest: /etc/nomad.d/20-vault.hcl
 
-- name: "Copy Nomad systemd unit file"
-  ansible.builtin.copy:
-    src: nomad.service
-    dest: /etc/systemd/system/nomad.service
-    mode: 0644
-
+# Node Consul config
 - name: "Generate Consul config"
   ansible.builtin.template:
     src: consul.hcl.j2
     dest: /etc/consul.d/consul.hcl
     mode: 0644
 
+# Consul Template bits
+- name: "Generate Nomad Consul Template config"
+  ansible.builtin.template:
+    src: consul-template.hcl.j2
+    dest: /etc/consul-template/config/10-nomad.hcl
+    mode: 0644
+
+- name: "Copy Nomad systemd unit file"
+  ansible.builtin.copy:
+    src: nomad.service
+    dest: /etc/systemd/system/nomad.service
+    mode: 0644
+
+- name: "Copy Nomad Consul Template templates"
+  ansible.builtin.copy:
+    src: consul_template/
+    dest: /etc/consul-template/templates/nomad/
+    mode: 0644
+
+- name: "Create resolved config folder"
+  ansible.builtin.file:
+    path: /etc/systemd/resolved.conf.d
+    state: directory
+    mode: 0755
+
+- name: "Install Consul resolved config"
+  ansible.builtin.copy:
+    src: consul-resolved.conf
+    dest: /etc/systemd/resolved.conf.d/00-consul.conf
+    mode: 0644
+
+# Service bits
 - name: "Reload systemd"
   ansible.builtin.systemd:
     daemon_reload: yes
@@ -48,6 +76,7 @@
     state: restarted
     enabled: true
   loop:
-    - nomad
-    - consul-template
+    - systemd-resolved
     - consul
+    - consul-template
+    - nomad

@@ -1,0 +1,70 @@
+---
+# Generate the approle if it does not exist.
+- name: "Check if AppRole ID exists"
+  ansible.builtin.stat:
+    path: /opt/vault/approle_id
+  register: _approle_id_exists
+
+- name: "Check if AppRole Secret exists"
+  ansible.builtin.stat:
+    path: /opt/vault/approle_id
+  register: _approle_secret_exists
+
+# data.role_id
+- name: "Generate AppRole ID"
+  community.hashi_vault.vault_read:
+    path: "auth/approle/role/{{ vault_role }}/role-id"
+  register: _approle_id
+  when: not _approle_id_exists.stat.exists
+
+
+# data.secret_id
+- name: "Generate AppRole Secret"
+  community.hashi_vault.vault_write:
+    path: "auth/approle/role/{{ vault_role }}/secret-id"
+  register: _approle_secret
+  when: not _approle_secret_exists.stat.exists
+
+- name: "Write AppRole ID"
+  ansible.builtin.copy:
+    content: "{{ _approle_id.data.role_id }}"
+    dest: /opt/vault/approle_id
+    mode: 0600
+    user: vault
+    group: vault
+  when: not _approle_id_exists.stat.exists
+
+- name: "Write AppRole Secret"
+  ansible.builtin.copy:
+    content: "{{ _approle_secret.data.secret_id }}"
+    dest: /opt/vault/approle_secret
+    mode: 0600
+    user: vault
+    group: vault
+  when: not _approle_secret_exists.stat.exists
+
+# Node Vault Agent config
+- name: "Generate Vault Agent config"
+  ansible.builtin.template:
+    src: vault-agent.hcl.j2
+    dest: /etc/vault.d/agent.hcl
+    mode: 0644
+    user: vault
+    group: vault
+
+# Service bits
+- name: "Copy Vault Agent systemd unit file"
+  ansible.builtin.copy:
+    src: vault-agent.service
+    dest: /etc/systemd/system/vault-agent.service
+    mode: 0644
+
+- name: "Reload systemd"
+  ansible.builtin.systemd:
+    daemon_reload: yes
+
+- name: "Restart Nomad and consul-template"
+  ansible.builtin.service:
+    name: "vault-agent"
+    state: restarted
+    enabled: true

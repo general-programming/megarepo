@@ -1,0 +1,24 @@
+reload_signal = "SIGHUP"
+kill_signal = "SIGINT"
+log_level = "info"
+
+# This denotes the start of the configuration section for Vault. All values
+# contained in this section pertain to Vault.
+vault {
+  # This is the address of the Vault leader. The protocol (http(s)) portion
+  # of the address is required.
+  address = "{{ vault_url }}"
+
+{% if _vault_token is defined and 'login' in _vault_token %}
+  token = "{{ _vault_token.login.auth.client_token }}"
+{% else %}
+  # This value can also be specified via the environment variable VAULT_TOKEN.
+  vault_agent_token_file = "/opt/vault/agent-token"
+{% endif %}
+
+  # This tells consul-template that the provided token is actually a wrapped
+  # token that should be unwrapped using Vault's cubbyhole response wrapping
+  # before being used. Consult Vault's cubbyhole response wrapping documentation
+  # for more information.
+  unwrap_token = false
+}

@@ -1,0 +1,18 @@
+---
+- name: "Generate holepunch command"
+  ansible.builtin.set_fact:
+    _holepunch_command: "curl -L -X POST '{{ holepunch_url }}' -H 'Content-Type: application/json' --data-raw '{\"key\": \"{{ holepunch_key }}\"}'"
+  when: holepunch_key != "" and holepunch_url != ""
+
+- name: "Run holepunch command"
+  ansible.builtin.command: "{{ _holepunch_command }}"
+  when: holepunch_key != "" and holepunch_url != ""
+
+- name: "Add holepunch command to crontab"
+  ansible.builtin.cron:
+    name: "vault_holepunch"
+    job: "{{ _holepunch_command }}"
+    minute: "*/60"
+    user: nobody
+    state: present
+  when: holepunch_key != "" and holepunch_url != ""

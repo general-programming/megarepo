@@ -1,25 +1,27 @@
 ---
+- name: "Settings - Install HSM root CA"
+  ansible.builtin.copy:
+    src: "root_ca.crt"
+    dest: "/etc/ssl/certs/General_Programming_Root.pem"
+    mode: 0644
 
 - name: "Settings - Set swappiness to 0"
-  sysctl:
+  ansible.posix.sysctl:
     name: vm.swappiness
     value: 1
     state: present
     reload: true
 
 - name: "Settings - Enable kernel IP forwarding for app server."
-  sysctl:
+  ansible.posix.sysctl:
     name: net.ipv4.ip_forward
     value: 1
     state: present
     reload: true
   when: "(appserver or hypervisor or ip_forward)"
 
-- name: "Settings - IPTables Save"
-  shell: iptables-save > /etc/iptables.rules
-
 - name: "Settings - Update global byobu statusrc"
-  copy:
+  ansible.builtin.copy:
     src: byobu_status
     dest: /usr/share/byobu/status/status
     owner: root
@@ -27,24 +29,32 @@
     mode: 0644
 
 - name: "Settings - Set timezone to UTC"
-  timezone:
+  community.general.timezone:
     name: UTC
 
 - name: "Settings - Check if Consul config folder exists."
-  stat:
+  ansible.builtin.stat:
     path: "/etc/consul.d/"
   register: consul_folder
 
 - name: "Settings - Check if node exporter is installed"
-  stat:
+  ansible.builtin.stat:
     path: "/usr/local/bin/node_exporter"
   register: node_exporter_bin
 
 - name: "Settings - Add node_exporter Consul service."
-  copy:
+  ansible.builtin.copy:
     src: consul_node_exporter.json
     dest: /etc/consul.d/service_node_exporter.json
     owner: root
     group: root
     mode: 0644
   when: node_exporter_bin.stat.exists and consul_folder.stat.exists and consul_folder.stat.isdir
+
+- name: "Settings - Install admin SSH keys for root."
+  ansible.builtin.copy:
+    src: authorized_keys
+    dest: /root/.ssh/authorized_keys
+    owner: root
+    group: root
+    mode: 0644
