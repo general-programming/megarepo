@@ -1,7 +1,7 @@
 vault {
   enabled = true
   address = "{{ vault_url }}"
-{% if _nomad_server_vault_token.login %}
+{% if _nomad_server_vault_token is defined and 'login' in _nomad_server_vault_token %}
   token = "{{ _nomad_server_vault_token.login.auth.client_token }}"
 {% endif %}
   create_from_role = "nomad-cluster"
