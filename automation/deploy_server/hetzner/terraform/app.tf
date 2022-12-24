@@ -8,19 +8,18 @@ data "hcloud_ssh_keys" "all_keys" {
 }
 
 variable "zones" {
-  default = ["nbg1", "hel1", "fsn1", "ash", "hil"]
+  default = ["ash", "hil", "nbg1", "hel1", "fsn1"]
 }
 
 resource "hcloud_server" "zuscale" {
-  count               = var.app-scaling
-
+  count       = var.app-scaling
   image       = data.hcloud_image.packer_snapshot.id
-  location = "${var.zones[ count.index % length(var.zones) ]}"
+  location    = var.zones[count.index % length(var.zones)]
   name        = "hetzner-${var.zones[ count.index % length(var.zones) ]}-${count.index + 1}"
   server_type = "cpx11"
 
-  ssh_keys = data.hcloud_ssh_keys.all_keys.ssh_keys.*.name
-  user_data           = base64encode(file("./common/cloud-init-autogen-packer.yml"))
+  ssh_keys    = data.hcloud_ssh_keys.all_keys.ssh_keys.*.name
+  user_data   = base64encode(file("./common/cloud-init-autogen-packer.yml"))
 
   public_net {
     ipv4_enabled = true
