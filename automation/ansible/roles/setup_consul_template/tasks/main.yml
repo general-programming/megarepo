@@ -2,7 +2,6 @@
 # _vault_token.login.auth.client_token
 - name: "Generate Vault token"
   community.hashi_vault.vault_token_create:
-    orphan: true
     policies:
       - vault-consul-tls-policy
     ttl: 168h

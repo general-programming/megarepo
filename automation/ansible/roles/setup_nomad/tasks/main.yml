@@ -20,7 +20,6 @@
 # Generate a vault token if we are a server.
 - name: "Generate Vault token for Nomad server"
   community.hashi_vault.vault_token_create:
-    orphan: true
     policies:
       - nomad-server
     ttl: 72h
