@@ -18,7 +18,7 @@
     policies:
       - nomad-server
     ttl: 72h
-  register: nomad_server_vault_token
+  register: _nomad_server_vault_token
   when: is_server
 
 - name: "Generate Nomad Vault config"
