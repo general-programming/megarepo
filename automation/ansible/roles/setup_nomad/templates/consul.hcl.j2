@@ -4,7 +4,7 @@ server = false
 ui = false
 enable_local_script_checks = true
 datacenter = "{{ consul_datacenter }}"
-retry_join = {{ consul_servers }}
+retry_join = {{ consul_servers | to_json }}
 {% if ansible_all_ipv4_addresses | ansible.utils.ipaddr('10.101.0.0/24') %}
 {% raw %}
 bind_addr = "{{ GetPrivateInterfaces | include \"network\" \"10.101.0.0/24\" | attr \"address\" }}"

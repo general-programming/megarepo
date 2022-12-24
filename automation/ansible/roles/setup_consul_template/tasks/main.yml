@@ -16,10 +16,6 @@
     state: directory
     mode: 0755
 
-- name: "Convert consul_servers to JSON"
-  ansible.builtin.set_fact:
-    _consul_servers: " {{ consul_servers | to_json }}"
-
 - name: "Generate Consul Template base config"
   ansible.builtin.template:
     src: base.j2
