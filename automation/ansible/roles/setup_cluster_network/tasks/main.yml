@@ -16,3 +16,12 @@
     user: nobody
     state: present
   when: holepunch_key != "" and holepunch_url != ""
+
+- name: "Verify if Consul is pingable."
+  ansible.netcommon.net_ping:
+    dest: "{{ consul_servers[0] }}"
+  register: _consul_ping
+
+- name: "Conenct via Netmaker if not pingable."
+  ansible.builtin.command: "netclient join -vvvv -t {{ netmaker_token }}"
+  when: _consul_ping.packets_rx == 0 and netmaker_token != ""
