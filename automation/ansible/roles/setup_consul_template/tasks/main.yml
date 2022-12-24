@@ -10,6 +10,12 @@
   when: vault_role in ["vault-server", "cluster-server"]
 
 # Node Vault Agent config
+- name: "Create Consul Template folder"
+  ansible.builtin.file:
+    path: /etc/consul-template/config
+    state: directory
+    mode: 0755
+
 - name: "Generate Consul Template base config"
   ansible.builtin.template:
     src: base.j2

@@ -75,8 +75,8 @@ curl -sL 'https://apt.netmaker.org/debian.deb.txt' | sudo tee /etc/apt/sources.l
 
 # Install our packages
 dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 update
-dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install netclient nomad vault consul fail2ban docker.io mosh \
-  ndppd git mosh traceroute htop cloud-init byobu ansible wireguard dnsutils python3-netaddr
+dpkg_waitlock apt-get -o DPkg::Lock::Timeout=-1 -y install netclient nomad vault consul consul-template fail2ban \
+  docker.io mosh ndppd git mosh traceroute htop cloud-init byobu ansible wireguard dnsutils python3-netaddr
 
 # Setup consul folders
 mkdir /var/lib/consul
