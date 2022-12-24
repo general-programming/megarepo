@@ -12,12 +12,12 @@
     "axios": "^0.27.2",
     "file-type": "^17.1.6",
     "form-data": "^4.0.0",
-    "twilio": "^3.80.1"
+    "twilio": "^3.84.0"
   },
   "devDependencies": {
-    "twilio-run": "^3.4.3"
+    "twilio-run": "^3.5.2"
   },
   "engines": {
-    "node": "18"
+    "node": ">=18"
   }
 }
