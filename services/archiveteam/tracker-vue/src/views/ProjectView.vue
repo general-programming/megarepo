@@ -72,6 +72,18 @@ onBeforeUnmount(() => {
   max-width: 25%;
   flex: 1 1 24%;
 }
+
+@media (max-width: 1024px) {
+  .projects {
+    display: block;
+  }
+
+  .project {
+    display: block;
+    max-width: 100%;
+    word-break: break-all;
+  }
+}
 </style>
 
 <template>
