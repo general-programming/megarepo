@@ -1,2 +1,2 @@
-cloud-init.yml
+cloud-init*.yml
 *.pem
