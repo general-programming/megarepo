@@ -13,8 +13,11 @@
 
 # Generate a vault token if we are a server.
 - name: "Generate Vault token for Nomad server"
-  ansible.builtin.set_fact:
-    nomad_server_vault_token: "{{ lookup('community.hashi_vault.vault_token_create', orphan=True, policies=['nomad-server'], ttl='72h') }}"
+  community.hashi_vault.vault_token_create:
+    orphan: true
+    policies:
+      - nomad-server
+    ttl: 72h
   register: nomad_server_vault_token
   when: is_server
 
