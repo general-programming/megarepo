@@ -12,5 +12,5 @@ server = false
 datacenter = "{{ consul_datacenter }}"
 data_dir = "/opt/consul"
 client_addr = "127.0.0.1"
-retry_join = {{ consul_servers | to_json }}
+retry_join = {{ consul_servers | to_json | replace('"', '\'') }}
 ssl = true
