@@ -11,7 +11,7 @@
     groups: "{{ item }}"
     shell: /bin/zsh
   when: not getent_passwd[admin_user]
-  with_items:
+  loop:
     - sudo
 
 - name: "Admin user - Add optional groups"
@@ -19,7 +19,7 @@
     name: "{{ admin_user }}"
     groups: "{{ item }}"
     append: true
-  with_items:
+  loop:
     - docker
   ignore_errors: yes
 
@@ -37,9 +37,9 @@
   become_user: "{{ admin_user }}"
 
 - name: "Admin user - Ubuntu sudoers NOPASSWD"
-  copy:
-    src: sudoers_ubuntu
-    dest: /etc/sudoers.d/ubuntu
+  template:
+    src: sudoers.j2
+    dest: /etc/sudoers.d/00-ansible
     owner: root
     group: root
     mode: 0440

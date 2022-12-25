@@ -115,6 +115,15 @@
     jump: ACCEPT
   when: "'service_nomad_serf' in group_names"
 
+- name: Allow Proxmox connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 8006
+    jump: ACCEPT
+  when: "'service_proxmox' in group_names"
+
 - name: Drop all traffic for external interface
   ansible.builtin.iptables:
     chain: INPUT
