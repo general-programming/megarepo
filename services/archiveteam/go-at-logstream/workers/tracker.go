@@ -23,18 +23,23 @@ import (
 func FetchProjects() (*model.ATTrackerProjects, error) {
 	resp, err := http.Get("https://warriorhq.archiveteam.org/projects.json")
 	if err != nil {
-		return nil, errors.New("Failed to fetch projects")
+		return nil, errors.New("failed to fetch projects")
 	}
-	defer resp.Body.Close()
+	defer func(Body io.ReadCloser) {
+		err := Body.Close()
+		if err != nil {
+			util.CreateLogger(false).Error("Failed to close body", zap.Error(err))
+		}
+	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, errors.New("Failed to read response body")
+		return nil, errors.New("failed to read response body")
 	}
 
 	result := &model.ATTrackerProjects{}
 	err = sonic.Unmarshal(body, result)
 	if err != nil {
-		return nil, fmt.Errorf("Failed to unmarshal response body: %w", err)
+		return nil, fmt.Errorf("failed to unmarshal response body: %w", err)
 	}
 
 	return result, nil
@@ -62,12 +67,12 @@ type TrackerSocket struct {
 }
 
 func (sock *TrackerSocket) Connect() {
-	logger := util.CreateLogger(false)
+	logger := util.CreateLogger()
 	defer util.RecoverFunction("TrackerSocket.Connect")
 
 	logger.Info("opening log socket", zap.String("project", sock.Project))
 
-	client, err := socketio.Dial("http://tracker.archiveteam.org:8080/" + sock.Project + "-log")
+	client, err := socketio.Dial(util.GetEnvWithDefault("TRACKER_URL", "http://tracker.archiveteam.org:8080") + "/" + sock.Project + "-log")
 
 	if err != nil {
 		logger.Error("Failed to connect to socket",
@@ -77,10 +82,24 @@ func (sock *TrackerSocket) Connect() {
 		return
 	}
 
-	_ = client.On("connect", sock.OnConnect)
-	_ = client.On("log_message", sock.OnMessage)
+	if !(sock.MustHook(client, "connect", sock.OnConnect) &&
+		sock.MustHook(client, "log_message", sock.OnMessage)) {
+		return
+	}
 
 	client.Run()
+}
+
+func (sock *TrackerSocket) MustHook(client *socketio.Client, name string, fn interface{}) bool {
+	err := client.On(name, fn)
+	logger := util.CreateLogger()
+
+	if err != nil {
+		logger.Error("Failed to create socket hook.", zap.Error(err))
+		return false
+	}
+
+	return true
 }
 
 func (sock *TrackerSocket) OnConnect(ns *socketio.NameSpace) {
@@ -90,7 +109,7 @@ func (sock *TrackerSocket) OnConnect(ns *socketio.NameSpace) {
 	util.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
-func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
+func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
 	defer util.RecoverFunction("TrackerSocket.OnMessage")
 	ctx := util.CreateContext()
 
@@ -121,6 +140,7 @@ func (sock *TrackerSocket) OnMessage(ns *socketio.NameSpace, message string) {
 	)
 
 	// append to redis
+	_, _ = storage.WrappedRedis.Client.Publish(ctx, "tracker-log", message).Result()
 	if PushRedis {
 		if err := storage.WrappedRedis.AppendLog(ctx, "archiveteam.tracker", map[string]string{
 			"project": parsed.Project,
@@ -170,7 +190,7 @@ type TrackerWorker struct {
 }
 
 func (worker *TrackerWorker) LaunchSocket(project model.ATTrackerProject) {
-	logger := util.CreateLogger(false)
+	logger := util.CreateLogger()
 
 	// special case to ignore urlteam
 	// TODO(erin) one day I'll make this work
@@ -196,8 +216,13 @@ func (worker *TrackerWorker) LaunchSocket(project model.ATTrackerProject) {
 
 func (worker *TrackerWorker) Init() {
 	// TODO(erin) actual app, please split this up.
-	logger := util.CreateLogger(false)
-	defer logger.Sync()
+	logger := util.CreateLogger()
+	defer func(logger *zap.Logger) {
+		err := logger.Sync()
+		if err != nil {
+			fmt.Printf("Failed to sync logger: %v", err)
+		}
+	}(logger)
 
 	worker.wg.Add(1)
 
