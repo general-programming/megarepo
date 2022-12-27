@@ -58,3 +58,31 @@
     owner: root
     group: root
     mode: 0644
+
+- name: "Settings - Get Vault SSH CA"
+  community.hashi_vault.vault_read:
+    url: "{{ vault_url }}"
+    path: "ssh-client-signer/config/ca"
+  register: vault_ssh_ca
+  delegate_to: localhost
+
+- name: "Settings - Install Vault SSH CA"
+  ansible.builtin.copy:
+    content: "{{ vault_ssh_ca.data.data.public_key }}"
+    dest: /etc/ssh/vault_ssh_ca.pub
+    owner: root
+    group: root
+    mode: 0644
+
+- name: "Settings: SSHD config"
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config.d/00-ansible.conf
+    owner: root
+    group: root
+    mode: 0644
+
+- name: "Settings: SSHD config - Restart SSHD"
+  ansible.builtin.service:
+    name: sshd
+    state: restarted

@@ -24,6 +24,9 @@ We have many points of presence in our space.
 ## Vault setup
 
 ```sh
+# Enable SSH secret engine and generate CA
+vault secrets enable -path=ssh-client-signer ssh
+vault write ssh-client-signer/config/ca generate_signing_key=true
 
 # Create PKI engines.
 vault secrets enable -path=pki_internal pki
