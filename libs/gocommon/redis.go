@@ -3,7 +3,7 @@ package gocommon
 import (
 	"fmt"
 
-	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
+	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/util"
 	"github.com/go-redis/redis/v9"
 )
 

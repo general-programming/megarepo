@@ -13,9 +13,9 @@ import (
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
-	"github.com/general-programming/megarepo/projects/go-at-logstream/model"
-	"github.com/general-programming/megarepo/projects/go-at-logstream/storage"
-	"github.com/general-programming/megarepo/projects/go-at-logstream/util"
+	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/model"
+	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/storage"
+	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/util"
 	socketio "github.com/googollee/go-socket.io"
 	"go.uber.org/zap"
 )

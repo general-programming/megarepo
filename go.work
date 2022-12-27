@@ -2,6 +2,6 @@ go 1.19
 
 use (
 	./libs/gocommon
-	./projects/go-at-logstream
+	./services/archiveteam/go-at-logstream
 	./services/archiveteam/leaderboard2
 )

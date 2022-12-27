@@ -1,4 +1,4 @@
-module github.com/general-programming/megarepo/projects/go-at-logstream
+module github.com/general-programming/megarepo/services/archiveteam/go-at-logstream
 
 go 1.19
 
