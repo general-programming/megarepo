@@ -54,7 +54,7 @@ func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error)
 		items, err := RedisClient.XRead(ctx, &redis.XReadArgs{
 			Streams: []string{"archiveteam.tracker", last},
 			Count:   512,
-			Block:   1000,
+			Block:   5000,
 		}).Result()
 
 		if err != nil {
