@@ -28,7 +28,7 @@ func FetchProjects() (*model.ATTrackerProjects, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			util.CreateLogger(false).Error("Failed to close body", zap.Error(err))
+			util.CreateLogger().Error("Failed to close body", zap.Error(err))
 		}
 	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)

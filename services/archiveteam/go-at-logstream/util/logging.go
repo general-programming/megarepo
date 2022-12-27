@@ -42,7 +42,7 @@ func CreateLogger() *zap.Logger {
 func LogWithCtx(ctx context.Context) *zap.Logger {
 	logger, ok := ctx.Value(LoggerKey).(*zap.Logger)
 	if !ok {
-		return CreateLogger(false)
+		return CreateLogger()
 	}
 
 	return logger
