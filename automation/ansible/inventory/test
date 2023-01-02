@@ -1,0 +1,2 @@
+[all]
+5.161.73.112 appserver=1 nodeexporter=1 ip_forward=1 managed_firewall=1 ansible_user=root
