@@ -1,0 +1,73 @@
+timeformat base         iso long;
+timeformat log          iso long;
+timeformat protocol     iso long;
+timeformat route        iso long;
+
+log syslog all;
+# log syslog { debug, trace, info, remote, warning, error, auth, fatal, bug };
+
+
+# Turn on global debugging of all protocols (all messages or just selected classes)
+# debug protocols all;
+# debug protocols { events, states };
+
+
+router id 172.31.255.37;
+
+protocol device {
+        scan time 10;
+}
+
+protocol kernel {
+        merge paths on;
+        export filter {
+                if source = RTS_STATIC then reject;
+
+                if proto = "spine1" then
+                        krt_prefsrc = 10.101.0.0;
+
+                if proto = "spine2" then
+                        krt_prefsrc = 10.101.0.0;
+
+                accept;
+        };
+}
+
+protocol direct {
+        interface "wg51839";
+        interface "wg51840";
+}
+
+protocol static {
+        route 10.101.0.0/20 reject;
+}
+
+template bgp router0 {
+        local as 4280805532;
+        multihop 10;
+        export where source ~ [ RTS_STATIC, RTS_BGP ];
+        next hop self;
+        hold time 30;
+        keepalive time 10;
+}
+
+protocol bgp spine1 from router0 {
+        source address 172.31.255.37;
+        neighbor 172.31.255.36 as 4280805525;
+}
+
+protocol bgp spine2 from router0 {
+        source address 172.31.255.39;
+        neighbor 172.31.255.38 as 4280805525;
+}
+
+protocol bfd {
+        interface "wg*" {
+                min rx interval 150 ms;
+                min tx interval 150 ms;
+                idle tx interval 1500 ms;
+        };
+
+        neighbor 172.31.255.36;
+        neighbor 172.31.255.38;
+}

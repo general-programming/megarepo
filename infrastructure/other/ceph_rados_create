@@ -1,0 +1,5 @@
+radosgw-admin realm create --rgw-realm=objects --default
+radosgw-admin zonegroup create --rgw-zonegroup=default --master --default
+radosgw-admin zone create --rgw-zonegroup=default --rgw-zone=default --master --default
+radosgw-admin period update --rgw-realm=objects --commit
+ceph orch apply rgw main --realm=objects --zone=default --placement=2
