@@ -9,7 +9,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	"github.com/general-programming/megarepo/libs/gocommon"
+	"github.com/general-programming/gocommon"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/fastpb_gen"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/model"
 	"github.com/go-redis/redis/v9"
