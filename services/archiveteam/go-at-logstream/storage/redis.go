@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/util"
+	"github.com/general-programming/gocommon"
 	"github.com/go-redis/redis/v9"
 )
 
@@ -17,7 +17,7 @@ type RedisClient struct {
 var WrappedRedis *RedisClient
 
 func InitRedis() {
-	opt, err := redis.ParseURL(util.GetEnvWithDefault("REDIS_URL", "redis://localhost:6379"))
+	opt, err := redis.ParseURL(gocommon.GetEnvWithDefault("REDIS_URL", "redis://localhost:6379"))
 	if err != nil {
 		panic(fmt.Sprintf("Failed to parse REDIS_URL: %s", err))
 	}

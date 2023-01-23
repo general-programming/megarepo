@@ -17,7 +17,7 @@ indent_size = 2
 
 # JS
 [*.js]
-indent_style = spaces
+indent_style = space
 indent_size = 4
 
 # Jinja
