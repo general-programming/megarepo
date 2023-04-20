@@ -5,6 +5,7 @@ Wants=network-online.target
 After=network-online.target
 Wants=vault-agent.service
 After=vault-agent.service
+StartLimitIntervalSec=0
 
 [Service]
 ExecReload=/bin/kill -HUP $MAINPID

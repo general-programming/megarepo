@@ -4,6 +4,7 @@ Documentation=https://www.consul.io/
 Requires=network-online.target
 After=network-online.target
 ConditionFileNotEmpty=/etc/consul.d/consul.hcl
+StartLimitIntervalSec=0
 
 [Service]
 User=consul
@@ -13,6 +14,7 @@ ExecReload=/bin/kill --signal HUP $MAINPID
 KillMode=process
 KillSignal=SIGTERM
 Restart=on-failure
+RestartSec=3
 LimitNOFILE=65536
 
 [Install]

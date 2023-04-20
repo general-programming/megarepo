@@ -2,10 +2,12 @@
 Description=consul-template
 Requires=network-online.target
 After=network-online.target vault-agent.service
+StartLimitIntervalSec=0
 
 [Service]
 KillSignal=SIGINT
 Restart=always
+RestartSec=3
 ExecStart=/usr/bin/consul-template -config=/etc/consul-template/config
 
 [Install]
