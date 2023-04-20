@@ -64,6 +64,7 @@
     url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     path: "ssh-client-signer/config/ca"
   register: vault_ssh_ca
+  ignore_errors: true
   delegate_to: localhost
   become: false
 
@@ -74,6 +75,7 @@
     owner: root
     group: root
     mode: 0644
+  ignore_errors: true
 
 - name: "Settings: SSHD config"
   ansible.builtin.template:
