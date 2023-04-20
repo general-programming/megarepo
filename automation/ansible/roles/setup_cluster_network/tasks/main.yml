@@ -25,5 +25,5 @@
 
 - name: "Conenct via Netmaker if not pingable."
   ansible.builtin.command:
-    cmd: "netclient join -vvvv -t {{ netmaker_token }}"
+    cmd: "netclient join -v 4 -t {{ netmaker_token }}"
   when: _consul_ping.rc != 0 and netmaker_token != ""
