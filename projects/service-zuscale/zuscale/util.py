@@ -1,6 +1,7 @@
 """General shared functions and classes by the whole app."""
 
 import base64
+import json
 import os
 from dataclasses import dataclass
 from enum import Enum
@@ -153,7 +154,9 @@ def get_hvac() -> hvac.Client:
     return client
 
 
-def get_from_vault(client: hvac.Client, key: str, get_file: bool=True) -> Union[str, dict]:
+def get_from_vault(
+    client: hvac.Client, key: str, get_file: bool = True
+) -> Union[str, dict]:
     response = client.secrets.kv.v2.read_secret_version(
         path=key,
         mount_point="webscale-scrape",
@@ -219,8 +222,8 @@ def build_cloud_init(template_name: str) -> str:
     # Build the ansible vars file
     infra_vars = get_from_vault(hvac_client, "ansible_vars", False)
     add_file(
-        "/tmp/infra_vars.yml",
-        yaml.dump(infra_vars),
+        "/tmp/infra_vars.json",
+        json.dumps(infra_vars),
         permissions="0644",
     )
 
