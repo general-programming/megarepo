@@ -61,10 +61,11 @@
 
 - name: "Settings - Get Vault SSH CA"
   community.hashi_vault.vault_read:
-    url: "{{ vault_url }}"
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     path: "ssh-client-signer/config/ca"
   register: vault_ssh_ca
   delegate_to: localhost
+  become: false
 
 - name: "Settings - Install Vault SSH CA"
   ansible.builtin.copy:

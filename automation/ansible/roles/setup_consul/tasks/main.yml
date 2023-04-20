@@ -1,0 +1,22 @@
+---
+- name: "Consul - Install"
+  package:
+    name: consul
+    state: latest
+
+- name: "Consul - Config"
+  template:
+    src: "consul.j2"
+    dest: "/etc/consul.d/00-base.hcl"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  register: consul_config
+
+- name: "Consul - Enable daemon"
+  systemd:
+    name: consul
+    enabled: true
+    state: restarted
+    daemon_reload: yes
+  when: consul_config.changed

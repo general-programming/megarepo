@@ -3,7 +3,7 @@
   apt_repository:
     repo: '{{ item }}'
     state: present
-  with_items:
+  loop:
     - 'deb https://repos.influxdata.com/ubuntu {{ ansible_distribution_release }} stable'
 
 - name: "Telegraf - install"

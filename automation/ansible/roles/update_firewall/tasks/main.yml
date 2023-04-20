@@ -17,7 +17,7 @@
   ansible.builtin.iptables:
     chain: "{{ item }}"
     flush: yes
-  with_items:
+  loop:
     - 'INPUT'
     - 'OUTPUT'
 

@@ -1,12 +1,13 @@
 - hosts: all
   strategy: free
   roles:
-    - role: cloudalchemy.node_exporter
+    - role: prometheus.prometheus.node_exporter
     - role: update_configs
     - role: setup_cluster_network
+      when: not is_server
     - role: setup_consul_template
     - role: setup_cluster_vault_agent
     - role: setup_nomad
     - role: update_firewall
   vars_files:
-    - /tmp/infra_vars.yml
+    - /tmp/infra_vars.json

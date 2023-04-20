@@ -1,17 +1,16 @@
 ---
 - name: "Bootstrap - Install python"
-  raw: "test -e /usr/bin/python || (apt-get -y update && apt-get -y install python)"
+  raw: "test -e /usr/bin/python3 || (apt-get -y update && apt-get -y install python3)"
 
 - name: "Bootstrap - Install other essential python packages"
   apt:
-    name: '{{ item }}'
+    name:
+      - python3-apt
+      - python3-pip
+      - sudo
     state: present
     update_cache: yes
     cache_valid_time: 172800
-  with_items:
-    - python-apt
-    - python-pip
-    - sudo
 
 - name: "Bootstrap - Check initial provision status"
   stat:

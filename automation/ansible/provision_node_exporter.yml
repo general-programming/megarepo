@@ -1,5 +1,5 @@
 - hosts: nodeexporter
   strategy: free
   roles:
-    - role: cloudalchemy.node_exporter
+    - role: prometheus.prometheus.node_exporter
     - role: update_configs

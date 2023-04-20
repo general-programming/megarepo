@@ -7,13 +7,16 @@
 
 - name: "Check if AppRole Secret exists"
   ansible.builtin.stat:
-    path: /opt/vault/approle_id
+    path: /opt/vault/approle_secret
   register: _approle_secret_exists
 
 # data.role_id
 - name: "Generate AppRole ID"
   community.hashi_vault.vault_read:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     path: "auth/approle/role/{{ vault_role }}/role-id"
+  delegate_to: localhost
+  become: false
   register: _approle_id
   when: not _approle_id_exists.stat.exists
 
@@ -21,25 +24,28 @@
 # data.secret_id
 - name: "Generate AppRole Secret"
   community.hashi_vault.vault_write:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     path: "auth/approle/role/{{ vault_role }}/secret-id"
+  delegate_to: localhost
+  become: false
   register: _approle_secret
   when: not _approle_secret_exists.stat.exists
 
 - name: "Write AppRole ID"
   ansible.builtin.copy:
-    content: "{{ _approle_id.data.role_id }}"
+    content: "{{ _approle_id.data.data.role_id }}"
     dest: /opt/vault/approle_id
     mode: 0600
-    user: vault
+    owner: vault
     group: vault
   when: not _approle_id_exists.stat.exists
 
 - name: "Write AppRole Secret"
   ansible.builtin.copy:
-    content: "{{ _approle_secret.data.secret_id }}"
+    content: "{{ _approle_secret.data.data.secret_id }}"
     dest: /opt/vault/approle_secret
     mode: 0600
-    user: vault
+    owner: vault
     group: vault
   when: not _approle_secret_exists.stat.exists
 

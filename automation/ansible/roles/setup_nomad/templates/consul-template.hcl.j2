@@ -1,19 +1,19 @@
 {% if is_server %}
 template {
-    source = "/etc/consul-template/templates/nomad/server-ca.tpl"
+    source = "/etc/consul-template/templates/nomad/nomad-server-ca.tpl"
     destination = "/etc/nomad.d/ca.crt"
     command = "/bin/bash -c 'systemctl reload nomad || true'"
 }
 
 template {
-    source = "/etc/consul-template/templates/nomad/server-cert.tpl"
+    source = "/etc/consul-template/templates/nomad/nomad-server-cert.tpl"
     destination = "/etc/nomad.d/server.crt"
     perms = "0700"
     command = "/bin/bash -c 'systemctl reload nomad || true'"
 }
 
 template {
-    source = "/etc/consul-template/templates/nomad/server-key.tpl"
+    source = "/etc/consul-template/templates/nomad/nomad-server-key.tpl"
     destination = "/etc/nomad.d/server.key"
     perms = "0700"
     command = "/bin/bash -c 'systemctl reload nomad || true'"

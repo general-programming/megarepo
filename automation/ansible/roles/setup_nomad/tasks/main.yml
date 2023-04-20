@@ -20,9 +20,12 @@
 # Generate a vault token if we are a server.
 - name: "Generate Vault token for Nomad server"
   community.hashi_vault.vault_token_create:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     policies:
       - nomad-server
-    ttl: 72h
+    ttl: 168h
+  delegate_to: localhost
+  become: false
   register: _nomad_server_vault_token
   when: is_server
 
@@ -37,6 +40,7 @@
     src: consul.hcl.j2
     dest: /etc/consul.d/consul.hcl
     mode: 0644
+  when: not is_server
 
 # Consul Template bits
 - name: "Generate Nomad Consul Template config"
@@ -68,6 +72,7 @@
     src: consul-resolved.conf
     dest: /etc/systemd/resolved.conf.d/00-consul.conf
     mode: 0644
+  when: not is_server
 
 # Service bits
 - name: "Reload systemd"
@@ -84,3 +89,13 @@
     - consul
     - consul-template
     - nomad
+
+- name: "Restart Consul + systemd-resolved"
+  ansible.builtin.service:
+    name: "{{ item }}"
+    state: restarted
+    enabled: true
+  loop:
+    - systemd-resolved
+    - consul
+  when: not is_server

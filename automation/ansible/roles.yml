@@ -3,6 +3,6 @@ roles:
   - name: debops-contrib.etckeeper
   - name: elastic.elasticsearch
     version: v7.13.1
-  - name: cloudalchemy.node_exporter
 collections:
   - name: community.hashi_vault
+  - name: prometheus.prometheus

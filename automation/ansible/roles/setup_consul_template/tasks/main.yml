@@ -2,9 +2,12 @@
 # _vault_token.login.auth.client_token
 - name: "Generate Vault token"
   community.hashi_vault.vault_token_create:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
     policies:
-      - vault-consul-tls-policy
+      - nomad-tls-policy
     ttl: 168h
+  delegate_to: localhost
+  become: false
   register: _vault_token
   when: vault_role in ["vault-server", "cluster-server"]
 
