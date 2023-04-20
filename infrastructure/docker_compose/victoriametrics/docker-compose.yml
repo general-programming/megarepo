@@ -11,4 +11,4 @@ services:
     env_file:
       - .env
     ports:
-      - $PRIVATE_IP:8428:8428
+      - "$PRIVATE_IP:8428:8428"

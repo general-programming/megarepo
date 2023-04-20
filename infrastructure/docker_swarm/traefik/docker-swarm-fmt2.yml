@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   traefik:
-    image: traefik:v2.7.0
+    image: traefik:v2.9.6
     env_file: .env
     command:
       - traefik
@@ -44,7 +44,7 @@ services:
       - --providers.consulcatalog.defaultRule="Host(`{{ .Name }}.thonk.dev`)"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - /srv/etc/traefik:/config
+      - /mnt/ceph/etc/traefik:/config
       - /var/lib/traefik:/var/lib/traefik
     networks:
       - publicweb

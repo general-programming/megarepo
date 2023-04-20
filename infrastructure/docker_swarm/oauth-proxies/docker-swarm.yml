@@ -41,7 +41,7 @@ services:
       - --provider-display-name=General Programming
       - --oidc-issuer-url=https://auth.generalprogramming.org
       - --cookie-secure=false
-      - --upstream=https://10.65.67.10:8006
+      - --upstream=https://10.65.67.100:8006
       - --ssl-upstream-insecure-skip-verify
       - --http-address=http://0.0.0.0:5601
       - --redirect-url=https://proxmox-fmt2.generalprogramming.org/oauth2/callback
