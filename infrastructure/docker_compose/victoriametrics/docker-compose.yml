@@ -6,6 +6,7 @@ services:
     command:
       - "-retentionPeriod=12"
       - "-usePromCompatibleNaming"
+      - "-selfScrapeInterval=15s"
     volumes:
       - /var/lib/victoria-metrics-data:/victoria-metrics-data
     env_file:
