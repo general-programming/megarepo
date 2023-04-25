@@ -49,5 +49,9 @@ fi
 # Create folders for support services.
 mkdir /var/lib/filebeat || true # Filebeat
 
+# Cleanup netclient stuff
+systemctl stop netclient
+rm -rf /etc/netclient
+
 # Cleanup cloud-init
 cloud-init clean
