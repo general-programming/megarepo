@@ -27,3 +27,8 @@
   ansible.builtin.command:
     cmd: "netclient join -v 4 -t {{ netmaker_token }}"
   when: _consul_ping.rc != 0 and netmaker_token != ""
+
+- name: Check if the main hosts are accessible
+  ansible.builtin.wait_for:
+    host: 10.65.67.19
+    port: 80
