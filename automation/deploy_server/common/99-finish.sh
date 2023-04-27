@@ -49,9 +49,14 @@ fi
 # Create folders for support services.
 mkdir /var/lib/filebeat || true # Filebeat
 
-# Cleanup netclient stuff
-systemctl stop netclient
-rm -rf /etc/netclient
+# Cleanup netclient stuff if we want to
+if [ -n "$KEEP_NETCLIENT" ]; then
+  echo "Keeping netclient data."
+else
+  echo "Deleting netclient data."
+  systemctl stop netclient
+  rm -rf /etc/netclient
+fi
 
 # Cleanup cloud-init
 cloud-init clean
