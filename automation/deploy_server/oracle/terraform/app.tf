@@ -40,7 +40,7 @@ resource "oci_core_instance" "zuscale" {
   count               = var.app-scaling
   availability_domain = "${var.zones[ count.index % length(var.zones) ]}"
   compartment_id      = oci_identity_compartment.tf-compartment.id
-  display_name        = "oracle-${count.index + 1}"
+  display_name        = "oci-zuscale-${count.index + 1}"
   shape               = var.platform_config_instance_shape
 
   shape_config {
