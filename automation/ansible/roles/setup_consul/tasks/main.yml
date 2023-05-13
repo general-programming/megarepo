@@ -31,6 +31,15 @@
     mode: "0644"
   when: "'service_scylla' in group_names"
 
+- name: Consul - Add Proxmox service
+  ansible.builtin.copy:
+    src: "service_proxmox.hcl"
+    dest: "/etc/consul.d/service_proxmox.hcl"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: "'service_proxmox' in group_names"
+
 - name: "Consul - Enable and restart daemon"
   systemd:
     name: consul
