@@ -75,4 +75,5 @@
   apt:
     name:
       - ceph-common
-    when: appserver_packages
+    state: latest
+  when: appserver_packages
