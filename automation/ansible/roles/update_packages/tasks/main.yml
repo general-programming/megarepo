@@ -2,7 +2,7 @@
 - name: "Packages - apt-get upgrade"
   apt:
     upgrade: yes
-    cache_valid_time: 172800
+    update_cache: yes
 
 - name: "Packages - Admin convienence packages"
   package:
@@ -25,20 +25,54 @@
       - unzip
     state: latest
 
-- name: "Packages - GPG keys"
+- name: "Packages - GPG keys (Legacy)"
   apt_key:
     url: "{{ item.key }}"
     id: "{{ item.value }}"
     state: present
   with_dict:
-    "https://download.docker.com/linux/ubuntu/gpg": "0EBFCD88"
     "https://repos.influxdata.com/influxdb.key": "2582E0C5"
     "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
     "https://download.gluster.org/pub/gluster/glusterfs/9/rsa.pub": "C2F8238C"
-    "https://apt.releases.hashicorp.com/gpg": "A621E701"
+
+- name: "Packages - GPG keys"
+  ansible.builtin.get_url:
+    url: "{{ item.key }}"
+    dest: "{{ item.value }}"
+  with_dict:
+    "https://download.docker.com/linux/ubuntu/gpg": "/usr/share/keyrings/docker-archive-keyring.asc"
+    "https://apt.releases.hashicorp.com/gpg": "/usr/share/keyrings/hashicorp-archive-keyring.asc"
 
 - name: "Packages - Hashicorp repo"
   ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
+    repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
     filename: hashicorp
     state: present
+
+- name: "Packages - Docker repo"
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+    filename: docker
+    state: present
+
+- name: "Packages - apt-get update"
+  apt:
+    update_cache: yes
+
+
+- name: "Packages - Install Docker"
+  apt:
+    name:
+      - docker-ce
+      - docker-ce-cli
+      - containerd.io
+      - docker-buildx-plugin
+      - docker-compose-plugin
+    state: latest
+  when: appserver_packages
+
+- name: "Packages - Misc cluster packages"
+  apt:
+    name:
+      - ceph-common
+    when: appserver_packages
