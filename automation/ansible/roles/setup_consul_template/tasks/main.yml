@@ -6,6 +6,7 @@
     policies:
       - nomad-tls-policy
     ttl: 168h
+    renewable: true
   delegate_to: localhost
   become: false
   register: _vault_token
