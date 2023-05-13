@@ -4,7 +4,6 @@
     - role: prometheus.prometheus.node_exporter
     - role: update_configs
     - role: setup_cluster_network
-      when: not is_server
     - role: setup_consul_template
     - role: setup_cluster_vault_agent
     - role: setup_nomad

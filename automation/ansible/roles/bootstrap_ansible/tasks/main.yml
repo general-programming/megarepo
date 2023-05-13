@@ -10,7 +10,6 @@
       - sudo
     state: present
     update_cache: yes
-    cache_valid_time: 172800
 
 - name: "Bootstrap - Check initial provision status"
   stat:

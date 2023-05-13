@@ -3,6 +3,7 @@
   roles:
     - role: update_packages
     - role: update_configs
+    - role: setup_consul
     - role: create_admin_user
     - role: setup_influxdb
       when: influx_listen_ip is defined and influx_listen_ip

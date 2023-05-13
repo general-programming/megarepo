@@ -1,4 +1,4 @@
-- hosts: docker_app
+- hosts: docker
   become: true
   roles:
     - role: update_packages

@@ -26,7 +26,7 @@ job "at_imgur" {
             config {
                 args = [
                     "--concurrent",
-                    "5",
+                    "1",
                     "nepeat"
                 ]
                 logging {
