@@ -18,6 +18,7 @@ web/
 .env
 *.retry
 secret/
+.fleet/
 
 # Gitsecret
 .gitsecret/keys/random_seed
