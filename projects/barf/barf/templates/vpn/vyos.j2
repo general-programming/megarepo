@@ -28,15 +28,23 @@ set vpn ipsec interface eth0
     {# ipsec links#}
     {% if link.ipsec %}
         {%- set interface_name = "vti" ~ link.link_id -%}
+        {%- set peer_name = "peer_" ~ other_peer.address.replace(".", "-") -%}
 set interfaces vti {{ interface_name }} address '{{ link.get_ip(our_side) }}/31'
-set vpn ipsec site-to-site peer {{ other_peer.address }} authentication id '{{ our_side.address }}'
-set vpn ipsec site-to-site peer {{ other_peer.address }} authentication mode 'pre-shared-secret'
-set vpn ipsec site-to-site peer {{ other_peer.address }} authentication pre-shared-secret '{{ secrets[link.secret] }}'
-set vpn ipsec site-to-site peer {{ other_peer.address }} connection-type initiate
-set vpn ipsec site-to-site peer {{ other_peer.address }} default-esp-group 'ESP_DEFAULT'
-set vpn ipsec site-to-site peer {{ other_peer.address }} ike-group 'IKEv2_DEFAULT'
-set vpn ipsec site-to-site peer {{ other_peer.address }} local-address any
-set vpn ipsec site-to-site peer {{ other_peer.address }} vti bind '{{ interface_name }}'
+
+set vpn ipsec authentication psk {{ peer_name }} id '{{ our_side.address }}'
+set vpn ipsec authentication psk {{ peer_name }} id '{{ other_peer.address }}'
+set vpn ipsec authentication psk {{ peer_name }} id any
+set vpn ipsec authentication psk {{ peer_name }} secret '{{ secrets[link.secret] }}'
+
+set vpn ipsec site-to-site peer {{ peer_name }} description '{{ link.side_a.hostname }} -> {{ link.side_b.hostname }}'
+set vpn ipsec site-to-site peer {{ peer_name }} authentication local-id '{{ our_side.address }}'
+set vpn ipsec site-to-site peer {{ peer_name }} authentication mode 'pre-shared-secret'
+set vpn ipsec site-to-site peer {{ peer_name }} connection-type initiate
+set vpn ipsec site-to-site peer {{ peer_name }} default-esp-group 'ESP_DEFAULT'
+set vpn ipsec site-to-site peer {{ peer_name }} ike-group 'IKEv2_DEFAULT'
+set vpn ipsec site-to-site peer {{ peer_name }} local-address any
+set vpn ipsec site-to-site peer {{ peer_name }} remote-address '{{ other_peer.address }}'
+set vpn ipsec site-to-site peer {{ peer_name }} vti bind '{{ interface_name }}'
     {% else %}
     {# wireguard links #}
         {%- set interface_name = "wg" ~ link.link_id -%}

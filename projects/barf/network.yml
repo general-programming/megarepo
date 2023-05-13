@@ -126,6 +126,16 @@ hosts:
     asn: 31898
     type: external
     role: vpn
+  oci-vpn-ord-1-1:
+    address: 131.186.6.35
+    asn: 31898
+    type: external
+    role: vpn
+  oci-vpn-ord-1-2:
+    address: 131.186.1.114
+    asn: 31898
+    type: external
+    role: vpn
   dfw1-vpn-leaf-1:
     address: 161.129.155.187
     asn: 4280805531
@@ -226,3 +236,15 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-client-1
     network: 172.31.255.38/31
+  51841:
+    side_a: fmt2-vpn-spine-1
+    side_b: oci-vpn-ord-1-1
+    network: 172.31.255.40/31
+    secret: oci-vpn-ord-1-1
+    ipsec: true
+  51842:
+    side_a: fmt2-vpn-spine-1
+    side_b: oci-vpn-ord-1-2
+    network: 172.31.255.42/31
+    secret: oci-vpn-ord-1-2
+    ipsec: true
