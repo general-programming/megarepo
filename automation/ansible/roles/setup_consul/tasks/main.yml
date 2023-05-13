@@ -13,10 +13,27 @@
     mode: "0644"
   register: consul_config
 
-- name: "Consul - Enable daemon"
+- name: Consul - Add Scylla CQL service
+  ansible.builtin.copy:
+    src: "service_scylla_cql.json"
+    dest: "/etc/consul.d/service_scylla_cql.json"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: "'service_scylla' in group_names"
+
+- name: Consul - Add Scylla Native service
+  ansible.builtin.copy:
+    src: "service_scylla_native.json"
+    dest: "/etc/consul.d/service_scylla_native.json"
+    owner: "root"
+    group: "root"
+    mode: "0644"
+  when: "'service_scylla' in group_names"
+
+- name: "Consul - Enable and restart daemon"
   systemd:
     name: consul
     enabled: true
     state: restarted
     daemon_reload: yes
-  when: consul_config.changed
