@@ -1,4 +1,11 @@
 ---
+- name: "Ensure nomad and vault are installed"
+  ansible.builtin.apt:
+    name:
+      - nomad
+      - vault
+    state: present
+
 - name: "Delete OS nomad config"
   ansible.builtin.file:
     path: /etc/nomad.d/nomad.hcl
@@ -85,8 +92,6 @@
     state: restarted
     enabled: true
   loop:
-    - systemd-resolved
-    - consul
     - consul-template
     - nomad
 
