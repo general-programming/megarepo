@@ -11,6 +11,7 @@ data "oci_core_images" "supported_platform_config_shape_images" {
 }
 
 resource "oci_identity_compartment" "tf-compartment" {
+    provider = oci.home_region
     # Required
     compartment_id = "${var.tenancy_ocid}"
     description = "Compartment for Terraform resources."
@@ -30,10 +31,6 @@ data "oci_identity_availability_domain" "ad2" {
 data "oci_identity_availability_domain" "ad3" {
   compartment_id = "${var.tenancy_ocid}"
   ad_number      = 3
-}
-
-variable "zones" {
-  default = ["xtuH:US-ASHBURN-AD-1", "xtuH:US-ASHBURN-AD-2", "xtuH:US-ASHBURN-AD-3"]
 }
 
 resource "oci_core_instance" "zuscale" {

@@ -11,8 +11,16 @@ variable "platform_config_instance_shape" {
   default = "VM.Standard.E4.Flex"
 }
 
+variable home_region {
+  default = "us-ashburn-1"
+}
+
 variable region {
   default = "us-ashburn-1"
+}
+
+variable "zones" {
+  default = ["xtuH:US-ASHBURN-AD-1", "xtuH:US-ASHBURN-AD-2", "xtuH:US-ASHBURN-AD-3"]
 }
 
 variable tenancy_ocid {
