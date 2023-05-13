@@ -15,8 +15,8 @@
 
 - name: Consul - Add Scylla CQL service
   ansible.builtin.copy:
-    src: "service_scylla_cql.json"
-    dest: "/etc/consul.d/service_scylla_cql.json"
+    src: "service_scylla_cql.hcl"
+    dest: "/etc/consul.d/service_scylla_cql.hcl"
     owner: "root"
     group: "root"
     mode: "0644"
@@ -24,8 +24,8 @@
 
 - name: Consul - Add Scylla Native service
   ansible.builtin.copy:
-    src: "service_scylla_native.json"
-    dest: "/etc/consul.d/service_scylla_native.json"
+    src: "service_scylla_native.hcl"
+    dest: "/etc/consul.d/service_scylla_native.hcl"
     owner: "root"
     group: "root"
     mode: "0644"

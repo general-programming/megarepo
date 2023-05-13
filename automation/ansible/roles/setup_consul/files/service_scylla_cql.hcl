@@ -4,8 +4,8 @@ service {
     port = 9042
 
     tags = [
-        "scylladb",
-        "server"
+        "scylla",
+        "cql"
     ]
 
     checks = [
