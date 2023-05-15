@@ -163,6 +163,10 @@ hosts:
     management: 10.255.2.9
     type: linux
     role: vpn
+  sea420-acc-v-hv2:
+    asn: 4280805533
+    type: linux
+    role: vpn
 links:
   51820:
     side_a: fmt2-vpn-spine-1
@@ -248,3 +252,11 @@ links:
     network: 172.31.255.42/31
     secret: oci-vpn-ord-1-2
     ipsec: true
+  51843:
+    side_a: fmt2-vpn-spine-1
+    side_b: sea420-acc-v-hv2
+    network: 172.31.255.44/31
+  51844:
+    side_a: fmt2-vpn-spine-2
+    side_b: sea420-acc-v-hv2
+    network: 172.31.255.46/31
