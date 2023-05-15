@@ -32,32 +32,13 @@
   community.general.timezone:
     name: UTC
 
-- name: "Settings - Check if Consul config folder exists."
-  ansible.builtin.stat:
-    path: "/etc/consul.d/"
-  register: consul_folder
-
-- name: "Settings - Check if node exporter is installed"
-  ansible.builtin.stat:
-    path: "/usr/local/bin/node_exporter"
-  register: node_exporter_bin
-
-- name: "Settings - Add node_exporter Consul service."
-  ansible.builtin.copy:
-    src: consul_node_exporter.json
-    dest: /etc/consul.d/service_node_exporter.json
-    owner: root
-    group: root
-    mode: 0644
-  when: node_exporter_bin.stat.exists and consul_folder.stat.exists and consul_folder.stat.isdir
-
 - name: "Settings - Install admin SSH keys for root."
-  ansible.builtin.copy:
-    src: authorized_keys
-    dest: /root/.ssh/authorized_keys
-    owner: root
-    group: root
-    mode: 0644
+  ansible.posix.authorized_key:
+    user: root
+    key: "{{ item }}"
+    state: present
+  loop:
+    - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
 
 - name: "Settings - Get Vault SSH CA"
   community.hashi_vault.vault_read:
@@ -89,3 +70,15 @@
   ansible.builtin.service:
     name: sshd
     state: restarted
+
+- name: "Check if node exporter port is open"
+  ansible.builtin.wait_for:
+    host: "localhost"
+    port: 9100
+    timeout: 2
+  register: node_exporter_port
+  ignore_errors: true
+
+- name: Handle node-exporter configuration
+  import_tasks: node_exporter.yml
+  when: node_exporter_port.failed == false
