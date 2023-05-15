@@ -62,6 +62,7 @@ set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} per
         {% endif %}
     {% endif %}
 
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} description '{{ other_peer.hostname }}'
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ device.management_address.ip }}
     {% if other_peer.is_spine %}
