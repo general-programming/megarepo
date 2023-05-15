@@ -1,18 +1,13 @@
-provider "aws" {
-    alias = "usw1"
-    region = "us-west-1"
-}
-
 module "nlsd-usw1" {
   source    = "./mod_nlsd"
   providers = {
     aws = aws.usw1
   }
-}
 
-provider "aws" {
-    alias  = "usw2"
-    region = "us-west-2"
+  concurrency = 3
+  instances   = 8
+  nickname = "nepeat"
+  spot_price = "0.0095"
 }
 
 module "nlsd-usw2" {
@@ -20,40 +15,40 @@ module "nlsd-usw2" {
   providers = {
     aws = aws.usw2
   }
+
+  concurrency = 3
+  instances   = 8
+  nickname = "nepeat"
+  spot_price = "0.0095"
 }
 
-provider "aws" {
-    alias  = "use1"
-    region = "us-east-1"
-}
+# module "nlsd-use1" {
+#   source = "./mod_nlsd"
+#   providers = {
+#     aws = aws.use1
+#   }
 
-module "nlsd-use1" {
-  source    = "./mod_nlsd"
-  providers = {
-    aws = aws.use1
-  }
-}
-
-provider "aws" {
-    alias  = "use2"
-    region = "us-east-2"
-}
+#   concurrency = 10
+#   instances   = 5
+#   nickname = "nepeat"
+#   spot_price = "0.0095"
+# }
 
 module "nlsd-use2" {
   source    = "./mod_nlsd"
   providers = {
     aws = aws.use2
   }
+
+  concurrency = 3
+  instances   = 8
+  nickname = "nepeat"
+  spot_price = "0.0095"
 }
 
-provider "aws" {
-    alias  = "euw1"
-    region = "eu-west-1"
-}
-
-module "nlsd-euw1" {
-  source    = "./mod_nlsd"
-  providers = {
-    aws = aws.euw1
-  }
-}
+# module "nlsd-euw1" {
+#   source    = "./mod_nlsd"
+#   providers = {
+#     aws = aws.euw1
+#   }
+# }

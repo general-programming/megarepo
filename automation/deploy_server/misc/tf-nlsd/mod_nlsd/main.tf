@@ -1,15 +1,7 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-    }
-  }
-}
-
 data "aws_region" "current" {}
 
 resource "aws_security_group" "nlsd" {
-  name = "nlsd"
+  name = "${data.aws_region.current.name}-${var.nickname}"
   description = "Allow inbound traffic and all outbound."
 
   ingress {
@@ -33,7 +25,7 @@ data "aws_ami" "ubuntu" {
 
     filter {
         name   = "name"
-        values = ["ubuntu/images/hvm-ssd/ubuntu-focal-20.04-arm64-server-*"]
+        values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
     }
 
     filter {
@@ -45,7 +37,7 @@ data "aws_ami" "ubuntu" {
 }
 
 resource "aws_iam_role" "example" {
-  name = "example-fleet-role-${data.aws_region.current.name}"
+  name = "required-role-${var.nickname}-${data.aws_region.current.name}"
   assume_role_policy = <<EOF
 {
   "Version": "2012-10-17",
@@ -68,23 +60,31 @@ resource "aws_iam_role_policy_attachment" "AmazonEC2SpotFleetTaggingRole-policy-
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEC2SpotFleetTaggingRole"
 }
 
+resource "aws_key_pair" "nepeat" {
+  key_name   = var.nickname
+  public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
+}
+
 resource "aws_spot_fleet_request" "nlsd" {
-    launch_specification {
-        instance_type = "t4g.micro"
-        spot_price = "0.01"
-        ami = "${data.aws_ami.ubuntu.id}"
-        user_data = templatefile("${path.module}/user_data.tmpl", {})
-
-        vpc_security_group_ids = ["${aws_security_group.nlsd.id}"]
-        associate_public_ip_address = true
-
-        root_block_device {
-            volume_size = 8
-        }
+  launch_specification {
+    instance_type = "t3a.micro"
+    ami = "${data.aws_ami.ubuntu.id}"
+    user_data = templatefile("${path.module}/user_data.tmpl", {
+      concurrency = var.concurrency
+      nickname = var.nickname
+    })
+    vpc_security_group_ids = [ "${aws_security_group.nlsd.id}" ]
+    associate_public_ip_address = true
+    key_name = aws_key_pair.nepeat.key_name
+    root_block_device {
+      volume_size = 16
     }
+  }
 
-    iam_fleet_role      = "${aws_iam_role.example.arn}"
-    spot_price          = "0.5"
-    target_capacity     = 50
-    terminate_instances_with_expiration = true
+  iam_fleet_role      = "${aws_iam_role.example.arn}"
+  spot_price          = var.spot_price
+  target_capacity     = var.instances
+  terminate_instances_with_expiration = true
+  excess_capacity_termination_policy = "NoTermination"
+  allocation_strategy = "lowestPrice"
 }
