@@ -33,7 +33,6 @@
   with_dict:
     "https://repos.influxdata.com/influxdb.key": "2582E0C5"
     "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
-    "https://download.gluster.org/pub/gluster/glusterfs/9/rsa.pub": "C2F8238C"
 
 - name: "Packages - GPG keys"
   ansible.builtin.get_url:
@@ -49,11 +48,20 @@
     filename: hashicorp
     state: present
 
-- name: "Packages - Docker repo"
+- name: "Packages - Docker repo for Ubuntu"
   ansible.builtin.apt_repository:
     repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
     filename: docker
     state: present
+  when: appserver_packages and ansible_distribution == "Ubuntu"
+
+- name: "Packages - Docker repo for Debian"
+  ansible.builtin.apt_repository:
+    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
+    filename: docker
+    state: present
+  when: appserver_packages and ansible_distribution == "Debian"
+
 
 - name: "Packages - apt-get update"
   apt:
