@@ -38,6 +38,7 @@
     minute: "*"
     job: "/usr/local/bin/prom_smartmon.sh > /var/lib/node_exporter/smartmon.prom.tmp && mv /var/lib/node_exporter/smartmon.prom.tmp /var/lib/node_exporter/smartmon.prom"
     user: root
+  when: "'metal' in group_names"
 
 # ipmi scraper
 - name: "Install ipmi scraper script"
@@ -54,3 +55,4 @@
     minute: "*"
     job: "ipmitool sensor | /usr/local/bin/prom_ipmi.sh > /var/lib/node_exporter/ipmi_sensors.prom.tmp && mv /var/lib/node_exporter/ipmi_sensors.prom.tmp /var/lib/node_exporter/ipmi_sensors.prom"
     user: root
+  when: "'metal' in group_names"
