@@ -39,6 +39,20 @@ scrape_configs:
         target_label: instance
       - source_labels: ["__meta_consul_dc"]
         target_label: datacenter
+  - job_name: "consul-sea420"
+    consul_sd_configs:
+      - server: "consul.service.sea420.consul:8500"
+        datacenter: sea420
+    relabel_configs:
+      - source_labels: ["__meta_consul_tags"]
+        regex: .*,prometheus,.*
+        action: keep
+      - source_labels: ["__meta_consul_service"]
+        target_label: job
+      - source_labels: ["__meta_consul_node"]
+        target_label: instance
+      - source_labels: ["__meta_consul_dc"]
+        target_label: datacenter
 alerting:
   alertmanagers:
     - static_configs:
