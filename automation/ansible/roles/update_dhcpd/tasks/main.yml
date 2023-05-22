@@ -26,6 +26,12 @@
     group: root
     mode: 0644
 
+- name: "dhcpd - Update apparmor profile"
+  shell: apparmor_parser -r /etc/apparmor.d/usr.sbin.dhcpd
+  args:
+    warn: false
+  ignore_errors: true
+
 - name: dhcpd - Restart
   service:
     name: "isc-dhcp-server"
