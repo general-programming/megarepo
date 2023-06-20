@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   consul:
-    image: consul:1.15.1
+    image: consul:1.15.2
     deploy:
       restart_policy:
         condition: any
@@ -12,7 +12,7 @@ services:
     volumes:
       - /var/lib/consul:/consul/data
       - /etc/consul:/consul/config
-    command: consul agent -server -config-dir /consul/config
+    command: consul agent -config-dir /consul/config
     environment:
       CONSUL_ALLOW_PRIVILEGED_PORTS: ''
 
