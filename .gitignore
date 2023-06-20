@@ -34,7 +34,6 @@ automation/ansible/inventory/nepeat_hosts
 node_modules/
 *.egg-info
 infrastructure/docker_swarm/pleroma/config/secret.exs
-infrastructure/docker_swarm/zabbix/.env_db_pgsql
 serverless/twilio-discordhook/.envrc
 .envrc_secret
 infrastructure/docker_swarm/logging/.env_oauth
