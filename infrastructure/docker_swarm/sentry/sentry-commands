@@ -18,6 +18,7 @@ kafka-consumer-groups --bootstrap-server kafka:9092 --group snuba-consumers --to
 kafka-topics --create --topic ingest-attachments --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-transactions --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-events --bootstrap-server kafka:9092
+kafka-topics --create --topic ingest-replay-recordings --bootstrap-server kafka:9092
 
 # snuba migrate
 docker exec -it $(docker ps | grep snuba-api | awk '{print $NF}') /bin/sh

@@ -8,9 +8,9 @@ x-healthcheck-defaults: &healthcheck_defaults
   # https://github.com/moby/moby/issues/39102
   # https://github.com/moby/moby/issues/39388
   # https://github.com/getsentry/self-hosted/issues/1000
-  interval: 30s
-  timeout: 60s
-  retries: 5
+  interval: "$HEALTHCHECK_INTERVAL"
+  timeout: "$HEALTHCHECK_TIMEOUT"
+  retries: $HEALTHCHECK_RETRIES
   start_period: 10s
 x-sentry-defaults: &sentry_defaults
   <<: *restart_policy
@@ -44,8 +44,10 @@ x-sentry-defaults: &sentry_defaults
     GRPC_DEFAULT_SSL_ROOTS_FILE_PATH_ENV_VAR: *ca_bundle
     # Leaving the value empty to just pass whatever is set
     # on the host system (or in the .env file)
-    SENTRY_EVENT_RETENTION_DAYS: 365
+    SENTRY_EVENT_RETENTION_DAYS:
     SENTRY_MAIL_HOST:
+    SENTRY_MAX_EXTERNAL_SOURCEMAP_SIZE:
+    OPENAI_API_KEY:
   volumes:
     - "/srv/var/sentry/data:/data"
     - "/srv/var/sentry/etc:/etc/sentry"
@@ -61,7 +63,7 @@ x-snuba-defaults: &snuba_defaults
     - redis
   image: "$SNUBA_IMAGE"
   environment:
-    SNUBA_SETTINGS: docker
+    SNUBA_SETTINGS: self_hosted
     CLICKHOUSE_HOST: clickhouse
     DEFAULT_BROKERS: "kafka:9092"
     REDIS_HOST: redis
@@ -69,7 +71,7 @@ x-snuba-defaults: &snuba_defaults
     UWSGI_DISABLE_LOGGING: "true"
     # Leaving the value empty to just pass whatever is set
     # on the host system (or in the .env file)
-    SENTRY_EVENT_RETENTION_DAYS: 365
+    SENTRY_EVENT_RETENTION_DAYS:
   networks:
     - sentry
 
@@ -85,7 +87,7 @@ services:
       - sentry
   redis:
     <<: *restart_policy
-    image: "redis:6.2.6-alpine"
+    image: "redis:6.2.10-alpine"
     healthcheck:
       <<: *healthcheck_defaults
       test: redis-cli ping
@@ -173,65 +175,55 @@ services:
           # https://github.com/getsentry/self-hosted/issues/1537
           "http_proxy='' wget -nv -t1 --spider 'http://localhost:8123/' || exit 1",
         ]
-      interval: 3s
-      timeout: 600s
-      retries: 200
+      interval: 10s
+      timeout: 10s
+      retries: 30
     networks:
       - sentry
-  # geoipupdate:
-  #   image: "maxmindinc/geoipupdate:v4.7.1"
-  #   # Override the entrypoint in order to avoid using envvars for config.
-  #   # Futz with settings so we can keep mmdb and conf in same dir on host
-  #   # (image looks for them in separate dirs by default).
-  #   entrypoint:
-  #     ["/usr/bin/geoipupdate", "-d", "/sentry", "-f", "/sentry/GeoIP.conf"]
-  #   volumes:
-  #     - "/srv/var/sentry/geoip:/sentry"
+  geoipupdate:
+    image: "maxmindinc/geoipupdate:v4.7.1"
+    # Override the entrypoint in order to avoid using envvars for config.
+    # Futz with settings so we can keep mmdb and conf in same dir on host
+    # (image looks for them in separate dirs by default).
+    entrypoint:
+      ["/usr/bin/geoipupdate", "-d", "/sentry", "-f", "/sentry/GeoIP.conf"]
+    volumes:
+      - "/srv/var/sentry/geoip:/sentry"
   snuba-api:
     <<: *snuba_defaults
   # Kafka consumer responsible for feeding events into Clickhouse
   snuba-consumer:
     <<: *snuba_defaults
-    command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750
+    command: consumer --storage errors --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
   # Kafka consumer responsible for feeding outcomes into Clickhouse
   # Use --auto-offset-reset=earliest to recover up to 7 days of TSDB data
   # since we did not do a proper migration
   snuba-outcomes-consumer:
     <<: *snuba_defaults
-    command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750
+    command: consumer --storage outcomes_raw --auto-offset-reset=earliest --max-batch-time-ms 750 --no-strict-offset-reset
   # Kafka consumer responsible for feeding session data into Clickhouse
   snuba-sessions-consumer:
     <<: *snuba_defaults
-    command: consumer --storage sessions_raw --auto-offset-reset=latest --max-batch-time-ms 750
+    command: consumer --storage sessions_raw --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
   # Kafka consumer responsible for feeding transactions data into Clickhouse
   snuba-transactions-consumer:
     <<: *snuba_defaults
-    command: consumer --storage transactions --consumer-group transactions_group --auto-offset-reset=latest --max-batch-time-ms 750 --commit-log-topic=snuba-commit-log
+    command: consumer --storage transactions --consumer-group transactions_group --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-replays-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
   snuba-replacer:
     <<: *snuba_defaults
-    command: replacer --storage errors --auto-offset-reset=latest --max-batch-size 3
+    command: replacer --storage errors --auto-offset-reset=latest --no-strict-offset-reset
   snuba-subscription-consumer-events:
     <<: *snuba_defaults
     command: subscriptions-scheduler-executor --dataset events --entity events --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-events-subscriptions-consumers --followed-consumer-group=snuba-consumers --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
+  snuba-subscription-consumer-sessions:
+    <<: *snuba_defaults
+    command: subscriptions-scheduler-executor --dataset sessions --entity sessions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-sessions-subscriptions-consumers --followed-consumer-group=sessions-group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
   snuba-subscription-consumer-transactions:
     <<: *snuba_defaults
     command: subscriptions-scheduler-executor --dataset transactions --entity transactions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-transactions-subscriptions-consumers --followed-consumer-group=transactions_group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
-  snuba-cleanup:
-    <<: *snuba_defaults
-    image: registry.generalprogramming.org/snuba-cleanup-self-hosted-local
-    build:
-      context: ./cron
-      args:
-        BASE_IMAGE: "$SNUBA_IMAGE"
-    command: '"*/5 * * * * snuba snuba cleanup --storage errors --dry-run False"'
-  snuba-transactions-cleanup:
-    <<: *snuba_defaults
-    image: registry.generalprogramming.org/snuba-cleanup-self-hosted-local
-    build:
-      context: ./cron
-      args:
-        BASE_IMAGE: "$SNUBA_IMAGE"
-    command: '"*/5 * * * * snuba snuba cleanup --storage transactions --dry-run False"'
   symbolicator:
     <<: *restart_policy
     image: "$SYMBOLICATOR_IMAGE"
@@ -258,6 +250,10 @@ services:
       - sentry
   web:
     <<: *sentry_defaults
+    ulimits:
+      nofile:
+        soft: 4096
+        hard: 4096
     healthcheck:
       <<: *healthcheck_defaults
       test:
@@ -275,16 +271,21 @@ services:
   ingest-consumer:
     <<: *sentry_defaults
     command: run ingest-consumer --all-consumer-types
-  post-process-forwarder:
+  ingest-replay-recordings:
     <<: *sentry_defaults
-    # Increase `--commit-batch-size 1` below to deal with high-load environments.
-    command: run post-process-forwarder --commit-batch-size 1
+    command: run ingest-replay-recordings
+  post-process-forwarder-errors:
+    <<: *sentry_defaults
+    command: run post-process-forwarder --entity errors
+  post-process-forwarder-transactions:
+    <<: *sentry_defaults
+    command: run post-process-forwarder --entity transactions --commit-log-topic=snuba-transactions-commit-log --synchronize-commit-group transactions_group
   subscription-consumer-events:
     <<: *sentry_defaults
-    command: run query-subscription-consumer --commit-batch-size 1 --topic events-subscription-results
+    command: run query-subscription-consumer --topic events-subscription-results
   subscription-consumer-transactions:
     <<: *sentry_defaults
-    command: run query-subscription-consumer --commit-batch-size 1 --topic transactions-subscription-results
+    command: run query-subscription-consumer --topic transactions-subscription-results
   sentry-cleanup:
     <<: *sentry_defaults
     image: registry.generalprogramming.org/sentry-cleanup-self-hosted-local
