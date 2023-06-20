@@ -2,7 +2,7 @@ version: "3.6"
 
 services:
   keycloak:
-    image: quay.io/keycloak/keycloak:20.0.1
+    image: quay.io/keycloak/keycloak:21.1.0
     volumes:
       - /etc/ipa/ca.crt:/ipa_ca.crt:ro
       - /srv/var/keycloak:/data
@@ -24,10 +24,9 @@ services:
     env_file: .env
     command:
       - start
-      # - --auto-build
-      - --db=postgres
       - --features=token-exchange
       - --http-enabled=true
+      - --db=postgres
       - --db-url=${DB_HOST}
       - --db-username=keycloak
       - --db-password=${DB_PASSWORD}
