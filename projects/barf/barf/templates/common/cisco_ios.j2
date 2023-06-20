@@ -13,10 +13,13 @@ ip default-gateway {{ device.default_route }}
 {% endif %}
 
 {# TACACS #}
+{% if device.tacacs_servers %}
 aaa new-model
 
 tacacs-server key {{ device.tacacs_key }}
 aaa group server tacacs+ consul
+{% endif %}
+
 {% for server in device.tacacs_servers %}
     server {{ server }}
 {% endfor %}
@@ -26,6 +29,7 @@ aaa group server tacacs+ consul
 tacacs-server host {{ server }}
 {% endfor %}
 
+{% if device.tacacs_servers %}
 aaa authentication login default group consul local
 aaa authentication enable default group consul enable
 
@@ -38,12 +42,16 @@ aaa accounting exec default start-stop group consul
 aaa accounting commands 0 default start-stop group consul
 aaa accounting commands 1 default start-stop group consul
 aaa accounting commands 15 default start-stop group consul
+{% endif %}
 
 {# Time #}
 ntp server 0.pool.ntp.org
 ntp server 1.pool.ntp.org
 
-{# Misc #}
+{# Discovery + SNMP #}
 cdp run
 lldp run
+{% include 'common/shared_ios_snmp.j2' %}
+
+{# Misc #}
 ip scp server enable
