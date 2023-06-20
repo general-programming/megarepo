@@ -1,7 +1,7 @@
 version: "3.8"
 services:
   traefik:
-    image: traefik:v2.8.3
+    image: traefik:v2.10.1
     env_file: .env
     command:
       - traefik
@@ -50,7 +50,7 @@ services:
 
       # consul catalog provider
       - --providers.consulcatalog=true
-      - --providers.consulcatalog.endpoint.address=consul.service.dc1.consul.:8500
+      - --providers.consulcatalog.endpoint.address=consul.service.sea420.consul.:8500
       - --providers.consulcatalog.exposedByDefault=false
       - --providers.consulcatalog.defaultRule=Host(`{{ .Name }}.thonk.dev`)
     volumes:
