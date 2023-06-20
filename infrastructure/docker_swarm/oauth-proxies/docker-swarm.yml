@@ -8,7 +8,7 @@ services:
       - --provider-display-name=General Programming
       - --oidc-issuer-url=https://auth.generalprogramming.org
       - --cookie-secure=false
-      - --upstream=http://192.168.3.2:8123
+      - --upstream=http://10.3.0.6:8123
       - --http-address=http://0.0.0.0:5601
       - --redirect-url=https://clickhouse.generalprogramming.org/oauth2/callback
       - --email-domain=*
@@ -50,7 +50,7 @@ services:
     volumes:
       - /srv/share/oauth2_proxy_templates:/templates:ro
     environment:
-      OAUTH2_PROXY_COOKIE_DOMAIN: clickhouse.generalprogramming.org
+      OAUTH2_PROXY_COOKIE_DOMAIN: proxmox-fmt2.generalprogramming.org
     env_file: .env
     networks:
       - publicweb
@@ -64,6 +64,40 @@ services:
         # Traefik 2
         - traefik.http.routers.proxmox_fmt2_proxy.rule=Host(`proxmox-fmt2.generalprogramming.org`)
         - traefik.http.services.proxmox_fmt2_proxy.loadbalancer.server.port=5601
+      restart_policy:
+        condition: any
+
+  proxmox_sea420:
+    image: quay.io/oauth2-proxy/oauth2-proxy
+    command:
+      - --provider=oidc
+      - --custom-sign-in-logo=https://cdn.owo.me/file/nepeat-public/genprog/logo-transparent-dark.png
+      - --provider-display-name=General Programming
+      - --oidc-issuer-url=https://auth.generalprogramming.org
+      - --cookie-secure=false
+      - --upstream=https://10.3.0.2:8006
+      - --ssl-upstream-insecure-skip-verify
+      - --http-address=http://0.0.0.0:5601
+      - --redirect-url=https://proxmox-sea420.generalprogramming.org/oauth2/callback
+      - --email-domain=*
+      - --custom-templates-dir=/templates
+    volumes:
+      - /srv/share/oauth2_proxy_templates:/templates:ro
+    environment:
+      OAUTH2_PROXY_COOKIE_DOMAIN: proxmox-sea420.generalprogramming.org
+    env_file: .env
+    networks:
+      - publicweb
+    deploy:
+      labels:
+        - traefik.enable=true
+        - traefik.port=5601
+        - traefik.docker.network=publicweb
+        # Routes
+        - traefik.frontend.rule=Host:proxmox-sea420.generalprogramming.org
+        # Traefik 2
+        - traefik.http.routers.proxmox_sea420_proxy.rule=Host(`proxmox-sea420.generalprogramming.org`)
+        - traefik.http.services.proxmox_sea420_proxy.loadbalancer.server.port=5601
       restart_policy:
         condition: any
 
