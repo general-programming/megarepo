@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import functools
 import ipaddress
+import json
 import secrets
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
@@ -37,18 +38,17 @@ class Cable:
     host_b_name: str
 
     @classmethod
-    def from_netbox(cls, data: dict):
+    def from_netbox(cls, data: dict) -> Cable:
         """Create a cable from a Netbox cable.
 
-        Attributes:
-            data (dict): A dictionary containing the cable data.
+        :param data: A dictionary containing the cable data.
+        :type data: dict
 
-        Returns:
-            Cable: The cable.
+        :return: A new cable object.
+        :rtype: Cable
 
-        Throws:
-            KeyError: If the cable data is missing any devices.
-            ValueError: If the cable data is invalid.
+        :raises KeyError: If the cable data is missing any devices.
+        :raises ValueError: If the cable data is invalid.
         """
 
         if not data["cable"]:
@@ -106,6 +106,7 @@ class HostInterface:
     mode: Optional[str] = None
     _description: Optional[str] = ""
     enabled: bool = True
+    # TODO: IPv6 support should be added.
     address: Optional[ipaddress.IPv4Interface] = None
     dhcp: bool = False
     untagged_vlan: Optional[NetworkVLAN] = None
@@ -117,12 +118,13 @@ class HostInterface:
     management: Optional[bool] = False
 
     @property
-    def description(self) -> str:
+    def description(self) -> Optional[str]:
         result = self._description or ""
 
         if self.cable:
             result += f" ({ self.cable })"
 
+        # Remove trailing whitespace due to the cable text.
         result = result.strip()
 
         if not result:
@@ -160,11 +162,25 @@ class HostInterface:
         """Return the interface name in Cisco format."""
         result = self.name
 
+        # We assume that the interface name is a number here.
+        # TODO: For that case, we really should check that the name is a number.
         if self.is_lag:
             result = "Port-Channel" + result
 
         return result
 
+
+@dataclass
+class OSPFNetwork:
+    network: ipaddress.IPv4Network
+    area: int
+
+    @classmethod
+    def from_dict(cls, data: dict) -> OSPFNetwork:
+        return cls(
+            network=ipaddress.IPv4Network(data["network"]),
+            area=data["area"],
+        )
 
 class BaseHost:
     DEVICETYPE = "base"
@@ -317,7 +333,7 @@ class BaseHost:
     def secret(
         self,
         key: str,
-        default_value: Optional[Callable] = None,
+        default_value: Optional[Callable[[], str]] = None,
         secret_path: Optional[str] = None,
     ):
         """Get a host specific secret.
@@ -342,6 +358,9 @@ class BaseHost:
             try:
                 result = response[key]
             except KeyError:
+                if not default_value:
+                    raise KeyError(f"Key {key} not found in {secret_path}")
+
                 result = default_value()
 
                 self.vault.secrets.kv.v2.patch(
@@ -350,6 +369,9 @@ class BaseHost:
                     secret={key: result},
                 )
         except hvac.exceptions.InvalidPath:
+            if not default_value:
+                raise KeyError(f"Key {key} not found in {secret_path}")
+
             result = default_value()
 
             self.vault.secrets.kv.v2.create_or_update_secret(
