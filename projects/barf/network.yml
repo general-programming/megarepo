@@ -65,6 +65,11 @@ hosts:
       - set nat source rule 10 outbound-interface eth1
       - set nat source rule 10 source address 172.31.255.0/24
       - set nat source rule 10 translation address masquerade
+      - set protocols bgp listen range 10.65.67.0/24 peer-group internal
+      - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
+      - set protocols bgp neighbor eth0.5 interface peer-group internal
+      - set protocols bgp peer-group internal ipv4-unicast
+      - set protocols bgp peer-group internal remote-as 4280805526
   fmt2-vpn-leaf-2:
     asn: 4280805526
     type: vyos
@@ -86,6 +91,11 @@ hosts:
       - set nat source rule 10 outbound-interface eth1
       - set nat source rule 10 source address 172.31.255.0/24
       - set nat source rule 10 translation address masquerade
+      - set protocols bgp listen range 10.65.67.0/24 peer-group internal
+      - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
+      - set protocols bgp neighbor eth0.5 interface peer-group internal
+      - set protocols bgp peer-group internal address-family ipv4-unicast
+      - set protocols bgp peer-group internal remote-as 4280805526
   sea69-acc-v-a-1:
     asn: 4280805527
     type: edgeos
