@@ -66,7 +66,7 @@ hosts:
       - set nat source rule 10 source address 172.31.255.0/24
       - set nat source rule 10 translation address masquerade
   fmt2-vpn-leaf-2:
-    asn: 4280851827
+    asn: 4280805526
     type: vyos
     role: vpn
     nameservers:
