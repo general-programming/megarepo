@@ -36,7 +36,7 @@
   ansible.builtin.cron:
     name: "prom_smartmon"
     minute: "*"
-    job: "/usr/local/bin/prom_smartmon.sh > /var/lib/node_exporter/smartmon.prom.tmp && mv /var/lib/node_exporter/smartmon.prom.tmp /var/lib/node_exporter/smartmon.prom"
+    job: "/usr/local/bin/prom_smartmon.sh > /var/lib/node_exporter/smartmon.prom.tmp && mv /var/lib/node_exporter/smartmon.prom.tmp /var/lib/node_exporter/smartmon.prom >/dev/null 2>&1"
     user: root
   when: "'metal' in group_names"
 
@@ -53,6 +53,6 @@
   ansible.builtin.cron:
     name: "prom_ipmi"
     minute: "*"
-    job: "ipmitool sensor | /usr/local/bin/prom_ipmi.sh > /var/lib/node_exporter/ipmi_sensors.prom.tmp && mv /var/lib/node_exporter/ipmi_sensors.prom.tmp /var/lib/node_exporter/ipmi_sensors.prom"
+    job: "ipmitool sensor | /usr/local/bin/prom_ipmi.sh > /var/lib/node_exporter/ipmi_sensors.prom.tmp && mv /var/lib/node_exporter/ipmi_sensors.prom.tmp /var/lib/node_exporter/ipmi_sensors.prom >/dev/null 2>&1"
     user: root
   when: "'metal' in group_names"
