@@ -47,6 +47,7 @@ groups:
         summary: Host out of inodes (instance {{ $labels.instance }})
         description: "Disk is almost running out of available inodes (< 10% left)\n  VALUE = {{ $value }}\n  LABELS = {{ $labels }}"
   - name: hardware
+    rules:
     - alert: HostNodeOvertemperatureAlarm
       expr: node_hwmon_temp_crit_alarm_celsius == 1
       for: 0m
