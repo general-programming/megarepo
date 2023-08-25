@@ -18,6 +18,8 @@ log = logging.getLogger(__name__)
 
 routes = web.RouteTableDef()
 
+RENDER_ENDPOINT = os.environ["RENDER_ENDPOINT"] + "/render"
+
 
 @routes.get("/")
 async def rootpage(request):
@@ -52,7 +54,7 @@ async def inbound_post(request):
     # Render mail
     async with ClientSession() as session:
         async with session.post(
-            "https://htmlrender.generalprogramming.org/render",
+            RENDER_ENDPOINT,
             json={"auth": os.environ["AUTH_KEY"], "html": mail_body},
         ) as response:
             try:
