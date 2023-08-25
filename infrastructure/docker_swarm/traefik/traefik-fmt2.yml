@@ -1,7 +1,0 @@
-tls:
-  options:
-    default:
-      clientAuth:
-        caFiles:
-          - /config/cloudflare-origin-pull-ca.pem
-        clientAuthType: RequireAndVerifyClientCert
