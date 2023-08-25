@@ -23,7 +23,7 @@ export interface Env {
 }
 
 // Mail endpoint handler
-const MAIL_ENDPOINT = 'https://mailhook.generalprogramming.org/inbound'
+const MAIL_ENDPOINT = 'https://mailhook-fmt2.generalprogramming.org/inbound'
 
 function formatEmail(address: Address): string {
 	return `${address.name} <${address.address}>`
