@@ -1,0 +1,6 @@
+service_type: node-exporter
+service_name: node-exporter
+placement:
+  host_pattern: '*'
+extra_entrypoint_args:
+  - "--collector.textfile.directory=/rootfs/var/lib/node_exporter/textfile_collector"
