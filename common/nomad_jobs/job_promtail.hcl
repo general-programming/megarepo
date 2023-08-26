@@ -29,7 +29,7 @@ positions:
   filename: /var/lib/promtail/positions.yml
 
 clients:
-  - url: http://loki.fmt2.generalprogramming.org:3100/loki/api/v1/push
+  - url: http://loki.fmt2.generalprogramming.org/loki/api/v1/push
 
 scrape_configs:
   - job_name: system
