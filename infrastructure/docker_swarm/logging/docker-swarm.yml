@@ -3,7 +3,7 @@ services:
   grafana:
     image: grafana/grafana:main
     environment:
-      GF_SERVER_ROOT_URL: https://grafana.generalprogramming.org
+      GF_SERVER_ROOT_URL: https://grafana-sea.generalprogramming.org
     env_file: .env_grafana
     volumes:
       - /srv/grafana/data:/var/lib/grafana
@@ -18,9 +18,9 @@ services:
         - traefik.port=3000
         - traefik.docker.network=publicweb
         # Routes
-        - traefik.frontend.rule=Host:grafana.generalprogramming.org
+        - traefik.frontend.rule=Host:grafana-sea.generalprogramming.org
         # Traefik 2
-        - traefik.http.routers.grafana.rule=Host(`grafana.generalprogramming.org`)
+        - traefik.http.routers.grafana.rule=Host(`grafana-sea.generalprogramming.org`)
         - traefik.http.services.grafana.loadbalancer.server.port=3000
       restart_policy:
         condition: any
