@@ -50,13 +50,14 @@ set vpn ipsec site-to-site peer {{ peer_name }} vti bind '{{ interface_name }}'
         {%- set interface_name = "wg" ~ link.link_id -%}
         {%- set port = link.link_id -%}
 set interfaces wireguard {{ interface_name }} description 'wg link ({{ link.side_a.hostname }} -> {{ link.side_b.hostname }})'
-set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side) }}/31
+set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side, with_netmask=True) }}
 set interfaces wireguard {{ interface_name }} private-key '{{ our_side.wg_privkey(port) }}'
 set interfaces wireguard {{ interface_name }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.wg_pubkey(port) }}'
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips 0.0.0.0/0
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips ::/0
         {% if other_peer.address %}
-set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.address }}
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.ip6_address }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} persistent-keepalive 10
         {% endif %}
@@ -78,7 +79,11 @@ set protocols bgp neighbor {{ link.get_ip(other_peer) }} bfd
 {% for network in device.networks %}
 set protocols bgp address-family ipv4-unicast network {{ network }}
 {% endfor -%}
+{% if ":" in device.management_address.with_prefixlen %}
+set protocols bgp address-family ipv6-unicast network {{ device.management_address }}
+{% elif device.management_address %}
 set protocols bgp address-family ipv4-unicast network {{ device.management_address }}
+{% endif %}
 
 set protocols bgp system-as '{{ device.asn }}'
 set protocols bgp peer-group leaf address-family ipv4-unicast

@@ -10,7 +10,7 @@ from barf.common import render_template
 from barf.model.wireguard import WGNetworkLink
 from barf.vendors import VENDOR_MAP, BaseHost
 from gql import gql
-from magic import logging
+from magic_logger import logging
 
 from common import get_nb_client
 
@@ -31,6 +31,10 @@ query ($tag: [String]) {
     config_context
 
     primary_ip4 {
+      address
+    }
+
+    primary_ip6 {
       address
     }
 

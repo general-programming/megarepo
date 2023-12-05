@@ -8,6 +8,7 @@ global_meta:
 hosts:
   fmt2-vpn-spine-1:
     address: 79.110.170.6
+    ip6_address: 2a0d:1a43:8008:420::1
     asn: 4280805525
     type: vyos
     role: vpn
@@ -15,6 +16,7 @@ hosts:
       - name: eth0
         description: external uplink
         dhcp: true
+        address: 2a0d:1a43:8008:420::1/64
       - name: eth1
         description: management vlan
         address: 10.255.1.21/24
@@ -27,6 +29,7 @@ hosts:
       - 1.1.1.1
   fmt2-vpn-spine-2:
     address: 79.110.170.7
+    ip6_address: 2a0d:1a43:8008:420::2
     asn: 4280805525
     type: vyos
     role: vpn
@@ -34,6 +37,7 @@ hosts:
       - name: eth0
         description: external uplink
         dhcp: true
+        address: 2a0d:1a43:8008:420::2/64
       - name: eth1
         description: management vlan
         address: 10.255.1.22/24
@@ -146,28 +150,6 @@ hosts:
     asn: 31898
     type: external
     role: vpn
-  dfw1-vpn-leaf-1:
-    address: 161.129.155.187
-    asn: 4280805531
-    type: vyos
-    role: vpn
-    cloudinit: true
-    interfaces:
-      - name: dum0
-        description: underlay loopback
-        address: 10.255.2.8/32
-        management: true
-      - name: eth0
-        description: external
-        address: 161.129.155.187/28
-      - name: eth1
-        description: internal
-        dhcp: true
-    nameservers:
-      - 1.1.1.1
-      - 1.0.0.1
-    networks:
-      - 10.64.1.0/24
   fmt2-vpn-client-1:
     asn: 4280805532
     management: 10.255.2.9
@@ -177,6 +159,28 @@ hosts:
     asn: 4280805533
     type: linux
     role: vpn
+  sea1-vpn-leaf-1:
+    asn: 4280805534
+    management: 2602:fa6d:f:aaaa::f01
+    type: vyos
+    role: vpn
+    cloudinit: true
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 2602:fa6d:f:aaaa::f01/128
+        management: true
+      - name: eth0
+        description: external
+        address: 2602:fa6d:10:ffff::f01/116
+      - name: eth1
+        description: internal
+        address: 10.3.2.4/23
+    nameservers:
+      - 2606:4700::1111
+      - 2606:4700::1001
+    networks:
+      - 10.3.2.0/23
 links:
   51820:
     side_a: fmt2-vpn-spine-1
@@ -234,14 +238,6 @@ links:
     network: 172.31.255.26/31
     secret: fmt2-oracle-vpn-4
     ipsec: true
-  51837:
-    side_a: fmt2-vpn-spine-1
-    side_b: dfw1-vpn-leaf-1
-    network: 172.31.255.32/31
-  51838:
-    side_a: fmt2-vpn-spine-2
-    side_b: dfw1-vpn-leaf-1
-    network: 172.31.255.34/31
   51839:
     side_a: fmt2-vpn-spine-1
     side_b: fmt2-vpn-client-1
@@ -270,3 +266,11 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea420-acc-v-hv2
     network: 172.31.255.46/31
+  51845:
+    side_a: fmt2-vpn-spine-1
+    side_b: sea1-vpn-leaf-1
+    network: fec0::6776:706e:1:0/127
+  51846:
+    side_a: fmt2-vpn-spine-2
+    side_b: sea1-vpn-leaf-1
+    network: fec0::6776:706e:2:0/127

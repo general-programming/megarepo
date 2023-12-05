@@ -14,10 +14,14 @@ set system name-server '{{ dns_server }}'
     {# DHCP interfaces. #}
     {% if interface.dhcp %}
 {{ device.interface_prefix(interface) }} address dhcp
+{{ device.interface_prefix(interface) }} ipv6 address autoconf
     {% endif %}
     {# Interface IP #}
     {% if interface.address %}
 {{ device.interface_prefix(interface) }} address {{ interface.address.with_prefixlen }}
+    {% endif %}
+    {% if interface.ip6_address %}
+{{ device.interface_prefix(interface) }} address {{ interface.ip6_address.with_prefixlen }}
     {% endif %}
     {# Interface MTU. #}
     {% if interface.mtu %}

@@ -36,9 +36,18 @@ class WGNetworkLink(NetworkLink):
     secret: Optional[str] = None
     ipsec: bool = False
 
-    def get_ip(self, host: "BaseHost") -> str:
+    def get_ip(self, host: "BaseHost", with_netmask: bool = False) -> str:
         """Return the IP address of the host on this link."""
-        side_a_ip, side_b_ip = list(ipaddress.IPv4Network(self.network).hosts())
+        if ":" in self.network:
+            side_a_ip, side_b_ip = list(ipaddress.IPv6Network(self.network).hosts())
+            netmask = "/127"
+        else:
+            side_a_ip, side_b_ip = list(ipaddress.IPv4Network(self.network).hosts())
+            netmask = "/31"
+
+        if with_netmask:
+            side_a_ip = str(side_a_ip) + netmask
+            side_b_ip = str(side_b_ip) + netmask
 
         if host == self.side_a:
             return side_a_ip

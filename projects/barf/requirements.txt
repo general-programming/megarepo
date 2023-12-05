@@ -2,7 +2,7 @@ click
 napalm
 napalm-vyos
 hvac
-python-magic
+magic-logger
 gql
 aiohttp
 dnspython

@@ -108,6 +108,7 @@ class HostInterface:
     enabled: bool = True
     # TODO: IPv6 support should be added.
     address: Optional[ipaddress.IPv4Interface] = None
+    ip6_address: Optional[ipaddress.IPv6Interface] = None
     dhcp: bool = False
     untagged_vlan: Optional[NetworkVLAN] = None
     tagged_vlans: List[NetworkVLAN] = field(default_factory=list)
@@ -191,6 +192,7 @@ class BaseHost:
         hostname: str,
         role: str,
         address: ipaddress.IPv4Interface = None,
+        ip6_address: ipaddress.IPv46nterface = None,
         asn: int = None,
         interfaces: List[HostInterface] = None,
         nameservers: List[str] = None,
@@ -203,6 +205,8 @@ class BaseHost:
         **kwargs,
     ):
         self.address = address
+        self.ip6_address = ip6_address
+
         self.hostname = hostname
         self.asn = asn
         self.snmp_location = snmp_location
@@ -314,6 +318,9 @@ class BaseHost:
         """Return the TACACS+ servers from Consul."""
         hosts = set()
 
+        # HACK: TACACS is broken, lol
+        return list(hosts)
+
         resolver = dns.resolver.Resolver()
         query = resolver.query("tacacs.service.fmt2.consul", "A")
         for host in query:
@@ -326,6 +333,9 @@ class BaseHost:
         """Return the management address for this host."""
         for interface in self.interfaces:
             if interface.management:
+                if interface.ip6_address:
+                    return interface.ip6_address
+
                 return interface.address
 
         return None
@@ -387,10 +397,7 @@ class BaseHost:
         """Create a host from a VPN network.yaml metadata entry."""
         interfaces = []
         for interface in meta.get("interfaces", []):
-            address = None
-
-            if "address" in interface:
-                address = ipaddress.IPv4Interface(interface.get("address"))
+            ip_address = interface.get("address", "")
 
             interfaces.append(
                 HostInterface(
@@ -398,7 +405,8 @@ class BaseHost:
                     type="VPNLink",
                     _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
-                    address=address,
+                    address=ipaddress.IPv4Interface(ip_address) if ":" not in ip_address and ip_address else None,
+                    ip6_address=ipaddress.IPv6Interface(ip_address) if ":" in ip_address else None,
                     dhcp=interface.get("dhcp", False),
                     untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
@@ -414,6 +422,7 @@ class BaseHost:
             hostname=hostname,
             role=meta["role"],
             address=meta.get("address", None),
+            ip6_address=meta.get("ip6_address", None),
             asn=meta["asn"],
             nameservers=meta.get("nameservers", []),
             extra_config=meta.get("extra_config", []),
@@ -439,7 +448,7 @@ class BaseHost:
                 cable = None
 
             # XXX: This will break if there are multiple IPs for this interface.
-            ip_address = None
+            ip_address = ""
 
             if "ip_addresses" in interface and interface["ip_addresses"]:
                 ip_address = interface["ip_addresses"][0]["address"]
@@ -450,7 +459,8 @@ class BaseHost:
                     type=interface["type"],
                     mode=interface["mode"],
                     _description=interface.get("description", None),
-                    address=ipaddress.IPv4Interface(ip_address) if ip_address else None,
+                    address=ipaddress.IPv4Interface(ip_address) if ":" not in ip_address and ip_address else None,
+                    ip6_address=ipaddress.IPv6Interface(ip_address) if ":" in ip_address else None,
                     dhcp=False,
                     untagged_vlan=NetworkVLAN.from_netbox(interface["untagged_vlan"]),
                     tagged_vlans=[
@@ -479,6 +489,7 @@ class BaseHost:
             hostname=netbox_meta["name"],
             role="network_devices",
             address=ipaddress.IPv4Interface(netbox_meta["primary_ip4"]["address"]),
+            ip6_address=ipaddress.IPv6Interface(netbox_meta["primary_ip6"]["address"]) if netbox_meta["primary_ip6"] else None,
             interfaces=interfaces,
             vlan_map=parsed_vlans,
             config_context=netbox_meta["config_context"] or {},
