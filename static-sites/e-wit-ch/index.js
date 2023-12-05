@@ -1,4 +1,4 @@
-(function() {
+(function () {
     // Utility
     const randint = (max) => {
         return Math.round(Math.random() * max);
@@ -6,7 +6,7 @@
 
     const randomElement = (array) => {
         return array[randint(array.length - 1)];
-    }
+    };
 
     // Random tags
     const tags = [
@@ -36,14 +36,7 @@
 
     // Random stripe colors
     // CSS from https://codepen.io/charliewilco/pen/BzAJzE
-    const stripes = [
-        "gay",
-        "trans",
-        "bi",
-        "pan",
-        "asex",
-        "nonb",
-    ]
+    const stripes = ["gay", "trans", "bi", "pan", "asex", "nonb"];
     let stripe = randomElement(stripes);
     let stripeElement = document.getElementById("stripe");
     stripeElement.classList.add(stripe);
@@ -52,20 +45,22 @@
     window.cookieconsent.initialise({
         container: document.getElementById("container"),
         palette: {
-            "popup": {
-                "background": "#edeff5",
-                "text": "#838391"
+            popup: {
+                background: "#edeff5",
+                text: "#838391",
             },
-            "button": {
-              "background": "#4b81e8"
-            }
+            button: {
+                background: "#4b81e8",
+            },
         },
-        onStatusChange: function(status) {
-            console.log(this.hasConsented() ? 'enable cookies' : 'disable cookies');
+        onStatusChange: function (status) {
+            console.log(
+                this.hasConsented() ? "enable cookies" : "disable cookies"
+            );
         },
         law: {
             regionalLaw: false,
         },
         location: true,
     });
-})()
+})();
