@@ -1,3 +1,4 @@
+import os
 import sys
 
 import twilio
@@ -69,8 +70,8 @@ for number in numbers:
             print(e)
             continue
 
-        for number in numbers:
-            print("available", number.friendly_name)
+        for avail_num in numbers:
+            print("available", avail_num.friendly_name)
 
 
 # twilio.
