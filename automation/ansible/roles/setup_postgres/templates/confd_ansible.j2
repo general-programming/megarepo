@@ -1,8 +1,8 @@
 # {{ ansible_managed }}
 {% if postgres_listen_ip %}
 listen_addresses = '127.0.0.1{{ "," + postgres_listen_ip }}'
-{% elif ansible_vpn0 %}
-listen_addresses = '127.0.0.1{{ "," + ansible_vpn0["ipv4"]["address"] }}'
+{% elif ansible_internal %}
+listen_addresses = '127.0.0.1{{ "," + ansible_internal["ipv4"]["address"] }}'
 {% else %}
 listen_addresses = '127.0.0.1'
 {% endif %}

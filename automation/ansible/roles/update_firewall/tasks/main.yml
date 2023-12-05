@@ -120,9 +120,18 @@
     chain: INPUT
     protocol: tcp
     destination_ports:
-      - 8006
+      - 5432
     jump: ACCEPT
   when: "'service_proxmox' in group_names"
+
+- name: Allow Postgres connections
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: tcp
+    destination_ports:
+      - 8006
+    jump: ACCEPT
+  when: "'service_postgres' in group_names"
 
 - name: Drop all traffic for external interface
   ansible.builtin.iptables:
