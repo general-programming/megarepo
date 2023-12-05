@@ -87,7 +87,7 @@ services:
       - sentry
   redis:
     <<: *restart_policy
-    image: "redis:6.2.10-alpine"
+    image: "redis:6.2.13-alpine"
     healthcheck:
       <<: *healthcheck_defaults
       test: redis-cli ping
@@ -101,7 +101,7 @@ services:
       - sentry
   zookeeper:
     <<: *restart_policy
-    image: "confluentinc/cp-zookeeper:6.2.0"
+    image: "confluentinc/cp-zookeeper:6.2.12"
     environment:
       ZOOKEEPER_CLIENT_PORT: "2181"
       CONFLUENT_SUPPORT_METRICS_ENABLE: "false"
@@ -122,7 +122,7 @@ services:
     <<: *restart_policy
     depends_on:
       - zookeeper
-    image: "confluentinc/cp-kafka:6.2.0"
+    image: "confluentinc/cp-kafka:6.2.12"
     environment:
       KAFKA_ZOOKEEPER_CONNECT: "zookeeper:2181"
       KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
@@ -142,6 +142,9 @@ services:
     healthcheck:
       <<: *healthcheck_defaults
       test: ["CMD-SHELL", "nc -z localhost 9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
     networks:
       - sentry
   clickhouse:
@@ -181,7 +184,7 @@ services:
     networks:
       - sentry
   geoipupdate:
-    image: "maxmindinc/geoipupdate:v4.7.1"
+    image: "ghcr.io/maxmind/geoipupdate:v6.0.0"
     # Override the entrypoint in order to avoid using envvars for config.
     # Futz with settings so we can keep mmdb and conf in same dir on host
     # (image looks for them in separate dirs by default).
@@ -212,6 +215,21 @@ services:
   snuba-replays-consumer:
     <<: *snuba_defaults
     command: consumer --storage replays --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-issue-occurrence-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage search_issues --consumer-group generic_events_group --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-metrics-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage metrics_raw --consumer-group snuba-metrics-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-generic-metrics-distributions-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage generic_metrics_distributions_raw --consumer-group snuba-gen-metrics-distributions-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-generic-metrics-sets-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage generic_metrics_sets_raw --consumer-group snuba-gen-metrics-sets-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
+  snuba-generic-metrics-counters-consumer:
+    <<: *snuba_defaults
+    command: consumer --storage generic_metrics_counters_raw --consumer-group snuba-gen-metrics-counters-consumers --auto-offset-reset=latest --max-batch-time-ms 750 --no-strict-offset-reset
   snuba-replacer:
     <<: *snuba_defaults
     command: replacer --storage errors --auto-offset-reset=latest --no-strict-offset-reset
@@ -224,6 +242,9 @@ services:
   snuba-subscription-consumer-transactions:
     <<: *snuba_defaults
     command: subscriptions-scheduler-executor --dataset transactions --entity transactions --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-transactions-subscriptions-consumers --followed-consumer-group=transactions_group --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
+  snuba-subscription-consumer-metrics:
+    <<: *snuba_defaults
+    command: subscriptions-scheduler-executor --dataset metrics --entity metrics_sets --entity metrics_counters --auto-offset-reset=latest --no-strict-offset-reset --consumer-group=snuba-metrics-subscriptions-consumers --followed-consumer-group=snuba-metrics-consumers --delay-seconds=60 --schedule-ttl=60 --stale-threshold-seconds=900
   symbolicator:
     <<: *restart_policy
     image: "$SYMBOLICATOR_IMAGE"
@@ -277,9 +298,21 @@ services:
   transactions-consumer:
     <<: *sentry_defaults
     command: run consumer ingest-transactions --consumer-group ingest-consumer
+  metrics-consumer:
+    <<: *sentry_defaults
+    command: run consumer ingest-metrics --consumer-group metrics-consumer
+  generic-metrics-consumer:
+    <<: *sentry_defaults
+    command: run consumer ingest-generic-metrics --consumer-group generic-metrics-consumer
+  billing-metrics-consumer:
+    <<: *sentry_defaults
+    command: run consumer billing-metrics-consumer --consumer-group billing-metrics-consumer
   ingest-replay-recordings:
     <<: *sentry_defaults
     command: run consumer ingest-replay-recordings --consumer-group ingest-replay-recordings
+  ingest-occurrences:
+    <<: *sentry_defaults
+    command: run consumer ingest-occurrences --consumer-group ingest-occurrences
   ingest-profiles:
     <<: *sentry_defaults
     command: run consumer --no-strict-offset-reset ingest-profiles --consumer-group ingest-profiles
@@ -289,12 +322,21 @@ services:
   post-process-forwarder-transactions:
     <<: *sentry_defaults
     command: run consumer post-process-forwarder-transactions --consumer-group post-process-forwarder --synchronize-commit-log-topic=snuba-transactions-commit-log --synchronize-commit-group transactions_group
+  post-process-forwarder-issue-platform:
+    <<: *sentry_defaults
+    command: run consumer post-process-forwarder-issue-platform --consumer-group post-process-forwarder --synchronize-commit-log-topic=snuba-generic-events-commit-log --synchronize-commit-group generic_events_group
   subscription-consumer-events:
     <<: *sentry_defaults
     command: run consumer events-subscription-results --consumer-group query-subscription-consumer
   subscription-consumer-transactions:
     <<: *sentry_defaults
     command: run consumer transactions-subscription-results --consumer-group query-subscription-consumer
+  subscription-consumer-metrics:
+    <<: *sentry_defaults
+    command: run consumer metrics-subscription-results --consumer-group query-subscription-consumer
+  subscription-consumer-generic-metrics:
+    <<: *sentry_defaults
+    command: run consumer generic-metrics-subscription-results --consumer-group query-subscription-consumer
   sentry-cleanup:
     <<: *sentry_defaults
     image: registry.generalprogramming.org/sentry-cleanup-self-hosted-local

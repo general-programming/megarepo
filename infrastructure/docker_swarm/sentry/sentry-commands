@@ -20,12 +20,16 @@ kafka-topics --create --topic ingest-transactions --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-events --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-replay-recordings --bootstrap-server kafka:9092
 kafka-topics --create --topic profiles --bootstrap-server kafka:9092
+kafka-topics --create --topic ingest-occurrences --bootstrap-server kafka:9092
+kafka-topics --create --topic ingest-metrics --bootstrap-server kafka:9092
+kafka-topics --create --topic ingest-performance-metrics --bootstrap-server kafka:9092
 
 # snuba migrate
 docker exec -it $(docker ps | grep snuba-api | awk '{print $NF}') /bin/sh
 snuba bootstrap --no-migrate --force && snuba migrations migrate --force
 
 # web
+docker exec -it $(docker ps | grep sentry_web | awk '{print $NF}') /bin/bash
 docker exec -it $(docker ps | grep sentry_web | awk '{print $NF}') sentry upgrade
 
 # relay gen secret
