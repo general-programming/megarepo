@@ -48,6 +48,27 @@ hosts:
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
+  sea1-vpn-spine-1:
+    address: 79.110.170.6
+    ip6_address: 2602:fa6d:10:ffff::f02
+    asn: 4280805529
+    type: vyos
+    role: vpn
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 2602:fa6d:f:aaaa::f02/128
+        management: true
+      - name: eth0
+        description: external
+        address: 2602:fa6d:10:ffff::f02/116
+        dhcp: true
+      - name: eth1
+        description: internal
+        address: 10.3.2.5/23
+    nameservers:
+      - 2606:4700::1111
+      - 2606:4700::1001
   fmt2-vpn-leaf-1:
     asn: 4280805526
     type: vyos
@@ -266,11 +287,14 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea420-acc-v-hv2
     network: 172.31.255.46/31
+
+  # sea1-vpn-leaf-1
   51845:
     side_a: fmt2-vpn-spine-1
     side_b: sea1-vpn-leaf-1
-    network: fec0::6776:706e:1:0/127
   51846:
     side_a: fmt2-vpn-spine-2
     side_b: sea1-vpn-leaf-1
-    network: fec0::6776:706e:2:0/127
+  51847:
+    side_a: sea1-vpn-spine-1
+    side_b: sea1-vpn-leaf-1

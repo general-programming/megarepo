@@ -124,7 +124,7 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
                 link_id=link_id,
                 side_a=side_a,
                 side_b=side_b,
-                network=link["network"],
+                network=link.get("network", None),
                 secret=link.get("secret", None),
                 ipsec=link.get("ipsec", False),
             )

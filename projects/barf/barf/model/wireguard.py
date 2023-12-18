@@ -38,16 +38,21 @@ class WGNetworkLink(NetworkLink):
 
     def get_ip(self, host: "BaseHost", with_netmask: bool = False) -> str:
         """Return the IP address of the host on this link."""
+        if not self.network:
+            return None
+
         if ":" in self.network:
-            side_a_ip, side_b_ip = list(ipaddress.IPv6Network(self.network).hosts())
-            netmask = "/127"
+            network = ipaddress.IPv6Network(self.network)
         else:
-            side_a_ip, side_b_ip = list(ipaddress.IPv4Network(self.network).hosts())
-            netmask = "/31"
+            network = ipaddress.IPv4Network(self.network)
+
+        # get the A + B IPS
+        side_a_ip = next(network.hosts())
+        side_b_ip = side_a_ip + 1
 
         if with_netmask:
-            side_a_ip = str(side_a_ip) + netmask
-            side_b_ip = str(side_b_ip) + netmask
+            side_a_ip = f"{side_a_ip}/{network.prefixlen}"
+            side_b_ip = f"{side_b_ip}/{network.prefixlen}"
 
         if host == self.side_a:
             return side_a_ip
@@ -56,6 +61,10 @@ class WGNetworkLink(NetworkLink):
         else:
             return None
 
+    @property
+    def unnumbered(self) -> bool:
+        """Whether this link is unnumbered."""
+        return self.network is None
 
 def generate_wireguard_keys() -> WGKeypair:
     """Generate a WireGuard private & public key.

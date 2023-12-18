@@ -50,7 +50,9 @@ set vpn ipsec site-to-site peer {{ peer_name }} vti bind '{{ interface_name }}'
         {%- set interface_name = "wg" ~ link.link_id -%}
         {%- set port = link.link_id -%}
 set interfaces wireguard {{ interface_name }} description 'wg link ({{ link.side_a.hostname }} -> {{ link.side_b.hostname }})'
+{% if not link.unnumbered %}
 set interfaces wireguard {{ interface_name }} address {{ link.get_ip(our_side, with_netmask=True) }}
+{% endif %}
 set interfaces wireguard {{ interface_name }} private-key '{{ our_side.wg_privkey(port) }}'
 set interfaces wireguard {{ interface_name }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.wg_pubkey(port) }}'
@@ -63,17 +65,24 @@ set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} per
         {% endif %}
     {% endif %}
 
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} description '{{ other_peer.hostname }}'
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as {{ other_peer.asn }}
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ device.management_address.ip }}
-    {% if other_peer.is_spine %}
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group spine
-    {% else %}
-set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group leaf
+{% if link.unnumbered %}
+set protocols bgp neighbor {{ interface_name }} description '{{ other_peer.hostname }}'
+set protocols bgp neighbor {{ interface_name }} update-source {{ device.management_address.ip }}
+set protocols bgp neighbor {{ interface_name }} interface peer-group fabric
+set protocols bgp neighbor {{ interface_name }} interface v6only peer-group fabric
+set protocols bgp neighbor {{ interface_name }} interface v6only remote-as external
+    {% if other_peer.can_bfd %}
+set protocols bgp neighbor {{ interface_name }} bfd
     {% endif %}
+{% else %}
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} description '{{ other_peer.hostname }}'
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} remote-as external
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} update-source {{ device.management_address.ip }}
+set protocols bgp neighbor {{ link.get_ip(other_peer) }} peer-group fabric
     {% if other_peer.can_bfd %}
 set protocols bgp neighbor {{ link.get_ip(other_peer) }} bfd
     {% endif %}
+{% endif %}
 {% endfor -%}
 
 {% for network in device.networks %}
@@ -86,10 +95,9 @@ set protocols bgp address-family ipv4-unicast network {{ device.management_addre
 {% endif %}
 
 set protocols bgp system-as '{{ device.asn }}'
-set protocols bgp peer-group leaf address-family ipv4-unicast
-set protocols bgp peer-group leaf ebgp-multihop '6'
-set protocols bgp peer-group spine address-family ipv4-unicast
-set protocols bgp peer-group spine ebgp-multihop '6'
+set protocols bgp peer-group fabric address-family ipv4-unicast
+set protocols bgp peer-group fabric address-family ipv6-unicast
+set protocols bgp peer-group fabric capability extended-nexthop
 set protocols bgp timers keepalive 10
 set protocols bgp timers holdtime 30
 
