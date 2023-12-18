@@ -93,7 +93,7 @@ hosts:
       - set protocols bgp listen range 10.65.67.0/24 peer-group internal
       - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
       - set protocols bgp neighbor eth0.5 interface peer-group internal
-      - set protocols bgp peer-group internal ipv4-unicast
+      - set protocols bgp peer-group internal address-family ipv4-unicast
       - set protocols bgp peer-group internal remote-as 4280805526
   fmt2-vpn-leaf-2:
     asn: 4280805526
@@ -203,14 +203,15 @@ hosts:
     networks:
       - 10.3.2.0/23
 links:
+  # fmt2-vpn-leaf-1
   51820:
     side_a: fmt2-vpn-spine-1
     side_b: fmt2-vpn-leaf-1
-    network: 172.31.255.0/31
   51821:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-leaf-1
-    network: 172.31.255.2/31
+
+  # sea69-acc-v-a-1
   51823:
     side_a: fmt2-vpn-spine-1
     side_b: sea69-acc-v-a-1
@@ -219,6 +220,8 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea69-acc-v-a-1
     network: 172.31.255.6/31
+
+  # sea21-hv-egg-irl
   51825:
     side_a: fmt2-vpn-spine-1
     side_b: sea21-hv-egg-irl
@@ -227,14 +230,16 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea21-hv-egg-irl
     network: 172.31.255.10/31
+
+  # fmt2-vpn-leaf-2
   51827:
     side_a: fmt2-vpn-spine-1
     side_b: fmt2-vpn-leaf-2
-    network: 172.31.255.12/31
   51828:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-leaf-2
-    network: 172.31.255.14/31
+
+  # oci-vpn-iad
   51831:
     side_a: fmt2-vpn-spine-1
     side_b: oracle-vpn-1-1
@@ -259,6 +264,8 @@ links:
     network: 172.31.255.26/31
     secret: fmt2-oracle-vpn-4
     ipsec: true
+
+  # fmt2-vpn-client
   51839:
     side_a: fmt2-vpn-spine-1
     side_b: fmt2-vpn-client-1
@@ -267,6 +274,8 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: fmt2-vpn-client-1
     network: 172.31.255.38/31
+
+  # oci-vpn-ord
   51841:
     side_a: fmt2-vpn-spine-1
     side_b: oci-vpn-ord-1-1
@@ -279,6 +288,8 @@ links:
     network: 172.31.255.42/31
     secret: oci-vpn-ord-1-2
     ipsec: true
+
+  # sea420-acc-v-hv2
   51843:
     side_a: fmt2-vpn-spine-1
     side_b: sea420-acc-v-hv2
