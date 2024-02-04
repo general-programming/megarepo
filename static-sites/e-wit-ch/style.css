@@ -79,15 +79,15 @@ section h3 {
         background-color: #000;
         color: #FFF;
     }
-    
+
     #background {
         filter: invert(100%) brightness(0.2);
     }
-    
+
     a {
         color: #ffc0cb;
     }
-    
+
     a:hover {
         /* add color */
     }
@@ -148,24 +148,24 @@ section h3 {
     --g-green: #00b180;
     --g-blue: #147aab;
     --g-indigo: #675997;
-    
+
     --t-blue: #4fa5c2;
     --t-pink: #f587ac;
     --t-white: #f9fbfc;
-    
+
     --b-pink: #c1357e;
     --b-purple: #675997;
     --b-blue: #0655a9;
-    
+
     --p-magenta: #fa5e5b;
     --p-yellow: #ffba00;
     --p-blue: #4fa5c2;
-    
+
     --a-black: #222222;
     --a-grey: #a2a2a2;
     --a-white: #f9fbfc;
     --a-purple: #a148a2;
-    
+
     --nb-black: #222222;
     --nb-yellow: #f7e45a;
     --nb-white: #f9fbfc;

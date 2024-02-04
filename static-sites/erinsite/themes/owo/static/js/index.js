@@ -1,4 +1,4 @@
-(function() {
+(function () {
     // Utility
     const randint = (max) => {
         return Math.round(Math.random() * max);
@@ -6,7 +6,7 @@
 
     const randomElement = (array) => {
         return array[randint(array.length - 1)];
-    }
+    };
 
     // Random tags
     const tags = [
@@ -36,15 +36,8 @@
 
     // Random stripe colors
     // CSS from https://codepen.io/charliewilco/pen/BzAJzE
-    const stripes = [
-        "gay",
-        "trans",
-        "bi",
-        "pan",
-        "asex",
-        "nonb",
-    ]
+    const stripes = ["gay", "trans", "bi", "pan", "asex", "nonb", ""];
     let stripe = randomElement(stripes);
     let stripeElement = document.getElementById("background");
     stripeElement.classList.add(stripe);
-})()
+})();

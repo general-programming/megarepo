@@ -4,19 +4,19 @@ date = 2023-01-01T08:00:00-07:00
 draft = false
 +++
 
-### hewwo
+# hewwo
 welcome to my hell
 
 you should refresh this page for the full experience
 
 fun fact: this page should in theory adapt to your system's light/dark theme setting!
 
-### about
+# about
 some words about me go here
 
 lorem ipsum, egg egg egg
 
-### testimony
+# testimony
 - "true oblivious dumbass" -obw
 - "chaotic dumbass" -ako
 - "you're a special idiot nep" -linuxgemini

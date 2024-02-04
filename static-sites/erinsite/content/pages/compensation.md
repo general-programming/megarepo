@@ -1,14 +1,16 @@
 ---
 title: "pay transparency"
+summary: "a ***painfully excessive*** display of pay transparency"
 ---
-inspired by [this page](https://xeiaso.net/salary-transparency) by xe, i decided to document the salaries and bonuses that i've had in all my roles to a ***painfully excessive*** display of transparency.
+inspired by [this page](https://xeiaso.net/salary-transparency) by xe, i decided to document the salaries and bonuses that i've had in all my roles to a **painfully excessive** display of transparency.
 
 if you are in a similar position as me back in 2020-2021 with a lot of hobby experience but zero professional experience, yolo that appliacation. worst they can do is bin your application!
 
 ## bonuses
 | month |   amount   | comment |
 |-------|------------|---------|
-| 2023-11 | $28,125k |  E, mid year bonus (rare!) |
+| 2023-12 | $500 |  spot bonus (aw yee team) |
+| 2023-11 | $28,125k |  E rating, mid year bonus (rare!) |
 | 2023-05 | $31,612  |  M+ rating, annual bonus |
 | 2022-12 | $500     | "The Bonus" |
 | 2022-01 | $40      | i got another covid shot |
