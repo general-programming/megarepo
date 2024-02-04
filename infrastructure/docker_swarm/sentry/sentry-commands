@@ -23,6 +23,7 @@ kafka-topics --create --topic profiles --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-occurrences --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-metrics --bootstrap-server kafka:9092
 kafka-topics --create --topic ingest-performance-metrics --bootstrap-server kafka:9092
+kafka-topics --create --topic ingest-monitors --bootstrap-server kafka:9092
 
 # snuba migrate
 docker exec -it $(docker ps | grep snuba-api | awk '{print $NF}') /bin/sh

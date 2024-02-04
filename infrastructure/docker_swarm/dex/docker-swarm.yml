@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   dex:
-    image: dexidp/dex:v2.36.0-alpine
+    image: dexidp/dex:v2.38.0-alpine
     volumes:
       - /etc/ipa/ca.crt:/ipa_ca.crt:ro
       - /srv/etc/dex.yaml:/config.yaml:ro
