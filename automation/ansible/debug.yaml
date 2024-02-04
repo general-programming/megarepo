@@ -1,0 +1,5 @@
+- hosts: all
+  strategy: free
+  tasks:
+  - debug:
+      var: hostvars[inventory_hostname]
