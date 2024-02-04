@@ -512,6 +512,7 @@ from barf.vendors.edgeos import EdgeOSHost
 from barf.vendors.external import ExternalHost
 from barf.vendors.linux import LinuxBirdHost
 from barf.vendors.vyos import VyOSHost
+from barf.vendors.mikrotik import MikroTikHost
 
 VENDOR_MAP = {
     "vyos": VyOSHost,
@@ -525,4 +526,5 @@ VENDOR_MAP = {
     "dnos-6": DNOS6Host,
     "dnos9": DNOS9Host,
     "dnos-9": DNOS9Host,
+    "mikrotik": MikroTikHost,
 }
