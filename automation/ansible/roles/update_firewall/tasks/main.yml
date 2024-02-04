@@ -1,31 +1,68 @@
-- name: Install iptables-persistent
+- name: Install firewall packages
   package:
-    name: iptables-persistent
+    name: "{{ item }}"
     state: present
+  loop:
+    - iptables-persistent
+    - netfilter-persistent
+    - ipset
 
 - name: Allow all INPUT before changes
   ansible.builtin.iptables:
     chain: INPUT
     policy: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow all OUTPUT before changes
   ansible.builtin.iptables:
     chain: OUTPUT
     policy: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
-- name: Flush INPUT/OUTPUT tables
+
+- name: "[V4] Flush INPUT/OUTPUT tables"
   ansible.builtin.iptables:
     chain: "{{ item }}"
     flush: yes
+    ip_version: ipv4
   loop:
     - 'INPUT'
     - 'OUTPUT'
+
+- name: "[V6] Flush INPUT/OUTPUT tables"
+  ansible.builtin.iptables:
+    chain: "{{ item }}"
+    flush: yes
+    ip_version: ipv6
+  loop:
+    - 'INPUT'
+    - 'OUTPUT'
+
+- name: Allow loopback traffic
+  ansible.builtin.iptables:
+    chain: INPUT
+    in_interface: lo
+    jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow related and established connections
   ansible.builtin.iptables:
     chain: INPUT
     ctstate: ESTABLISHED,RELATED
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow ICMP
   ansible.builtin.iptables:
@@ -33,6 +70,21 @@
     protocol: icmp
     ctstate: NEW,ESTABLISHED,RELATED
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
+
+- name: Allow ICMP6
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: icmpv6
+    ctstate: NEW,ESTABLISHED,RELATED
+    jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow SSH connections
   ansible.builtin.iptables:
@@ -41,6 +93,10 @@
     destination_ports:
       - 22
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow node_exporter connections
   ansible.builtin.iptables:
@@ -49,6 +105,10 @@
     destination_ports:
       - 9100
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 - name: Allow HTTP connections
   ansible.builtin.iptables:
@@ -59,6 +119,10 @@
       - 443
       - 8080
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_http_https' in group_names"
 
 - name: Allow IRC connections
@@ -68,6 +132,10 @@
     destination_ports:
       - 6667
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_irc' in group_names"
 
 - name: Allow IRCS connections
@@ -77,6 +145,10 @@
     destination_ports:
       - 6697
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_ircs' in group_names"
 
 - name: Allow Nomad HTTP connections
@@ -86,6 +158,10 @@
     destination_ports:
       - 4646
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_nomad_http' in group_names"
 
 - name: Allow Nomad RPC connections
@@ -95,6 +171,10 @@
     destination_ports:
       - 4647
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_nomad_rpc' in group_names"
 
 - name: Allow Nomad Serf TCP connections
@@ -104,6 +184,10 @@
     destination_ports:
       - 4648
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_nomad_serf' in group_names"
 
 - name: Allow Nomad Serf UDP connections
@@ -113,6 +197,10 @@
     destination_ports:
       - 4648
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_nomad_serf' in group_names"
 
 - name: Allow Proxmox connections
@@ -122,8 +210,52 @@
     destination_ports:
       - 5432
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_proxmox' in group_names"
 
+# Create internal traffic ipsets
+- name: Create ipset v4
+  shell: >
+    ipset create internal_traffic4 hash:net || true
+    && ipset destroy internal_traffic4_new || true
+    && ipset create internal_traffic4_new "hash:net"
+    && ipset add internal_traffic4_new 10.0.0.0/8
+    && ipset add internal_traffic4_new 192.168.0.0/16
+    && ipset add internal_traffic4_new 172.16.0.0/12
+    && ipset swap internal_traffic4_new internal_traffic4
+    && ipset destroy internal_traffic4_new
+
+- name: Create ipset v6
+  shell: >
+    ipset create internal_traffic6 hash:net family inet6 || true
+    && ipset destroy internal_traffic6_new || true
+    && ipset create internal_traffic6_new "hash:net" family inet6
+    && ipset add internal_traffic6_new 2602:fa6d:10:ffff::/116
+    && ipset swap internal_traffic6_new internal_traffic6
+    && ipset destroy internal_traffic6_new
+
+
+# Add rules for denying non-internal traffic.
+- name: "[V4] Drop all non internal traffic"
+  ansible.builtin.iptables:
+    chain: INPUT
+    match_set: "!internal_traffic4"
+    match_set_flags: src
+    jump: DROP
+    ip_version: ipv4
+
+- name: "[V6] Drop all non internal traffic"
+  ansible.builtin.iptables:
+    chain: INPUT
+    match_set: "!internal_traffic6"
+    match_set_flags: src
+    jump: DROP
+    ip_version: ipv6
+
+# Internal services go here
 - name: Allow Postgres connections
   ansible.builtin.iptables:
     chain: INPUT
@@ -131,13 +263,11 @@
     destination_ports:
       - 8006
     jump: ACCEPT
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
   when: "'service_postgres' in group_names"
-
-- name: Drop all traffic for external interface
-  ansible.builtin.iptables:
-    chain: INPUT
-    in_interface: ens19
-    jump: DROP
 
 - name: Save IPv4 tables
   community.general.iptables_state:
