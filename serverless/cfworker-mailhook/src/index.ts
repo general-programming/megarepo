@@ -51,11 +51,14 @@ async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: Exec
 		email: rawEmail,
 	});
 
-	await fetch(MAIL_ENDPOINT, {
+	const endpointResponse = await fetch(MAIL_ENDPOINT, {
 		method: 'POST',
 		headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
 		body: emailBlob,
 	  });
+
+	  console.log("endpoint status: ", endpointResponse.status);
+	  console.log("endpoint body: ", await endpointResponse.text());
 }
 
 
