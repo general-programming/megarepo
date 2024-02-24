@@ -61,3 +61,6 @@ alerting:
             - alertmanager:9093
 rule_files:
   - alerts.yml
+
+remote_write:
+  - url: http://vminsert.fmt2.generalprogramming.org:8480/insert/0/prometheus/api/v1/write

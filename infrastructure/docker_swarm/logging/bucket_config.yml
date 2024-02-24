@@ -1,8 +1,0 @@
-type: S3
-config:
-  bucket: thanos
-  endpoint: thanosminio:9000
-  insecure: true
-  signature_version2: true
-  access_key: THANOS_ACCESS_INTERNAL
-  secret_key: THANOS_INSECURE_SECRET
