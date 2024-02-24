@@ -233,27 +233,37 @@
     ipset create internal_traffic6 hash:net family inet6 || true
     && ipset destroy internal_traffic6_new || true
     && ipset create internal_traffic6_new "hash:net" family inet6
-    && ipset add internal_traffic6_new 2602:fa6d:10:ffff::/116
+    && ipset add internal_traffic6_new 2602:fa6d:10::/48
     && ipset swap internal_traffic6_new internal_traffic6
     && ipset destroy internal_traffic6_new
 
 
-# Add rules for denying non-internal traffic.
-- name: "[V4] Drop all non internal traffic"
+# Add rules for allow internal traffic.
+- name: "[V4] Allow all internal traffic"
   ansible.builtin.iptables:
     chain: INPUT
-    match_set: "!internal_traffic4"
+    match_set: "internal_traffic4"
     match_set_flags: src
-    jump: DROP
+    jump: ACCEPT
     ip_version: ipv4
 
-- name: "[V6] Drop all non internal traffic"
+- name: "[V6] Allow all internal traffic"
   ansible.builtin.iptables:
     chain: INPUT
-    match_set: "!internal_traffic6"
+    match_set: "internal_traffic6"
     match_set_flags: src
-    jump: DROP
+    jump: ACCEPT
     ip_version: ipv6
+
+# YOLO.
+- name: Drop all INPUT after changes
+  ansible.builtin.iptables:
+    chain: INPUT
+    policy: DROP
+    ip_version: "{{ item }}"
+  loop:
+    - ipv4
+    - ipv6
 
 # Internal services go here
 - name: Allow Postgres connections
