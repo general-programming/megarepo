@@ -2,11 +2,16 @@
 
 data_dir = "/var/lib/consul"
 log_level = "INFO"
-server = false
+{% if consul_server %}
+server = true
+ui = {{ enable_consul_ui }}
+{% else %}
+server = {{ enable_consul_ui }}
 ui = false
+{% endif %}
 enable_local_script_checks = true
-datacenter = "fmt2"
-retry_join = ["consul.service.fmt2.consul"]
+datacenter = "{{ datacenter }}"
+retry_join = ["consul.service.{{ datacenter }}.consul"]
 {% raw %}
 bind_addr = "{{ GetPrivateInterfaces | include \"network\" \"10.0.0.0/8\" | attr \"address\" }}"
 {% endraw %}
