@@ -48,27 +48,6 @@ hosts:
     nameservers:
       - 10.255.1.8
       - 1.1.1.1
-  sea1-vpn-spine-1:
-    address: 79.110.170.6
-    ip6_address: 2602:fa6d:10:ffff::f02
-    asn: 4280805529
-    type: vyos
-    role: vpn
-    interfaces:
-      - name: dum0
-        description: underlay loopback
-        address: 2602:fa6d:f:aaaa::f02/128
-        management: true
-      - name: eth0
-        description: external
-        address: 2602:fa6d:10:ffff::f02/116
-        dhcp: true
-      - name: eth1
-        description: internal
-        address: 10.3.2.5/23
-    nameservers:
-      - 2606:4700::1111
-      - 2606:4700::1001
   fmt2-vpn-leaf-1:
     asn: 4280805526
     type: vyos
@@ -87,7 +66,7 @@ hosts:
     extra_config:
       - set protocols ospf area 0 network 10.65.67.0/24
       - set protocols ospf redistribute bgp metric-type 2
-      - set nat source rule 10 outbound-interface eth1
+      - set nat source rule 10 outbound-interface name eth1
       - set nat source rule 10 source address 172.31.255.0/24
       - set nat source rule 10 translation address masquerade
       - set protocols bgp listen range 10.65.67.0/24 peer-group internal
@@ -113,7 +92,7 @@ hosts:
     extra_config:
       - set protocols ospf area 0 network 10.65.67.0/24
       - set protocols ospf redistribute bgp metric-type 2
-      - set nat source rule 10 outbound-interface eth1
+      - set nat source rule 10 outbound-interface name eth1
       - set nat source rule 10 source address 172.31.255.0/24
       - set nat source rule 10 translation address masquerade
       - set protocols bgp listen range 10.65.67.0/24 peer-group internal
@@ -178,8 +157,30 @@ hosts:
     role: vpn
   sea420-acc-v-hv2:
     asn: 4280805533
-    type: linux
+    type: mikrotik
     role: vpn
+  # sea1
+  sea1-vpn-spine-1:
+    # address: 79.110.170.6
+    ip6_address: 2602:fa6d:10:ffff::f02
+    asn: 4280805529
+    type: vyos
+    role: vpn
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 2602:fa6d:f:aaaa::f02/128
+        management: true
+      - name: eth0
+        description: external
+        address: 2602:fa6d:10:ffff::f02/116
+        dhcp: true
+      - name: eth1
+        description: internal
+        address: 10.3.2.5/23
+    nameservers:
+      - 2606:4700::1111
+      - 2606:4700::1001
   sea1-vpn-leaf-1:
     asn: 4280805534
     management: 2602:fa6d:f:aaaa::f01
@@ -202,6 +203,13 @@ hosts:
       - 2606:4700::1001
     networks:
       - 10.3.2.0/23
+    extra_config:
+      - set high-availability vrrp group internal vrid 10
+      - set high-availability vrrp group internal interface eth1
+      - set high-availability vrrp group internal address 10.3.2.1/23
+      - set nat source rule 10 outbound-interface name eth0
+      - set nat source rule 10 source address 10.3.2.0/23
+      - set nat source rule 10 translation address masquerade
 links:
   # fmt2-vpn-leaf-1
   51820:
@@ -209,6 +217,9 @@ links:
     side_b: fmt2-vpn-leaf-1
   51821:
     side_a: fmt2-vpn-spine-2
+    side_b: fmt2-vpn-leaf-1
+  51829:
+    side_a: sea1-vpn-spine-1
     side_b: fmt2-vpn-leaf-1
 
   # sea69-acc-v-a-1
@@ -220,6 +231,10 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea69-acc-v-a-1
     network: 172.31.255.6/31
+  51835:
+    side_a: sea1-vpn-spine-1
+    side_b: sea69-acc-v-a-1
+    network: 172.31.255.12/31
 
   # sea21-hv-egg-irl
   51825:
@@ -237,6 +252,9 @@ links:
     side_b: fmt2-vpn-leaf-2
   51828:
     side_a: fmt2-vpn-spine-2
+    side_b: fmt2-vpn-leaf-2
+  51830:
+    side_a: sea1-vpn-spine-1
     side_b: fmt2-vpn-leaf-2
 
   # oci-vpn-iad
@@ -298,6 +316,10 @@ links:
     side_a: fmt2-vpn-spine-2
     side_b: sea420-acc-v-hv2
     network: 172.31.255.46/31
+  51836:
+    side_a: sea1-vpn-spine-1
+    side_b: sea420-acc-v-hv2
+    network: 172.31.255.14/31
 
   # sea1-vpn-leaf-1
   51845:
