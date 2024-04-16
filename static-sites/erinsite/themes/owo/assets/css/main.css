@@ -273,6 +273,8 @@ footer {
 
 footer a {
   margin-right: 0.5rem;
+  width: 88px;
+  height: 31px;
 }
 
 /* table styles */
