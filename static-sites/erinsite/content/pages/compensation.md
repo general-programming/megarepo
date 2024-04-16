@@ -9,8 +9,9 @@ if you are in a similar position as me back in 2020-2021 with a lot of hobby exp
 ## bonuses
 | month |   amount   | comment |
 |-------|------------|---------|
+| 2024-04 | $74,251 |  E rating, 2023 annual. honestly wild to think i've made it this far |
 | 2023-12 | $500 |  spot bonus (aw yee team) |
-| 2023-11 | $28,125k |  E rating, mid year bonus (rare!) |
+| 2023-11 | $28,125 |  E rating, mid year bonus (rare!) |
 | 2023-05 | $31,612  |  M+ rating, annual bonus |
 | 2022-12 | $500     | "The Bonus" |
 | 2022-01 | $40      | i got another covid shot |
@@ -21,6 +22,7 @@ if you are in a similar position as me back in 2020-2021 with a lot of hobby exp
 
 | start date |  end date  | company |  role  |  salary  | comment |
 |------------|------------|---------|--------|----------|---------|
+| 2023-09-01 | present    | tiktok usds | [2-1] site reliabity engineer | $180k/yr | woah! |
 | 2023-09-01 | present    | tiktok usds | [1-2] site reliabity engineer | $151.5k/yr | mid year raise! |
 | 2022-08-08 | 2023-09-01 | tiktok usds | [1-2] site reliabity engineer | $135k/yr | new role! |
 | 2022-04-03 | 2022-08-08 | amazon | [L3] it support associate ii | $33.13/hr | forte lucky raise! |
