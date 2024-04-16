@@ -260,6 +260,21 @@ header nav ul {
   padding: 0;
 }
 
+/* footer */
+footer {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  justify-content: flex-start;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+  border-top: 1px solid #eeeeee;
+}
+
+footer a {
+  margin-right: 0.5rem;
+}
+
 /* table styles */
 table {
   border-spacing: 0px;

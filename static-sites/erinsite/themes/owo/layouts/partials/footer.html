@@ -1,0 +1,7 @@
+<footer id="webring">
+    {{ range .Site.Params.webring }}
+    <a href="{{ .url }}">
+        <img src="{{ .image }}"/>
+    </a>
+    {{ end }}
+</footer>
