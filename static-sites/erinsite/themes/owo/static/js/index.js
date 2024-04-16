@@ -1,11 +1,24 @@
 (function () {
     // Utility
-    const randint = (max) => {
-        return Math.round(Math.random() * max);
+    const randint = (min, max) => {
+        try {
+            const randomBuffer = new Uint32Array(1);
+
+            window.crypto.getRandomValues(randomBuffer);
+
+            const randomNumber = randomBuffer[0] / (0xffffffff + 1);
+            min = Math.ceil(min);
+            max = Math.floor(max);
+            return Math.floor(randomNumber * (max - min + 1)) + min;
+        } catch (e) {
+            console.warn("no crypto rng!");
+        }
+
+        return Math.round(Math.random() * (max - min) + min);
     };
 
     const randomElement = (array) => {
-        return array[randint(array.length - 1)];
+        return array[randint(0, array.length - 1)];
     };
 
     // Random tags
@@ -29,6 +42,13 @@
         ":wq!",
         "i still prefer coding in the backend",
         "Cup.",
+        "you can help expand this",
+        "[citation needed]",
+        "computers were a mistake",
+        "oops",
+        "woof",
+        "meow",
+        "awoo",
     ];
 
     let tagElement = document.getElementById("dynamictag");
