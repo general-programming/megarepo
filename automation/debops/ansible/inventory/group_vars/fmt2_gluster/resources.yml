@@ -1,5 +1,0 @@
-resources__group_files_gluster:
-  - src: '{{ resources__src + "service_gluster.json" }}'
-    dest: "/etc/consul.d/service_gluster.json"
-    owner: "consul"
-    group: "consul"

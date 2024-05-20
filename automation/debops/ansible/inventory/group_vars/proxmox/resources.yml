@@ -1,5 +1,0 @@
-resources__group_files_proxmox:
-  - src: '{{ resources__src + "service_proxmox.hcl" }}'
-    dest: "/etc/consul.d/service_proxmox.hcl"
-    owner: "consul"
-    group: "consul"

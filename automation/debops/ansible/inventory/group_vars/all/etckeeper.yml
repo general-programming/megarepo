@@ -1,4 +1,0 @@
----
-etckeeper__gitignore:
-  - name: 'proxmox-pve'
-    ignore: 'pve/'

@@ -1,2 +1,0 @@
-apt_install__group_packages_gluster:
-  - "glusterfs-server"
