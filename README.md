@@ -4,7 +4,7 @@ Mega repo for General Programming business operations.
 
 ## Folders
 
-* automation/ - Ansible + PyInfra playbooks for automating deployments and managements to core systems and disposable fleet.
+* automation/ - Ansible playbooks for automating deployments and managements to core systems and disposable fleet.
 * common/ - Files shared between automation playbooks and other scripts.
 * infrastructure/ - Dockerfiles and Ansible playbooks to setup "important" services
 * serverless/ - Various webhooks that handle events fired by other services.

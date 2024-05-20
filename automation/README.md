@@ -1,3 +1,3 @@
 # automation/
 
-contains pyinfra / ansible playbooks and task files.
+contains ansible playbooks and task files.
