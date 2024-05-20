@@ -60,4 +60,10 @@
     let stripe = randomElement(stripes);
     let stripeElement = document.getElementById("background");
     stripeElement.classList.add(stripe);
+
+    // shuffle the webring
+    var webring = document.querySelector("#webring");
+    for (var i = webring.children.length; i >= 0; i--) {
+        webring.appendChild(webring.children[randint(0, i)]);
+    }
 })();
