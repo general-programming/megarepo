@@ -12,6 +12,11 @@
     src: 00-dhcpd.j2
     dest: /etc/dhcp/dhcpd.d/00-ansible.conf
 
+- name: dhcpd - Update config for v6
+  template:
+    src: 00-dhcpd6.j2
+    dest: /etc/dhcp/dhcpd6.d/00-ansible.conf
+
 - name: dhcpd - Update webhook
   template:
     src: dhcpd_discordhook.j2
@@ -35,5 +40,11 @@
 - name: dhcpd - Restart
   service:
     name: "isc-dhcp-server"
+    enabled: true
+    state: restarted
+
+- name: dhcpd6 - Restart
+  service:
+    name: "isc-dhcp-server6"
     enabled: true
     state: restarted

@@ -24,6 +24,6 @@ on commit {
 }
 
 # Leases from Netbox
-{% for lease in leases %}
+{% for lease in leases.v4 %}
 host {{ lease.host }} { hardware ethernet {{ lease.mac }}; fixed-address {{ lease.ip }}; option host-name "{{ lease.hostname }}"; }
 {% endfor %}

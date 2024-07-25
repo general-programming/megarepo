@@ -1,0 +1,14 @@
+# 00-dhcpd6.j2
+# {{ ansible_managed }}
+
+# Discord commit hook
+# TODO: Add commit hook
+
+# Leases from Netbox
+{% for lease in leases.v6 %}
+host {{ lease.host }} {
+  hardware ethernet {{ lease.mac }};
+  fixed-address6 {{ lease.ip }};
+  option host-name "{{ lease.hostname }}";
+}
+{% endfor %}

@@ -44,7 +44,10 @@ query {
 )
 
 if __name__ == "__main__":
-    leases = []
+    leases = {
+        "v4": [],
+        "v6": [],
+    }
 
     # Execute query and merge physical device + VM interfaces in one list.
     result = client.execute(query)
@@ -58,9 +61,11 @@ if __name__ == "__main__":
         except IndexError:
             continue
 
-        # Ignore IPv6 IPs.
+        # handle for IPv6 IPs.
         if ":" in ip_address:
-            continue
+            ip_family = "v6"
+        else:
+            ip_family = "v4"
 
         # Device name for physical / virt.
         if "device" in interface:
@@ -78,7 +83,7 @@ if __name__ == "__main__":
             log.warning(f"{ip_address} missing MAC")
             continue
 
-        leases.append(
+        leases[ip_family].append(
             generate_lease(
                 lease_name=hostname,
                 hostname=device_name,
