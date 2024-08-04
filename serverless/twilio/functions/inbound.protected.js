@@ -98,6 +98,9 @@ async function buildDiscordWebhookPayloads(event) {
                     custom_id: "reply",
                     label: "Reply",
                     style: 1,
+                    emoji: {
+                        name: "🗨️",
+                    },
                 },
             ],
         });

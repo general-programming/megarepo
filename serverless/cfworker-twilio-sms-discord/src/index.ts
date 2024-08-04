@@ -176,7 +176,9 @@ export default {
 					data: {
 						tts: false,
 						embeds: [embedResponse],
-						allowed_mentions: {},
+						allowed_mentions: {
+							users: [senderId],
+						},
 					},
 				};
 
