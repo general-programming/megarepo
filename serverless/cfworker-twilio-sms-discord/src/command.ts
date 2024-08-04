@@ -106,19 +106,26 @@ const handleSMS = async (body: any, options: any, guildConfig: DurableObjectStub
 	const toPhoneNumber = options.phone_number;
 	const message = options.message;
 	const attachmentId = options.attachment;
+	const senderId = body.member.user.id;
 	let attachmentUrl: string = '';
 
 	try {
-		console.log(body.data);
 		attachmentUrl = body.data.resolved.attachments[attachmentId].url;
 	} catch (error) {
 		attachmentUrl = '';
 	}
 
-	await sendSMS(twilio, phoneNumber, toPhoneNumber, message, attachmentUrl);
+	return await sendSMS(twilio, senderId, phoneNumber, toPhoneNumber, message, attachmentUrl);
 };
 
-export const sendSMS = async (twilio: Twilio, phoneNumber: string, toPhoneNumber: string, message: string, attachmentUrl?: string) => {
+export const sendSMS = async (
+	twilio: Twilio,
+	senderId: string,
+	phoneNumber: string,
+	toPhoneNumber: string,
+	message: string,
+	attachmentUrl?: string
+) => {
 	if (!toPhoneNumber) {
 		return createEmbed('Error', 'No phone number provided', 'failure');
 	}
@@ -128,7 +135,7 @@ export const sendSMS = async (twilio: Twilio, phoneNumber: string, toPhoneNumber
 	}
 
 	try {
-		const fields: EmbedFields[] = [createField('From', phoneNumber)];
+		const fields: EmbedFields[] = [createField('Sender', `<@${senderId}>`), createField('From', phoneNumber)];
 
 		if (message) {
 			fields.push(createField('Message', message));

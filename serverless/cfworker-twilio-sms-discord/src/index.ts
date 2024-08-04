@@ -101,8 +101,8 @@ export default {
 			);
 		}
 
-		console.log(rawBody);
 		const body = JSON.parse(rawBody);
+		console.log(body);
 
 		if (body.type === InteractionType.PING) {
 			console.log('got ping from discord');
@@ -167,8 +167,9 @@ export default {
 			if (modalId === 'reply_modal') {
 				const replyText = body.data.components[0].components[0].value;
 				const toPhoneNumber = body.message.embeds[0].title;
+				const senderId = body.member.user.id;
 
-				const embedResponse = await sendSMS(twilio, phoneNumber, toPhoneNumber, replyText);
+				const embedResponse = await sendSMS(twilio, senderId, phoneNumber, toPhoneNumber, replyText);
 
 				let response = {
 					type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -181,7 +182,6 @@ export default {
 
 				return new Response(JSON.stringify(response), { status: 200, headers: { 'Content-Type': 'application/json' } });
 			}
-			console.log(body);
 		}
 
 		console.log('Unknown interaction type', body.type);
