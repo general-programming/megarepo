@@ -84,6 +84,21 @@ async function buildDiscordWebhookPayloads(event) {
         footer = `Call to ${event.To}`;
     }
 
+    // Create the reply components
+    const components = [
+        {
+            type: 1,
+            components: [
+                {
+                    type: 2,
+                    style: 5,
+                    label: "Reply",
+                    custom_id: "reply",
+                },
+            ],
+        },
+    ];
+
     // Create the message payload.
     const messageForm = new FormData();
     const messagePayload = {
@@ -99,6 +114,7 @@ async function buildDiscordWebhookPayloads(event) {
                 fields: fields,
             },
         ],
+        components: components,
     };
     messageForm.append("payload_json", JSON.stringify(messagePayload));
     payloads.push(messageForm);

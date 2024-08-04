@@ -87,6 +87,22 @@ async function buildDiscordWebhookPayloads(event) {
         footer = `Call to ${event.To}`;
     }
 
+    // Create the component payload.
+    const components = [];
+    if (isSMS) {
+        components.push({
+            type: 1,
+            components: [
+                {
+                    type: 2,
+                    custom_id: "reply",
+                    label: "Reply",
+                    style: 1,
+                },
+            ],
+        });
+    }
+
     // Create the message payload.
     const messageForm = new FormData();
     const messagePayload = {
@@ -102,8 +118,9 @@ async function buildDiscordWebhookPayloads(event) {
                 fields: fields,
             },
         ],
+        components: components,
     };
-    console.log(messagePayload);
+    console.log(JSON.stringify(messagePayload));
     messageForm.append("payload_json", JSON.stringify(messagePayload));
     payloads.push(messageForm);
 
@@ -129,18 +146,28 @@ async function buildDiscordWebhookPayloads(event) {
 exports.handler = async function (context, event, callback) {
     const payloads = await buildDiscordWebhookPayloads(event);
     const isSMS = checkIfSMS(event);
-    const webhookURI = isSMS
-        ? context.DISCORD_WEBHOOK_SMS
-        : context.DISCORD_WEBHOOK_VOICE;
+    const channelID = isSMS
+        ? context.DISCORD_CHANNEL_SMS
+        : context.DISCORD_CHANNEL_VOICE;
+
+    const postURI = `https://discord.com/api/channels/${channelID}/messages`;
+    console.log("Posting to", postURI);
 
     for (const payload of payloads) {
         await axios({
             method: "POST",
-            url: webhookURI,
+            url: postURI,
             headers: {
                 "Content-Type": `multipart/form-data; boundary=${payload._boundary}`,
+                Authorization: `Bot ${context.DISCORD_BOT_TOKEN}`,
             },
             data: payload,
+        }).catch((err) => {
+            console.error("Got HTTP error posting to Discord", err);
+
+            if (err.response) {
+                console.error(err.response.data);
+            }
         });
 
         // Nasty hack to sleep for 200ms in between requests.
@@ -153,9 +180,9 @@ exports.handler = async function (context, event, callback) {
         const twiml = new Twilio.twiml.VoiceResponse();
         const dial = twiml.dial({
             callerId: event.From,
-            recordingStatusCallback: "",
-            recordingStatusCallbackMethod: "POST",
+            record: "record-from-ringing-dual",
         });
+
         dial.sip(
             {
                 username: context.SIP_USERNAME,
