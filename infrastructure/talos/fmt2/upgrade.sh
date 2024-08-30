@@ -11,5 +11,5 @@ hosts=(
 for host in ${hosts[@]}
 do
     echo "Upgrading $host"
-    talosctl upgrade --image ghcr.io/siderolabs/installer:v1.7.5 -n $host
+    talosctl upgrade --image ghcr.io/siderolabs/installer:v1.7.6 -n $host
 done
