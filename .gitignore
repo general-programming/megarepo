@@ -33,7 +33,6 @@ automation/ansible/inventory/nepeat_hosts
 # Language garbage
 node_modules/
 *.egg-info
-infrastructure/docker_swarm/pleroma/config/secret.exs
 serverless/twilio-discordhook/.envrc
 .envrc_secret
 infrastructure/docker_swarm/dex/config.yaml
