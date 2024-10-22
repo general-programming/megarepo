@@ -24,7 +24,7 @@ query ($tag: [String]) {
     vid
   }
 
-  device_list(tag: $tag) {
+  device_list(filters: {tag: $tag}) {
     name
     serial
     asset_tag
