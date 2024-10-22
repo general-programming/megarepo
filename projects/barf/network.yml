@@ -102,16 +102,14 @@ hosts:
       - set protocols bgp peer-group internal remote-as 4280805526
   sea69-acc-v-a-1:
     asn: 4280805527
-    type: edgeos
+    type: vyos
     role: vpn
     networks:
-      - 192.168.8.0/23
+      - 10.36.75.0/24
     interfaces:
-      # EdgeOS is awful and does not have a good way to have multiple loopbacks.
-      # This exists only as a dummy entry for the dummy interface.
       - name: dum0
         description: underlay loopback
-        address: 10.36.75.2/32
+        address: 10.255.2.5/32
         management: true
     nameservers:
       - 10.255.1.8
@@ -226,15 +224,12 @@ links:
   51823:
     side_a: fmt2-vpn-spine-1
     side_b: sea69-acc-v-a-1
-    network: 172.31.255.4/31
   51824:
     side_a: fmt2-vpn-spine-2
     side_b: sea69-acc-v-a-1
-    network: 172.31.255.6/31
   51835:
     side_a: sea1-vpn-spine-1
     side_b: sea69-acc-v-a-1
-    network: 172.31.255.12/31
 
   # sea21-hv-egg-irl
   51825:
