@@ -16,6 +16,13 @@ some words about me go here
 
 lorem ipsum, egg egg egg
 
+# links
+- [bluesky](https://bsky.app/profile/owo.me)
+- [mastodon](https://coolmathgam.es/@erin)
+- [twitter](https://x.com/eggrins)
+- [github](https://github.com/nepeat)
+- [emma](https://emma.pet/)
+
 # testimony
 - "true oblivious dumbass" -obw
 - "chaotic dumbass" -ako
