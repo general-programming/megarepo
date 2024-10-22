@@ -191,7 +191,7 @@ def main(
     hosts, links, global_meta = load_network(network_filename)
 
     # Merge network file with Netbox switches.
-    hosts.extend(get_nb_hosts())
+    # hosts.extend(get_nb_hosts())
 
     # Get secrets from Vault.
     secrets = VaultSecrets()
