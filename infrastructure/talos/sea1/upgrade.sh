@@ -9,5 +9,5 @@ hosts=(
 for host in ${hosts[@]}
 do
     echo "Upgrading $host"
-    talosctl upgrade --image factory.talos.dev/installer-secureboot/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515:v1.8.0 -n $host
+    talosctl upgrade --image factory.talos.dev/installer-secureboot/ce4c980550dd2ab1b17bbf2b08801c7eb59418eafe8f279833297925d67c7515:v1.9.3 -n $host
 done
