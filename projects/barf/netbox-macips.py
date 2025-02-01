@@ -55,41 +55,42 @@ if __name__ == "__main__":
 
     # Iterate through all interfaces.
     for interface in interfaces:
-        # Try to get the IP.
-        try:
-            ip_address = interface["ip_addresses"][0]["address"].split("/")[0]
-        except IndexError:
-            continue
+        for address in interface["ip_addresses"]:
+            # Try to get the IP.
+            try:
+                ip_address = address["address"].split("/")[0]
+            except IndexError:
+                continue
 
-        # handle for IPv6 IPs.
-        if ":" in ip_address:
-            ip_family = "v6"
-        else:
-            ip_family = "v4"
+            # handle for IPv6 IPs.
+            if ":" in ip_address:
+                ip_family = "v6"
+            else:
+                ip_family = "v4"
 
-        # Device name for physical / virt.
-        if "device" in interface:
-            device_name = interface["device"]["name"]
-        else:
-            device_name = interface["virtual_machine"]["name"]
+            # Device name for physical / virt.
+            if "device" in interface:
+                device_name = interface["device"]["name"]
+            else:
+                device_name = interface["virtual_machine"]["name"]
 
-        # Clean the names for DHCPd.
-        interface_name = clean_hostname(interface["name"])
-        device_name = clean_hostname(device_name)
-        hostname = f"{device_name}-{interface_name}".lower()
+            # Clean the names for DHCPd.
+            interface_name = clean_hostname(interface["name"])
+            device_name = clean_hostname(device_name)
+            hostname = f"{device_name}-{interface_name}".lower()
 
-        # Do not use IPs that do not have MAC addresses.
-        if not interface["mac_address"]:
-            log.warning(f"{ip_address} missing MAC")
-            continue
+            # Do not use IPs that do not have MAC addresses.
+            if not interface["mac_address"]:
+                log.warning(f"{ip_address} missing MAC")
+                continue
 
-        leases[ip_family].append(
-            generate_lease(
-                lease_name=hostname,
-                hostname=device_name,
-                mac=interface["mac_address"],
-                ip=ip_address,
+            leases[ip_family].append(
+                generate_lease(
+                    lease_name=hostname,
+                    hostname=device_name,
+                    mac=interface["mac_address"],
+                    ip=ip_address,
+                )
             )
-        )
 
     print(json.dumps(leases))
