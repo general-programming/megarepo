@@ -27,7 +27,7 @@ infrastructure/other/discourse/discourse_data.yml
 infrastructure/other/discourse/discourse_web.yml
 infrastructure/other/gitlab_runner_ssh_key
 infrastructure/docker_swarm/registry/docker-swarm.yml
-infrastructure/docker_swarm/sentry/.secret_env
+
 automation/ansible/inventory/nepeat_hosts
 
 # Language garbage
@@ -37,8 +37,6 @@ serverless/twilio-discordhook/.envrc
 .envrc_secret
 infrastructure/docker_swarm/dex/config.yaml
 infrastructure/docker_swarm/traefik/traefik_users.passwd
-infrastructure/docker_swarm/sentry/config.yml
-infrastructure/docker_swarm/sentry/sentry.conf.py
 
 # terraform
 .terraform
