@@ -12,10 +12,16 @@
     src: 00-dhcpd.j2
     dest: /etc/dhcp/dhcpd.d/00-ansible.conf
 
+- name: dhcpd - Check if v6 exists
+  ansible.builtin.stat:
+    path: "/etc/dhcp/dhcpd6.d"
+  register: v6_exists
+
 - name: dhcpd - Update config for v6
   template:
     src: 00-dhcpd6.j2
     dest: /etc/dhcp/dhcpd6.d/00-ansible.conf
+  when: v6_exists.stat.exists
 
 - name: dhcpd - Update webhook
   template:
@@ -32,9 +38,7 @@
     mode: 0644
 
 - name: "dhcpd - Update apparmor profile"
-  shell: apparmor_parser -r /etc/apparmor.d/usr.sbin.dhcpd
-  args:
-    warn: false
+  ansible.builtin.shell: apparmor_parser -r /etc/apparmor.d/usr.sbin.dhcpd
   ignore_errors: true
 
 - name: dhcpd - Restart
@@ -48,3 +52,4 @@
     name: "isc-dhcp-server6"
     enabled: true
     state: restarted
+  when: v6_exists.stat.exists
