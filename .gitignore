@@ -23,12 +23,7 @@ secret/
 # Gitsecret
 .gitsecret/keys/random_seed
 .direnv/
-infrastructure/other/discourse/discourse_data.yml
-infrastructure/other/discourse/discourse_web.yml
-infrastructure/other/gitlab_runner_ssh_key
 infrastructure/docker_swarm/registry/docker-swarm.yml
-
-automation/ansible/inventory/nepeat_hosts
 
 # Language garbage
 node_modules/
@@ -42,7 +37,6 @@ infrastructure/docker_swarm/traefik/traefik_users.passwd
 .terraform
 terraform.tfvars
 terraform.tfstate*
-infrastructure/docker_swarm/traefik/config-fmt2/traefik.yml
 automation/deploy_server/misc/tf-nlsd/mod_nlsd/user_data.tmpl
 infrastructure/docker_swarm/traefik/config-wob/traefik.yml
 
