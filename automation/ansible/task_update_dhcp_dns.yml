@@ -3,7 +3,7 @@
   roles:
     - role: update_dhcpd
   vars:
-    - cloudflare_webhook: "{{ lookup('env', 'CLOUDFLARE_WEBHOOK_DHCP') }}"
+    cloudflare_webhook: "{{ lookup('env', 'CLOUDFLARE_WEBHOOK_DHCP') }}"
 - hosts: dnsserver
   strategy: free
   roles:
