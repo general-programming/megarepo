@@ -24,35 +24,35 @@
   when: node_exporter_port.failed == false
 
 # smartmon service
-- name: "Install smartmon script"
-  ansible.builtin.copy:
-    src: prom_smartmon.sh
-    dest: /usr/local/bin/prom_smartmon.sh
-    owner: root
-    group: root
-    mode: 0755
+# - name: "Install smartmon script"
+#   ansible.builtin.copy:
+#     src: prom_smartmon.sh
+#     dest: /usr/local/bin/prom_smartmon.sh
+#     owner: root
+#     group: root
+#     mode: 0755
 
-- name: "Setup smartmon cronjob"
-  ansible.builtin.cron:
-    name: "prom_smartmon"
-    minute: "*"
-    job: "/usr/local/bin/prom_smartmon.sh > /var/lib/node_exporter/smartmon.prom.tmp && mv /var/lib/node_exporter/smartmon.prom.tmp /var/lib/node_exporter/smartmon.prom >/dev/null 2>&1"
-    user: root
-  when: "'metal' in group_names"
+# - name: "Setup smartmon cronjob"
+#   ansible.builtin.cron:
+#     name: "prom_smartmon"
+#     minute: "*"
+#     job: "/usr/local/bin/prom_smartmon.sh > /var/lib/node_exporter/smartmon.prom.tmp && mv /var/lib/node_exporter/smartmon.prom.tmp /var/lib/node_exporter/smartmon.prom >/dev/null 2>&1"
+#     user: root
+#   when: "'metal' in group_names"
 
 # ipmi scraper
-- name: "Install ipmi scraper script"
-  ansible.builtin.copy:
-    src: prom_ipmi.sh
-    dest: /usr/local/bin/prom_ipmi.sh
-    owner: root
-    group: root
-    mode: 0755
+# - name: "Install ipmi scraper script"
+#   ansible.builtin.copy:
+#     src: prom_ipmi.sh
+#     dest: /usr/local/bin/prom_ipmi.sh
+#     owner: root
+#     group: root
+#     mode: 0755
 
-- name: "Setup ipmi scraper cronjob"
-  ansible.builtin.cron:
-    name: "prom_ipmi"
-    minute: "*"
-    job: "ipmitool sensor | /usr/local/bin/prom_ipmi.sh > /var/lib/node_exporter/ipmi_sensors.prom.tmp && mv /var/lib/node_exporter/ipmi_sensors.prom.tmp /var/lib/node_exporter/ipmi_sensors.prom >/dev/null 2>&1"
-    user: root
-  when: "'metal' in group_names"
+# - name: "Setup ipmi scraper cronjob"
+#   ansible.builtin.cron:
+#     name: "prom_ipmi"
+#     minute: "*"
+#     job: "ipmitool sensor | /usr/local/bin/prom_ipmi.sh > /var/lib/node_exporter/ipmi_sensors.prom.tmp && mv /var/lib/node_exporter/ipmi_sensors.prom.tmp /var/lib/node_exporter/ipmi_sensors.prom >/dev/null 2>&1"
+#     user: root
+#   when: "'metal' in group_names"
