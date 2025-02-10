@@ -2,7 +2,7 @@ version: '3.6'
 
 services:
   consul:
-    image: consul:1.15.2
+    image: hashicorp/consul:1.20.2
     deploy:
       restart_policy:
         condition: any
