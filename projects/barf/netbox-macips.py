@@ -25,7 +25,9 @@ query = gql(
     """
 query {
   interface_list {
-    mac_address
+    primary_mac_address {
+      mac_address
+    }
     name
     device { name }
     ip_addresses {
@@ -33,7 +35,9 @@ query {
     }
   }
   vm_interface_list {
-    mac_address
+    primary_mac_address {
+      mac_address
+    }
     name
     virtual_machine { name }
     ip_addresses {
@@ -80,7 +84,7 @@ if __name__ == "__main__":
             hostname = f"{device_name}-{interface_name}".lower()
 
             # Do not use IPs that do not have MAC addresses.
-            if not interface["mac_address"]:
+            if not interface["primary_mac_address"]:
                 log.warning(f"{ip_address} missing MAC")
                 continue
 
@@ -88,7 +92,7 @@ if __name__ == "__main__":
                 generate_lease(
                     lease_name=hostname,
                     hostname=device_name,
-                    mac=interface["mac_address"],
+                    mac=interface["primary_mac_address"]["mac_address"],
                     ip=ip_address,
                 )
             )
