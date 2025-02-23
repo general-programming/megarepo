@@ -37,7 +37,5 @@ infrastructure/docker_swarm/traefik/traefik_users.passwd
 .terraform
 terraform.tfvars
 terraform.tfstate*
-automation/deploy_server/misc/tf-nlsd/mod_nlsd/user_data.tmpl
-infrastructure/docker_swarm/traefik/config-wob/traefik.yml
 
 *autogen.yml
