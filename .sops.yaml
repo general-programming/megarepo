@@ -1,0 +1,2 @@
+creation_rules:
+    - hc_vault_transit_uri: "https://vault-proxy.catgirls.dev:8200/v1/sops/keys/firstkey"

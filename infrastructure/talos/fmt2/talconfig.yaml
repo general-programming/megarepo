@@ -1,0 +1,103 @@
+clusterName: genprog-fmt2
+endpoint: https://kube.generalprogramming.org:6443
+additionalMachineCertSans:
+  - kube.generalprogramming.org
+nodes:
+  - hostname: controlplane
+    ipAddress: "10.65.67.44,10.65.67.45,10.65.67.46"
+    installDisk: /dev/sda
+    controlPlane: true
+    ignoreHostname: true
+  - hostname: worker
+    ipAddress: "10.65.67.47,10.65.67.48,10.65.67.49,10.65.67.50,10.65.67.51"
+    installDisk: /dev/sda
+    controlPlane: false
+    ignoreHostname: true
+worker:
+  machineSpec:
+    secureboot: true
+  machineFiles:
+    - content: |
+        -----BEGIN CERTIFICATE-----
+        MIIC4jCCAmigAwIBAgIUZgMkbOiuMw1JzRKAJRCOjQk+ubUwCgYIKoZIzj0EAwQw
+        gZ8xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMSEwHwYDVQQKDBhH
+        ZW5lcmFsIFByb2dyYW1taW5nLCBMTEMxMjAwBgNVBAsMKUdlbmVyYWwgUHJvZ3Jh
+        bW1pbmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MSQwIgYDVQQDDBtHZW5lcmFsIFBy
+        b2dyYW1taW5nIFJvb3QgQ0EwHhcNMjIwNjEyMTQyMTU1WhcNMzIwNjA5MTQyMTU1
+        WjCBnzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xITAfBgNVBAoM
+        GEdlbmVyYWwgUHJvZ3JhbW1pbmcsIExMQzEyMDAGA1UECwwpR2VuZXJhbCBQcm9n
+        cmFtbWluZyBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkxJDAiBgNVBAMMG0dlbmVyYWwg
+        UHJvZ3JhbW1pbmcgUm9vdCBDQTB2MBAGByqGSM49AgEGBSuBBAAiA2IABBkXrmL9
+        voQQ+VvAqHbblwezvO6m7FZTKlkqWIo9VBlbqW3QZLB6GrJpNMzVqDu33UP+zn88
+        6mMa0CBiJcqYv3mN7z4EBbjzXsC6PXFmRwQnL9lscLN1jwAJjQD6ie7cSqNjMGEw
+        HQYDVR0OBBYEFHSBjz8oQmF1EPiWCaJQKeCgi/GfMB8GA1UdIwQYMBaAFHSBjz8o
+        QmF1EPiWCaJQKeCgi/GfMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGG
+        MAoGCCqGSM49BAMEA2gAMGUCMQDDqRQvlvgekjz85OzJOgJQPKZsGtqe/JTYO6K2
+        TRk5Q64TSXh0FTHUMQDgwyO51b8CMBaIRHkNuiJBkNMhM+uHoTB5ODT5N6yNPApM
+        v7K4+BSJlNBYH5gmwy0zEzLRiN/3VQ==
+        -----END CERTIFICATE-----
+      permissions: 0644
+      path: /etc/ssl/certs/ca-certificates
+      op: append
+  schematic:
+    customization:
+      systemExtensions:
+        officialExtensions:
+          - siderolabs/qemu-guest-agent
+controlPlane:
+  machineSpec:
+    secureboot: true
+  machineFiles:
+    - content: |
+        -----BEGIN CERTIFICATE-----
+        MIIC4jCCAmigAwIBAgIUZgMkbOiuMw1JzRKAJRCOjQk+ubUwCgYIKoZIzj0EAwQw
+        gZ8xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMSEwHwYDVQQKDBhH
+        ZW5lcmFsIFByb2dyYW1taW5nLCBMTEMxMjAwBgNVBAsMKUdlbmVyYWwgUHJvZ3Jh
+        bW1pbmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MSQwIgYDVQQDDBtHZW5lcmFsIFBy
+        b2dyYW1taW5nIFJvb3QgQ0EwHhcNMjIwNjEyMTQyMTU1WhcNMzIwNjA5MTQyMTU1
+        WjCBnzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xITAfBgNVBAoM
+        GEdlbmVyYWwgUHJvZ3JhbW1pbmcsIExMQzEyMDAGA1UECwwpR2VuZXJhbCBQcm9n
+        cmFtbWluZyBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkxJDAiBgNVBAMMG0dlbmVyYWwg
+        UHJvZ3JhbW1pbmcgUm9vdCBDQTB2MBAGByqGSM49AgEGBSuBBAAiA2IABBkXrmL9
+        voQQ+VvAqHbblwezvO6m7FZTKlkqWIo9VBlbqW3QZLB6GrJpNMzVqDu33UP+zn88
+        6mMa0CBiJcqYv3mN7z4EBbjzXsC6PXFmRwQnL9lscLN1jwAJjQD6ie7cSqNjMGEw
+        HQYDVR0OBBYEFHSBjz8oQmF1EPiWCaJQKeCgi/GfMB8GA1UdIwQYMBaAFHSBjz8o
+        QmF1EPiWCaJQKeCgi/GfMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGG
+        MAoGCCqGSM49BAMEA2gAMGUCMQDDqRQvlvgekjz85OzJOgJQPKZsGtqe/JTYO6K2
+        TRk5Q64TSXh0FTHUMQDgwyO51b8CMBaIRHkNuiJBkNMhM+uHoTB5ODT5N6yNPApM
+        v7K4+BSJlNBYH5gmwy0zEzLRiN/3VQ==
+        -----END CERTIFICATE-----
+      permissions: 0644
+      path: /etc/ssl/certs/ca-certificates
+      op: append
+  schematic:
+    customization:
+      systemExtensions:
+        officialExtensions:
+          - siderolabs/qemu-guest-agent
+patches:
+  - # Encrypt system disk with TPM
+    |-
+    machine:
+      systemDiskEncryption:
+        ephemeral:
+          provider: luks2
+          keys:
+            - slot: 0
+              nodeID: {}
+        state:
+          provider: luks2
+          keys:
+            - slot: 0
+              nodeID: {}
+  - # IPv6 support
+    |-
+    cluster:
+      network:
+        podSubnets:
+            - 10.244.0.0/16
+            - fc00:cafe:cafe:1::/64
+        # The service subnet CIDR.
+        serviceSubnets:
+            - 10.96.0.0/12
+            - fc00:cafe:cafe:2::/64

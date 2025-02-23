@@ -1,0 +1,136 @@
+clusterName: sea1
+endpoint: https://kube.sea1.generalprogramming.org:6443
+additionalMachineCertSans:
+  - kube.sea1.generalprogramming.org
+nodes:
+  - hostname: controlplane
+    ipAddress: "10.3.2.16,10.3.2.17,10.3.2.18"
+    installDisk: /dev/sda
+    controlPlane: true
+    ignoreHostname: true
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: true
+        dhcpOptions:
+          ipv4: true
+          ipv6: true
+  # nvme passthrough, single nic for v4/v6
+  - hostname: worker-nvme
+    ipAddress: "10.3.2.10,10.3.2.11,10.3.2.12"
+    installDisk: /dev/sda
+    controlPlane: false
+    ignoreHostname: true
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: true
+        dhcpOptions:
+          ipv4: true
+          ipv6: true
+    machineDisks:
+      - device: /dev/nvme0n1
+        partitions:
+          - mountpoint: /var/mnt/data
+  # wobscale rack, literally a oneoff. zfs disk, dual nic for v4/v6
+  - hostname: sea1-k8s-103-0
+    ipAddress: "10.3.6.3"
+    installDisk: /dev/sda
+    controlPlane: false
+    networkInterfaces:
+      - interface: enp6s18
+        dhcp: true
+        dhcpOptions:
+          ipv4: true
+          ipv6: true
+    machineDisks:
+      - device: /dev/sdb
+        partitions:
+          - mountpoint: /var/mnt/data
+worker:
+  machineSpec:
+    secureboot: true
+  machineFiles:
+    - content: |
+        -----BEGIN CERTIFICATE-----
+        MIIC4jCCAmigAwIBAgIUZgMkbOiuMw1JzRKAJRCOjQk+ubUwCgYIKoZIzj0EAwQw
+        gZ8xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMSEwHwYDVQQKDBhH
+        ZW5lcmFsIFByb2dyYW1taW5nLCBMTEMxMjAwBgNVBAsMKUdlbmVyYWwgUHJvZ3Jh
+        bW1pbmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MSQwIgYDVQQDDBtHZW5lcmFsIFBy
+        b2dyYW1taW5nIFJvb3QgQ0EwHhcNMjIwNjEyMTQyMTU1WhcNMzIwNjA5MTQyMTU1
+        WjCBnzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xITAfBgNVBAoM
+        GEdlbmVyYWwgUHJvZ3JhbW1pbmcsIExMQzEyMDAGA1UECwwpR2VuZXJhbCBQcm9n
+        cmFtbWluZyBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkxJDAiBgNVBAMMG0dlbmVyYWwg
+        UHJvZ3JhbW1pbmcgUm9vdCBDQTB2MBAGByqGSM49AgEGBSuBBAAiA2IABBkXrmL9
+        voQQ+VvAqHbblwezvO6m7FZTKlkqWIo9VBlbqW3QZLB6GrJpNMzVqDu33UP+zn88
+        6mMa0CBiJcqYv3mN7z4EBbjzXsC6PXFmRwQnL9lscLN1jwAJjQD6ie7cSqNjMGEw
+        HQYDVR0OBBYEFHSBjz8oQmF1EPiWCaJQKeCgi/GfMB8GA1UdIwQYMBaAFHSBjz8o
+        QmF1EPiWCaJQKeCgi/GfMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGG
+        MAoGCCqGSM49BAMEA2gAMGUCMQDDqRQvlvgekjz85OzJOgJQPKZsGtqe/JTYO6K2
+        TRk5Q64TSXh0FTHUMQDgwyO51b8CMBaIRHkNuiJBkNMhM+uHoTB5ODT5N6yNPApM
+        v7K4+BSJlNBYH5gmwy0zEzLRiN/3VQ==
+        -----END CERTIFICATE-----
+      permissions: 0644
+      path: /etc/ssl/certs/ca-certificates
+      op: append
+  schematic:
+    customization:
+      systemExtensions:
+        officialExtensions:
+          - siderolabs/qemu-guest-agent
+controlPlane:
+  machineSpec:
+    secureboot: true
+  machineFiles:
+    - content: |
+        -----BEGIN CERTIFICATE-----
+        MIIC4jCCAmigAwIBAgIUZgMkbOiuMw1JzRKAJRCOjQk+ubUwCgYIKoZIzj0EAwQw
+        gZ8xCzAJBgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMSEwHwYDVQQKDBhH
+        ZW5lcmFsIFByb2dyYW1taW5nLCBMTEMxMjAwBgNVBAsMKUdlbmVyYWwgUHJvZ3Jh
+        bW1pbmcgQ2VydGlmaWNhdGUgQXV0aG9yaXR5MSQwIgYDVQQDDBtHZW5lcmFsIFBy
+        b2dyYW1taW5nIFJvb3QgQ0EwHhcNMjIwNjEyMTQyMTU1WhcNMzIwNjA5MTQyMTU1
+        WjCBnzELMAkGA1UEBhMCVVMxEzARBgNVBAgMCldhc2hpbmd0b24xITAfBgNVBAoM
+        GEdlbmVyYWwgUHJvZ3JhbW1pbmcsIExMQzEyMDAGA1UECwwpR2VuZXJhbCBQcm9n
+        cmFtbWluZyBDZXJ0aWZpY2F0ZSBBdXRob3JpdHkxJDAiBgNVBAMMG0dlbmVyYWwg
+        UHJvZ3JhbW1pbmcgUm9vdCBDQTB2MBAGByqGSM49AgEGBSuBBAAiA2IABBkXrmL9
+        voQQ+VvAqHbblwezvO6m7FZTKlkqWIo9VBlbqW3QZLB6GrJpNMzVqDu33UP+zn88
+        6mMa0CBiJcqYv3mN7z4EBbjzXsC6PXFmRwQnL9lscLN1jwAJjQD6ie7cSqNjMGEw
+        HQYDVR0OBBYEFHSBjz8oQmF1EPiWCaJQKeCgi/GfMB8GA1UdIwQYMBaAFHSBjz8o
+        QmF1EPiWCaJQKeCgi/GfMA8GA1UdEwEB/wQFMAMBAf8wDgYDVR0PAQH/BAQDAgGG
+        MAoGCCqGSM49BAMEA2gAMGUCMQDDqRQvlvgekjz85OzJOgJQPKZsGtqe/JTYO6K2
+        TRk5Q64TSXh0FTHUMQDgwyO51b8CMBaIRHkNuiJBkNMhM+uHoTB5ODT5N6yNPApM
+        v7K4+BSJlNBYH5gmwy0zEzLRiN/3VQ==
+        -----END CERTIFICATE-----
+      permissions: 0644
+      path: /etc/ssl/certs/ca-certificates
+      op: append
+  schematic:
+    customization:
+      systemExtensions:
+        officialExtensions:
+          - siderolabs/qemu-guest-agent
+patches:
+  - # Encrypt system disk with TPM
+    |-
+    machine:
+      systemDiskEncryption:
+        ephemeral:
+          provider: luks2
+          keys:
+            - slot: 0
+              tpm: {}
+        state:
+          provider: luks2
+          keys:
+            - slot: 0
+              tpm: {}
+  - # IPv6 support
+    |-
+    cluster:
+      network:
+        podSubnets:
+          - 10.244.0.0/16
+          - fd40:10:244::/56
+        serviceSubnets:
+          - 10.96.0.0/12
+          - d40:10:96::/108

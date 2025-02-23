@@ -1,0 +1,6 @@
+sea1-controlplane.yaml
+sea1-worker.yaml
+talosconfig
+sea1-worker-nvme.yaml
+sea1-worker-sata.yaml
+sea1-sea1-k8s-103-0.yaml
