@@ -234,6 +234,7 @@
     && ipset destroy internal_traffic6_new || true
     && ipset create internal_traffic6_new "hash:net" family inet6
     && ipset add internal_traffic6_new 2602:fa6d:10::/48
+    && ipset add internal_traffic6_new 2620:fc:c000::/64
     && ipset swap internal_traffic6_new internal_traffic6
     && ipset destroy internal_traffic6_new
 
