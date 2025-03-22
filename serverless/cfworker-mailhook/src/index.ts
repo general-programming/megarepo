@@ -8,59 +8,114 @@
  * Learn more at https://developers.cloudflare.com/workers/
  */
 
-import * as PostalMime from 'postal-mime'
-import { Address } from 'postal-mime'
+import PostalMime from 'postal-mime'
+import puppeteer from "@cloudflare/puppeteer";
+import { md5, formatEmail } from './utils';
+import { HEIGHT_PADDING } from './consts';
+import { discordPush } from './discord';
 
 export interface Env {
-	// Example binding to KV. Learn more at https://developers.cloudflare.com/workers/runtime-apis/kv/
-	// MY_KV_NAMESPACE: KVNamespace;
-	//
-	// Example binding to Durable Object. Learn more at https://developers.cloudflare.com/workers/runtime-apis/durable-objects/
-	// MY_DURABLE_OBJECT: DurableObjectNamespace;
-	//
-	// Example binding to R2. Learn more at https://developers.cloudflare.com/workers/runtime-apis/r2/
-	// MY_BUCKET: R2Bucket;
-}
-
-// Mail endpoint handler
-const MAIL_ENDPOINT = 'https://mailhook-fmt2.generalprogramming.org/inbound'
-
-function formatEmail(address: Address): string {
-	return `${address.name} <${address.address}>`
+	MYBROWSER: Fetcher;
+	BUCKET_BASE: string;
+	MY_BUCKET: R2Bucket;
+	DISCORD_WEBHOOK?: string;
 }
 
 async function handleEmail(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {
-	const parser = new PostalMime.default()
-
 	// parse email content
 	const rawEmailResposne = new Response(message.raw)
 	const rawEmail = await rawEmailResposne.text()
 
-	const email = await parser.parse(rawEmail)
+	const email = await PostalMime.parse(rawEmail)
 
 	// generate the string for email to
-	const toString = email.to.map(formatEmail).join(', ')
+	const toString = (email.to || []).map(formatEmail).join(', ')
 	const bccString = (email.bcc || []).map(formatEmail).join(', ')
 	const ccString = (email.cc || []).map(formatEmail).join(', ')
 
-	// send the email to the endpoint
-	const emailBlob = new URLSearchParams({
-		from: formatEmail(email.from),
-		to: toString,
-		subject: email.subject || "",
-		email: rawEmail,
+
+	// render the email then store the image + html content, and email in an s3 endpoint
+	if (!email.html && !email.text) {
+		console.error("No email content found");
+		return;
+	}
+
+	const toRender = email.html || email.text || "";
+	const rendered = await renderEmail(env, toRender)
+	// md5 the email content
+	const page_hash = await md5(rawEmail);
+	await env.MY_BUCKET.put(`htmlrender_api/${page_hash}.html`, toRender, {
+		httpMetadata: {
+			contentType: "text/html",
+		},
+	});
+	await env.MY_BUCKET.put(`htmlrender_api/${page_hash}.png`, rendered, {
+		httpMetadata: {
+			contentType: "image/png",
+		},
 	});
 
-	const endpointResponse = await fetch(MAIL_ENDPOINT, {
-		method: 'POST',
-		headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-		body: emailBlob,
-	  });
+	// Set up URLs for the stored content
+	const bucketBaseUrl = env.BUCKET_BASE;
+	const mailImageUrl = `${bucketBaseUrl}/htmlrender_api/${page_hash}.png`;
+	const mailRawUrl = `${bucketBaseUrl}/htmlrender_api/${page_hash}.html`;
 
-	  console.log("endpoint status: ", endpointResponse.status);
-	  console.log("endpoint body: ", await endpointResponse.text());
+	// Push to Discord if webhook URL is configured
+	if (env.DISCORD_WEBHOOK) {
+		// Set the environment variable for the discord function
+		process.env.DISCORD_WEBHOOK = env.DISCORD_WEBHOOK;
+		
+		const [pushStatus, pushResponse] = await discordPush(
+			mailImageUrl,
+			mailRawUrl,
+			email.subject || "[Blank subject]",
+			formatEmail(email.from),
+			toString
+		);
+
+		if (pushStatus !== 204) {
+			console.error("Error from Discord:", pushResponse);
+		}
+	}
 }
 
+/* 
+ * Renders the email using puppeteer
+ *
+ * @param env - CF environment variables
+ * @param email - HTML content of the email to rende
+ *
+ */
+async function renderEmail(env: Env, email: string): Promise<Buffer<ArrayBufferLike>> {
+	const browser = await puppeteer.launch(env.MYBROWSER);
+	const page = await browser.newPage();
+	await page.setContent(email);
+
+	const realHeight: number = await page.evaluate(() => {
+		let body = document.body;
+		let html = document.documentElement;
+  
+		return Math.max(
+			body.scrollHeight,
+			body.offsetHeight,
+			html.clientHeight,
+			html.scrollHeight,
+			html.offsetHeight
+		);
+	});
+	const paddedHeight = realHeight + HEIGHT_PADDING;
+	// debug
+	console.log(`realHeight: ${realHeight} paddedHeight: ${paddedHeight}`);
+	await page.setViewport({
+		width: 1024,
+		height: realHeight,
+	});
+
+	const image = await page.screenshot({ type: 'png' });
+	await browser.close();
+
+	return image;
+}
 
 export default {
 	async email(message: ForwardableEmailMessage, env: Env, ctx: ExecutionContext): Promise<void> {

@@ -2,10 +2,11 @@
   "name": "mailhook",
   "version": "0.0.0",
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240117.0",
-    "postal-mime": "^2.0.2",
-    "typescript": "^5.3.3",
-    "wrangler": "^3.25.0"
+    "@cloudflare/puppeteer": "^0.0.14",
+    "@cloudflare/workers-types": "^4.20250320.0",
+    "postal-mime": "^2.4.3",
+    "typescript": "^5.8.2",
+    "wrangler": "^4.3.0"
   },
   "private": true,
   "scripts": {
@@ -14,5 +15,11 @@
   },
   "peerDependencies": {
     "postal-mime": "^1.0.16"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "esbuild",
+      "workerd"
+    ]
   }
 }

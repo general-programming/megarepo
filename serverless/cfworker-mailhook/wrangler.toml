@@ -1,3 +1,16 @@
 name = "mailhook"
 main = "src/index.ts"
-compatibility_date = "2023-05-07"
+compatibility_flags = [ "nodejs_compat" ]
+compatibility_date = "2025-03-22"
+
+browser = { binding = "MYBROWSER" }
+
+[observability.logs]
+enabled = true
+
+[vars]
+BUCKET_BASE = "https://mailhook.owo.me"
+
+[[r2_buckets]]
+binding = 'MY_BUCKET' # <~ valid JavaScript variable name
+bucket_name = 'mailhook'
