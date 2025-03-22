@@ -66,4 +66,8 @@ vault write pki_internal/roles/genprog \
   allow_subdomains=true \
   generate_lease=true \
   max_ttl="8766h"
+
+# sops setup
+vault secrets enable -path=sops transit
+vault write sops/keys/firstkey type=rsa-4096
 ```
