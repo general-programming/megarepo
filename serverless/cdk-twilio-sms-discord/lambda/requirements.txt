@@ -1,3 +1,0 @@
-twilio>=7.8.2
-requests
-https://github.com/Rapptz/discord.py/archive/refs/heads/master.zip
