@@ -104,11 +104,10 @@ async function renderEmail(env: Env, email: string): Promise<Buffer<ArrayBufferL
 		);
 	});
 	const paddedHeight = realHeight + HEIGHT_PADDING;
-	// debug
-	console.log(`realHeight: ${realHeight} paddedHeight: ${paddedHeight}`);
+
 	await page.setViewport({
 		width: 1024,
-		height: realHeight,
+		height: paddedHeight,
 	});
 
 	const image = await page.screenshot({ type: 'png' });
