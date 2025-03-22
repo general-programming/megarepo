@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto';
+import { Env } from '.';
 
 /**
  * Pushes email information to Discord webhook
  * 
+ * @param env - CF environment variables
  * @param mailImage - URL to the rendered email image
  * @param mailRaw - URL to the raw email content
  * @param subject - Email subject
@@ -11,6 +13,7 @@ import { createHash } from 'node:crypto';
  * @returns Promise with status code and response text
  */
 export async function discordPush(
+  env: Env,
   mailImage: string,
   mailRaw: string,
   subject: string = "[Blank subject]",
@@ -42,7 +45,7 @@ export async function discordPush(
   const avatarUrl = `https://www.gravatar.com/avatar/${fromHash}?default=identicon&s=256`;
 
   // Get Discord webhook URL from environment
-  const webhookUrl = process.env.DISCORD_WEBHOOK;
+  const webhookUrl = env.DISCORD_WEBHOOK;
   if (!webhookUrl) {
     console.error("Discord webhook URL not configured");
     return [500, "Discord webhook URL not configured"];
