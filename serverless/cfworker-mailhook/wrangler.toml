@@ -1,7 +1,7 @@
 name = "mailhook"
 main = "src/index.ts"
-compatibility_flags = [ "nodejs_compat" ]
-compatibility_date = "2025-03-22"
+compatibility_flags = ["nodejs_compat"]
+compatibility_date = "2025-04-19"
 
 browser = { binding = "MYBROWSER" }
 
@@ -12,5 +12,12 @@ enabled = true
 BUCKET_BASE = "https://mailhook.owo.me"
 
 [[r2_buckets]]
-binding = 'MY_BUCKET' # <~ valid JavaScript variable name
+binding = 'MY_BUCKET'    # <~ valid JavaScript variable name
 bucket_name = 'mailhook'
+
+[[queues.producers]]
+queue = "email-queue"
+binding = "EMAIL_QUEUE"
+
+[[queues.consumers]]
+queue = "email-queue"
