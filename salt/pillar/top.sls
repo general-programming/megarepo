@@ -2,3 +2,4 @@
   '*':
     - common
     - schedule
+    - admin_user
