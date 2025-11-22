@@ -1,10 +1,12 @@
-import requests
 import os
 
+import requests
+
 twilio_auth = requests.auth.HTTPBasicAuth(
-    os.environ["TWILIO_SID"],
-    os.environ["TWILIO_AUTH_TOKEN"]
+    os.environ["TWILIO_SID"], os.environ["TWILIO_AUTH_TOKEN"]
 )
 
-r = requests.get("https://preview.twilio.com/Numbers/AvailableNumbers", auth=twilio_auth)
+r = requests.get(
+    "https://preview.twilio.com/Numbers/AvailableNumbers", auth=twilio_auth
+)
 print(r.json())

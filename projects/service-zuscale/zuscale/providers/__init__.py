@@ -1,14 +1,15 @@
 import os
-
 from typing import Dict
 
 from zuscale.providers.base import BaseProvider
+from zuscale.providers.ec2 import Ec2
 from zuscale.providers.hetzner_cloud import HetznerCloud
 from zuscale.providers.scaleway import Scaleway
 from zuscale.providers.vultr import Vultr
-from zuscale.providers.ec2 import Ec2
 
-ALL_CLOUDS = {} # type: Dict[str, BaseProvider]
+# ruff: noqa: F401
+
+ALL_CLOUDS = {}  # type: Dict[str, BaseProvider]
 
 if os.environ.get("HETZNER_TOKEN", ""):
     ALL_CLOUDS["hetzner_cloud"] = HetznerCloud

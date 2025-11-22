@@ -1,43 +1,41 @@
 # This Python file uses the following encoding: utf-8
 import os
+
 import stripe
-
-from functools import wraps
-
-from flask import g, request, session
+from flask import g, session
 from redis import ConnectionPool, StrictRedis
-
 from sqlalchemy.orm.exc import NoResultFound
 
-from gpbilling.model import sm, Account
+from gpbilling.model import Account, sm
 
 redis_pool = ConnectionPool(
-    host=os.environ.get('REDIS_PORT_6379_TCP_ADDR', os.environ.get('REDIS_HOST', '127.0.0.1')),
-    port=int(os.environ.get('REDIS_PORT_6379_TCP_PORT', os.environ.get('REDIS_PORT', 6379))),
-    db=int(os.environ.get('REDIS_DB', 0)),
-    decode_responses=True
+    host=os.environ.get(
+        "REDIS_PORT_6379_TCP_ADDR", os.environ.get("REDIS_HOST", "127.0.0.1")
+    ),
+    port=int(
+        os.environ.get("REDIS_PORT_6379_TCP_PORT", os.environ.get("REDIS_PORT", 6379))
+    ),
+    db=int(os.environ.get("REDIS_DB", 0)),
+    decode_responses=True,
 )
+
 
 def init_stripe():
     plans = {
         "email": {
             "amount": 1000,
             "interval": "month",
-            "product": {
-                "name": "Email service"
-            },
+            "product": {"name": "Email service"},
             "nickname": "Email service",
             "currency": "usd",
         },
         "infra10": {
             "amount": 1000,
             "interval": "month",
-            "product": {
-                "name": "Infrastructure 10"
-            },
+            "product": {"name": "Infrastructure 10"},
             "nickname": "Infrastructure",
             "currency": "usd",
-        }
+        },
     }
 
     existing_plans = stripe.Plan.list(limit=100)
@@ -45,10 +43,7 @@ def init_stripe():
 
     for plan_id, plan_meta in plans.items():
         if plan_id not in existing_ids:
-            stripe.Plan.create(
-                id=plan_id,
-                **plan_meta
-            )
+            stripe.Plan.create(id=plan_id, **plan_meta)
 
 
 def connect_sql():

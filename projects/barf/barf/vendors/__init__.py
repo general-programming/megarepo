@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import functools
 import ipaddress
-import json
 import secrets
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
@@ -10,11 +9,15 @@ from typing import TYPE_CHECKING, Callable, List, Optional
 
 import dns.resolver
 import hvac
+
 from barf.model import get_vault
 from barf.model.wireguard import get_wg_keys
 
 if TYPE_CHECKING:
     from barf.model.wireguard import WGKeypair
+
+
+# ruff: noqa: E402
 
 
 @dataclass
@@ -123,7 +126,7 @@ class HostInterface:
         result = self._description or ""
 
         if self.cable:
-            result += f" ({ self.cable })"
+            result += f" ({self.cable})"
 
         # Remove trailing whitespace due to the cable text.
         result = result.strip()
@@ -182,6 +185,7 @@ class OSPFNetwork:
             network=ipaddress.IPv4Network(data["network"]),
             area=data["area"],
         )
+
 
 class BaseHost:
     DEVICETYPE = "base"
@@ -405,8 +409,16 @@ class BaseHost:
                     type="VPNLink",
                     _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
-                    address=ipaddress.IPv4Interface(ip_address) if ":" not in ip_address and ip_address else None,
-                    ip6_address=ipaddress.IPv6Interface(ip_address) if ":" in ip_address else None,
+                    address=(
+                        ipaddress.IPv4Interface(ip_address)
+                        if ":" not in ip_address and ip_address
+                        else None
+                    ),
+                    ip6_address=(
+                        ipaddress.IPv6Interface(ip_address)
+                        if ":" in ip_address
+                        else None
+                    ),
                     dhcp=interface.get("dhcp", False),
                     untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
@@ -459,8 +471,16 @@ class BaseHost:
                     type=interface["type"],
                     mode=interface["mode"],
                     _description=interface.get("description", None),
-                    address=ipaddress.IPv4Interface(ip_address) if ":" not in ip_address and ip_address else None,
-                    ip6_address=ipaddress.IPv6Interface(ip_address) if ":" in ip_address else None,
+                    address=(
+                        ipaddress.IPv4Interface(ip_address)
+                        if ":" not in ip_address and ip_address
+                        else None
+                    ),
+                    ip6_address=(
+                        ipaddress.IPv6Interface(ip_address)
+                        if ":" in ip_address
+                        else None
+                    ),
                     dhcp=False,
                     untagged_vlan=NetworkVLAN.from_netbox(interface["untagged_vlan"]),
                     tagged_vlans=[
@@ -489,7 +509,11 @@ class BaseHost:
             hostname=netbox_meta["name"],
             role="network_devices",
             address=ipaddress.IPv4Interface(netbox_meta["primary_ip4"]["address"]),
-            ip6_address=ipaddress.IPv6Interface(netbox_meta["primary_ip6"]["address"]) if netbox_meta["primary_ip6"] else None,
+            ip6_address=(
+                ipaddress.IPv6Interface(netbox_meta["primary_ip6"]["address"])
+                if netbox_meta["primary_ip6"]
+                else None
+            ),
             interfaces=interfaces,
             vlan_map=parsed_vlans,
             config_context=netbox_meta["config_context"] or {},
@@ -511,8 +535,8 @@ from barf.vendors.dell import DNOS6Host, DNOS9Host
 from barf.vendors.edgeos import EdgeOSHost
 from barf.vendors.external import ExternalHost
 from barf.vendors.linux import LinuxBirdHost
-from barf.vendors.vyos import VyOSHost
 from barf.vendors.mikrotik import MikroTikHost
+from barf.vendors.vyos import VyOSHost
 
 VENDOR_MAP = {
     "vyos": VyOSHost,

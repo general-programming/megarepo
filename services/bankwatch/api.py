@@ -1,15 +1,19 @@
-import os
 import logging
-import time
+import os
 import uuid
-from redis import ConnectionPool, StrictRedis
-from flask import Flask, jsonify, request, render_template, g
 
 import stripe
-from plaid.errors import PlaidError
-
 from constants import CHARGE_TYPES
-from common import plaid_client, get_transactions, load_accounts, push_plaid_transactions, push_discord_embed
+from flask import Flask, g, jsonify, render_template, request
+from plaid.errors import PlaidError
+from redis import ConnectionPool, StrictRedis
+
+from common import (
+    get_transactions,
+    plaid_client,
+    push_discord_embed,
+    push_plaid_transactions,
+)
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:
@@ -24,16 +28,22 @@ log = logging.getLogger(__name__)
 # App
 app = Flask(__name__)
 redis_pool = ConnectionPool(
-    host=os.environ.get('REDIS_PORT_6379_TCP_ADDR', os.environ.get('REDIS_HOST', '127.0.0.1')),
-    port=int(os.environ.get('REDIS_PORT_6379_TCP_PORT', os.environ.get('REDIS_PORT', 6379))),
-    db=int(os.environ.get('REDIS_DB', 0)),
-    decode_responses=True
+    host=os.environ.get(
+        "REDIS_PORT_6379_TCP_ADDR", os.environ.get("REDIS_HOST", "127.0.0.1")
+    ),
+    port=int(
+        os.environ.get("REDIS_PORT_6379_TCP_PORT", os.environ.get("REDIS_PORT", 6379))
+    ),
+    db=int(os.environ.get("REDIS_DB", 0)),
+    decode_responses=True,
 )
+
 
 # Before/after request
 @app.before_request
 def connect_redis():
     g.redis = StrictRedis(connection_pool=redis_pool)
+
 
 @app.before_request
 def add_bank_key():
@@ -46,6 +56,7 @@ def add_bank_key():
     g.redis.setex("bank:addkey", 60 * 60 * 24, g.add_bank_key)
     log.info("Bank key has been set to %s", g.add_bank_key)
 
+
 @app.teardown_request
 def disconnect_redis(result=None):
     if hasattr(g, "redis"):
@@ -53,29 +64,35 @@ def disconnect_redis(result=None):
 
     return result
 
+
 # Randomize this key on every run to ensure we are the only ones adding banks.
 
-@app.route('/')
+
+@app.route("/")
 def rootpage():
     return "Plaid webhook handler API"
 
+
 @app.route("/add_bank", methods=["GET"])
 def add_bank():
-    return render_template("add_bank.html",
+    return render_template(
+        "add_bank.html",
         plaid_environment=os.environ["PLAID_ENV"],
         plaid_public_key=os.environ["PLAID_PUBLIC_KEY"],
-        webhook_url=os.environ["WEBHOOK_URL"]
+        webhook_url=os.environ["WEBHOOK_URL"],
     )
+
 
 def format_error(e):
     return {
-        'error': {
-            'display_message': e.display_message,
-            'error_code': e.code,
-            'error_type': e.type,
-            'error_message': e.message
+        "error": {
+            "display_message": e.display_message,
+            "error_code": e.code,
+            "error_type": e.type,
+            "error_message": e.message,
         }
     }
+
 
 @app.route("/add_bank", methods=["POST"])
 def add_bank_post():
@@ -99,10 +116,14 @@ def add_bank_post():
 
     return jsonify({"result": "Success"})
 
+
 @app.route("/" + os.environ.get("WEBHOOK_NAME", "inbound"), methods=["POST"])
 def inbound_post():
     # Parse data.
-    if "webhook_type" not in request.json or request.json["webhook_type"] != "TRANSACTIONS":
+    if (
+        "webhook_type" not in request.json
+        or request.json["webhook_type"] != "TRANSACTIONS"
+    ):
         return jsonify({"error": "invalid_type"}), 400
 
     item_id = request.json["item_id"]
@@ -115,43 +136,50 @@ def inbound_post():
 
     # Drop request if there are no transactions.
     if not transactions:
-        log.warning("Found no transactions for item %s, despite getting a hook request.", item_id)
+        log.warning(
+            "Found no transactions for item %s, despite getting a hook request.",
+            item_id,
+        )
         return jsonify("ok")
 
     # Push to Discord
-    push_status, push_response = push_plaid_transactions(
-        transactions,
-        g.redis
-    )
+    push_status, push_response = push_plaid_transactions(transactions, g.redis)
 
     return jsonify("ok")
 
-@app.route('/stripe_test', methods=['POST'])
+
+@app.route("/stripe_test", methods=["POST"])
 def stripe_test_post():
     return handle_stripe(True)
 
-@app.route('/stripe', methods=['POST'])
+
+@app.route("/stripe", methods=["POST"])
 def stripe_live_post():
     return handle_stripe()
 
+
 def handle_stripe(is_test=False):
     # Boilerplate event parsing
-    payload = request.data.decode('utf-8')
-    received_sig = request.headers.get('Stripe-Signature', None)
+    payload = request.data.decode("utf-8")
+    received_sig = request.headers.get("Stripe-Signature", None)
 
     try:
         event = stripe.Webhook.construct_event(
             payload,
             received_sig,
-            os.environ["STRIPE_TEST_WEBHOOK_SECRET"] if is_test else os.environ["STRIPE_WEBHOOK_SECRET"],
-            api_key=os.environ["STRIPE_TEST_APIKEY"] if is_test else os.environ["STRIPE_APIKEY"]
+            os.environ["STRIPE_TEST_WEBHOOK_SECRET"]
+            if is_test
+            else os.environ["STRIPE_WEBHOOK_SECRET"],
+            api_key=os.environ["STRIPE_TEST_APIKEY"]
+            if is_test
+            else os.environ["STRIPE_APIKEY"],
         )
     except ValueError:
         log.info("Error while decoding event!")
-        return 'Bad payload', 400
+        return "Bad payload", 400
     except stripe.error.SignatureVerificationError:
         log.info("Invalid signature!")
-        return 'Bad signature', 400
+        return "Bad signature", 400
 
     data_object = event.data["object"]
 
@@ -175,49 +203,52 @@ def handle_stripe(is_test=False):
 
             # Add transaction description field
             if charge_description:
-                fields.append({
-                    "name": "Description",
-                    "value": charge_description,
-                    "inline": True
-                })
+                fields.append(
+                    {"name": "Description", "value": charge_description, "inline": True}
+                )
 
             # Add fields for failures/refunds
             if amount_refunded:
-                fields.append({
-                    "name": "Amount refunded",
-                    "value": f"{amount_refunded} {currency.upper()}",
-                    "inline": True
-                })
+                fields.append(
+                    {
+                        "name": "Amount refunded",
+                        "value": f"{amount_refunded} {currency.upper()}",
+                        "inline": True,
+                    }
+                )
 
             if failure_message:
-                fields.append({
-                    "name": "Failure message",
-                    "value": failure_message,
-                    "inline": True
-                })
+                fields.append(
+                    {
+                        "name": "Failure message",
+                        "value": failure_message,
+                        "inline": True,
+                    }
+                )
 
             push_discord_embed(
                 title=f"{status.capitalize()} Stripe charge.",
                 description=desc_text,
                 fields=fields,
-                testing=is_test
+                testing=is_test,
             )
     elif event.type == "charge.dispute.created":
         dispute_amount = data_object["amount"] / 100
         dispute_currency = data_object["currency"].upper()
 
         push_discord_embed(
-            title=f"New Stripe dispute.",
+            title="New Stripe dispute.",
             description=f"A dispute for {dispute_amount} {dispute_currency} has been opened.",
-            testing=is_test
+            testing=is_test,
         )
 
-    log.info("Received {environ} event: id={id}, type={type}".format(
-        environ="test" if is_test else "live",
-        id=event.id,
-        type=event.type
-    ))
+    log.info(
+        "Received {environ} event: id={id}, type={type}".format(
+            environ="test" if is_test else "live", id=event.id, type=event.type
+        )
+    )
 
     return "", 200
+
 
 log.info("Webhook API started!")

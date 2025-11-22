@@ -1,24 +1,28 @@
 # This Python file uses the following encoding: utf-8
-import logging
 import os
-
-from flask import Flask
-from flask_cors import CORS
-from flask_mail import Mail
 
 import sentry_sdk
 import stripe
-
+from flask import Flask
+from flask_cors import CORS
+from flask_mail import Mail
+from gpbilling.model.handlers import (
+    before_request,
+    commit_sql,
+    connect_redis,
+    connect_sql,
+    disconnect_redis,
+    disconnect_sql,
+    init_stripe,
+)
 from sentry_sdk.integrations.flask import FlaskIntegration
 from werkzeug.contrib.fixers import ProxyFix
 
-from gpbilling.model.handlers import (init_stripe, before_request, commit_sql, connect_redis, connect_sql, disconnect_redis,
-                                      disconnect_sql)
+# ruff: noqa: E402
 
 # Setup sentry before app
 sentry_sdk.init(
-    dsn=os.environ.get("SENTRY_DSN", None),
-    integrations=[FlaskIntegration()]
+    dsn=os.environ.get("SENTRY_DSN", None), integrations=[FlaskIntegration()]
 )
 
 
@@ -30,11 +34,7 @@ app.url_map.strict_slashes = False
 
 # CORS
 CORS(
-    app=app,
-    origins=[
-        "https://pay.generalprogrmaming.org",
-        "https://pay.catgirls.dev"
-    ]
+    app=app, origins=["https://pay.generalprogrmaming.org", "https://pay.catgirls.dev"]
 )
 
 # Mail

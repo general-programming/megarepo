@@ -18,9 +18,7 @@ class HetznerCloud(BaseProvider):
         super().__init__(loop)
 
     def _headers(self) -> dict:
-        return {
-            "Authorization": "Bearer " + self.token
-        }
+        return {"Authorization": "Bearer " + self.token}
 
     @staticmethod
     def _check_error(error: dict, response: dict = None):
@@ -63,7 +61,7 @@ class HetznerCloud(BaseProvider):
         ssh_keys: List[SSHKey] = None,
         tags: List[str] = [],
         server_meta: dict = {},
-        **kwargs
+        **kwargs,
     ):
         # Add the SSH keys if they exist.
         if ssh_keys:
@@ -79,15 +77,19 @@ class HetznerCloud(BaseProvider):
         if "network" in server_meta:
             kwargs["networks"] = [server_meta["network"]]
 
-        result = await self.post("/servers", data={
-            "name": hostname,
-            "location": location,
-            "server_type": server_type.name,
-            "image": image.image_id,
-            "user_data": cloud_init,
-            "labels": labels,
-            **kwargs
-        }, json=True)
+        result = await self.post(
+            "/servers",
+            data={
+                "name": hostname,
+                "location": location,
+                "server_type": server_type.name,
+                "image": image.image_id,
+                "user_data": cloud_init,
+                "labels": labels,
+                **kwargs,
+            },
+            json=True,
+        )
 
         log.debug(result)
 
@@ -146,10 +148,7 @@ class HetznerCloud(BaseProvider):
 
         while not complete:
             log.debug("fetching page %d", page)
-            result = await self.get(endpoint, params={
-                "page": page,
-                "per_page": 50
-            })
+            result = await self.get(endpoint, params={"page": page, "per_page": 50})
 
             if field:
                 # Yield whole pages if we do not have a field set.
@@ -160,7 +159,9 @@ class HetznerCloud(BaseProvider):
                 yield result
 
             # Parse the result, pull the pagination data.
-            next_page = result.get("meta", {}).get("pagination", {}).get("next_page", None)
+            next_page = (
+                result.get("meta", {}).get("pagination", {}).get("next_page", None)
+            )
             if next_page:
                 page = next_page
             else:

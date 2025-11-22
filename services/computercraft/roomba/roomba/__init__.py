@@ -1,9 +1,12 @@
-from sanic import Sanic, Request, HTTPResponse, Websocket
-from sanic_ext import render
-from roomba.model.redis import get_redis, get_ctx_redis
 import json
 
+from roomba.model.redis import get_ctx_redis, get_redis
+from sanic import HTTPResponse, Request, Sanic, Websocket
+from sanic_ext import render
+
 app = Sanic(__name__)
+
+# ruff: noqa
 
 
 @app.middleware("request")

@@ -1,15 +1,12 @@
 # coding=utf-8
 import json
 
-from flask import g, request
-from flask_restplus import Resource, abort
-
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.orm.exc import NoResultFound
+from flask import request
+from flask_restplus import Resource
 
 
 class ResourceBase(Resource):
-    def get_field(self, field: str, default=None, asjson: bool=False):
+    def get_field(self, field: str, default=None, asjson: bool = False):
         if request.is_json and field in request.json:
             return request.json.get(field, default)
         elif request.form and field in request.form:

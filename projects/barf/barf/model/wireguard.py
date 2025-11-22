@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 import hvac
+
 from barf.model import get_vault
 from barf.model.network import NetworkLink
 
@@ -65,6 +66,7 @@ class WGNetworkLink(NetworkLink):
     def unnumbered(self) -> bool:
         """Whether this link is unnumbered."""
         return self.network is None
+
 
 def generate_wireguard_keys() -> WGKeypair:
     """Generate a WireGuard private & public key.

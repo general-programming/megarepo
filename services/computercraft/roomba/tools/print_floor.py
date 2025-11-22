@@ -1,8 +1,9 @@
 import asyncio
-from roomba.model.redis import get_redis
 import json
 from collections import defaultdict
+
 import termcolor
+from roomba.model.redis import get_redis
 
 
 def reprPoint(

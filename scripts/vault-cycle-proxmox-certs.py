@@ -6,9 +6,9 @@ from proxmoxer import ProxmoxAPI
 THIRTY_ONE_DAYS = 60 * 60 * 24 * 31
 vault = hvac.Client()
 
-proxmox_secrets = vault.secrets.kv.v2.read_secret_version(path="proxmox-cert-updater",)[
-    "data"
-]["data"]
+proxmox_secrets = vault.secrets.kv.v2.read_secret_version(
+    path="proxmox-cert-updater",
+)["data"]["data"]
 
 proxmox = ProxmoxAPI(
     "proxmox.service.fmt2.consul",

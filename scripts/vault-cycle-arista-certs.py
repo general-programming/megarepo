@@ -1,5 +1,3 @@
-import time
-
 import hvac
 
 THIRTY_ONE_DAYS = 60 * 60 * 24 * 31

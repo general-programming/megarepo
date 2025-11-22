@@ -4,9 +4,9 @@ import os
 
 from zuscale.cli.commands import ALL_COMMANDS
 
-parser = argparse.ArgumentParser(description='bad cli')
+parser = argparse.ArgumentParser(description="bad cli")
 
-parser.add_argument('command', nargs='+', help='command to run')
+parser.add_argument("command", nargs="+", help="command to run")
 
 
 async def main():
@@ -17,6 +17,7 @@ async def main():
         raise Exception("Command not valid?")
 
     await command.run(args.command[1:])
+
 
 if __name__ == "__main__":
     cloud_type = os.environ.get("CLOUD", "all").strip().lower()

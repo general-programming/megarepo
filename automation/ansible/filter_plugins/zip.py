@@ -5,6 +5,7 @@
 #
 from itertools import zip_longest
 
+
 def zipped(list1, list2, longest=False, fillvalue=None):
     if all([type(x) is dict for x in list1]):
         if longest:
@@ -24,6 +25,7 @@ def zipped(list1, list2, longest=False, fillvalue=None):
 
         return list(zip(list1, list2))
 
+
 def fill_list_with_empty_dicts(array, length):
     if len(array) < length:
         diff = length - len(array)
@@ -35,6 +37,4 @@ def fill_list_with_empty_dicts(array, length):
 
 class FilterModule(object):
     def filters(self):
-        return {
-            'zip': zipped
-        }
+        return {"zip": zipped}

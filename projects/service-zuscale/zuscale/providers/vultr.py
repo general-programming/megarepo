@@ -19,9 +19,7 @@ class Vultr(BaseProvider):
         super().__init__(loop)
 
     def _headers(self) -> dict:
-        return {
-            "Authorization": "Bearer " + self.token
-        }
+        return {"Authorization": "Bearer " + self.token}
 
     async def pre_hook(self, response):
         if "error" in response and response["error"]:
@@ -55,7 +53,7 @@ class Vultr(BaseProvider):
                 image_id=os["id"],
                 name=os["name"],
                 arch=self._get_image_arch(os["arch"]),
-                datacenter="all"
+                datacenter="all",
             )
             for os in images_result["os"]
         ]
@@ -72,7 +70,7 @@ class Vultr(BaseProvider):
                 created=server["date_created"],
                 ip4=server["main_ip"],
                 ip6=server["v6_main_ip"] or None,
-                server_tags=server["tag"].split(",")
+                server_tags=server["tag"].split(","),
             )
             for server in instances_result["instances"]
         ]
@@ -86,12 +84,14 @@ class Vultr(BaseProvider):
         ssh_keys: List[SSHKey] = None,
         tags: List[str] = [],
         server_meta: dict = {},
-        **kwargs
+        **kwargs,
     ):
         # Pick any region from the safe regions.
         safe_regions = await self._list_regions()
         picked_region = None
-        for region in random.sample(server_type.datacenters, len(server_type.datacenters)):
+        for region in random.sample(
+            server_type.datacenters, len(server_type.datacenters)
+        ):
             if region in safe_regions:
                 picked_region = region
                 break
@@ -146,7 +146,11 @@ class Vultr(BaseProvider):
         if "vultr_regions" not in self.BASE_CACHE:
             self.BASE_CACHE["vultr_regions"] = await self.get("/regions")
 
-        return [region["id"] for region in self.BASE_CACHE["vultr_regions"]["regions"] if region["country"] == country]
+        return [
+            region["id"]
+            for region in self.BASE_CACHE["vultr_regions"]["regions"]
+            if region["country"] == country
+        ]
 
     def _get_image_arch(self, arch: str) -> OSArch:
         """Maps an image's arch string to an OSArch..

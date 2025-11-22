@@ -1,28 +1,23 @@
 import asyncio
-import tempfile
-import json
-import hashlib
-import os
-import logging
 import functools
+import hashlib
 import io
-
+import json
+import logging
+import os
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 
 import aiofiles
 import boto3
 import sentry_sdk
-
 from aiohttp import web
 from pyppeteer import launch as launch_pyppeteer
 from sentry_sdk.integrations.aiohttp import AioHttpIntegration
 
 # Sentry setup
 if "SENTRY_DSN" in os.environ:
-    sentry_sdk.init(
-        dsn=os.environ["SENTRY_DSN"],
-        integrations=[AioHttpIntegration()]
-    )
+    sentry_sdk.init(dsn=os.environ["SENTRY_DSN"], integrations=[AioHttpIntegration()])
 
 # Logging configuration
 if "DEBUG_FLOOD" in os.environ:
@@ -35,7 +30,13 @@ log = logging.getLogger(__name__)
 
 # TODO: Move these constants somewhere.
 HEIGHT_PADDING = 25
-CDN_BASE = "https://" + os.environ["CDN_URL"] + "/file/" + os.environ["S3_BUCKET"] + "/htmlrender_api/"
+CDN_BASE = (
+    "https://"
+    + os.environ["CDN_URL"]
+    + "/file/"
+    + os.environ["S3_BUCKET"]
+    + "/htmlrender_api/"
+)
 
 # XXX S3 STUFF PLS
 s3_client = boto3.client(
@@ -49,25 +50,32 @@ s3_client = boto3.client(
 routes = web.RouteTableDef()
 executor = ThreadPoolExecutor(max_workers=4)
 
-@routes.get('/')
+
+@routes.get("/")
 async def rootpage(request):
     return web.Response(text="html render api")
+
 
 async def upload_file(data: bytes, file_name: str):
     loop = asyncio.get_running_loop()
     data_io = io.BytesIO(data)
 
-    return await loop.run_in_executor(executor, functools.partial(
-        s3_client.upload_fileobj,
-        data_io,
-        os.environ["S3_BUCKET"],
-        file_name,
-    ))
+    return await loop.run_in_executor(
+        executor,
+        functools.partial(
+            s3_client.upload_fileobj,
+            data_io,
+            os.environ["S3_BUCKET"],
+            file_name,
+        ),
+    )
+
 
 async def check_auth(key: str) -> bool:
     return key == os.environ["API_KEY"]
 
-@routes.post('/render')
+
+@routes.post("/render")
 async def render_post(request):
     # Parse JSON and check auth.
     try:
@@ -91,7 +99,7 @@ async def render_post(request):
 
     # Encode the HTML back to UTF8.
     try:
-        page_html = page_html.encode('utf-8')
+        page_html = page_html.encode("utf-8")
     except UnicodeEncodeError:
         pass
 
@@ -109,15 +117,14 @@ async def render_post(request):
             # Instead, launch the browser with the --disable-dev-shm-usage flag"
             # - https://developers.google.com/web/tools/puppeteer/troubleshooting
             "--disable-dev-shm-usage",
-
             # XXX Add sandbox, pls.
             "--no-sandbox",
-            "--disable-setuid-sandbox"
-        ]
+            "--disable-setuid-sandbox",
+        ],
     )
     page = await browser.newPage()
 
-    with tempfile. TemporaryDirectory() as tmpdirname:
+    with tempfile.TemporaryDirectory() as tmpdirname:
         # Setup the temporary paths.
         tmphtml_path = os.path.join(tmpdirname, page_hash + ".html")
         rendered_path = os.path.join(tmpdirname, "rendered.jpg")
@@ -127,7 +134,8 @@ async def render_post(request):
 
         # Open the page and get the real height of the page.
         await page.goto("file://" + tmphtml_path)
-        real_height = await page.evaluate('''() => {
+        real_height = (
+            await page.evaluate("""() => {
             let body = document.body,
                 html = document.documentElement;
 
@@ -138,24 +146,20 @@ async def render_post(request):
                 html.scrollHeight,
                 html.offsetHeight
             )
-        }''') + HEIGHT_PADDING  # lmao black magic
+        }""")
+            + HEIGHT_PADDING
+        )  # lmao black magic
 
         # Set the browser window size / viewport.
-        await page.setViewport({
-            "width": 1024,
-            "height": real_height
-        })
+        await page.setViewport({"width": 1024, "height": real_height})
 
         # Make the screenshot and cleanup.
-        await page.screenshot({
-            'path': rendered_path,
-            "clip": {
-                "x": 0,
-                "y": 0,
-                "width": 1024,
-                "height": real_height
+        await page.screenshot(
+            {
+                "path": rendered_path,
+                "clip": {"x": 0, "y": 0, "width": 1024, "height": real_height},
             }
-        })
+        )
 
         await browser.close()
 
@@ -181,13 +185,18 @@ async def render_post(request):
         # Upload the rendered HTML page.
         await upload_file(image_data, f"htmlrender_api/{page_hash}.jpg")
 
-        return web.json_response({
-            "image_url": CDN_BASE + page_hash + ".jpg",
-            "raw_url": CDN_BASE + page_hash + ".html"
-        })
+        return web.json_response(
+            {
+                "image_url": CDN_BASE + page_hash + ".jpg",
+                "raw_url": CDN_BASE + page_hash + ".html",
+            }
+        )
+
 
 app = web.Application(
-    client_max_size=1024*1024*16  # Default of 2MB crippled some emails. 16MB should be "enough"
+    client_max_size=1024
+    * 1024
+    * 16  # Default of 2MB crippled some emails. 16MB should be "enough"
 )
 app.add_routes(routes)
 

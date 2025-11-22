@@ -5,6 +5,7 @@ from zuscale.providers import ALL_CLOUDS
 
 SIZE_1_GB = 1024 * 1024 * 1024
 
+
 class PsCommand(BaseCommand):
     MATCH_REGEX = "ps"
 
@@ -25,7 +26,11 @@ class PsCommand(BaseCommand):
 
             print(f"All {provider} servers ({len(servers)} count)")
             for server in servers:
-                tags_friendly = (", tags " + ";".join(server.server_tags)) if server.server_tags else ""
+                tags_friendly = (
+                    (", tags " + ";".join(server.server_tags))
+                    if server.server_tags
+                    else ""
+                )
                 print(
                     f"{server.server_name} {server.ip4} - {server.server_type} running on "
                     f"{server.datacenter}, [{server.data_out / SIZE_1_GB} GB out], created {server.created}{tags_friendly}"
@@ -35,15 +40,26 @@ class PsCommand(BaseCommand):
                 total_hourly += server_type.price_hourly
                 total_data_out += server.data_out / SIZE_1_GB
 
-            print(f"Total {provider} per hour cost for {len(servers)} nodes: {total_hourly}")
-            print(f"Total {provider} data for {len(servers)} nodes: {total_data_out} GB")
+            print(
+                f"Total {provider} per hour cost for {len(servers)} nodes: {total_hourly}"
+            )
+            print(
+                f"Total {provider} data for {len(servers)} nodes: {total_data_out} GB"
+            )
             total_price += total_hourly
             total_nodes += len(servers)
 
             await cloud.cleanup()
 
-        print(f"Total hourly cost for {total_nodes} nodes on all providers: {total_price:.3f}")
-        print(f"Total daily cost for {total_nodes} nodes on all providers: {total_price * 24:.3f}")
-        print(f"Total weekly cost for {total_nodes} nodes on all providers: {total_price * 24 * 7:.3f}")
-        print(f"Total monthly cost for {total_nodes} nodes on all providers: {total_price * 24 * 30:.3f}")
-
+        print(
+            f"Total hourly cost for {total_nodes} nodes on all providers: {total_price:.3f}"
+        )
+        print(
+            f"Total daily cost for {total_nodes} nodes on all providers: {total_price * 24:.3f}"
+        )
+        print(
+            f"Total weekly cost for {total_nodes} nodes on all providers: {total_price * 24 * 7:.3f}"
+        )
+        print(
+            f"Total monthly cost for {total_nodes} nodes on all providers: {total_price * 24 * 30:.3f}"
+        )

@@ -5,7 +5,6 @@ import json
 import os
 from dataclasses import dataclass
 from enum import Enum
-from io import StringIO
 from typing import List, Union
 
 import hvac

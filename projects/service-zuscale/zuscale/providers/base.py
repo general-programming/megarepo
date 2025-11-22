@@ -7,13 +7,13 @@ from urllib.parse import urljoin
 
 import aiohttp
 import aiolimiter
+
 from zuscale.util import (
     OSArch,
     QuotaExceeded,
     ServerType,
     SSHKey,
     build_cloud_init,
-    chunks,
     name_cleaner,
 )
 

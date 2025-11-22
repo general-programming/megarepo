@@ -3,8 +3,9 @@ from typing import Tuple
 
 import hvac
 import netmiko
-from barf.vendors import BaseHost
 from napalm import get_network_driver
+
+from barf.vendors import BaseHost
 
 
 def get_secret(secret: str, key: str = "secret") -> str:
@@ -17,9 +18,9 @@ def get_secret(secret: str, key: str = "secret") -> str:
         str: The secret's value.
     """
     vault = hvac.Client()
-    response = vault.secrets.kv.v2.read_secret_version(path=secret,)[
-        "data"
-    ]["data"]
+    response = vault.secrets.kv.v2.read_secret_version(
+        path=secret,
+    )["data"]["data"]
 
     if key:
         return response[key]

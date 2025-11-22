@@ -59,7 +59,7 @@ async def inbound_post(request):
         ) as response:
             try:
                 reply = await response.json()
-            except:
+            except:  # noqa: E722
                 reply = await response.text()
                 log.error("Error parsing response from render API: %s", reply)
                 return web.json_response({"error": "bad_parse"})

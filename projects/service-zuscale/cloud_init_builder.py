@@ -5,9 +5,7 @@ from zuscale.util import build_cloud_init
 parser = argparse.ArgumentParser(description="Generates a cloud-init file.")
 
 parser.add_argument(
-    "--stdout",
-    help="Output the cloud-init to stdout.",
-    action="store_true"
+    "--stdout", help="Output the cloud-init to stdout.", action="store_true"
 )
 
 parser.add_argument(
@@ -16,7 +14,7 @@ parser.add_argument(
     type=str,
     nargs="?",
     const=1,
-    default="cloud-init-template.yml"
+    default="cloud-init-template.yml",
 )
 
 parser.add_argument(
@@ -25,7 +23,7 @@ parser.add_argument(
     type=str,
     nargs="?",
     const=1,
-    default="cloud-init-autogen.yml"
+    default="cloud-init-autogen.yml",
 )
 
 if __name__ == "__main__":

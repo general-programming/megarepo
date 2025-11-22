@@ -1,13 +1,13 @@
 # coding=utf-8
-from flask import g, session, request
-from flask_restplus import Namespace, abort, fields
-from sqlalchemy import and_, or_, func
-
 import stripe
+from flask import g
+from flask_restplus import Namespace
 from stripe.error import InvalidRequestError
+
 from gpbilling.views.api.base import ResourceBase
 
 ns = Namespace("subscriptions", "Subscriptions")
+
 
 @ns.route("/")
 class SubscriptionResource(ResourceBase):
@@ -26,7 +26,9 @@ class SubscriptionResource(ResourceBase):
 
         if g.user.stripe_customer:
             try:
-                for subscription in stripe.Subscription.list(customer=g.user.stripe_customer)["data"]:
+                for subscription in stripe.Subscription.list(
+                    customer=g.user.stripe_customer
+                )["data"]:
                     if "items" in subscription:
                         for item in subscription["items"]:
                             sub_id, sub_meta = self.sub_to_dict(item)
@@ -42,7 +44,9 @@ class SubscriptionResource(ResourceBase):
 
         return subscriptions
 
-    @ns.param("subscription_id", "Subscription ID", type=str, _in="formData", required=True)
+    @ns.param(
+        "subscription_id", "Subscription ID", type=str, _in="formData", required=True
+    )
     def delete(self):
         sub_id = self.get_field("subscription_id")
 

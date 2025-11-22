@@ -2,8 +2,8 @@
 # coding=utf-8
 import os
 
-from alembic.config import Config
 from alembic import command
+from alembic.config import Config
 from sqlalchemy.engine.reflection import Inspector
 
 from gpbilling.model import Base, engine
@@ -14,12 +14,16 @@ def init_db():
 
     inspector = Inspector.from_engine(engine)
     if "alembic_version" in inspector.get_table_names():
-        raise Exception("Database has already been initialised. Use \"alembic upgrade head\" instead.")
+        raise Exception(
+            'Database has already been initialised. Use "alembic upgrade head" instead.'
+        )
 
     engine.echo = True
     Base.metadata.create_all(bind=engine)
 
-    alembic_cfg = Config(os.path.dirname(os.path.realpath(__file__)) + "/../../alembic.ini")
+    alembic_cfg = Config(
+        os.path.dirname(os.path.realpath(__file__)) + "/../../alembic.ini"
+    )
     command.stamp(alembic_cfg, "head")
 
 

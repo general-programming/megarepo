@@ -30,12 +30,18 @@ async def get_hosts():
 
             # Add servers if they have a special tag on them.
             # XXX Find a way to make this less fixed.
-            if "project_erin_archiveteam" in server.server_tags or "PYINFRA_ALL" in os.environ:
+            if (
+                "project_erin_archiveteam" in server.server_tags
+                or "PYINFRA_ALL" in os.environ
+            ):
                 zuscale_hosts.append(
-                    (server.ip4, {
-                        "ssh_user": ssh_user,
-                        "provider": cloud.NAME,
-                    })
+                    (
+                        server.ip4,
+                        {
+                            "ssh_user": ssh_user,
+                            "provider": cloud.NAME,
+                        },
+                    )
                 )
 
         await cloud.cleanup()
@@ -51,10 +57,13 @@ def get_static_hosts():
             if not host:
                 continue
             zuscale_hosts.append(
-                (host, {
-                    "ssh_user": "root",
-                    "provider": "static",
-                })
+                (
+                    host,
+                    {
+                        "ssh_user": "root",
+                        "provider": "static",
+                    },
+                )
             )
 
 

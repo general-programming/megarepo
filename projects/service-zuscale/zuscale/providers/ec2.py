@@ -1,14 +1,13 @@
 import logging
-import random
-import orjson as json
-from typing import List, Optional
-
-from zuscale.providers.base import BaseProvider, BaseServer, OSArch, VMImage, ServerType
-from zuscale.util import ServerType, SSHKey, get_env, to_b64
+from typing import List
 
 import aiobotocore
 
+from zuscale.providers.base import BaseProvider, BaseServer, OSArch, VMImage
+from zuscale.util import ServerType, SSHKey, get_env
+
 log = logging.getLogger("provider.ec2")
+
 
 class Ec2ServerType(ServerType):
     region: str
@@ -33,28 +32,34 @@ class Ec2(BaseProvider):
         instances = []
 
         async with self.session.create_client(
-            "ec2", region_name="us-east-1",
+            "ec2",
+            region_name="us-east-1",
             aws_secret_access_key=self.secret_key,
-            aws_access_key_id=self.access_key
+            aws_access_key_id=self.access_key,
         ) as client:
             extra_args = {}
 
             while True:
-                instance_types_response = await client.describe_instance_types(**extra_args)
+                instance_types_response = await client.describe_instance_types(
+                    **extra_args
+                )
 
-                instances.extend(Ec2ServerType(
-                    name=instance_type["InstanceType"],
-                    # XXX Fuck. https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/pricing.html
-                    price_hourly=0.00,
-                    # XXX Shit!
-                    datacenters=[],
-                    cores=instance_type["VCpuInfo"]["DefaultVCpus"],
-                    memory=instance_type["MemoryInfo"]["SizeInMiB"],
-                    # XXX oh no
-                    disk=0.0,
-                    # XXX lol gravitron
-                    arch=OSArch.X64,
-                ) for instance_type in instance_types_response["InstanceTypes"])
+                instances.extend(
+                    Ec2ServerType(
+                        name=instance_type["InstanceType"],
+                        # XXX Fuck. https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/pricing.html
+                        price_hourly=0.00,
+                        # XXX Shit!
+                        datacenters=[],
+                        cores=instance_type["VCpuInfo"]["DefaultVCpus"],
+                        memory=instance_type["MemoryInfo"]["SizeInMiB"],
+                        # XXX oh no
+                        disk=0.0,
+                        # XXX lol gravitron
+                        arch=OSArch.X64,
+                    )
+                    for instance_type in instance_types_response["InstanceTypes"]
+                )
 
                 if "NextToken" in instance_types_response:
                     extra_args["NextToken"] = instance_types_response["NextToken"]
@@ -68,9 +73,10 @@ class Ec2(BaseProvider):
 
         for region in self.regions:
             async with self.session.create_client(
-                "ec2", region_name=region,
+                "ec2",
+                region_name=region,
                 aws_secret_access_key=self.secret_key,
-                aws_access_key_id=self.access_key
+                aws_access_key_id=self.access_key,
             ) as client:
                 extra_args = {}
 
@@ -79,19 +85,26 @@ class Ec2(BaseProvider):
 
                     for response in instances_response["Reservations"]:
                         for instance in response["Instances"]:
-                            if instance.get("State", {}).get("Name", "") == "terminated":
+                            if (
+                                instance.get("State", {}).get("Name", "")
+                                == "terminated"
+                            ):
                                 continue
 
-                            instances.append(BaseServer(
-                                server_id=instance["InstanceId"],
-                                server_name=instance["InstanceId"],
-                                server_type=instance["InstanceType"],
-                                server_tags=[x["Value"] for x in instance.get("Tags", [])],
-                                datacenter=region,
-                                created=instance["LaunchTime"],
-                                ip4=instance["PublicIpAddress"],
-                                ip6=None,
-                            ))
+                            instances.append(
+                                BaseServer(
+                                    server_id=instance["InstanceId"],
+                                    server_name=instance["InstanceId"],
+                                    server_type=instance["InstanceType"],
+                                    server_tags=[
+                                        x["Value"] for x in instance.get("Tags", [])
+                                    ],
+                                    datacenter=region,
+                                    created=instance["LaunchTime"],
+                                    ip4=instance["PublicIpAddress"],
+                                    ip6=None,
+                                )
+                            )
 
                     if "NextToken" in instances_response:
                         extra_args["NextToken"] = instances_response["NextToken"]
@@ -99,7 +112,6 @@ class Ec2(BaseProvider):
                         break
 
             return instances
-
 
     async def list_images(self) -> List[VMImage]:
         raise NotImplementedError
@@ -141,7 +153,7 @@ class Ec2(BaseProvider):
         ssh_keys: List[SSHKey] = None,
         tags: List[str] = [],
         server_meta: dict = {},
-        **kwargs
+        **kwargs,
     ):
         raise NotImplementedError
 

@@ -1,15 +1,15 @@
 # coding=utf-8
-from flask import g, session, request
-from flask_restplus import Namespace, abort, fields
-from sqlalchemy import and_, or_, func
-
 import stripe
+from flask import g, session
+from flask_restplus import Namespace
+from sqlalchemy import func
 
 from gpbilling.lib.email import send_email
 from gpbilling.model import Account
 from gpbilling.views.api.base import ResourceBase
 
 ns = Namespace("account", "Account managment")
+
 
 @ns.route("/")
 class AccountResource(ResourceBase):
@@ -23,32 +23,44 @@ class AccountResource(ResourceBase):
     @ns.param("email_verify", "New email to verify", _in="formData", type=str)
     @ns.param("password", "New password", _in="formData", type=str)
     @ns.param("new_password", "New password to verify", _in="formData", type=str)
-    @ns.param("refresh_stripe", "Attempt to relink with a Stripe customer object", _in="formData", type=str)
+    @ns.param(
+        "refresh_stripe",
+        "Attempt to relink with a Stripe customer object",
+        _in="formData",
+        type=str,
+    )
     def put(self):
         if not g.user:
             return {"error": "You are not logged in."}, 403
-        
+
         response = {"messages": []}
-        
+
         refresh_stripe = self.get_field("refresh_stripe")
         if refresh_stripe:
             try:
                 customer = stripe.Customer.list(email=g.user.email)["data"][0]
                 print(customer)
                 g.user.stripe_customer = customer["id"]
-                response["messages"].append("A Stripe customer object has been linked to your account.")
+                response["messages"].append(
+                    "A Stripe customer object has been linked to your account."
+                )
             except KeyError:
-                response["messages"].append("A Stripe customer object could not be found with your email.")
+                response["messages"].append(
+                    "A Stripe customer object could not be found with your email."
+                )
 
         # XXX: Do stuff with fields
 
         return response
 
+
 @ns.route("/register")
 class AccountRegisterResource(ResourceBase):
     @ns.param("username", "Username", type=str, _in="formData", required=True)
     @ns.param("password", "Password", type=str, _in="formData", required=True)
-    @ns.param("password_verify", "Password to verify", type=str, _in="formData", required=True)
+    @ns.param(
+        "password_verify", "Password to verify", type=str, _in="formData", required=True
+    )
     @ns.param("email", "Email", type=str, _in="formData", required=True)
     def post(self):
         username = self.get_field("username")
@@ -63,21 +75,27 @@ class AccountRegisterResource(ResourceBase):
         # Make sure the two passwords match.
         if password != password_verify:
             return {"error": "Passwords do not match."}, 400
-        
+
         # Check if the email is filled.
         if not email:
             return {"error": "Email is blank."}, 400
 
         # Make sure this email address hasn't been taken before.
-        if g.db.query(Account.id).filter(
-            func.lower(Account.email) == email.lower()
-        ).count() != 0:
+        if (
+            g.db.query(Account.id)
+            .filter(func.lower(Account.email) == email.lower())
+            .count()
+            != 0
+        ):
             return {"error": "Email is taken."}, 400
 
         # Make sure this username hasn't been taken before.
-        if g.db.query(Account.id).filter(
-            func.lower(Account.username) == username.lower()
-        ).count() == 1:
+        if (
+            g.db.query(Account.id)
+            .filter(func.lower(Account.username) == username.lower())
+            .count()
+            == 1
+        ):
             return {"error": "Username is taken."}, 400
 
         new_account = Account(
@@ -94,6 +112,7 @@ class AccountRegisterResource(ResourceBase):
 
         g.db.commit()
 
+
 @ns.route("/login")
 class AccountLoginResource(ResourceBase):
     @ns.param("username", "Username", type=str, _in="formData", required=True)
@@ -104,9 +123,11 @@ class AccountLoginResource(ResourceBase):
 
         # Check username, lowercase to make it case-insensitive.
         print(username)
-        user = g.db.query(Account).filter(
-            func.lower(Account.username) == username.lower()
-        ).scalar()
+        user = (
+            g.db.query(Account)
+            .filter(func.lower(Account.username) == username.lower())
+            .scalar()
+        )
         if not user:
             return {"error": "User does not exist."}, 400
 
@@ -118,6 +139,7 @@ class AccountLoginResource(ResourceBase):
 
         return user.to_dict()
 
+
 @ns.route("/logout")
 class AccountLogoutResource(ResourceBase):
     def post(self):
@@ -127,9 +149,8 @@ class AccountLogoutResource(ResourceBase):
             session.pop("user_id")
             logged_out = True
 
-        return {
-            "logged_out": logged_out
-        }
+        return {"logged_out": logged_out}
+
 
 @ns.route("/verify")
 class AccountVerifyResource(ResourceBase):
