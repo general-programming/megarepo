@@ -5,12 +5,11 @@
     state: absent
   loop:
     - /etc/salt/minion.d/00-config.conf
-    - /etc/salt/minion.d/_schedule.conf
   register: _removed_configs
 
 - name: Delete salt PKI if configs were removed
   ansible.builtin.file:
-    path: /etc/salt/pki
+    path: /etc/salt/pki/minion
     state: absent
   when: _removed_configs is changed
 
@@ -36,3 +35,22 @@
     group: root
     mode: '0644'
   notify: Restart Salt Minion
+
+- name: Ensure systemd override directory exists
+  ansible.builtin.file:
+    path: /etc/systemd/system/salt-minion.service.d
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Template minion systemd override
+  ansible.builtin.template:
+    src: minion-override.service.j2
+    dest: /etc/systemd/system/salt-minion.service.d/override.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload Systemd
+    - Restart Salt Minion

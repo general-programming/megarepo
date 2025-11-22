@@ -5,6 +5,11 @@
     state: restarted
     enabled: true
 
+- name: Reload Systemd
+  ansible.builtin.command: systemctl daemon-reload
+  become: true
+  listen: Reload Systemd
+
 - name: Restart Salt Minion
   ansible.builtin.service:
     name: salt-minion
