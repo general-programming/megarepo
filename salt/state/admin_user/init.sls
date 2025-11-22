@@ -6,14 +6,12 @@ admin_user_create:
     - home: /home/{{ admin_user }}
     - shell: /bin/bash
     - createhome: True
-    - groups:
-      - sudo
-      - docker
 
 admin_user_ssh_keys:
   ssh_auth.manage:
     - user: {{ admin_user }}
     - source: salt://admin_user/files/authorized_keys_{{ admin_user }}
+    - config: '%h/.ssh/authorized_keys'
 
 admin_ssh_sudoers:
   file.managed:
