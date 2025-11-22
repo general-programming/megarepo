@@ -1,4 +1,19 @@
 ---
+- name: Remove old config files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/salt/minion.d/00-config.conf
+    - /etc/salt/minion.d/_schedule.conf
+  register: _removed_configs
+
+- name: Delete salt PKI if configs were removed
+  ansible.builtin.file:
+    path: /etc/salt/pki
+    state: absent
+  when: _removed_configs is changed
+
 - name: Install Salt Minion package
   ansible.builtin.package:
     name: salt-minion
