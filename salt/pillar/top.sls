@@ -1,3 +1,4 @@
 {{ saltenv }}:
   '*':
     - common
+    - schedule
