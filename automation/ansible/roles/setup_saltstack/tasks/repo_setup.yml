@@ -1,0 +1,23 @@
+---
+- name: "[Debian] Import SaltStack GPG key"
+  ansible.builtin.copy:
+    src: SaltProjectKey.gpg.pub
+    dest: /etc/apt/keyrings/salt-archive-keyring.pgp
+  when: "ansible_os_family in ['Debian', 'Ubuntu']"
+
+- name: "[Debian] Add SaltStack APT repository"
+  ansible.builtin.copy:
+    src: salt.sources
+    dest: /etc/apt/sources.list.d/salt.sources
+  when: "ansible_os_family in ['Debian', 'Ubuntu']"
+
+- name: "[Debian] Update APT cache"
+  ansible.builtin.apt:
+    update_cache: true
+  when: "ansible_os_family in ['Debian', 'Ubuntu']"
+
+- name: "[RedHat] Add SaltStack YUM repository"
+  ansible.builtin.copy:
+    src: salt.repo
+    dest: /etc/yum.repos.d/salt.repo
+  when: "ansible_os_family in ['RedHat', 'Fedora']"

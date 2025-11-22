@@ -1,0 +1,7 @@
+---
+- hosts: saltminion
+  strategy: free
+  roles:
+    - role: setup_saltstack
+  var:
+    role: minion

@@ -1,0 +1,11 @@
+---
+- name: Ensure SaltStack repository is present
+  ansible.builtin.include_tasks:
+    file: repo_setup.yml
+
+- name: Include {{ role }} tasks
+  ansible.builtin.include_tasks:
+    file: "{{ role }}.yml"
+  when:
+    - role is defined
+    - role in ['master', 'minion']

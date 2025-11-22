@@ -17,3 +17,7 @@ repos:
     hooks:
       - id: yamllint
         args: [--strict]
+  - repo: https://github.com/warpnet/salt-lint
+    rev: v0.9.2
+    hooks:
+      - id: salt-lint

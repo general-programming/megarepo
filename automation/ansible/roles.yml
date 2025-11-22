@@ -1,8 +1,6 @@
 ---
 roles:
   - name: debops-contrib.etckeeper
-  - name: elastic.elasticsearch
-    version: v7.13.1
 collections:
   - name: community.hashi_vault
   - name: prometheus.prometheus

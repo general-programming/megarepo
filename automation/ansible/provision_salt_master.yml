@@ -1,0 +1,7 @@
+---
+- hosts: saltmaster
+  strategy: free
+  roles:
+    - role: setup_saltstack
+  vars:
+    role: master

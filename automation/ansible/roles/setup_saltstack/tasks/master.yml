@@ -1,0 +1,14 @@
+---
+- name: Install SaltStack master package
+  ansible.builtin.package:
+    name: salt-master
+    state: present
+
+- name: Template master configuration file
+  ansible.builtin.template:
+    src: salt-master.conf.j2
+    dest: /etc/salt/master
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Salt Master

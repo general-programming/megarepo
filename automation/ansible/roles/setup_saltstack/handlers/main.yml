@@ -1,0 +1,12 @@
+---
+- name: Restart Salt Master
+  ansible.builtin.service:
+    name: salt-master
+    state: restarted
+    enabled: true
+
+- name: Restart Salt Minion
+  ansible.builtin.service:
+    name: salt-minion
+    state: restarted
+    enabled: true
