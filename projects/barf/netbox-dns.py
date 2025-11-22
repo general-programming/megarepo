@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import json
 import logging
+import os
 import sys
 from typing import Generator
 
@@ -13,23 +15,59 @@ log = logging.getLogger()
 client = get_nb_client()
 
 
-def create_zone(leases) -> Generator[IPAMHost, None, None]:
+def create_zone(leases, output_json: bool = False) -> Generator[IPAMHost, None, None]:
     for lease in leases:
         hostname = lease.clean_hostname.lower()
         fqdn = f"{hostname}.generalprogramming.org"
 
         if lease.ipv6:
-            yield f"address=/{fqdn}/{lease.ipv6}"
+            if output_json:
+                yield {
+                    "address": {
+                        "fqdn": fqdn,
+                        "ip": lease.ipv6,
+                    }
+                }
+            else:
+                yield f"address=/{fqdn}/{lease.ipv6}"
 
         if lease.ipv4:
             reverse_arpa = ".".join(lease.ipv4.split(".")[::-1]) + ".in-addr.arpa"
-            yield f"address=/{fqdn}/{lease.ipv4}"
-            yield f"ptr-record={reverse_arpa},{fqdn}"
+            if output_json:
+                yield {
+                    "address": {
+                        "fqdn": fqdn,
+                        "ip": lease.ipv4,
+                    }
+                }
+                yield {
+                    "ptr_record": {
+                        "reverse_arpa": reverse_arpa,
+                        "fqdn": fqdn,
+                    },
+                }
+            else:
+                yield f"address=/{fqdn}/{lease.ipv4}"
+                yield f"ptr-record={reverse_arpa},{fqdn}"
 
         if lease.ipmi_ip:
             reverse_arpa = ".".join(lease.ipmi_ip.split(".")[::-1]) + ".in-addr.arpa"
-            yield f"address=/ipmi.{fqdn}/{lease.ipmi_ip}"
-            yield f"ptr-record={reverse_arpa},{fqdn}"
+            if output_json:
+                yield {
+                    "address": {
+                        "fqdn": f"ipmi.{fqdn}",
+                        "ip": lease.ipmi_ip,
+                    }
+                }
+                yield {
+                    "ptr_record": {
+                        "reverse_arpa": reverse_arpa,
+                        "fqdn": fqdn,
+                    },
+                }
+            else:
+                yield f"address=/ipmi.{fqdn}/{lease.ipmi_ip}"
+                yield f"ptr-record={reverse_arpa},{fqdn}"
 
 
 def non_static_host(hostname: str) -> bool:
@@ -129,5 +167,21 @@ if __name__ == "__main__":
             )
         )
 
-    for entry in create_zone(leases):
-        print(entry)
+    nix_output = "NIX" in os.environ
+    entries = list(create_zone(leases, nix_output))
+
+    if nix_output:
+        output = {
+            "addresses": [],
+            "ptr_records": [],
+        }
+        for entry in entries:
+            if entry.get("address"):
+                output["addresses"].append(entry["address"])
+            if entry.get("ptr_record"):
+                output["ptr_records"].append(entry["ptr_record"])
+
+        print(json.dumps(output, indent=2))
+    else:
+        for entry in entries:
+            print(entry)
