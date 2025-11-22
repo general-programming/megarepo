@@ -1,6 +1,7 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-kubernetesVersion: v1.32.2
+talosVersion: v1.10.5
+kubernetesVersion: v1.33.2
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
@@ -29,10 +30,14 @@ nodes:
         dhcpOptions:
           ipv4: true
           ipv6: true
-    machineDisks:
-      - device: /dev/nvme0n1
-        partitions:
-          - mountpoint: /var/mnt/data
+    userVolumes:
+      - name: data
+        provisioning:
+          diskSelector:
+            match: disk.transport == "nvme"
+          minSize: 50GiB
+        filesystem:
+          type: xfs
   # wobscale rack, literally a oneoff. zfs disk, dual nic for v4/v6
   - hostname: sea1-k8s-103-0
     ipAddress: "10.3.6.3"
