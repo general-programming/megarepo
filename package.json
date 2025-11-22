@@ -17,14 +17,14 @@
   },
   "homepage": "https://github.com/general-programming/megarepo#readme",
   "devDependencies": {
-    "eslint": "^8.30.0",
-    "eslint-config-standard": "^17.0.0",
-    "eslint-plugin-import": "^2.26.0",
-    "eslint-plugin-n": "^15.6.0",
+    "eslint": "^9.39.1",
+    "eslint-config-standard": "^17.1.0",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-n": "^17.23.1",
     "eslint-plugin-node": "^11.1.0",
-    "eslint-plugin-promise": "^6.1.1",
-    "postal-mime": "^1.0.16",
-    "semistandard": "*"
+    "eslint-plugin-promise": "^7.2.1",
+    "postal-mime": "^2.6.0",
+    "semistandard": "^17.0.0"
   },
   "peerDependencies": {
     "postal-mime": "^1.0.16"
