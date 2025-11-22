@@ -4,6 +4,13 @@
     name: salt-master
     state: present
 
+- name: "[Debian] Install other master packages"
+  ansible.builtin.apt:
+    name:
+      - python3-pygit2
+    state: present
+  when: "ansible_os_family in ['Debian', 'Ubuntu']"
+
 - name: Template master configuration file
   ansible.builtin.template:
     src: salt-master.conf.j2
@@ -11,4 +18,28 @@
     owner: root
     group: root
     mode: '0644'
+  notify: Restart Salt Master
+
+- name: Install salt master pip deps
+  ansible.builtin.command:
+    cmd: salt-pip install pygit2
+  notify: Restart Salt Master
+
+- name: Ensure autosign directory exists
+  ansible.builtin.file:
+    path: /etc/salt/autosign_grains
+    state: directory
+    owner: salt
+    group: salt
+    mode: '0700'
+
+- name: Replace autosign key grain
+  ansible.builtin.template:
+    src: autosign_grain.j2
+    dest: /etc/salt/autosign_grains/vault_key
+    owner: salt
+    group: salt
+    mode: '0600'
+  vars:
+    grain: "{{ vault_salt_key.data.data.data.key }}"
   notify: Restart Salt Master

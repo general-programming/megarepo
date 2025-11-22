@@ -3,3 +3,21 @@
   ansible.builtin.package:
     name: salt-minion
     state: present
+
+- name: Template minion grains
+  ansible.builtin.template:
+    src: grains.j2
+    dest: /etc/salt/grains
+    owner: salt
+    group: salt
+    mode: '0600'
+  notify: Restart Salt Minion
+
+- name: Template minion configuration file
+  ansible.builtin.template:
+    src: salt-minion.conf.j2
+    dest: /etc/salt/minion
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Salt Minion

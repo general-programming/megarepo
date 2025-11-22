@@ -1,15 +1,19 @@
 user: salt
 pki_dir: /etc/salt/pki
 
+# auth
+autosign_grains_dir: /etc/salt/autosign_grains
+
+# state config
 fileserver_backend:
   - git
-
 gitfs_base: main
 gitfs_root: salt/state
-
 gitfs_remotes:
   - https://github.com/general-programming/megarepo.git
 
+# pillar config
+git_pillar_base: main
 ext_pillar:
   - git:
     - __env__ https://github.com/general-programming/megarepo.git:

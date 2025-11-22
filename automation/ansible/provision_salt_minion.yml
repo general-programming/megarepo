@@ -3,5 +3,5 @@
   strategy: free
   roles:
     - role: setup_saltstack
-  var:
+  vars:
     role: minion

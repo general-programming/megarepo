@@ -1,0 +1,14 @@
+master:
+  - 10.3.2.6
+
+master_type: str
+random_master: true
+
+saltenv: base
+
+startup_states: sls
+sls_list:
+  - refresh_pillar
+
+autosign_grains:
+  - vault_key

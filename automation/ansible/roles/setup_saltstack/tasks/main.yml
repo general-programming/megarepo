@@ -3,6 +3,14 @@
   ansible.builtin.include_tasks:
     file: repo_setup.yml
 
+- name: "Get vault salt key"
+  community.hashi_vault.vault_read:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
+    path: "secret/data/salt_grain_key"
+  register: vault_salt_key
+  delegate_to: localhost
+  become: false
+
 - name: Include {{ role }} tasks
   ansible.builtin.include_tasks:
     file: "{{ role }}.yml"
