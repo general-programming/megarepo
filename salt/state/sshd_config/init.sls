@@ -19,6 +19,7 @@ sshd_config_managed:
     - user: root
     - group: root
     - mode: '0644'
+    - makedirs: True
 
 sshd_config_remove_old:
   file.absent:
