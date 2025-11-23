@@ -21,6 +21,6 @@ admin_ssh_sudoers:
     - user: root
     - group: root
     - contents: |
-        '{{ admin_user }} ALL=(ALL) NOPASSWD: ALL'
+        '{{ admin_user }} ALL=(ALL) NOPASSWD:ALL'
     - require:
       - user: admin_user_create
