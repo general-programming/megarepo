@@ -45,7 +45,7 @@ dhcp_server_service:
 # dhcpv6
 dhcpd6_config:
   file.managed:
-    - name: /etc/dhcp/dhcp6d.d/10-netbox.conf
+    - name: /etc/dhcp/dhcpd6.d/10-netbox.conf
     - source: salt://dhcp_server/files/dhcpd6.conf.j2
     - template: jinja
     - user: root
