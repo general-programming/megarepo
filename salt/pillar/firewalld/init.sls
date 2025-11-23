@@ -91,6 +91,11 @@ firewalld:
         - comment: node-exporter
           port: 9100
           protocol: tcp
+{% if 'service_proxmox' in salt['grains.get']('tags', []) %}
+        - comment: proxmox webui
+          port: 8006
+          protocol: tcp
+{% endif %}
 {% else %}
 firewalld:
   enabled: false
