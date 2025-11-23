@@ -15,7 +15,6 @@ firewalld:
       description: Internal IPv4 traffic
       type: hash:net
       options:
-        family: ipv4
         maxelem:
           - 65536
         timeout:
@@ -31,7 +30,8 @@ firewalld:
       description: Internal IPv6 traffic
       type: hash:net
       options:
-        family: ipv6
+        family:
+          - inet6
         maxelem:
           - 65536
         timeout:
