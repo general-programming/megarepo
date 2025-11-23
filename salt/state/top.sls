@@ -7,6 +7,7 @@
     - admin_user
     - sysctl
     - certs
+    - sshd_config
 
   'G@tags:docker':
     - install_docker

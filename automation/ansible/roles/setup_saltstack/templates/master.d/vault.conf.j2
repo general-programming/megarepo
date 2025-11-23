@@ -1,0 +1,23 @@
+peer_run:
+  .*:
+    - vault.get_config
+    - vault.generate_secret_id
+
+vault:
+  auth:
+    method: approle
+    approle_mount: salt-master
+    role_id: {{ approle_id.data.data.role_id }}
+    secret_id: {{ approle_secret_id.data.data.secret_id }}
+  server:
+    url: https://vault-proxy.catgirls.dev:8200
+  issue:
+    type: approle
+    approle:
+      mount: salt-minions
+  metadata:
+    entity:
+      minion-id: '{minion}'
+      role: '{pillar[role]}'
+  cache:
+    backend: disk

@@ -22,7 +22,10 @@
 
 - name: Install salt master pip deps
   ansible.builtin.command:
-    cmd: salt-pip install pygit2
+    cmd: salt-pip install {{ item }}
+  loop:
+    - pygit2
+    - saltext-vault
   notify: Restart Salt Master
 
 - name: Ensure autosign directory exists
@@ -32,6 +35,31 @@
     owner: salt
     group: salt
     mode: '0700'
+
+- name: Generate Salt AppRole ID
+  community.hashi_vault.vault_read:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
+    path: auth/salt-master/role/salt-master-role/role-id
+  delegate_to: localhost
+  become: false
+  register: approle_id
+
+- name: Generate Salt AppRole Secret
+  community.hashi_vault.vault_write:
+    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
+    path: auth/salt-master/role/salt-master-role/secret-id
+  delegate_to: localhost
+  become: false
+  register: approle_secret_id
+
+- name: Create vault master config
+  ansible.builtin.template:
+    src: master.d/vault.conf.j2
+    dest: /etc/salt/master.d/vault.conf
+    owner: salt
+    group: salt
+    mode: '0600'
+  notify: Restart Salt Master
 
 - name: Replace autosign key grain
   ansible.builtin.template:

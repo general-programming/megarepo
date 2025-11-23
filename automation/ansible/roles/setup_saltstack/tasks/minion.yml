@@ -54,3 +54,10 @@
   notify:
     - Reload Systemd
     - Restart Salt Minion
+
+- name: Install salt minion pip deps
+  ansible.builtin.command:
+    cmd: salt-pip install {{ item }}
+  loop:
+    - saltext-vault
+  notify: Restart Salt Minion

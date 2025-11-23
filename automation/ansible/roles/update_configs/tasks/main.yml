@@ -15,24 +15,6 @@
     group: root
     mode: 0644
 
-- name: "Settings - Get Vault SSH CA"
-  community.hashi_vault.vault_read:
-    url: "{{ vault_url or lookup('env', 'VAULT_ADDR') }}"
-    path: "ssh-client-signer/config/ca"
-  register: vault_ssh_ca
-  ignore_errors: true
-  delegate_to: localhost
-  become: false
-
-- name: "Settings - Install Vault SSH CA"
-  ansible.builtin.copy:
-    content: "{{ vault_ssh_ca.data.data.public_key }}"
-    dest: /etc/ssh/vault_ssh_ca.pub
-    owner: root
-    group: root
-    mode: 0644
-  ignore_errors: true
-
 - name: "Settings: SSHD config"
   ansible.builtin.template:
     src: sshd_config.j2
