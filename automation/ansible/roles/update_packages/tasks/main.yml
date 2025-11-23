@@ -8,31 +8,12 @@
   package:
     name:
       - mosh
-      - zsh
-      - byobu
-      - htop
-      - apt-transport-https
-      - ca-certificates
-      - curl
-      - software-properties-common
       - bridge-utils
       - aptitude
       - fail2ban
       - nfs-common
       - nload
-      - mtr
-      - gnupg
-      - unzip
     state: latest
-
-- name: "Packages - GPG keys (Legacy)"
-  apt_key:
-    url: "{{ item.key }}"
-    id: "{{ item.value }}"
-    state: present
-  with_dict:
-    "https://repos.influxdata.com/influxdb.key": "2582E0C5"
-    "https://www.postgresql.org/media/keys/ACCC4CF8.asc": "ACCC4CF8"
 
 - name: "Packages - GPG keys"
   ansible.builtin.get_url:
@@ -50,18 +31,6 @@
 - name: "Packages - apt-get update"
   apt:
     update_cache: yes
-
-
-- name: "Packages - Install Docker"
-  apt:
-    name:
-      - docker-ce
-      - docker-ce-cli
-      - containerd.io
-      - docker-buildx-plugin
-      - docker-compose-plugin
-    state: latest
-  when: appserver_packages
 
 - name: "Packages - Misc cluster packages"
   apt:
