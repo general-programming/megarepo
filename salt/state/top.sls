@@ -9,5 +9,8 @@
     - certs
     - sshd_config
 
+    # services
+    - service_node_exporter
+
   'G@tags:docker':
     - install_docker

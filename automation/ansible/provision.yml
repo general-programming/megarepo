@@ -8,8 +8,6 @@
 # tinc VPN, admin user, central stats collection.
 - import_playbook: provision_cluster_backbone.yml
 
-- import_playbook: provision_node_exporter.yml
-
 # Database server setup
 - import_playbook: provision_database_server.yml
 

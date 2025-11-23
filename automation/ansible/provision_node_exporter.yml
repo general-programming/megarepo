@@ -1,5 +1,0 @@
-- hosts: nodeexporter
-  strategy: free
-  roles:
-    - role: prometheus.prometheus.node_exporter
-    - role: update_configs
