@@ -57,7 +57,7 @@ node_exporter_service_enable:
   cmd.run:
     - name: systemctl daemon-reload
     - watch:
-      - file: /etc/systemd/system/node_exporter.service
+      - file: node_exporter_service_file
 
 node_exporter_service:
   service.running:
