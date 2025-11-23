@@ -39,12 +39,6 @@ firewalld:
       ports:
         tcp:
           - "8000"
-    node-exporter:
-      short: node-exporter
-      description: "node-exporter"
-      ports:
-        tcp:
-          - "9100"
   zones:
     public:
       short: public
@@ -57,6 +51,12 @@ firewalld:
         - dns
         - dhcpv6-client
         - node-exporter
+{% if 'dnsserver' in salt['grains.get']('tags', []) %}
+        - dns
+{% endif %}
+{% if 'dnsserver' in salt['grains.get']('tags', []) %}
+        - dhcp
+{% endif %}
       protocols:
         - icmp
         - ipv6-icmp
@@ -69,6 +69,18 @@ firewalld:
           ipset:
             - name: internal_traffic6
           accept: true
+      ports:
+        - comment: node-exporter
+          port: 9100
+          protocol: tcp
+{% if 'saltmaster' in salt['grains.get']('tags', []) %}
+        - comment: salt-master
+          port: 4505
+          protocol: tcp
+        - comment: salt-python
+          port: 4506
+          protocol: tcp
+{% endif %}
 {% else %}
 firewalld:
   enabled: false
