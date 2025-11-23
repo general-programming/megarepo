@@ -4,7 +4,6 @@ firewalld:
   enabled: true
   ipsets:
     internal_traffic4:
-      name: internal_traffic4
       short: internal_traffic4
       description: Internal IPv4 traffic
       type: hash:net
@@ -20,7 +19,6 @@ firewalld:
         - 192.168.0.0/16
         - 172.16.0.0/12
     internal_traffic6:
-      name: internal_traffic6
       short: internal_traffic6
       description: Internal IPv6 traffic
       type: hash:net
@@ -65,11 +63,11 @@ firewalld:
       rich_rules:
         - family: ipv4
           ipset:
-            - name: internal_traffic4
+            name: internal_traffic4
           accept: true
         - family: ipv6
           ipset:
-            - name: internal_traffic6
+            name: internal_traffic6
           accept: true
       ports:
         - comment: node-exporter
