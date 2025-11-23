@@ -10,6 +10,7 @@ dns_server_default:
     - user: root
     - group: root
     - mode: '0644'
+    - template: jinja
     - require:
       - pkg: dns_server_pkgs
 
@@ -20,6 +21,7 @@ dns_server_static:
     - user: root
     - group: root
     - mode: '0644'
+    - template: jinja
     - require:
       - pkg: dns_server_pkgs
 
