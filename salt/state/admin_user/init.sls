@@ -48,3 +48,12 @@ admin_user_enable_byobu:
     - unless: test -d /home/{{ admin_user }}/.config/byobu || test -d /home/{{ admin_user }}/.byobu
     - require:
       - user: admin_user_create
+
+admin_user_ssh_principal:
+  file.managed:
+    - name: /etc/ssh/auth_principals/{{ admin_user }}
+    - contents: admin
+    - user: root
+    - group: root
+    - mode: '0644'
+    - makedirs: True
