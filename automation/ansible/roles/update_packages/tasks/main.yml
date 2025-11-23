@@ -39,7 +39,6 @@
     url: "{{ item.key }}"
     dest: "{{ item.value }}"
   with_dict:
-    "https://download.docker.com/linux/ubuntu/gpg": "/usr/share/keyrings/docker-archive-keyring.asc"
     "https://apt.releases.hashicorp.com/gpg": "/usr/share/keyrings/hashicorp-archive-keyring.asc"
 
 - name: "Packages - Hashicorp repo"
@@ -47,21 +46,6 @@
     repo: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.asc] https://apt.releases.hashicorp.com {{ ansible_distribution_release }} main"
     filename: hashicorp
     state: present
-
-- name: "Packages - Docker repo for Ubuntu"
-  ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-    filename: docker
-    state: present
-  when: appserver_packages and ansible_distribution == "Ubuntu"
-
-- name: "Packages - Docker repo for Debian"
-  ansible.builtin.apt_repository:
-    repo: "deb [arch=amd64 signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/debian {{ ansible_distribution_release }} stable"
-    filename: docker
-    state: present
-  when: appserver_packages and ansible_distribution == "Debian"
-
 
 - name: "Packages - apt-get update"
   apt:

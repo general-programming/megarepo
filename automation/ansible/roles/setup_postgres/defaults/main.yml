@@ -1,4 +1,0 @@
----
-postgres_version: 16
-postgres_hba_hosts: null
-postgres_listen_ip: null

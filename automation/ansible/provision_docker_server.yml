@@ -1,5 +1,0 @@
-- hosts: docker
-  become: true
-  roles:
-    - role: update_packages
-      appserver_packages: true
