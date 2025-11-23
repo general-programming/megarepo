@@ -9,6 +9,13 @@ logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()
 
 
+__virtualname__ = "netbox"
+
+
+def __virtual__():
+    return __virtualname__
+
+
 def _get_nb_client() -> Client:
     # Select your transport with a defined url endpoint
     transport = AIOHTTPTransport(
