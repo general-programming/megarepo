@@ -48,7 +48,7 @@ node_exporter_user:
 node_exporter_service_file:
   file.managed:
     - name: /etc/systemd/system/node_exporter.service
-    - source: salt://node-exporter/files/node_exporter.service
+    - source: salt://node_exporter/files/node_exporter.service
     - user: root
     - group: root
     - mode: '0644'
