@@ -6,6 +6,9 @@ admin_user_create:
     - home: /home/{{ admin_user }}
     - shell: /bin/bash
     - createhome: True
+    - remove_groups: False
+    - groups:
+      - wheel
 
 admin_user_ssh_keys:
   ssh_auth.manage:
@@ -21,6 +24,6 @@ admin_ssh_sudoers:
     - user: root
     - group: root
     - contents: |
-        {{ admin_user }} ALL=(ALL) NOPASSWD:ALL
+        {{ admin_user }} ALL=(ALL) NOPASSWD: ALL
     - require:
       - user: admin_user_create
