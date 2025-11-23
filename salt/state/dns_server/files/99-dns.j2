@@ -3,9 +3,9 @@
 
 {% for lease in salt['netbox.get_leases']() %}
 {% if lease.address %}
-address=/{{ lease.fqdn }}/{{ lease.ip }}
+address=/{{ lease.address.fqdn }}/{{ lease.address.ip }}
 {% endif %}
 {% if lease.ptr_record %}
-ptr-record={{ lease.reverse_arpa }},{{ lease.fqdn }}
+ptr-record={{ lease.ptr_record.reverse_arpa }},{{ lease.ptr_record.fqdn }}
 {% endif %}
 {% endfor %}
