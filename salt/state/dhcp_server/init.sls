@@ -23,11 +23,11 @@ dhcp_server_apparmor_update:
 
 # remove old ansible configs
 dhcpd_ansible_cleanup:
-  fle.absient:
+  file.absent:
     - name: /etc/dhcp/dhcpd.d/00-ansible.conf
 
 dhcpd6_ansible_cleanup:
-  fle.absient:
+  file.absent:
     - name: /etc/dhcp/dhcpd6.d/00-ansible.conf
 
 # dhcpv4
