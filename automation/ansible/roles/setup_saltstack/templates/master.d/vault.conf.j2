@@ -10,7 +10,7 @@ vault:
     role_id: {{ approle_id.data.data.role_id }}
     secret_id: {{ approle_secret_id.data.data.secret_id }}
   server:
-    url: https://vault-proxy.catgirls.dev:8200
+    url: http://10.65.67.27:8201
   issue:
     type: approle
     approle:
