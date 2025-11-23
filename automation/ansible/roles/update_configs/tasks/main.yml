@@ -1,17 +1,4 @@
 ---
-- name: "Settings - Install HSM root CA"
-  ansible.builtin.copy:
-    src: "root_ca.crt"
-    dest: "/etc/ssl/certs/General_Programming_Root.pem"
-    mode: 0644
-
-- name: "Settings - Set swappiness to 0"
-  ansible.posix.sysctl:
-    name: vm.swappiness
-    value: 1
-    state: present
-    reload: true
-
 - name: "Settings - Enable kernel IP forwarding for app server."
   ansible.posix.sysctl:
     name: net.ipv4.ip_forward
@@ -27,18 +14,6 @@
     owner: root
     group: root
     mode: 0644
-
-- name: "Settings - Set timezone to UTC"
-  community.general.timezone:
-    name: UTC
-
-- name: "Settings - Install admin SSH keys for root."
-  ansible.posix.authorized_key:
-    user: root
-    key: "{{ item }}"
-    state: present
-  loop:
-    - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
 
 - name: "Settings - Get Vault SSH CA"
   community.hashi_vault.vault_read:

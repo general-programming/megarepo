@@ -1,4 +1,4 @@
-create_test_file:
-  file.managed:
-    - name: /tmp/testfile.txt
-    - contents: {{ salt['pillar.get']('common:test_value') }}
+common_timezone_utc:
+  timezone.system:
+    - name: Etc/UTC
+    - utc: True
