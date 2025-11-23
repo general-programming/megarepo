@@ -67,12 +67,10 @@ firewalld:
         - icmp
         - ipv6-icmp
       rich_rules:
-        - family: ipv4
-          ipset:
+        - ipset:
             name: internal_traffic4
           accept: true
-        - family: ipv6
-          ipset:
+        - ipset:
             name: internal_traffic6
           accept: true
       ports:
