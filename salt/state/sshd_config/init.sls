@@ -1,3 +1,9 @@
+{% if grains['os_family'] == 'RedHat' %}
+{% set sshd_service = 'sshd' %}
+{% else %}
+{% set sshd_service = 'ssh' %}
+{% endif %}
+
 sshd_config_include:
   file.append:
     - name: /etc/ssh/sshd_config
@@ -27,7 +33,7 @@ sshd_config_remove_old:
 
 sshd_config_restart:
   service.running:
-    - name: sshd
+    - name: {{ sshd_service }}
     - enable: True
     - onchanges:
       - file: sshd_config_include
