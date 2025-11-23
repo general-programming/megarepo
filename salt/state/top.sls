@@ -14,3 +14,6 @@
 
   'G@tags:docker':
     - install_docker
+
+  # 'G@tags:managed_firewall':
+  #   - firewalld

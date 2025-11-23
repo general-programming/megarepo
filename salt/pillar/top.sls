@@ -3,3 +3,4 @@
     - common
     - schedule
     - admin_user
+    - firewalld
