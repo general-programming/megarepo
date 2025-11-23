@@ -10,9 +10,9 @@ admin_user_create:
 admin_user_ssh_keys:
   ssh_auth.manage:
     - user: {{ admin_user }}
-    - source: salt://admin_user/files/authorized_keys_{{ admin_user }}
     - config: '/%h/.ssh/authorized_keys'
-    - ssh_keys: []
+    - ssh_keys:
+      - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAID/AoFk4QgHsVnYa4o2YYPxQW1TGvDNXO9sY7VRfM1lI infra-admin
 
 admin_ssh_sudoers:
   file.managed:
