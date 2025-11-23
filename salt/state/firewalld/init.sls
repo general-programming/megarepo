@@ -35,6 +35,10 @@ ip6tables:
   service.disabled:
     - enable: False
 
+package_remove_iptables_persistent:
+  pkg.removed:
+    - name: iptables-persistent
+
 package_firewalld:
   pkg.installed:
     - name: {{ firewalld.package }}
