@@ -9,7 +9,7 @@ packages_common:
       - tmux
       - byobu
       - mtr
-      - gnupg
+      - gnupg2
       - unzip
       - zsh
 
