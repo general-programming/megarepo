@@ -4,7 +4,7 @@ import socket
 import json
 import requests
 
-CLOUDFLARE_WEBHOOK = "{{ salt['vault.get_secret']('salt/kv/dhcp_webhook')['url'] }}"
+CLOUDFLARE_WEBHOOK = "{{ salt['vault.read_secret']('salt/kv/dhcp_webhook')['url'] }}"
 
 def push_lease(ip, hostname, mac):
     # Set hostname to a default if it is not set.
