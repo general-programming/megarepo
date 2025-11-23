@@ -32,6 +32,6 @@ admin_user_enable_byobu:
   cmd.run:
     - name: byobu-enable
     - runas: {{ admin_user }}
-    - unless: test -f /home/{{ admin_user }}/.byobu
+    - unless: test -d /home/{{ admin_user }}/.byobu
     - require:
       - user: admin_user_create
