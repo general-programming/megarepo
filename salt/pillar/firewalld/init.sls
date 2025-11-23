@@ -2,6 +2,13 @@
 {% if "managed_firewall" in salt['grains.get']('tags', []) %}
 firewalld:
   enabled: true
+
+  ipset:
+    manage: true
+
+  backend:
+    manage: true
+
   ipsets:
     internal_traffic4:
       short: internal_traffic4
