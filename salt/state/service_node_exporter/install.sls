@@ -56,7 +56,7 @@ node_exporter_service_file:
 node_exporter_service_enable:
   cmd.run:
     - name: systemctl daemon-reload
-    - watch:
+    - onchanges:
       - file: node_exporter_service_file
 
 node_exporter_service:
@@ -64,6 +64,6 @@ node_exporter_service:
     - name: node_exporter
     - enable: True
     - restart: True
-    - watch:
+    - onchanges:
       - file: node_exporter_service_file
       - user: node_exporter_user
