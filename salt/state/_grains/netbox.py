@@ -1,6 +1,3 @@
-import salt.modules.netbox
-
-
 def netbox_leases():
     grains = {
         "netbox_dns": {
@@ -9,7 +6,7 @@ def netbox_leases():
         }
     }
 
-    entries = salt.modules.netbox.get_leases()
+    entries = __salt__["netbox.get_leases"]()
 
     for entry in entries:
         if entry.get("address"):
