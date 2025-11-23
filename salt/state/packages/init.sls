@@ -4,3 +4,5 @@ packages_common:
     - pkgs:
       - sudo
       - htop
+      - tmux
+      - byobu
