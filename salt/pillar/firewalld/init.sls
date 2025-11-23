@@ -4,6 +4,7 @@ firewalld:
   enabled: true
   ipsets:
     internal_traffic4:
+      name: internal_traffic4
       short: internal_traffic4
       description: Internal IPv4 traffic
       type: hash:net
@@ -14,11 +15,12 @@ firewalld:
           - 300
         hashsize:
           - 1024
-        entries:
-          - 10.0.0.0/8
-          - 192.168.0.0/16
-          - 172.16.0.0/12
+      entries:
+        - 10.0.0.0/8
+        - 192.168.0.0/16
+        - 172.16.0.0/12
     internal_traffic6:
+      name: internal_traffic6
       short: internal_traffic6
       description: Internal IPv6 traffic
       type: hash:net
@@ -29,9 +31,9 @@ firewalld:
           - 300
         hashsize:
           - 1024
-        entries:
-          - 2602:fa6d:10::/48
-          - 2620:fc:c000::/64
+      entries:
+        - 2602:fa6d:10::/48
+        - 2620:fc:c000::/64
   services:
     salt-minion:
       short: salt-minion
