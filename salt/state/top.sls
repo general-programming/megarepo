@@ -17,3 +17,6 @@
 
   'G@tags:managed_firewall':
     - firewalld
+
+  'G@tags:dnsserver':
+    - dns_server

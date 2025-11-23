@@ -71,3 +71,17 @@ resource "vault_approle_auth_backend_role" "salt_master_approle_role" {
     role_name      = "salt-master-role"
     token_policies = ["default", vault_policy.salt_master_approle.name]
 }
+
+
+resource "vault_policy" "salt_minions" {
+  name = "saltstack/minions"
+    policy = <<EOT
+path "salt/kv/*" {
+  capabilities = ["read"]
+}
+
+path "salt/data/roles/{{identity.entity.metadata.role}}" {
+  capabilities = ["read"]
+}
+EOT
+}

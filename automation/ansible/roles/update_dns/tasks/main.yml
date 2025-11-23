@@ -3,27 +3,6 @@
   delegate_to: localhost
   register: dns_output
 
-- name: dns - Install dnsmasq
-  package:
-    name: dnsmasq
-    state: present
-
 - name: dns - Parse leases output
   set_fact:
     dns_file: "{{ dns_output.stdout }}"
-
-- name: dns - Update default config
-  template:
-    src: 00-default.j2
-    dest: /etc/dnsmasq.d/00-default.conf
-
-- name: dns - Update static config
-  template:
-    src: 99-dns.j2
-    dest: /etc/dnsmasq.d/99-dns.conf
-
-- name: dns - Reload
-  service:
-    name: "dnsmasq"
-    enabled: true
-    state: restarted

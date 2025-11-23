@@ -60,4 +60,6 @@
     cmd: salt-pip install {{ item }}
   loop:
     - saltext-vault
+    - gql
+    - aiohttp
   notify: Restart Salt Minion
