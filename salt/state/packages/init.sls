@@ -18,5 +18,8 @@ packages_debian:
   pkg.installed:
     - pkgs:
       - apt-transport-https
+{% if grains['osmajorrelease'] == 13 %}
+      # deb13 removed this?
       - software-properties-common
+{% endif %}
 {% endif %}
