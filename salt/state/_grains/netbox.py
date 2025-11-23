@@ -5,7 +5,7 @@ from typing import Generator
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
-from saltext.vault.utils.vault import read_kv
+from saltext.vault.modules.vault import read_secret
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()
@@ -16,7 +16,7 @@ def _get_nb_client() -> Client:
     transport = AIOHTTPTransport(
         url="https://netbox.generalprogramming.org/graphql/",
         headers={
-            "Authorization": f"Token {read_kv('salt/kv/data/netbox_ro')['secret']}"
+            "Authorization": f"Token {read_secret('salt/kv/data/netbox_ro')['secret']}"
         },
     )
 
