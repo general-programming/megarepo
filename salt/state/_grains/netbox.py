@@ -5,17 +5,18 @@ from typing import Generator
 
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
+from saltext.vault.utils.vault import read_kv
 
 logging.basicConfig(level=logging.WARNING)
 log = logging.getLogger()
 
 
-def get_nb_client() -> Client:
+def _get_nb_client() -> Client:
     # Select your transport with a defined url endpoint
     transport = AIOHTTPTransport(
         url="https://netbox.generalprogramming.org/graphql/",
         headers={
-            "Authorization": f"Token {__salt__['vault.read_secret']('salt/kv/data/netbox_ro')['secret']}"
+            "Authorization": f"Token {read_kv('salt/kv/data/netbox_ro')['secret']}"
         },
     )
 
@@ -42,9 +43,6 @@ class IPAMHost:
     @property
     def clean_hostname(self):
         return clean_hostname(self.hostname)
-
-
-client = get_nb_client()
 
 
 def create_zone(leases, output_json: bool = False) -> Generator[IPAMHost, None, None]:
@@ -153,6 +151,7 @@ def netbox_leases():
     leases = []
 
     # Execute query and merge physical device + VM interfaces in one list.
+    client = _get_nb_client()
     result = client.execute(query)
     hosts = result["device_list"] + result["virtual_machine_list"]
 
@@ -202,7 +201,7 @@ def netbox_leases():
 
     entries = list(create_zone(leases, True))
 
-    output = {
+    grains = {
         "netbox_dns": {
             "addresses": [],
             "ptr_records": [],
@@ -210,8 +209,8 @@ def netbox_leases():
     }
     for entry in entries:
         if entry.get("address"):
-            output["netbox_dns"]["addresses"].append(entry["address"])
+            grains["netbox_dns"]["addresses"].append(entry["address"])
         if entry.get("ptr_record"):
-            output["netbox_dns"]["ptr_records"].append(entry["ptr_record"])
+            grains["netbox_dns"]["ptr_records"].append(entry["ptr_record"])
 
-    return output
+    return grains
