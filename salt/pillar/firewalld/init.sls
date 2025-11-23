@@ -29,6 +29,7 @@ firewalld:
       short: internal_traffic6
       description: Internal IPv6 traffic
       type: hash:net
+      family: ipv6
       options:
         maxelem:
           - 65536
@@ -67,10 +68,12 @@ firewalld:
         - icmp
         - ipv6-icmp
       rich_rules:
-        - ipset:
+        - family: ipv4
+          ipset:
             name: internal_traffic4
           accept: true
-        - ipset:
+        - family: ipv6
+          ipset:
             name: internal_traffic6
           accept: true
       ports:
