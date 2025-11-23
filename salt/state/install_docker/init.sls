@@ -6,7 +6,7 @@
 
 install_docker_repo:
   pkgrepo.managed:
-    - name: deb https://download.docker.com/linux/{{ grains['os'] | lower }} {{ grains['oscodename'] }} stable
+    - name: deb [arch={{ grains['osarch'] }} signed-by=/usr/share/keyrings/docker-archive-keyring.asc] https://download.docker.com/linux/{{ grains['os'] | lower }} {{ grains['oscodename'] }} stable # noqa: 204
     - file: /etc/apt/sources.list.d/docker.list
     - dist: {{ grains['oscodename'] }}
     - key_url: {{ docker_key }}
