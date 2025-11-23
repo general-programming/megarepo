@@ -15,19 +15,6 @@
     group: root
     mode: 0644
 
-- name: "Settings: SSHD config"
-  ansible.builtin.template:
-    src: sshd_config.j2
-    dest: /etc/ssh/sshd_config.d/00-ansible.conf
-    owner: root
-    group: root
-    mode: 0644
-
-- name: "Settings: SSHD config - Restart SSHD"
-  ansible.builtin.service:
-    name: sshd
-    state: restarted
-
 - name: "Check if node exporter port is open"
   ansible.builtin.wait_for:
     host: "localhost"

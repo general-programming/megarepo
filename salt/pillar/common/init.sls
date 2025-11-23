@@ -1,2 +1,2 @@
 common:
-  test_value: "This is a test value."
+  salt_managed: 'This file is managed by Salt. Do not edit manually.'
