@@ -6,5 +6,5 @@
     - groups
     - admin_user
 
-  'G:tags:docker':
+  'G@tags:docker':
     - install_docker
