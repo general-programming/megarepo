@@ -14,7 +14,7 @@ sshd_config_vault_ca:
 sshd_config_managed:
   file.managed:
     - name: /etc/sshd/sshd_config.d/10-genprog.conf
-    - source: salt://state/sshd_config/files/10-genprog.conf.j2
+    - source: salt://sshd_config/files/10-genprog.conf.j2
     - template: jinja
     - user: root
     - group: root
