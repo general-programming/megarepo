@@ -7,13 +7,13 @@ firewalld:
       short: internal_traffic4
       description: Internal IPv4 traffic
       type: hash:net
-        options:
-          maxelem:
-            - 65536
-          timeout:
-            - 300
-          hashsize:
-            - 1024
+      options:
+        maxelem:
+          - 65536
+        timeout:
+          - 300
+        hashsize:
+          - 1024
         entries:
           - 10.0.0.0/8
           - 192.168.0.0/16
@@ -22,13 +22,13 @@ firewalld:
       short: internal_traffic6
       description: Internal IPv6 traffic
       type: hash:net
-        options:
-          maxelem:
-            - 65536
-          timeout:
-            - 300
-          hashsize:
-            - 1024
+      options:
+        maxelem:
+          - 65536
+        timeout:
+          - 300
+        hashsize:
+          - 1024
         entries:
           - 2602:fa6d:10::/48
           - 2620:fc:c000::/64
