@@ -11,7 +11,7 @@ admin_user_ssh_keys:
   ssh_auth.manage:
     - user: {{ admin_user }}
     - source: salt://admin_user/files/authorized_keys_{{ admin_user }}
-    - config: '%h/.ssh/authorized_keys'
+    - config: '/%h/.ssh/authorized_keys'
     - ssh_keys: []
 
 admin_ssh_sudoers:
