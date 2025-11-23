@@ -48,6 +48,13 @@ firewalld:
       ports:
         tcp:
           - "8000"
+    salt-master:
+      short: salt-master
+      description: "salt-master"
+      ports:
+        tcp:
+          - "4505"
+          - "4506"
   zones:
     public:
       short: public
@@ -65,6 +72,9 @@ firewalld:
 {% if 'dnsserver' in salt['grains.get']('tags', []) %}
         - dhcp
 {% endif %}
+{% if 'saltmaster' in salt['grains.get']('tags', []) %}
+        - salt-master
+{% endif %}
       protocols:
         - icmp
         - ipv6-icmp
@@ -81,14 +91,6 @@ firewalld:
         - comment: node-exporter
           port: 9100
           protocol: tcp
-{% if 'saltmaster' in salt['grains.get']('tags', []) %}
-        - comment: salt-master
-          port: 4505
-          protocol: tcp
-        - comment: salt-python
-          port: 4506
-          protocol: tcp
-{% endif %}
 {% else %}
 firewalld:
   enabled: false
