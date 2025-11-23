@@ -1,1 +1,2 @@
-username: localadmin
+admin_user:
+  username: localadmin

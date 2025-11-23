@@ -1,1 +1,2 @@
-test_value: "This is a test value."
+common:
+  test_value: "This is a test value."
