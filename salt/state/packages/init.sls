@@ -2,10 +2,8 @@
 packages_common:
   pkg.installed:
     - pkgs:
-      - apt-transport-https
       - ca-certificates
       - curl
-      - software-properties-common
       - sudo
       - htop
       - tmux
@@ -14,3 +12,11 @@ packages_common:
       - gnupg
       - unzip
       - zsh
+
+{% if grains['os_family'] == 'Debian' %}
+packages_debian:
+  pkg.installed:
+    - pkgs:
+      - apt-transport-https
+      - software-properties-common
+{% endif %}
