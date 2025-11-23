@@ -50,7 +50,6 @@ firewalld:
         - salt-minion
         - dns
         - dhcpv6-client
-        - node-exporter
 {% if 'dnsserver' in salt['grains.get']('tags', []) %}
         - dns
 {% endif %}
