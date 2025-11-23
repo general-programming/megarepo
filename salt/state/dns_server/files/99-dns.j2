@@ -1,10 +1,11 @@
 # 99-dns.j2
 # {{ pillar['common']['salt_managed'] }}
 
-{% for entry in salt['pillar.get']('netbox_dns:addresses', []) %}
-address=/{{ entry.fqdn }}/{{ entry.ip }}
-{% endfor %}
-
-{% for entry in salt['pillar.get']('netbox_dns:ptr_records', []) %}
-ptr-record={{ entry.reverse_arpa }},{{ entry.fqdn }}
+{% for lease in salt['netbox.get_leases']() %}
+{% if lease.address %}
+address=/{{ lease.fqdn }}/{{ lease.ip }}
+{% endif %}
+{% if lease.ptr_record %}
+ptr-record={{ lease.reverse_arpa }},{{ lease.fqdn }}
+{% endif %}
 {% endfor %}
