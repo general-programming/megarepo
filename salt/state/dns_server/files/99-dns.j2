@@ -8,4 +8,4 @@ address=/{{ lease.address.fqdn }}/{{ lease.address.ip }}
 {% if 'ptr_record' in lease -%}
 ptr-record={{ lease.ptr_record.reverse_arpa }},{{ lease.ptr_record.fqdn }}
 {% endif -%}
-{% endfor %}
+{% endfor -%}

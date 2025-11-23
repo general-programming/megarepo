@@ -4,7 +4,7 @@ import socket
 import json
 import requests
 
-CLOUDFLARE_WEBHOOK = "{{ cloudflare_webhook }}"
+CLOUDFLARE_WEBHOOK = "{{ salt['vault.get_secret']('salt/kv/dhcp_webhook')['url'] }}"
 
 def push_lease(ip, hostname, mac):
     # Set hostname to a default if it is not set.
@@ -27,7 +27,7 @@ def push_lease(ip, hostname, mac):
         # Also doesn't hurt to handle general request exceptions.
         # We'll lose the notification but if the machine tries to renew the lease, it'll be caught anyways.
         pass
-    
+
 
 if __name__ == "__main__":
     ip, hostname, mac = sys.argv[1:4]

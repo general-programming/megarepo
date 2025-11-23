@@ -29,6 +29,19 @@ def _get_nb_client() -> Client:
     return Client(transport=transport, fetch_schema_from_transport=True)
 
 
+def _clean_hostname(data: str) -> str:
+    return data.replace(" ", "_").replace(":", "").replace("_-_", "_").replace("/", "_")
+
+
+def _generate_lease(lease_name, hostname: str, mac: str, ip: str):
+    return {
+        "host": lease_name,
+        "hostname": hostname,
+        "mac": mac,
+        "ip": ip,
+    }
+
+
 @dataclass
 class _IPAMHost:
     hostname: str
@@ -39,12 +52,7 @@ class _IPAMHost:
 
     @property
     def clean_hostname(self):
-        return (
-            self.hostname.replace(" ", "_")
-            .replace(":", "")
-            .replace("_-_", "_")
-            .replace("/", "_")
-        )
+        return _clean_hostname(self.hostname)
 
 
 def _create_zone(leases, output_json: bool = False) -> Generator[_IPAMHost, None, None]:
@@ -116,7 +124,7 @@ def _non_static_host(hostname: str) -> bool:
     return result
 
 
-query = gql(
+dns_query = gql(
     """
 query {
   device_list {
@@ -149,12 +157,39 @@ query {
 )
 
 
+dhcp_query = gql(
+    """
+query {
+  interface_list {
+    primary_mac_address {
+      mac_address
+    }
+    name
+    device { name }
+    ip_addresses {
+      address
+    }
+  }
+  vm_interface_list {
+    primary_mac_address {
+      mac_address
+    }
+    name
+    virtual_machine { name }
+    ip_addresses {
+      address
+    }
+  }
+}"""
+)
+
+
 def get_leases():
     leases = []
 
     # Execute query and merge physical device + VM interfaces in one list.
     client = _get_nb_client()
-    result = client.execute(query)
+    result = client.execute(dns_query)
     hosts = result["device_list"] + result["virtual_machine_list"]
 
     # Iterate through all interfaces.
@@ -204,3 +239,57 @@ def get_leases():
     entries = list(_create_zone(leases, True))
 
     return entries
+
+
+def get_dhcp_leases():
+    leases = {
+        "v4": [],
+        "v6": [],
+    }
+
+    # Execute query and merge physical device + VM interfaces in one list.
+    client = _get_nb_client()
+    result = client.execute(dhcp_query)
+    interfaces = result["interface_list"] + result["vm_interface_list"]
+
+    # Iterate through all interfaces.
+    for interface in interfaces:
+        for address in interface["ip_addresses"]:
+            # Try to get the IP.
+            try:
+                ip_address = address["address"].split("/")[0]
+            except IndexError:
+                continue
+
+            # handle for IPv6 IPs.
+            if ":" in ip_address:
+                ip_family = "v6"
+            else:
+                ip_family = "v4"
+
+            # Device name for physical / virt.
+            if "device" in interface:
+                device_name = interface["device"]["name"]
+            else:
+                device_name = interface["virtual_machine"]["name"]
+
+            # Clean the names for DHCPd.
+            interface_name = _clean_hostname(interface["name"])
+            device_name = _clean_hostname(device_name)
+            hostname = f"{device_name}-{interface_name}".lower()
+
+            # Do not use IPs that do not have MAC addresses.
+            if not interface["primary_mac_address"]:
+                log.warning(f"{ip_address} missing MAC")
+                continue
+
+            leases[ip_family].append(
+                _generate_lease(
+                    lease_name=hostname,
+                    hostname=device_name,
+                    mac=interface["primary_mac_address"]["mac_address"],
+                    ip=ip_address,
+                )
+            )
+
+    return leases

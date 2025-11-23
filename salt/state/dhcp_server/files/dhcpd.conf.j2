@@ -1,5 +1,5 @@
 # 00-dhcpd.j2
-# {{ ansible_managed }}
+# {{ pillar['common']['salt_managed'] }}
 
 # Discord commit hook
 # Hook syntax taken from https://sidvind.com/wiki/Dhcpd_on_commit
@@ -24,6 +24,6 @@ on commit {
 }
 
 # Leases from Netbox
-{% for lease in leases.v4 %}
+{% for lease in salt['netbox.get_dhcp_leases']().v4 -%}
 host {{ lease.host }} { hardware ethernet {{ lease.mac }}; fixed-address {{ lease.ip }}; option host-name "{{ lease.hostname }}"; }
-{% endfor %}
+{% endfor -%}

@@ -20,3 +20,6 @@
 
   'G@tags:dnsserver':
     - dns_server
+
+  # 'G@tags:dhcpserver':
+  #   - dhcp_server
