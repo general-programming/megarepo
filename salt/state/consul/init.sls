@@ -39,7 +39,7 @@ consul_config:
 consul_empty_consulhcl:
   file.managed:
     - name: /etc/consul.d/consul.hcl
-    - contents: ''
+    - contents: '# This file is intentionally left blank.'
     - user: root
     - group: root
     - mode: '0644'
