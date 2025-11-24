@@ -4,3 +4,4 @@
     - schedule
     - admin_user
     - firewalld
+    - consul
