@@ -1,5 +1,7 @@
 consul:
-{% if grains['datacenter'] == 'sea1' %}
+{% if grains['datacenter'] == 'sea420' %}
+  bootstrap_expect: 1
+{% elif grains['datacenter'] == 'sea1' %}
   retry_join:
     - "2602:fa6d:10:ffff::101"
     - "2602:fa6d:10:ffff::102"
