@@ -1,4 +1,5 @@
 vault_key: {{ vault_salt_key.data.data.data.key }}
+datacenter: {{ datacenter }}
 {% if sites is defined %}
 sites: {{ sites | to_json }}
 {% else %}
