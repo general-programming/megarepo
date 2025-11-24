@@ -44,6 +44,10 @@ consul_empty_consulhcl:
     - group: root
     - mode: '0644'
 
+# add services
+include:
+  - consul.services
+
 consul_service:
   service.running:
     - name: consul
