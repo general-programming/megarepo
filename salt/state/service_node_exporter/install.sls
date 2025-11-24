@@ -20,6 +20,12 @@ move_node_exporter:
     - name: /usr/local/bin/node_exporter
     - source: /tmp/node_exporter-{{ node_exporter_version }}.linux-amd64/node_exporter
 
+{% if salt['grains.get']('selinux:enabled', False) %}
+node_exporter_fix_selinux:
+  cmd.run:
+    - name: /sbin/restorecon -v /usr/local/bin/node_exporter
+{% endif %}
+
 delete_node_exporter_dir:
   file.absent:
     - name: /tmp/node_exporter-{{ node_exporter_version }}.linux-amd64
@@ -27,7 +33,6 @@ delete_node_exporter_dir:
 delete_node_exporter_files:
   file.absent:
     - name: /tmp/node_exporter.tar.gz
-
 {% endif %}
 
 node_exporter_group:
