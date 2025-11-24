@@ -64,6 +64,6 @@ node_exporter_service:
     - name: node_exporter
     - enable: True
     - restart: True
-    - onchanges:
+    - watch:
       - file: node_exporter_service_file
       - user: node_exporter_user

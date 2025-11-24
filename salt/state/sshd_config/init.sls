@@ -35,7 +35,7 @@ sshd_config_restart:
   service.running:
     - name: {{ sshd_service }}
     - enable: True
-    - onchanges:
+    - watch:
       - file: sshd_config_include
       - file: sshd_config_managed
       - file: sshd_config_vault_ca

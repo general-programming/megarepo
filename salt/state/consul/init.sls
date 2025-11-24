@@ -49,9 +49,7 @@ consul_service:
     - name: consul
     - enable: True
     - full_restart: True
-    - require:
+    - watch:
       - pkg: consul_pkg
       - file: consul_config
       - file: consul_empty_consulhcl
-    - onchanges:
-      - file: consul_config

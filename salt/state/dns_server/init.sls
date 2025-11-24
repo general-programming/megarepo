@@ -29,8 +29,7 @@ dns_server_service:
   service.running:
     - name: dnsmasq
     - enable: True
-    - onchanges:
+    - watch:
+      - pkg: dns_server_pkgs
       - file: dns_server_default
       - file: dns_server_static
-    - require:
-      - pkg: dns_server_pkgs

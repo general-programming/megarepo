@@ -48,7 +48,7 @@ dhcp_server_service:
     - require:
       - file: dhcp_server_webhook
       - cmd: dhcp_server_apparmor_update
-    - onchanges:
+    - watch:
       - file: dhcpd_config
 
 # dhcpv6
@@ -67,8 +67,7 @@ dhcp6_server_service:
     - name: isc-dhcp-server6
     - enable: True
     - full_restart: True
-    - require:
+    - watch:
       - file: dhcp_server_webhook
       - cmd: dhcp_server_apparmor_update
-    - onchanges:
       - file: dhcpd6_config
