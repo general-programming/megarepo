@@ -65,12 +65,11 @@ firewalld:
         - ssh
         - salt-minion
         - dns
+        - dhcp
+        - dhcpv6
         - dhcpv6-client
 {% if 'dnsserver' in salt['grains.get']('tags', []) %}
         - dns
-{% endif %}
-{% if 'dnsserver' in salt['grains.get']('tags', []) %}
-        - dhcp
 {% endif %}
 {% if 'saltmaster' in salt['grains.get']('tags', []) %}
         - salt-master
