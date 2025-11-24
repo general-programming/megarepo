@@ -1,10 +1,11 @@
 {% if grains['os_family'] == 'Debian' %}
 consul_repo_debian:
   pkgrepo.managed:
-    - name: "deb [arch={{ grains['osarch'] }} signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg] https://apt.releases.hashicorp.com {{ grains["lsb_distrib_codename"] }} main" # noqa: 204
+    - name: "deb [signed-by=/usr/share/keyrings/hashicorp-archive-keyring.gpg arch={{ grains['osarch'] }}] https://apt.releases.hashicorp.com {{ grains["lsb_distrib_codename"] }} main" # noqa: 204
     - dist: {{ grains['lsb_distrib_codename'] }}
     - file: /etc/apt/sources.list.d/hashicorp.list
     - key_url: https://apt.releases.hashicorp.com/gpg
+    - aptkey: False
     - require_in:
       - pkg: consul_pkg
 {% elif grains['os_family'] == 'RedHat' %}

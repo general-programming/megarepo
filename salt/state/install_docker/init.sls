@@ -10,6 +10,7 @@ install_docker_repo:
     - file: /etc/apt/sources.list.d/docker.list
     - dist: {{ grains['oscodename'] }}
     - key_url: {{ docker_key }}
+    - aptkey: False
     - require_in:
       - pkg: install_docker_pkgs
 
