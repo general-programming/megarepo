@@ -28,7 +28,7 @@ consul_pkg:
 consul_config:
   file.recurse:
     - name: /etc/consul.d
-    - source: salt://state/consul/files/consul_configs
+    - source: salt://consul/files/consul_configs
     - user: root
     - group: root
     - template: jinja
