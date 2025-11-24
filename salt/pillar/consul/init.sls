@@ -7,6 +7,7 @@ consul:
     - "2602:fa6d:10:ffff::101"
     - "2602:fa6d:10:ffff::102"
     - "2602:fa6d:10:ffff::103"
+  bind_addr: "[::]"
 {% elif grains['datacenter'] == 'fmt2' %}
   retry_join:
     - "10.65.67.47"
