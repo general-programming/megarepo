@@ -49,6 +49,8 @@ spec:
       metadata:
         annotations:
           external-dns.alpha.kubernetes.io/hostname: vminsert.fmt2.generalprogramming.org
+          tailscale.com/expose: "true"
+          tailscale.com/hostname: "svc-vminsert-fmt2"
     insertPorts:
       influxPort: "8089"
       graphitePort: "2003"
