@@ -1,7 +1,7 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.10.5
-kubernetesVersion: v1.33.2
+talosVersion: v1.12.2
+kubernetesVersion: v1.35.0
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
@@ -43,16 +43,26 @@ nodes:
     ipAddress: "10.3.6.3"
     installDisk: /dev/sda
     controlPlane: false
+    nameservers:
+      - 10.3.0.3
+      - 10.65.67.6
     networkInterfaces:
       - interface: enp6s18
+        addresses:
+          - "10.3.6.3/27"
+        routes:
+          - network: "0.0.0.0/0"
+            gateway: "10.3.6.1"
         dhcp: true
         dhcpOptions:
-          ipv4: true
+          ipv4: false
           ipv6: true
-    machineDisks:
-      - device: /dev/sdb
-        partitions:
-          - mountpoint: /var/mnt/data
+    userVolumes:
+      - name: data
+        provisioning:
+          diskSelector:
+            match: disk.transport != ''
+          minSize: 500GiB
 worker:
   machineSpec:
     secureboot: true
