@@ -5,8 +5,8 @@ go 1.23.0
 replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v0.9.1
 
 require (
-	github.com/bytedance/gopkg v0.0.0-20240531030433-5df24c0168e2
-	github.com/bytedance/sonic v1.8.1
+	github.com/bytedance/gopkg v0.1.3
+	github.com/bytedance/sonic v1.15.0
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.8.0
 	github.com/general-programming/gocommon v0.0.0-20230108100818-ce3bf0a96ec1
@@ -25,8 +25,10 @@ require (
 require (
 	github.com/andres-erbsen/clock v0.0.0-20160526145045-9e14626cd129 // indirect
 	github.com/bytedance/go-tagexpr/v2 v2.9.2 // indirect
+	github.com/bytedance/sonic/loader v0.5.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
+	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cloudwego/netpoll v0.5.0 // indirect
 	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
@@ -38,7 +40,7 @@ require (
 	github.com/henrylee2cn/goutil v0.0.0-20210127050712-89660552f6f8 // indirect
 	github.com/influxdata/line-protocol v0.0.0-20200327222509-2487e7298839 // indirect
 	github.com/klauspost/compress v1.15.14 // indirect
-	github.com/klauspost/cpuid/v2 v2.2.3 // indirect
+	github.com/klauspost/cpuid/v2 v2.2.9 // indirect
 	github.com/nyaruka/phonenumbers v1.0.55 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/savsgio/gotils v0.0.0-20220530130905-52f3993e8d6d // indirect
