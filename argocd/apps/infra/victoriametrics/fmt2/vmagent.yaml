@@ -1,0 +1,15 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAgent
+metadata:
+  name: vmagent
+  namespace: victoriametrics
+spec:
+  selectAllByDefault: true
+  replicaCount: 1
+  inlineRelabelConfig:
+    - target_label: "dc"
+      replacement: "fmt2"
+    - target_label: "cluster"
+      replacement: "fmt2-k8s"
+  remoteWrite:
+    - url: "http://vminsert-fmt2-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"

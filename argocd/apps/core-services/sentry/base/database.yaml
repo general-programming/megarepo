@@ -1,0 +1,27 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: sentry-db
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  storage:
+    pvcTemplate:
+      accessModes:
+        - ReadWriteOnce
+      resources:
+        requests:
+          storage: 16Gi
+      storageClassName: local-path
+    initdb:
+      database: sentry
+      owner: sentry
+  postgresql:
+    parameters:
+      max_connections: "284"
+      shared_buffers: "1GB"

@@ -1,0 +1,36 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: consul-helm
+  namespace: argocd
+spec:
+  destination:
+    namespace: consul
+    server: https://kubernetes.default.svc
+  project: infra
+  source:
+    chart: consul
+    helm:
+      valuesObject:
+        global:
+          arcocd:
+            enabled: true
+        connectInject:
+          enabled: false
+        client:
+          enabled: true
+          exposeGossipPorts: false
+        dns:
+          enabled: true
+        server:
+          replicas: 5
+          exposeGossipAndRPCPorts: true
+    repoURL: https://helm.releases.hashicorp.com
+    targetRevision: 1.9.3
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - allowEmpty=true

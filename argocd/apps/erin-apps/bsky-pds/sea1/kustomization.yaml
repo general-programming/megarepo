@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: bsky-pds
+resources: []
+# resources:
+#   - ../base
+#   - ingress.yaml
+#   - secret.yaml
+# patches:
+#   - path: patch-config.yaml

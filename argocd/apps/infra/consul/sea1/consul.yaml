@@ -1,0 +1,23 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: consul-helm
+  namespace: argocd
+spec:
+  source:
+    helm:
+      valuesObject:
+        global:
+          name: sea1
+          datacenter: sea1
+        server:
+          enabled: false
+        client:
+          enabled: true
+          exposeGossipPorts: true
+          join:
+            - consul.service.consul
+            # fallback to HVs if DNS is broke
+            - 2602:fa6d:10:ffff::101
+            - 2602:fa6d:10:ffff::102
+            - 2602:fa6d:10:ffff::103

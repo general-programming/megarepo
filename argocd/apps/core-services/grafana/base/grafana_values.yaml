@@ -1,0 +1,134 @@
+plugins:
+  - vonage-status-panel
+  - grafana-piechart-panel
+dashboardProviders:
+  dashboardproviders.yaml:
+    apiVersion: 1
+    providers:
+    - name: 'default'
+      orgId: 1
+      folder: ''
+      type: file
+      disableDeletion: false
+      editable: true
+      options:
+        path: /var/lib/grafana/dashboards/default
+dashboards:
+  default:
+    kubernetes_ns:
+      gnetId: 15758
+      revision: 41
+      datasource: VM-FMT2
+    kubernetes_pods:
+      gnetId: 15760
+      revision: 34
+      datasource: VM-FMT2
+    kubernetes_global:
+      gnetId: 15757
+      revision: 42
+      datasource: VM-FMT2
+    kubernetes_nodes:
+      gnetId: 15757
+      revision: 32
+      datasource: VM-FMT2
+    kubernetes_apiserver:
+      gnetId: 15761
+      revision: 18
+      datasource: VM-FMT2
+    kubernetes_coredns:
+      gnetId: 15762
+      revision: 19
+      datasource: VM-FMT2
+    proxmox:
+      gnetId: 13307
+      revision: 6
+      datasource: VM-FMT2
+    ceph-cluster:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/ceph-cluster.json
+      datasource: VM-FMT2
+    cephfs-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/cephfs-overview.json
+      datasource: VM-FMT2
+    host-details:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/host-details.json
+      datasource: VM-FMT2
+    hosts-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/hosts-overview.json
+      datasource: VM-FMT2
+    osd-device-details:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/osd-device-details.json
+      datasource: VM-FMT2
+    osds-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/osds-overview.json
+      datasource: VM-FMT2
+    pool-detail:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/pool-detail.json
+      datasource: VM-FMT2
+    pool-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/pool-overview.json
+      datasource: VM-FMT2
+    radosgw-detail:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/radosgw-detail.json
+      datasource: VM-FMT2
+    radosgw-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/radosgw-overview.json
+      datasource: VM-FMT2
+    radosgw-sync-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/radosgw-sync-overview.json
+      datasource: VM-FMT2
+    rbd-details:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/rbd-details.json
+      datasource: VM-FMT2
+    rbd-overview:
+      url: https://raw.githubusercontent.com/ceph/ceph/main/monitoring/ceph-mixin/dashboards_out/rbd-overview.json
+      datasource: VM-FMT2
+persistence:
+  enabled: true
+  accessModes: ["ReadWriteMany"]
+extraSecretMounts:
+  - name: grafana-secrets
+    secretName: grafana-secrets
+    defaultMode: 0440
+    mountPath: /etc/secrets/grafana_secrets
+    readOnly: true
+grafana.ini:
+  server:
+    domain: grafana.generalprogramming.org
+    root_url: https://grafana.generalprogramming.org
+  auth.generic_oauth:
+    enabled: true
+    name: General Programming SSO
+    allow_sign_up: true
+    client_id: $__file{/etc/secrets/grafana_secrets/oauth_client_id}
+    client_secret: $__file{/etc/secrets/grafana_secrets/oauth_client_secret}
+    scopes: openid email profile offline_access roles
+    email_attribute_path: email
+    login_attribute_path: username
+    name_attribute_path: name
+    groups_attribute_path: groups
+    auth_url: https://sso.generalprogramming.org/realms/master/protocol/openid-connect/auth
+    token_url: https://sso.generalprogramming.org/realms/master/protocol/openid-connect/token
+    api_url: https://sso.generalprogramming.org/realms/master/protocol/openid-connect/userinfo
+    role_attribute_path: "contains(groups[*], 'superadmin') && 'GrafanaAdmin' || contains(groups[*], 'admins') && 'Admin' || contains(groups[*], 'editor') && 'Editor' || 'Viewer'"
+    allow_assign_grafana_admin: true
+  security:
+    allow_embedding: true
+sidecar:
+  datasources:
+    enabled: true
+    searchNamespace: ALL
+  alerts:
+    enabled: true
+    searchNamespace: ALL
+  dashboards:
+    enabled: true
+    searchNamespace: ALL
+ingress:
+  enabled: true
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+  hosts:
+    - grafana.generalprogramming.org
+admin:
+  existingSecret: grafana-secrets

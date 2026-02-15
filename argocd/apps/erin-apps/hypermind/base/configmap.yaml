@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hypermind-config
+data:
+  ENABLE_MAP: "true"
+  ENABLE_CHAT: "true"
+  MAX_PEERS: "1000000"
+  MAX_CONNECTIONS: "1000"

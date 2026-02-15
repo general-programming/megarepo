@@ -1,0 +1,49 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: scylladb-config
+data:
+  scylla.yaml: |
+    authenticator: PasswordAuthenticator
+    authorizer: CassandraAuthorizer
+---
+apiVersion: scylla.scylladb.com/v1
+kind: ScyllaCluster
+metadata:
+  name: scylladb
+spec:
+  repository: "docker.io/scylladb/scylla"
+  version: "6.2.2"
+  agentRepository: "docker.io/scylladb/scylla-manager-agent"
+  agentVersion: "3.4.1"
+  developerMode: false
+  automaticOrphanedNodeCleanup: true
+  sysctls:
+  - fs.aio-max-nr=30000000
+  datacenter:
+    name: sea1
+    racks:
+    - name: sea1
+      members: 3
+      scyllaConfig: scylladb-config
+      storage:
+        capacity: 100Gi
+        storageClassName: local-path
+      agentResources:
+        requests:
+          cpu: 100m
+          memory: 100M
+      resources:
+        requests:
+          cpu: 2
+          memory: 8Gi
+        limits:
+          cpu: 2
+          memory: 8Gi
+      placement:
+        tolerations:
+        - key: scylla-operator.scylladb.com/dedicated
+          operator: Equal
+          value: scyllaclusters
+          effect: NoSchedule

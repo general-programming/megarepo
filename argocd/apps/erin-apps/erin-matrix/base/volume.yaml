@@ -1,0 +1,14 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: synapse-data
+spec:
+  storageClassName: cephfs
+  # Your storage class may not have ReadWriteMany.
+  # If it does not, setting it to ReadWriteOnce is fine.
+  accessModes:
+  - ReadWriteMany
+  resources:
+    requests:
+      storage: 64Gi

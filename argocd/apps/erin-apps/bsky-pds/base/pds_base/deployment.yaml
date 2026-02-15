@@ -1,0 +1,44 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pds
+  labels:
+    app.kubernetes.io/component: atproto-pds
+    app.kubernetes.io/name: atproto
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: pds
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: pds
+    spec:
+      containers:
+      - name: pds
+        image: ghcr.io/bluesky-social/pds:0.4
+        envFrom:
+        - configMapRef:
+            name: pds-config
+        - secretRef:
+            name: pds-secrets
+        # I assume that shared data may become possible eventually.
+        volumeMounts:
+        - name: pds-data
+          mountPath: /data
+        # Based on the server requirements on the normal server.
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "2000m"
+            memory: "2Gi"
+      volumes:
+      - name: pds-data
+        persistentVolumeClaim:
+          claimName: pds-data

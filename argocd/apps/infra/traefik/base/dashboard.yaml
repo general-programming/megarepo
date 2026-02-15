@@ -1,0 +1,19 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: traefik-dashboard-auth
+  namespace: traefik
+data:
+  users: >-
+    b2J3OiQyeSQwOSQ3OC5MbEovazhnNmRBdy5CZWhRbTB1MkU0VTNEUmh2MVd6QzhYc1RuUlBQVnhZVXlxSC5ubQpnZW5wcm9nOiQyeSQwOSRZTWN6UEJnMmNCY2VRLkVqbElvQU91dThMcTZtWTg2ZGZFY2lhd2RuVlFtZ29aM0FNeHBLSwpuZXBlYXQ6JCRhcHIxJCQ5YzhzU3JTUCQkd3hJQThROFlyOWZZREh3QlhZLnM1Lw==
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: traefik-dashboard-basicauth
+  namespace: traefik
+
+spec:
+  basicAuth:
+    secret: traefik-dashboard-auth

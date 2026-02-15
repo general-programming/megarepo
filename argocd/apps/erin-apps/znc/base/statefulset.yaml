@@ -1,0 +1,53 @@
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: znc
+spec:
+  selector:
+    matchLabels:
+      app: znc
+  serviceName: "znc"
+  replicas: 1
+  minReadySeconds: 10
+  template:
+    metadata:
+      labels:
+        app: znc
+    spec:
+      terminationGracePeriodSeconds: 10
+      restartPolicy: Always
+      initContainers:
+      - name: init-config
+        image: znc:1.8.2
+        command: ['/bin/sh', '-c', "until [ -f /znc-data/configs/znc.conf ]; do echo waiting for znc.conf; sleep 2; done"]
+        volumeMounts:
+          - mountPath: /znc-data
+            name: znc-data
+      containers:
+      - name: znc
+        image: znc:1.8.2
+        ports:
+        - containerPort: 6667
+          name: irc
+        - containerPort: 6697
+          name: ircs
+        volumeMounts:
+        - name: znc-data
+          mountPath: /znc-data
+        - mountPath: /znc-certs
+          name: tls-erin-znc
+      volumes:
+      - name: tls-erin-znc
+        secret:
+          secretName: tls-erin-znc
+      dnsPolicy: Default
+  volumeClaimTemplates:
+  - metadata:
+      name: znc-data
+    spec:
+      storageClassName: cephfs
+      accessModes: ["ReadWriteMany"]
+      resources:
+        requests:
+          storage: 16Gi

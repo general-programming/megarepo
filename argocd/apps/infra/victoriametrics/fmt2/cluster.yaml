@@ -1,0 +1,54 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMCluster
+metadata:
+  name: fmt2-victoriametrics
+  namespace: victoriametrics
+spec:
+  # Add fields here
+  retentionPeriod: "4"
+  replicationFactor: 2
+  vmstorage:
+    replicaCount: 5
+    storageDataPath: "/vm-data"
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ceph-rbd
+          resources:
+            requests:
+              storage: 128Gi
+    resources:
+      limits:
+        cpu: "2"
+        memory: 1Gi
+  vmselect:
+    replicaCount: 3
+    cacheMountPath: "/select-cache"
+    storage:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: ceph-rbd
+          resources:
+            requests:
+              storage: 2Gi
+    resources:
+      limits:
+        cpu: "2"
+        memory: "1Gi"
+    serviceSpec:
+      spec:
+        type: LoadBalancer
+      metadata:
+        annotations:
+          external-dns.alpha.kubernetes.io/hostname: vmselect.fmt2.generalprogramming.org
+  vminsert:
+    replicaCount: 3
+    serviceSpec:
+      spec:
+        type: LoadBalancer
+      metadata:
+        annotations:
+          external-dns.alpha.kubernetes.io/hostname: vminsert.fmt2.generalprogramming.org
+    insertPorts:
+      influxPort: "8089"
+      graphitePort: "2003"

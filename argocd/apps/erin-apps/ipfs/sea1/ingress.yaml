@@ -1,0 +1,37 @@
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ipfs
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/target: "sea1-traefik-k8s.generalprogramming.org"
+spec:
+  rules:
+    - host: ipfs.owo.me
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ipfs
+                port:
+                  number: 80
+          # API + WebUI
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: ipfs-api
+                port:
+                  number: 80
+          - path: /webui
+            pathType: Prefix
+            backend:
+              service:
+                name: ipfs-api
+                port:
+                  number: 80

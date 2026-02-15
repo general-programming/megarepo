@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: deluge
+spec:
+  ports:
+  - port: 8112
+    targetPort: 8112
+    name: http
+  selector:
+    app: deluge
+  type: ClusterIP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: deluge-nodeport
+spec:
+  ports:
+  - port: 30888
+    targetPort: 30888
+    nodePort: 30888
+    protocol: TCP
+    name: torrent-tcp
+  - port: 30888
+    targetPort: 30888
+    nodePort: 30888
+    protocol: UDP
+    name: torrent-udp
+  selector:
+    app: deluge
+  type: NodePort

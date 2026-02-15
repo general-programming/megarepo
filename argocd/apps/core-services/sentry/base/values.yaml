@@ -1,0 +1,88 @@
+---
+ipv6: true
+
+user:
+  create: false
+
+hooks:
+  preUpgrade: true
+
+system:
+  url: "https://sentry.generalprogramming.org"
+  adminEmail: "support@generalprogramming.org"
+
+ingress:
+  hostname: sentry.generalprogramming.org
+  regexPathStyle: traefik
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
+    external-dns.alpha.kubernetes.io/target: "sea1-traefik-k8s.generalprogramming.org"
+
+sentry:
+  existingSecret: sentry-secrets
+  existingSecretKey: sentry_secret_key
+
+symbolicator:
+  enabled: true
+
+metrics:
+  enabled: true
+
+auth:
+  register: false
+
+# Integrations
+github:
+  appId: "156805"
+  appName: "sentry.generalprogramming.org"
+  existingSecret: sentry-secrets
+  existingSecretPrivateKeyKey: "github_private_key"
+  existingSecretWebhookSecretKey: "github_webhook_secret"
+  existingSecretClientIdKey: "github_client_id"
+  existingSecretClientSecretKey: "github_client_secret"
+
+discord:
+  existingSecret: sentry-secrets
+  existingSecretApplicationId: "discord_appid"
+  existingSecretPublicKey: "discord_pubkey"
+  existingSecretClientSecret: "discord_secret"
+  existingSecretBotToken: "discord_bot_token"
+
+# DB
+postgresql:
+  enabled: false
+
+externalPostgresql:
+  database: sentry
+  existingSecret: sentry-db-app
+  existingSecretKeys:
+    username: username
+    password: password
+    database: dbname
+    host: host
+
+# Storage
+filestore:
+  filesystem:
+    persistence:
+      storageClass: cephfs
+      accessMode: ReadWriteMany
+      size: 16Gi
+      persistentWorkers: true
+
+# ZK
+zookeeper:
+  persistence:
+    size: 16Gi
+
+# Kafka
+kafka:
+  controller:
+    resourcesPreset: large
+    readinessProbe:
+      initialDelaySeconds: 10
+      periodSeconds: 15
+      timeoutSeconds: 5
+      failureThreshold: 9

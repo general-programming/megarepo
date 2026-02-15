@@ -1,0 +1,43 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: synapse
+spec:
+  routes:
+  - kind: Rule
+    match: Host(`matrix.owo.me`) && PathPrefix(`/_synapse/client`)
+    services:
+    - kind: Service
+      name: synapse
+      port: 8008
+  - kind: Rule
+    match: Host(`matrix.owo.me`) && PathPrefix(`/_matrix`)
+    services:
+    - kind: Service
+      name: synapse
+      port: 8008
+  - kind: Rule
+    match: Host(`matrix.owo.me`) && PathPrefix(`/.well-known/matrix`)
+    services:
+    - kind: Service
+      name: synapse
+      port: 8008
+  - kind: Rule
+    match: Host(`matrix.owo.me`) && PathRegexp(`^/_matrix/client/(.*)/(login|logout|refresh)`)
+    services:
+    - kind: Service
+      name: mas
+      port: 8080
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: matrix-mas
+spec:
+  routes:
+  - kind: Rule
+    match: Host(`matrix-auth.owo.me`)
+    services:
+    - kind: Service
+      name: mas
+      port: 8080

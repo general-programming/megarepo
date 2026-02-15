@@ -1,0 +1,30 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librenms-redis
+spec:
+  selector:
+    matchLabels:
+      app: librenms-redis
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: librenms-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: librenms-redis
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: librenms-redis
+  selector:
+    app: librenms-redis
+  type: ClusterIP

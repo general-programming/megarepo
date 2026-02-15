@@ -1,0 +1,47 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ipfs
+  labels:
+    app.kubernetes.io/component: ipfs
+    app.kubernetes.io/name: ipfs
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: ipfs
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: ipfs
+    spec:
+      containers:
+      - name: ipfs
+        image: ipfs/kubo:v0.33.2
+        envFrom:
+        - configMapRef:
+            name: ipfs-config
+        volumeMounts:
+        - name: ipfs-data
+          mountPath: /data/ipfs
+        - name: ipfs-init
+          mountPath: /container-init.d/99-init.sh
+          subPath: 99-init.sh
+        # Based on the server requirements on the normal server.
+        resources:
+          limits:
+            cpu: "2000m"
+            memory: "2Gi"
+          requests:
+            cpu: "2000m"
+            memory: "2Gi"
+      volumes:
+      - name: ipfs-data
+        persistentVolumeClaim:
+          claimName: ipfs-data
+      - name: ipfs-init
+        configMap:
+          name: ipfs-init

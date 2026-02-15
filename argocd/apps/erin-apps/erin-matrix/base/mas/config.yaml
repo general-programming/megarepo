@@ -1,0 +1,88 @@
+http:
+  listeners:
+  - name: web
+    resources:
+    - name: discovery
+    - name: human
+    - name: oauth
+    - name: compat
+    - name: graphql
+    - name: assets
+    binds:
+    - address: "[::]:8080"
+    proxy_protocol: false
+  - name: internal
+    resources:
+    - name: health
+    binds:
+    - host: "0.0.0.0"
+      port: 8081
+    proxy_protocol: false
+  trusted_proxies:
+  - 192.168.0.0/16
+  - 172.16.0.0/12
+  - 10.0.0.0/10
+  - 127.0.0.1/8
+  - fd00::/8
+  - ::1/128
+  public_base: https://matrix-auth.owo.me/
+database:
+  uri: SECRET_DB_URI
+  max_connections: 10
+  min_connections: 0
+  connect_timeout: 30
+  idle_timeout: 600
+  max_lifetime: 1800
+email:
+  from: '"Matrix Authentication Service" <matrix@owo.me>'
+  reply_to: '"Matrix Authentication Service" <matrix@owo.me>'
+  transport: blackhole
+secrets:
+  encryption: SECRET_ENCRYPTION
+  keys:
+  - kid: z4LIcHkecC
+    key: |
+      SECRET_KEY_0
+  - kid: bJpoexEjHs
+    key: |
+      SECRET_KEY_1
+  - kid: EXwfEtT3r1
+    key: |
+      SECRET_KEY_2
+  - kid: SEbB6uIT5U
+    key: |
+      SECRET_KEY_3
+passwords:
+  enabled: false
+matrix:
+  homeserver: owo.me
+  secret: SECRET_ADMIN_SECRET
+  endpoint: http://synapse:8008/
+clients:
+  - client_id: 01JCT3FBVE6N98HQKGZJA2GV5X
+    client_auth_method: client_secret_basic
+    client_secret: SECRET_CLIENT_SECRET
+metrics:
+  exporter: prometheus
+upstream_oauth2:
+  providers:
+    - id: 01JCSXTW4RZVHV7H7YB2G3YWNE
+      human_name: genprog
+      issuer: https://sso.generalprogramming.org/realms/master
+      token_endpoint_auth_method: client_secret_basic
+      client_id: matrix_synapse
+      client_secret: "SECRET_oidc_secret"
+      scope: "openid profile email"
+      claims_imports:
+        localpart:
+          action: require
+          template: "{{ user.preferred_username }}"
+        displayname:
+          action: suggest
+          template: "{{ user.preferred_username }}"
+        email:
+          action: require
+          template: "{{ user.email }}"
+          set_email_verification: always
+account:
+  email_change_allowed: true

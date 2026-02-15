@@ -1,0 +1,60 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: rrdcached
+spec:
+  ports:
+  - port: 42217
+    targetPort: 42217
+    name: rrdcache
+  selector:
+    app: rrdcached
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rrdcached
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: rrdcached
+  serviceName: rrdcached
+  template:
+    metadata:
+      labels:
+        app: rrdcached
+    spec:
+      containers:
+        - name: rrdcached
+          image: crazymax/rrdcached
+          env:
+            - name: LOG_LEVEL
+              value: LOG_INFO
+            - name: WRITE_TIMEOUT
+              value: "1800"
+            - name: WRITE_JITTER
+              value: "1800"
+            - name: WRITE_THREADS
+              value: "4"
+            - name: FLUSH_DEAD_DATA_INTERVAL
+              value: "3600"
+          volumeMounts:
+            - name: data-volume
+              mountPath: /data/db
+              subPath: db
+            - name: data-volume
+              mountPath: /data/journal
+              subPath: journal
+  volumeClaimTemplates:
+    - metadata:
+        name: data-volume
+      spec:
+        accessModes: [ "ReadWriteOnce" ]
+        resources:
+          requests:
+            storage: 16Gi
+        storageClassName: cephfs

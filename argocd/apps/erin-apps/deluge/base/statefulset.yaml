@@ -1,0 +1,60 @@
+
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: deluge
+spec:
+  selector:
+    matchLabels:
+      app: deluge
+  serviceName: "deluge"
+  replicas: 1
+  minReadySeconds: 10
+  template:
+    metadata:
+      labels:
+        app: deluge
+    spec:
+      terminationGracePeriodSeconds: 10
+      restartPolicy: Always
+      containers:
+      - name: deluge
+        image: lscr.io/linuxserver/deluge:latest
+        resources:
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+        ports:
+        - containerPort: 8112
+          name: http
+        - containerPort: 30888
+          name: torrent-tcp
+        - containerPort: 30888
+          protocol: UDP
+          name: torrent-udp
+        volumeMounts:
+        - name: deluge-data
+          mountPath: /downloads
+        - name: deluge-config
+          mountPath: /config
+      dnsPolicy: Default
+  volumeClaimTemplates:
+  - metadata:
+      name: deluge-data
+    spec:
+      storageClassName: ceph-rbd-xfs
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 512Gi
+  - metadata:
+      name: deluge-config
+    spec:
+      storageClassName: ceph-rbd-xfs
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 1Gi

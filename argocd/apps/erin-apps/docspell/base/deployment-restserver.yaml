@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docspell-restserver
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: docspell-restserver
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: docspell-restserver
+    spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+      containers:
+      - name: docspell-restserver
+        image: docspell/restserver:nightly
+        env:
+          - name: DOCSPELL_SERVER_BACKEND_JDBC_URL
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: jdbc-uri
+          - name: DOCSPELL_SERVER_BACKEND_JDBC_USER
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: username
+          - name: DOCSPELL_SERVER_BACKEND_JDBC_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: password
+        envFrom:
+        - configMapRef:
+            name: docspell-config
+        - secretRef:
+            name: docspell-secrets

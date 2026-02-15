@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: synapse
+spec:
+  selector:
+    matchLabels:
+      app: synapse
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: synapse
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: /_synapse/metrics
+        reloader.stakater.com/auto: "true"
+    spec:
+      securityContext:
+        fsGroup: 991
+        fsGroupChangePolicy: "OnRootMismatch"
+      initContainers:
+        - name: initialize-secrets
+          image: docker.io/library/python:3
+          command: ["python", "/init/initialize-secrets.py", "homeserver.yaml"]
+          volumeMounts:
+            - name: init
+              mountPath: /init
+            - name: data
+              mountPath: /data
+            - name: config
+              mountPath: /config
+          env:
+            - name: database_host
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-db-app
+                  key: host
+            - name: database_name
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-db-app
+                  key: dbname
+            - name: database_user
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-db-app
+                  key: user
+            - name: database_password
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-db-app
+                  key: password
+            - name: database_port
+              valueFrom:
+                secretKeyRef:
+                  name: matrix-db-app
+                  key: port
+          envFrom:
+            - secretRef:
+                name: matrix-secrets
+      containers:
+      - image: matrixdotorg/synapse:latest
+        name: synapse
+        resources: {}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+          - name: config
+            mountPath: /config
+          - name: secrets
+            mountPath: /secrets
+        env:
+          - name: SYNAPSE_SERVER_NAME
+            value: owo.me
+          - name: SYNAPSE_REPORT_STATS
+            value: "no"
+          - name: TZ
+            value: America/Los_Angeles
+      volumes:
+        - name: config
+          configMap:
+            name: homeserver
+        - name: init
+          configMap:
+            name: secrets-init
+        - name: secrets
+          secret:
+            secretName: matrix-secrets
+        - name: data
+          persistentVolumeClaim:
+            claimName: synapse-data

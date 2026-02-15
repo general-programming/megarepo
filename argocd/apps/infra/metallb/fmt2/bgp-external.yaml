@@ -1,0 +1,31 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: fmt2-pool-external
+  namespace: metallb-system
+spec:
+  autoAssign: false
+  addresses:
+    - 79.110.170.65/32
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: fmt2-bgp-external
+  namespace: metallb-system
+spec:
+  myASN: 4280805526
+  peerASN: 208590
+  peerAddress: 10.65.67.36
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: fmt2-advertisement-external
+  namespace: metallb-system
+spec:
+  aggregationLength: 32
+  peers:
+    - fmt2-bgp-external
+  ipAddressPools:
+    - fmt2-pool-external

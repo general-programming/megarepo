@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: keycloak-tls
+spec:
+  secretName: keycloak-tls
+  issuerRef: 
+    kind: ClusterIssuer
+    name: letsencrypt-genprog
+  dnsNames:
+    - "sso.generalprogramming.org"
+  keystores:
+    jks:
+      create: true
+      passwordSecretRef:
+        key: KC_HTTPS_KEY_STORE_PASSWORD
+        name: keycloak-secrets

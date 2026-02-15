@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: docspell-joex
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: docspell-joex
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: docspell-joex
+    spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+      containers:
+      - name: docspell-joex
+        image: docspell/joex:nightly
+        env:
+          - name: DOCSPELL_JOEX_JDBC_URL
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: jdbc-uri
+          - name: DOCSPELL_JOEX_JDBC_USER
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: username
+          - name: DOCSPELL_JOEX_JDBC_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: docspell-db-app
+                key: password
+        envFrom:
+        - configMapRef:
+            name: docspell-config
+        - secretRef:
+            name: docspell-secrets

@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: librenms-startup
+data:
+  setup-script.sh: |
+    #!/bin/bash
+    set -x
+    
+    id
+    cd /opt/librenms

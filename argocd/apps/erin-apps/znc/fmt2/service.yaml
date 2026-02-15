@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: znc-external
+  annotations:
+    metallb.universe.tf/address-pool: fmt2-pool-external
+    metallb.universe.tf/allow-shared-ip: external

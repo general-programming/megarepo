@@ -1,0 +1,11 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: crt-erin-znc
+spec:
+  secretName: tls-erin-znc
+  issuerRef: 
+    kind: ClusterIssuer
+    name: letsencrypt-genprog
+  dnsNames:
+    - "erin-znc.generalprogramming.org"

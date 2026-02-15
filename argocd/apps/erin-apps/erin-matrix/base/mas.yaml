@@ -1,0 +1,67 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mas
+spec:
+  selector:
+    matchLabels:
+      app: mas
+  template:
+    metadata:
+      labels:
+        app: mas
+      annotations:
+        reloader.stakater.com/auto: "true"
+    spec:
+      initContainers:
+      - name: initialize-secrets
+        image: docker.io/library/python:3
+        command: ["python", "/init/initialize-secrets.py", "config.yaml"]
+        volumeMounts:
+          - name: init
+            mountPath: /init
+          - name: data
+            mountPath: /data
+          - name: config
+            mountPath: /config
+        env:
+          - name: DB_URI
+            valueFrom:
+              secretKeyRef:
+                name: matrix-mas-db-app
+                key: uri
+        envFrom:
+          - secretRef:
+              name: mas-secrets
+      containers:
+      - name: mas
+        image: ghcr.io/element-hq/matrix-authentication-service:1.0.0
+        args: ["server", "-c", "/data/config.yaml"]
+        resources:
+          limits:
+            memory: "128Mi"
+            cpu: "500m"
+        ports:
+        - name: http
+          containerPort: 8080
+        - name: health
+          containerPort: 8081
+        volumeMounts:
+          - name: data
+            mountPath: /data
+      - name: debug
+        image: library/debian:latest
+        command: ["bash", "-c", "while true; do sleep 300; done"]
+        resources: {}
+        volumeMounts:
+          - name: data
+            mountPath: /data
+      volumes:
+        - name: config
+          configMap:
+            name: mas
+        - name: init
+          configMap:
+            name: secrets-init
+        - name: data
+          emptyDir: {}

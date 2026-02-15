@@ -1,0 +1,24 @@
+---
+apiVersion: k8s.mariadb.com/v1alpha1
+kind: MariaDB
+metadata:
+  name: mariadb-librenms
+spec:
+  replicas: 3
+  galera:
+    enabled: true
+  username: librenms
+  passwordSecretKeyRef:
+    name: db-password
+    key: password
+    generate: true
+  rootPasswordSecretKeyRef:
+    name: root-password
+    key: password
+    generate: true
+  database: librenms
+  storage:
+    size: 16Gi
+    storageClassName: local-path
+  updateStrategy:
+    autoUpdateDataPlane: true

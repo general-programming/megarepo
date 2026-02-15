@@ -1,0 +1,24 @@
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+  namespace: cert-manager
+  name: letsencrypt-genprog
+spec:
+  acme:
+    email: support@generalprogramming.org
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef:
+      name: letsencrypt-prod
+    solvers:
+    - selector:
+        dnsZones:
+          - "generalprogramming.org"
+          - "catgirls.dev"
+          - "owo.me"
+          - "e2.pm"
+          - "coolmathgam.es"
+      dns01:
+        cloudflare:
+          apiTokenSecretRef:
+            name: cloudflare-api-token-secret
+            key: api-token

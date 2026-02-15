@@ -1,0 +1,8 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - mail-webhook.yml
+  - mastodon-coolmathgames.yml
+  - erin-matrix.yml
+  - ipfs.yml
+  - devhack-librenms.yml

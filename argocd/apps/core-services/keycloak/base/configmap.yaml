@@ -1,0 +1,15 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+data:
+  KC_DB: postgres
+  KC_HTTP_ENABLED: "true"
+  KC_PROXY: "edge"
+  KC_FEATURES: "token-exchange"
+  KC_METRICS_ENABLED: "true"
+  KC_HEALTH_ENABLED: "true"
+  KC_HOSTNAME: sso.generalprogramming.org
+  KC_PROXY_HEADERS: xforwarded
+  KC_HTTPS_KEY_STORE_FILE: /certs/keystore.jks

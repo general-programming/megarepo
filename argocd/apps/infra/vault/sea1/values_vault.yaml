@@ -1,0 +1,11 @@
+global:
+  enabled: false
+  tlsDisable: false
+  externalVaultAddr: 'http://10.65.67.27:8201'
+  authPath: "auth/kubernetes-sea1"
+
+csi:
+  enabled: true
+
+injector:
+  enabled: true

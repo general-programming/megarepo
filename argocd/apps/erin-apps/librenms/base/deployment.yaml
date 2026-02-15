@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librenms
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: librenms
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: librenms
+    spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+      initContainers:
+      - name: librenms-init
+        image: nepeat/librenms:latest
+        command: ["/bin/bash", "/scripts/setup-script.sh"]
+        env:
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-password
+                key: password
+        envFrom:
+        - configMapRef:
+            name: librenms-config
+        - secretRef:
+            name: librenms-secrets
+        volumeMounts:
+        - name: librenms-data
+          mountPath: /data
+        - name: startup-script
+          mountPath: /scripts
+      containers:
+      - name: librenms
+        image: nepeat/librenms:latest
+        env:
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: db-password
+                key: password
+        envFrom:
+        - configMapRef:
+            name: librenms-config
+        - secretRef:
+            name: librenms-secrets
+        volumeMounts:
+        - name: librenms-data
+          mountPath: /data
+      volumes:
+      - name: librenms-data
+        persistentVolumeClaim:
+          claimName: librenms-data
+      - name: startup-script
+        configMap:
+          name: librenms-startup
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: librenms-dispatcher
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: librenms-dispatcher
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: librenms-dispatcher
+    spec:
+      dnsConfig:
+        options:
+          - name: ndots
+            value: "2"
+      containers:
+      - name: librenms
+        image: nepeat/librenms:latest
+        envFrom:
+        - configMapRef:
+            name: librenms-config
+        - secretRef:
+            name: librenms-secrets
+        env:
+        - name: SIDECAR_DISPATCHER
+          value: "1"
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-password
+              key: password
+        volumeMounts:
+        - name: librenms-data
+          mountPath: /data
+      volumes:
+      - name: librenms-data
+        persistentVolumeClaim:
+          claimName: librenms-data
+---

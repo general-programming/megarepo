@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - ../base
+  - secret.yaml
+  - cloudflared.yaml
+  - ingress_argo.yaml
+  - ingress_dashboard.yaml
+patches:
+  - path: application.yaml

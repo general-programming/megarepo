@@ -1,0 +1,28 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: hypermind
+spec:
+  selector:
+    matchLabels:
+      app: hypermind
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: hypermind
+      annotations:
+        reloader.stakater.com/auto: "true"
+    spec:
+      hostNetwork: true
+      containers:
+      - name: hypermind
+        image: ghcr.io/lklynet/hypermind:latest
+        envFrom:
+        - configMapRef:
+            name: hypermind-config
+        ports:
+        - containerPort: 3000
+          name: web
+          protocol: TCP

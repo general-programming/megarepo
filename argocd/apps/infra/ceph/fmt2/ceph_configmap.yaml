@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rook-ceph-mon-endpoints
+  namespace: ceph
+data:
+  csi-cluster-config-json: >-
+    [{"clusterID":"ceph","monitors":["10.65.67.100:6789","10.65.67.101:6789","10.65.67.102:6789"],"namespace":""}]
+  data: >-
+    fmt2-hv-14-07-52-100=10.65.67.100:6789,fmt2-hv-14-07-52-101=10.65.67.101:6789,fmt2-hv-14-07-52-102=10.65.67.102:6789
+  mapping: '{"node":{}}'
+  maxMonId: '2'

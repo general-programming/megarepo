@@ -1,0 +1,12 @@
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: test-secret
+spec:
+  type: kv-v2
+  mount: secret
+  path: testsecret
+  destination:
+    name: vault-testsecret
+    create: true
+  refreshAfter: 1m

@@ -1,0 +1,10 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ipfs-config
+  labels:
+    app.kubernetes.io/component: ipfs
+    app.kubernetes.io/name: ipfs
+data:
+  IPFS_PROFILE: server

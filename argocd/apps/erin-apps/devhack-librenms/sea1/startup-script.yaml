@@ -1,0 +1,33 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: librenms-startup
+data:
+  setup-script.sh: |
+    #!/bin/bash
+    set -x
+    
+    cd /opt/librenms
+
+    cat << EOF > /data/config/config_gen.php
+    <?php
+    \$config['auth.socialite.register'] = true;
+    \$config['auth.socialite.default_role'] = 'global-read';
+
+    \$config['auth.socialite.claims'] = [
+        'admins' => [
+            'roles' => ['admin'],
+        ],
+    ];
+    \$config['auth.socialite.configs'] = [
+        'keycloak' => [
+            'client_id' => '${KEYCLOAK_CLIENT_ID}',
+            'client_secret' => '${KEYCLOAK_CLIENT_SECRET}',
+            'base_url' => 'https://idp.devhack.net',
+            'realms' => 'devhack',
+            'listener' => '\SocialiteProviders\Keycloak\KeycloakExtendSocialite',
+        ],
+    ];
+    ?>
+    EOF

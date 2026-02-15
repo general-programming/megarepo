@@ -1,0 +1,14 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik-helm
+  namespace: argocd
+spec:
+  source:
+    helm:
+      valuesObject:
+        service:
+          annotations:
+            metallb.universe.tf/address-pool: fmt2-pool-external
+            metallb.universe.tf/allow-shared-ip: external
+---

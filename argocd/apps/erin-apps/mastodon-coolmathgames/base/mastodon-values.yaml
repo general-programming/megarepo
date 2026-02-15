@@ -1,0 +1,178 @@
+image:
+  repository: ghcr.io/theessem/mastodon
+  tag: nightly.2026-02-09  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon
+
+mastodon:
+  hooks:
+    dbMigrate:
+      enabled: true
+    assetsPrecompile:
+      enabled: false
+
+  # streaming config
+  streaming:
+    image:
+      repository: ghcr.io/theessem/mastodon-streaming
+      tag: nightly.2026-02-09  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
+    
+    replicas: 3
+
+  # very IMPORTANT
+  local_domain: coolmathgam.es
+
+  # add extra vars
+  extraEnvVars:
+    - name: EXTRA_DATA_HOSTS
+      value: "https://blob.jortage.com"
+    - name: EXPERIMENTAL_FEATURES
+      value: wrapstodon
+
+  # add SECRET_KEY_BASE, OTP_SECRET, VAPID_PRIVATE_KEY, VAPID_PUBLIC_KEY to vault
+  secrets:
+    existingSecret: mastodon-secrets
+
+  # storage config
+  s3:
+    enabled: true
+    # add AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to vault
+    existingSecret: mastodon-s3
+    alias_host: pool.jortage.com/coolmathgames
+    # this should not be secret
+    secretKeys:
+      # bucket: coolmathgames
+      s3Bucket: "S3_BUCKET"
+      # endpoint: https://pool-api.jortage.com
+      s3Endpoint: "S3_ENDPOINT"
+      # hostname: pool-api.jortage.com
+      s3Hostname: "S3_HOSTNAME"
+      # region: jort
+      s3Region: "S3_REGION"
+
+  # shamelessly copied from values
+  sidekiq:
+    workers:
+      # "Make sure the scheduler queue only exists once and with a worker that has 1 replica."
+      - name: scheduler
+        concurrency: 25
+        replicas: 1
+        resources: {}
+        affinity: {}
+        topologySpreadConstraints: {}
+        queues:
+          - scheduler
+        image:
+          repository:
+          tag:
+        customDatabaseConfigYml:
+          configMapRef:
+            name:
+            key:
+      # everything else
+      - name: all-queues
+        concurrency: 25
+        replicas: 3
+        resources: {}
+        affinity: {}
+        topologySpreadConstraints: {}
+        queues:
+          - default,8
+          - push,6
+          - ingress,4
+          - mailers,2
+          - fasp,1
+          - pull
+        image:
+          repository:
+          tag:
+        # allows you to mount a custom database.yml from a configmap
+        # please note that we do not advise using a read-only replica for sidekiq workers
+        customDatabaseConfigYml:
+          configMapRef:
+            name:
+            key:
+
+  smtp:
+    server: smtp.sendgrid.net
+    port: 587
+    # login + password set in vault
+    existingSecret: mastodon-smtp
+    from_address: automated@coolmathgam.es
+  
+  web:
+    replicas: 3
+
+  metrics:
+    statsd:
+      exporter:
+        enabled: true
+
+ingress:
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+
+  hosts:
+    - host: coolmathgam.es
+      paths:
+        - path: "/"
+  
+  tls: null
+
+  streaming:
+    tls: null
+
+redis:
+  default:
+    storageClass: ceph-rbd-xfs
+
+  volumePermissions:
+    enabled: true
+
+  auth:
+    password: "this_is_insecure_but_it_is_redis_so_who_cares"
+
+  master:
+    persistence:
+      enabled: false
+
+  replica:
+    persistence:
+      enabled: false
+    replicaCount: 3
+
+elasticsearch:
+  default:
+    storageClass: ceph-rbd-xfs
+
+  preset: small_cluster
+
+  metrics:
+    enabled: true
+
+  master:
+    replicaCount: 3
+    heapSize: 1g
+  
+  data:
+    replicaCount: 3
+    heapSize: 2g
+
+  coordinating:
+    replicaCount: 0
+  
+  ingest:
+    enabled: false
+    replicaCount: 0
+
+postgresql:
+  enabled: false
+
+externalDatabase:
+  enabled: true
+  hostname: mastodon-db-rw
+  port: "5432"
+  database: mastodon
+  user: mastodon
+  existingSecret: mastodon-db-app
+  secretKeys:
+    password: "password"

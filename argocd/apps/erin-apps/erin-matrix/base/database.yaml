@@ -1,0 +1,51 @@
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: postgres-secret
+spec:
+  type: kv-v2
+  mount: secret
+  path: app/postgres_secrets
+  destination:
+    name: postgres-secret
+    create: true
+  refreshAfter: 1m
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: matrix-db
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  storage:
+    storageClass: local-path
+    size: 8Gi
+  bootstrap:
+    initdb:
+      database: matrix
+      owner: matrix
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: matrix-mas-db
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  storage:
+    storageClass: local-path
+    size: 8Gi
+  bootstrap:
+    initdb:
+      database: matrix_mas
+      owner: matrix_mas

@@ -1,0 +1,67 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: shared-timescaledb
+spec:
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: timescale
+    major: 17
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  storage:
+    storageClass: local-path
+    size: 256Gi
+  bootstrap:
+    initdb:
+      database: shared
+      owner: shared
+      postInitTemplateSQL:
+        - CREATE EXTENSION IF NOT EXISTS timescaledb;
+  postgresUID: 1000
+  postgresGID: 1000
+  postgresql:
+    parameters:
+      shared_buffers: "32192MB"
+      effective_cache_size: "96578MB"
+      maintenance_work_mem: "2047MB"
+      work_mem: "13735kB"
+      timescaledb.max_background_workers: "16"
+      max_worker_processes: "43"
+      max_parallel_workers_per_gather: "12"
+      max_parallel_workers: "24"
+      wal_buffers: "16MB"
+      min_wal_size: "512MB"
+      default_statistics_target: "100"
+      random_page_cost: "1.1"
+      checkpoint_completion_target: "0.9"
+      max_locks_per_transaction: "1024"
+      autovacuum_max_workers: "10"
+      autovacuum_naptime: "10"
+      default_toast_compression: "lz4"
+      jit: "off"
+      effective_io_concurrency: "256"
+    shared_preload_libraries:
+      - timescaledb
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescale-rw-hostport
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      nodePort: 32346
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    cnpg.io/cluster: shared-timescaledb
+    cnpg.io/instanceRole: primary
+  sessionAffinity: None
+  type: NodePort

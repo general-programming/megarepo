@@ -1,0 +1,22 @@
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: ceph-external
+  namespace: ceph
+spec:
+  external:
+    enable: true
+  crashCollector:
+    disable: true
+  healthCheck:
+    daemonHealth:
+      mon:
+        disabled: false
+        interval: 45s
+  dataDirHostPath: /var/lib/rook
+  # providing an image is required, if you want to create other CRs (rgw, mds, nfs)
+  # In latest Rook release we dont need to provide cephVersion we can skip this one.
+  cephVersion:
+    image: quay.io/ceph/ceph:v19.2.0
+  # skip upgrade checks for external
+  skipUpgradeChecks: true

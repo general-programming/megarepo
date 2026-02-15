@@ -1,0 +1,133 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbox
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: netbox
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: netbox
+    spec:
+      containers:
+      - name: netbox
+        image: netboxcommunity/netbox:v4.4-3.4.2
+        resources: {}
+        env:
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: dbname
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: password
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: host
+        envFrom:
+        - configMapRef:
+            name: netbox-env
+        - secretRef:
+            name: netbox-secrets
+        volumeMounts:
+        # Configs
+        - name: ldap-config
+          subPath: ldap_config.py
+          mountPath: /etc/netbox/config/ldap/ldap_config.py
+        # PVC
+        - name: netbox-media
+          mountPath: /opt/netbox/netbox/media
+      volumes:
+        - name: netbox-media
+          persistentVolumeClaim:
+            claimName: netbox-media
+        - name: ldap-config
+          configMap:
+            name: netbox-config
+            items:
+            - key: ldap_config.py
+              path: ldap_config.py
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: netbox-worker
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: netbox-worker
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: netbox-worker
+    spec:
+      containers:
+      - name: netbox-worker
+        image: netboxcommunity/netbox:v4.4-3.4.2
+        command:
+          - /opt/netbox/venv/bin/python
+          - /opt/netbox/netbox/manage.py
+          - rqworker
+        resources: {}
+        env:
+          - name: DB_NAME
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: dbname
+          - name: DB_USER
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: username
+          - name: DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: password
+          - name: DB_HOST
+            valueFrom:
+              secretKeyRef:
+                name: netbox-db-app
+                key: host
+        envFrom:
+        - configMapRef:
+            name: netbox-env
+        - secretRef:
+            name: netbox-secrets
+        volumeMounts:
+        # Configs
+        - name: ldap-config
+          subPath: ldap_config.py
+          mountPath: /etc/netbox/config/ldap/ldap_config.py
+        # PVC
+        - name: netbox-media
+          mountPath: /opt/netbox/netbox/media
+      volumes:
+        - name: netbox-media
+          persistentVolumeClaim:
+            claimName: netbox-media
+        - name: ldap-config
+          configMap:
+            name: netbox-config
+            items:
+            - key: ldap_config.py
+              path: ldap_config.py

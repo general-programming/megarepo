@@ -1,0 +1,52 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: traefik-helm
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  destination:
+    namespace: traefik
+    server: https://kubernetes.default.svc
+  project: infra
+  source:
+    chart: traefik
+    helm:
+      valuesObject:
+        deployment:
+          kind: DaemonSet
+          updateStrategy:
+            type: RollingUpdate
+        dashboard:
+          enabled: false
+        logs:
+          access:
+            enabled: true
+            format: json
+            fields:
+              headers:
+                names:
+                  "User-Agent": "keep"
+                  "CF-Connecting-IP": "keep"
+                  "X-Forwarded-For": "keep"
+        experimental:
+          plugins:
+            cloudflarewarp:
+              moduleName: github.com/BetterCorp/cloudflarewarp
+              version: v1.3.3
+        ports:
+          websecure:
+            middlewares:
+              - traefik-cloudflare-realip@kubernetescrd
+        additionalArguments:
+          - "--providers.kubernetesingress.ingressendpoint.publishedservice=traefik/traefik-helm"
+    repoURL: https://traefik.github.io/charts
+    targetRevision: 39.0.1
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
+    syncOptions:
+      - allowEmpty=true

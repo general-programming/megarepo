@@ -1,0 +1,111 @@
+alloy:
+  envFrom:
+    - configMapRef:
+        name: alloy-env-local
+  configMap:
+    content: |-
+      logging {
+        level = "info"
+        format = "logfmt"
+      }
+
+      discovery.kubernetes "pods" {
+        role = "pod"
+      }
+
+      discovery.relabel "pods" {
+        targets = discovery.kubernetes.pods.targets
+
+        rule {
+          source_labels = ["__meta_kubernetes_namespace"]
+          target_label = "namespace"
+          action = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+          target_label = "app"
+          action = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+          target_label = "component"
+          action = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_container_name"]
+          target_label = "container"
+          action = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_pod_name"]
+          target_label = "pod"
+          action = "replace"
+        }
+
+        rule {
+          source_labels = ["__meta_kubernetes_node_name"]
+          target_label = "node_name"
+          action = "replace"
+        }
+      }
+
+      loki.source.kubernetes "pods" {
+        targets    = discovery.relabel.pods.output
+        forward_to = [loki.process.process.receiver]
+      }
+
+      loki.process "process" {
+        forward_to = [loki.write.loki.receiver]
+
+        stage.drop {
+          older_than          = "1h"
+          drop_counter_reason = "too old"
+        }
+
+        stage.drop {
+          source              = "namespace"
+          expression          = "(argocd)"
+          drop_counter_reason = "excluded_namespaces"
+        }
+
+        stage.structured_metadata {
+          values = {
+            pod = "",
+            filename = "",
+            container = "",
+            container_runtime = "",
+            instance = "",
+          }
+        }
+
+        stage.static_labels {
+          values = {
+            cluster = sys.env("REGION"),
+          }
+        }
+
+        stage.label_drop {
+          values = [ "job" ]
+        }
+      }
+
+      loki.write "loki" {
+        endpoint {
+          url = "http://loki.fmt2.generalprogramming.org/loki/api/v1/push"
+        }
+      }
+  mounts:
+    varlog: true
+    dockercontainers: true
+
+  resources:
+    limits:
+      cpu: 1
+      memory: 1Gi
+    requests:
+      cpu: 1
+      memory: 1Gi

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - upstream/cert-manager.yaml
+  - secrets.yaml
+  - issuer.yaml
+patches:
+  - path: patch-nameservers-00.yaml
+    target:
+      kind: Deployment
+      name: cert-manager
+  - path: patch-nameservers-01.yaml
+    target:
+      kind: Deployment
+      name: cert-manager

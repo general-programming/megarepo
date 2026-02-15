@@ -1,0 +1,57 @@
+server_name: "owo.me"
+pid_file: /data/homeserver.pid
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    resources:
+      - names: [client, federation]
+        compress: false
+  - port: 8000
+    type: metrics
+enable_metrics: true
+database:
+  name: psycopg2
+  args:
+    user: SECRET_database_user
+    password: SECRET_database_password
+    dbname: SECRET_database_name
+    host: SECRET_database_host
+    port: SECRET_database_port
+log_config: "/config/log.yaml"
+media_store_path: /data/media_store
+max_upload_size: "99M"
+registration_shared_secret: "SECRET_registration_shared_secret"
+report_stats: false
+macaroon_secret_key: "SECRET_macaroon_secret_key"
+form_secret: "SECRET_form_secret"
+signing_key_path: "/secrets/signing.key"
+trusted_key_servers:
+  - server_name: "matrix.org"
+public_baseurl: https://matrix.owo.me
+password_config:
+  enabled: false
+ip_range_whitelist: []
+allow_public_rooms_over_federation: true
+experimental_features:
+  msc3861:
+    enabled: true
+
+    # Synapse will call `{issuer}/.well-known/openid-configuration` to get the OIDC configuration
+    issuer: https://matrix-auth.owo.me/
+
+    # Matches the `client_id` in the auth service config
+    client_id: 01JCT3FBVE6N98HQKGZJA2GV5X
+
+    # Matches the `client_auth_method` in the auth service config
+    client_auth_method: client_secret_basic
+
+    # Matches the `client_secret` in the auth service config
+    client_secret: "SECRET_CLIENT_SECRET"
+
+    # Matches the `matrix.secret` in the auth service config
+    admin_token: "SECRET_ADMIN_SECRET"
+
+    # URL to advertise to clients where users can self-manage their account
+    account_management_url: https://matrix-auth.owo.me/account

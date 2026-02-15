@@ -1,0 +1,14 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMScrapeConfig
+metadata:
+  name: mongodb
+spec:
+  consulSDConfigs:
+  - server: http://consul-http.consul.svc.cluster.local:8500
+    services:
+    - node_exporter
+  relabelConfigs:
+  - action: replace
+    sourceLabels:
+    - __meta_consul_service
+    targetLabel: job

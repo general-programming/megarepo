@@ -1,0 +1,15 @@
+kind: Kustomization
+namespace: argocd
+resources:
+- github.com/argoproj-labs/argocd-autopilot/manifests/ha?ref=v0.4.20
+- argocd-lb.yaml
+patches:
+  - path: rbac.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-rbac-cm
+  - path: patch_ha.yaml
+  - path: patch_argocd_cm.yaml
+    target:
+      kind: ConfigMap
+      name: argocd-cm

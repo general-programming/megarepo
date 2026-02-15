@@ -1,0 +1,118 @@
+storage:
+  trace:
+    backend: s3
+    s3:
+      endpoint: "radosgw.service.consul"
+      access_key: ${S3_ACCESS_KEY}
+      secret_key: ${S3_SECRET_KEY}
+      bucket: tempo
+      forcepathstyle: true
+      insecure: true
+minio:
+  enabled: false
+
+traces:
+  otlp:
+    grpc:
+      enabled: true
+    http:
+      enabled: true
+  zipkin:
+    enabled: false
+  jaeger:
+    thriftHttp:
+      enabled: false
+  opencensus:
+    enabled: false
+
+gateway:
+  enabled: true
+  service:
+    type: LoadBalancer
+    annotations:
+      external-dns.alpha.kubernetes.io/hostname: tempo.fmt2.generalprogramming.org
+
+querier:
+  replicas: 1
+
+  extraArgs:
+    - '-config.expand-env=true'
+  extraEnv:
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_access_key
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_secret_key
+
+compactor:
+  replicas: 1
+
+  extraArgs:
+    - '-config.expand-env=true'
+  extraEnv:
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_access_key
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_secret_key
+
+distributor:
+  replicas: 2
+
+  extraArgs:
+    - '-config.expand-env=true'
+  extraEnv:
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_access_key
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_secret_key
+
+ingester:
+  replicas: 3
+
+  extraArgs:
+    - '-config.expand-env=true'
+  extraEnv:
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_access_key
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_secret_key
+
+queryFrontend:
+  replicas: 1
+
+  extraArgs:
+    - '-config.expand-env=true'
+  extraEnv:
+    - name: S3_ACCESS_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_access_key
+    - name: S3_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: tempo-secrets
+          key: s3_secret_key

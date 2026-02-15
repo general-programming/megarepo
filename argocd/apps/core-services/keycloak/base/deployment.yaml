@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: keycloak
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: keycloak
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: keycloak
+    spec:
+      containers:
+      - name: keycloak
+        image: quay.io/keycloak/keycloak:25.0.4
+        args: ["start"]
+        resources: {}
+        volumeMounts:
+        - name: keycloak-tls
+          mountPath: /certs
+        env:
+          - name: KC_DB_URL
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db-app
+                key: jdbc-uri
+          - name: KC_DB_USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db-app
+                key: username
+          - name: KC_DB_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: keycloak-db-app
+                key: password
+        envFrom:
+        - configMapRef:
+            name: keycloak-config
+        - secretRef:
+            name: keycloak-secrets
+      volumes:
+      - name: keycloak-tls
+        secret:
+          secretName: keycloak-tls
+

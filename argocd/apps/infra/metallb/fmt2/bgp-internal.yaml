@@ -1,0 +1,41 @@
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: fmt2-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - 10.3.4.0/23
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: fmt2-bgp-leaf1
+  namespace: metallb-system
+spec:
+  myASN: 4280805526
+  peerASN: 4280805526
+  peerAddress: 10.65.67.34
+---
+apiVersion: metallb.io/v1beta2
+kind: BGPPeer
+metadata:
+  name: fmt2-bgp-leaf2
+  namespace: metallb-system
+spec:
+  myASN: 4280805526
+  peerASN: 4280805526
+  peerAddress: 10.65.67.35
+---
+apiVersion: metallb.io/v1beta1
+kind: BGPAdvertisement
+metadata:
+  name: fmt2-advertisement
+  namespace: metallb-system
+spec:
+  aggregationLength: 24
+  peers:
+    - fmt2-bgp-leaf1
+    - fmt2-bgp-leaf2
+  ipAddressPools:
+    - fmt2-pool
