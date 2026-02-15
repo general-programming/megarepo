@@ -10,7 +10,7 @@ require (
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.8.0
 	github.com/general-programming/gocommon v0.0.0-20230108100818-ce3bf0a96ec1
-	github.com/go-redis/redis/v9 v9.0.0-rc.2
+	github.com/go-redis/redis/v9 v9.17.3
 	github.com/google/certificate-transparency-go v1.3.2
 	github.com/googollee/go-socket.io v1.6.2
 	github.com/gorilla/websocket v1.5.3
