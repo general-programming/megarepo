@@ -9,7 +9,7 @@ import (
 	"github.com/cloudwego/hertz/pkg/app/server"
 	"github.com/cloudwego/hertz/pkg/common/utils"
 	"github.com/cloudwego/hertz/pkg/protocol/consts"
-	"github.com/general-programming/gocommon"
+	"github.com/general-programming/megarepo/go/common"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/fastpb_gen"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/model"
 	"github.com/hertz-contrib/pprof"
@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	RedisClient = gocommon.NewRedis()
+	RedisClient = common.NewRedis()
 }
 
 func Marshal(msg fastpb.Writer) []byte {
@@ -45,7 +45,7 @@ type ConnectionHandler struct {
 }
 
 func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error) {
-	gocommon.LogWithCtx(ctx).Info("Starting up, got redis client")
+	common.LogWithCtx(ctx).Info("Starting up, got redis client")
 	rl := ratelimit.New(5)
 	last := "$"
 
@@ -58,7 +58,7 @@ func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error)
 		}).Result()
 
 		if err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to read from redis", zap.Error(err))
+			common.LogWithCtx(ctx).Error("Failed to read from redis", zap.Error(err))
 			continue
 		}
 
@@ -68,22 +68,22 @@ func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error)
 
 				projectString, ok := entry.Values["project"].(string)
 				if !ok {
-					gocommon.LogWithCtx(ctx).Error("Project is missing")
+					common.LogWithCtx(ctx).Error("Project is missing")
 					continue
 				}
 
 				msgString, ok := entry.Values["message"].(string)
 				if !ok {
-					gocommon.LogWithCtx(ctx).Error(
+					common.LogWithCtx(ctx).Error(
 						"Failed to get message bytes",
 						zap.Any("entry", entry),
 					)
 				}
 
 				msg := fastpb_gen.TrackerEvent{}
-				err = gocommon.Unmarshal(msgString, &msg)
+				err = common.Unmarshal(msgString, &msg)
 				if err != nil {
-					gocommon.LogWithCtx(ctx).Error(
+					common.LogWithCtx(ctx).Error(
 						"Failed to unmarshal message",
 						zap.String("msg", msgString),
 						zap.Error(err),
@@ -96,12 +96,12 @@ func (c *ConnectionHandler) RedisConsumerWorker(ctx context.Context) (err error)
 				}
 
 				encoded := Marshal(&msg)
-				encoded = gocommon.Compress(encoded)
+				encoded = common.Compress(encoded)
 				err = c.Connection.WriteMessage(websocket.BinaryMessage, encoded)
 
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-						gocommon.LogWithCtx(ctx).Error(
+						common.LogWithCtx(ctx).Error(
 							"Got unexpected error writing",
 							zap.Error(err),
 						)
@@ -119,7 +119,7 @@ func (c *ConnectionHandler) spin(ctx context.Context) {
 		_, message, err := c.Connection.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
-				gocommon.LogWithCtx(ctx).Error(
+				common.LogWithCtx(ctx).Error(
 					"Got unexpected error reading",
 					zap.Error(err),
 				)
@@ -134,9 +134,9 @@ func (c *ConnectionHandler) spin(ctx context.Context) {
 
 func (c *ConnectionHandler) HandleClientMessage(ctx context.Context, message []byte) {
 	parsed := model.ClientMessage{}
-	err := gocommon.Unmarshal(string(message), &parsed)
+	err := common.Unmarshal(string(message), &parsed)
 	if err != nil {
-		gocommon.LogWithCtx(ctx).Error(
+		common.LogWithCtx(ctx).Error(
 			"Failed to parse message",
 			zap.ByteString("message", message),
 			zap.Error(err),
@@ -145,30 +145,30 @@ func (c *ConnectionHandler) HandleClientMessage(ctx context.Context, message []b
 	}
 
 	// handle the message types
-	gocommon.Unmarshal(string(message), &parsed.Args)
+	common.Unmarshal(string(message), &parsed.Args)
 
 	switch parsed.Type {
 	case "subscribe":
 		project, ok := parsed.Args["project"]
 		if !ok {
-			gocommon.LogWithCtx(ctx).Error("Missing project in subscribe")
+			common.LogWithCtx(ctx).Error("Missing project in subscribe")
 			return
 		}
 
 		projectString, ok := project.(string)
 		if !ok {
-			gocommon.LogWithCtx(ctx).Error("Project is not a string")
+			common.LogWithCtx(ctx).Error("Project is not a string")
 			return
 		}
 
-		gocommon.LogWithCtx(ctx).Debug("Subscribing to project", zap.String("project", projectString))
+		common.LogWithCtx(ctx).Debug("Subscribing to project", zap.String("project", projectString))
 
 		c.Projects[projectString] = true
 	}
 }
 
 func SocketHandler(ctx context.Context, c *app.RequestContext) {
-	ctx = gocommon.CtxWithLogger(ctx)
+	ctx = common.CtxWithLogger(ctx)
 
 	err := upgrader.Upgrade(c, func(conn *websocket.Conn) {
 		connection := ConnectionHandler{

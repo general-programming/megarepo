@@ -13,7 +13,7 @@ import (
 
 	"github.com/bytedance/gopkg/util/gopool"
 	"github.com/bytedance/sonic"
-	"github.com/general-programming/gocommon"
+	"github.com/general-programming/megarepo/go/common"
 	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/model"
 	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/storage"
 	socketio "github.com/googollee/go-socket.io"
@@ -28,7 +28,7 @@ func FetchProjects() (*model.ATTrackerProjects, error) {
 	defer func(Body io.ReadCloser) {
 		err := Body.Close()
 		if err != nil {
-			gocommon.CreateLogger().Error("Failed to close body", zap.Error(err))
+			common.CreateLogger().Error("Failed to close body", zap.Error(err))
 		}
 	}(resp.Body)
 	body, err := io.ReadAll(resp.Body)
@@ -67,12 +67,12 @@ type TrackerSocket struct {
 }
 
 func (sock *TrackerSocket) Connect() {
-	logger := gocommon.CreateLogger()
-	defer gocommon.RecoverFunction("TrackerSocket.Connect")
+	logger := common.CreateLogger()
+	defer common.RecoverFunction("TrackerSocket.Connect")
 
 	logger.Info("opening log socket", zap.String("project", sock.Project))
 
-	client, err := socketio.Dial(gocommon.GetEnvWithDefault("TRACKER_URL", "http://tracker.archiveteam.org:8080") + "/" + sock.Project + "-log")
+	client, err := socketio.Dial(common.GetEnvWithDefault("TRACKER_URL", "http://tracker.archiveteam.org:8080") + "/" + sock.Project + "-log")
 
 	if err != nil {
 		logger.Error("Failed to connect to socket",
@@ -92,7 +92,7 @@ func (sock *TrackerSocket) Connect() {
 
 func (sock *TrackerSocket) MustHook(client *socketio.Client, name string, fn interface{}) bool {
 	err := client.On(name, fn)
-	logger := gocommon.CreateLogger()
+	logger := common.CreateLogger()
 
 	if err != nil {
 		logger.Error("Failed to create socket hook.", zap.Error(err))
@@ -103,20 +103,20 @@ func (sock *TrackerSocket) MustHook(client *socketio.Client, name string, fn int
 }
 
 func (sock *TrackerSocket) OnConnect(ns *socketio.NameSpace) {
-	defer gocommon.RecoverFunction("TrackerSocket.OnConnect")
-	ctx := gocommon.CreateContext()
+	defer common.RecoverFunction("TrackerSocket.OnConnect")
+	ctx := common.CreateContext()
 
-	gocommon.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
+	common.LogWithCtx(ctx).Info("Connected to socket", zap.String("endpoint", ns.Endpoint()))
 }
 
 func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
-	defer gocommon.RecoverFunction("TrackerSocket.OnMessage")
-	ctx := gocommon.CreateContext()
+	defer common.RecoverFunction("TrackerSocket.OnMessage")
+	ctx := common.CreateContext()
 
 	parsed := &model.ATTrackerUpdate{}
 	err := sonic.UnmarshalString(message, parsed)
 	if err != nil {
-		gocommon.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", message), zap.Error(err))
+		common.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", message), zap.Error(err))
 		return
 	}
 
@@ -132,7 +132,7 @@ func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
 	size, _ := parsed.SizeMB.Float64()
 	sizeText := fmt.Sprintf("%.2fMB", size)
 
-	gocommon.LogWithCtx(ctx).Debug("log_message",
+	common.LogWithCtx(ctx).Debug("log_message",
 		zap.String("project", parsed.Project),
 		zap.String("downloader", parsed.Downloader),
 		zap.String("items", itemsText),
@@ -146,7 +146,7 @@ func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
 			"project": parsed.Project,
 			"message": message,
 		}); err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+			common.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
 		}
 	}
 
@@ -154,7 +154,7 @@ func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
 	if PushInflux {
 		timestampFloat, err := parsed.Timestamp.Float64()
 		if err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+			common.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
 			return
 		}
 		timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
@@ -179,7 +179,7 @@ func (sock *TrackerSocket) OnMessage(_ *socketio.NameSpace, message string) {
 			Timestamp: &timestamp,
 		})
 		if err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to emit metric", zap.Error(err))
+			common.LogWithCtx(ctx).Error("Failed to emit metric", zap.Error(err))
 		}
 	}
 }
@@ -190,7 +190,7 @@ type TrackerWorker struct {
 }
 
 func (worker *TrackerWorker) LaunchSocket(project model.ATTrackerProject) {
-	logger := gocommon.CreateLogger()
+	logger := common.CreateLogger()
 
 	// special case to ignore urlteam
 	// TODO(erin) one day I'll make this work
@@ -216,7 +216,7 @@ func (worker *TrackerWorker) LaunchSocket(project model.ATTrackerProject) {
 
 func (worker *TrackerWorker) Init() {
 	// TODO(erin) actual app, please split this up.
-	logger := gocommon.CreateLogger()
+	logger := common.CreateLogger()
 	defer func(logger *zap.Logger) {
 		err := logger.Sync()
 		if err != nil {

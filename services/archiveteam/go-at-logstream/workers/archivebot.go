@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/general-programming/gocommon"
+	"github.com/general-programming/megarepo/go/common"
 	"github.com/general-programming/megarepo/services/archiveteam/go-at-logstream/storage"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -127,7 +127,7 @@ func HandleArchiveBotMessage(ctx context.Context, message []byte) {
 	parsed := &ArchiveBotMessage{}
 	err := sonic.Unmarshal(message, parsed)
 	if err != nil {
-		gocommon.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", string(message)), zap.Error(err))
+		common.LogWithCtx(ctx).Error("Failed to unmarshal message", zap.String("msg", string(message)), zap.Error(err))
 		return
 	}
 
@@ -137,7 +137,7 @@ func HandleArchiveBotMessage(ctx context.Context, message []byte) {
 			"job":     parsed.JobInfo.Url,
 			"message": string(message),
 		}); err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
+			common.LogWithCtx(ctx).Error("Failed to append to redis", zap.Error(err))
 		}
 	}
 
@@ -145,7 +145,7 @@ func HandleArchiveBotMessage(ctx context.Context, message []byte) {
 	if PushInflux {
 		timestampFloat, err := parsed.Timestamp.Float64()
 		if err != nil {
-			gocommon.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
+			common.LogWithCtx(ctx).Error("Failed to parse timestamp", zap.Error(err), zap.String("timestamp", parsed.Timestamp.String()))
 			return
 		}
 		timestamp := time.UnixMilli(int64(math.Round(timestampFloat * 1000)))
@@ -190,10 +190,10 @@ func ArchiveBotMain() {
 	gopool.Go(func() {
 		defer close(done)
 		for {
-			ctx := gocommon.CreateContext()
+			ctx := common.CreateContext()
 			_, message, err := c.ReadMessage()
 			if err != nil {
-				gocommon.LogWithCtx(ctx).Error("Failed to read message", zap.Error(err))
+				common.LogWithCtx(ctx).Error("Failed to read message", zap.Error(err))
 				return
 			}
 

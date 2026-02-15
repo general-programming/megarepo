@@ -5,14 +5,14 @@ import (
 
 	"github.com/bytedance/sonic"
 	"github.com/cloudwego/hertz/pkg/app/client"
-	"github.com/general-programming/gocommon"
+	"github.com/general-programming/megarepo/go/common"
 	ct "github.com/google/certificate-transparency-go"
 	"go.uber.org/zap"
 )
 
 func main() {
-	ctx := gocommon.CreateContext()
-	log := gocommon.CreateLogger()
+	ctx := common.CreateContext()
+	log := common.CreateLogger()
 
 	clientCfg := &tls.Config{
 		InsecureSkipVerify: true,

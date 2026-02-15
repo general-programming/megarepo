@@ -1,10 +1,10 @@
 package workers
 
 import (
-	"github.com/general-programming/gocommon"
+	"github.com/general-programming/megarepo/go/common"
 )
 
 var (
-	PushRedis  = gocommon.GetBoolEnvWithDefault("PUSH_REDIS", false)
-	PushInflux = gocommon.GetBoolEnvWithDefault("PUSH_INFLUX", false)
+	PushRedis  = common.GetBoolEnvWithDefault("PUSH_REDIS", false)
+	PushInflux = common.GetBoolEnvWithDefault("PUSH_INFLUX", false)
 )
