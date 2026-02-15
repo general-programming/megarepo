@@ -13,65 +13,65 @@ images:
   newName: victoriametrics/operator
   newTag: v0.67.0
 # IDK how to do this properly.
-replacements:
-- source:
-    fieldPath: .metadata.namespace
-    group: cert-manager.io
-    kind: Certificate
-    name: vm-serving-cert
-    version: v1
-  targets:
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-    select:
-      kind: ValidatingWebhookConfiguration
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-    select:
-      kind: CustomResourceDefinition
-- source:
-    fieldPath: .metadata.name
-    group: cert-manager.io
-    kind: Certificate
-    name: vm-serving-cert
-    version: v1
-  targets:
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-      index: 1
-    select:
-      kind: ValidatingWebhookConfiguration
-  - fieldPaths:
-    - .metadata.annotations.[cert-manager.io/inject-ca-from]
-    options:
-      create: true
-      delimiter: /
-      index: 1
-    select:
-      kind: CustomResourceDefinition
-- source:
-    fieldPath: .metadata.namespace
-    kind: Service
-    name: webhook-service
-    version: v1
-  targets:
-  - fieldPaths:
-    - .spec.dnsNames.0
-    - .spec.dnsNames.1
-    options:
-      create: true
-      delimiter: .
-      index: 1
-    select:
-      group: cert-manager.io
-      kind: Certificate
-      version: v1
+# Commented out for now since IDK where this came from
+# - source:
+#     fieldPath: .metadata.namespace
+#     group: cert-manager.io
+#     kind: Certificate
+#     name: vm-serving-cert
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#     select:
+#       kind: ValidatingWebhookConfiguration
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#     select:
+#       kind: CustomResourceDefinition
+# - source:
+#     fieldPath: .metadata.name
+#     group: cert-manager.io
+#     kind: Certificate
+#     name: vm-serving-cert
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#       index: 1
+#     select:
+#       kind: ValidatingWebhookConfiguration
+#   - fieldPaths:
+#     - .metadata.annotations.[cert-manager.io/inject-ca-from]
+#     options:
+#       create: true
+#       delimiter: /
+#       index: 1
+#     select:
+#       kind: CustomResourceDefinition
+# - source:
+#     fieldPath: .metadata.namespace
+#     kind: Service
+#     name: webhook-service
+#     version: v1
+#   targets:
+#   - fieldPaths:
+#     - .spec.dnsNames.0
+#     - .spec.dnsNames.1
+#     options:
+#       create: true
+#       delimiter: .
+#       index: 1
+#     select:
+#       group: cert-manager.io
+#       kind: Certificate
+#       version: v1
