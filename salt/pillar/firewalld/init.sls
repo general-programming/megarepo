@@ -96,6 +96,13 @@ firewalld:
           port: 8006
           protocol: tcp
 {% endif %}
+    trusted:
+      short: trusted
+      description: Trusted Zone
+      target: ACCEPT
+      masquerade: true
+      interfaces:
+        - tailscale0
 {% else %}
 firewalld:
   enabled: false
