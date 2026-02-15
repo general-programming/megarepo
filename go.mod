@@ -19,7 +19,7 @@ require (
 	github.com/influxdata/influxdb-client-go/v2 v2.12.1
 	go.uber.org/ratelimit v0.2.0
 	go.uber.org/zap v1.27.0
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
