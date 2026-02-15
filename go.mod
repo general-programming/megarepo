@@ -5,9 +5,9 @@ go 1.19
 replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v0.9.1
 
 require (
-	github.com/bytedance/gopkg v0.0.0-20221122125632-68358b8ecec6
+	github.com/bytedance/gopkg v0.0.0-20240531030433-5df24c0168e2
 	github.com/bytedance/sonic v1.8.1
-	github.com/cloudwego/fastpb v0.0.3
+	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.8.0
 	github.com/general-programming/gocommon v0.0.0-20230108100818-ce3bf0a96ec1
 	github.com/go-redis/redis/v9 v9.0.0-rc.2
