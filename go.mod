@@ -8,7 +8,7 @@ require (
 	github.com/bytedance/gopkg v0.1.3
 	github.com/bytedance/sonic v1.15.0
 	github.com/cloudwego/fastpb v0.0.6
-	github.com/cloudwego/hertz v0.8.0
+	github.com/cloudwego/hertz v0.10.4
 	github.com/general-programming/gocommon v0.0.0-20230108100818-ce3bf0a96ec1
 	github.com/go-redis/redis/v9 v9.0.0-rc.2
 	github.com/google/certificate-transparency-go v1.3.2
@@ -29,7 +29,8 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chenzhuoyu/base64x v0.0.0-20221115062448-fe3a3abad311 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/netpoll v0.5.0 // indirect
+	github.com/cloudwego/gopkg v0.1.4 // indirect
+	github.com/cloudwego/netpoll v0.7.2 // indirect
 	github.com/deepmap/oapi-codegen v1.8.2 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/felixge/fgprof v0.9.3 // indirect
