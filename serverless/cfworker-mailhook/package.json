@@ -2,11 +2,11 @@
   "name": "mailhook",
   "version": "0.0.0",
   "devDependencies": {
-    "@cloudflare/puppeteer": "^1.0.2",
-    "@cloudflare/workers-types": "^4.20250420.0",
-    "postal-mime": "^2.4.3",
-    "typescript": "^5.8.3",
-    "wrangler": "^3.114.2"
+    "@cloudflare/puppeteer": "^1.0.6",
+    "@cloudflare/workers-types": "^4.20260214.0",
+    "postal-mime": "^2.7.3",
+    "typescript": "^5.9.3",
+    "wrangler": "^4.65.0"
   },
   "private": true,
   "scripts": {
