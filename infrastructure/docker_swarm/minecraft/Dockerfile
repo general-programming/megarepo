@@ -1,4 +1,4 @@
-FROM openjdk:8
+FROM openjdk:25
 
 RUN apt-get update && \
     apt-get install -y --no-install-recommends less nano byobu openssh-server locales htop vim rsync python3 python3-pip python3-virtualenv && \
