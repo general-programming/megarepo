@@ -24,6 +24,7 @@ metadata:
   name: postgres-rw-hostport
   annotations:
     tailscale.com/expose: "true"
+    tailscale.com/hostname: "svc-shared-postgres"
 spec:
   ports:
     - name: postgres
