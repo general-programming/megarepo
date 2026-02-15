@@ -1,0 +1,39 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: scraperdb
+spec:
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+  storage:
+    storageClass: local-path
+    size: 128Gi
+  bootstrap:
+    initdb:
+      database: scraper
+      owner: scraper
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-rw-hostport
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "svc-scraperdb-postgres"
+spec:
+  ports:
+    - name: postgres
+      port: 5432
+      nodePort: 32345
+      protocol: TCP
+      targetPort: 5432
+  selector:
+    cnpg.io/cluster: scraperdb
+    cnpg.io/instanceRole: primary
+  sessionAffinity: None
+  type: NodePort
