@@ -13,6 +13,7 @@ spec:
   storage:
     storageClass: local-path
     size: 128Gi
+  enableSuperuserAccess: true
   bootstrap:
     initdb:
       database: scraper
