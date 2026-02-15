@@ -12,7 +12,7 @@
   "dependencies": {
     "@twilio-labs/serverless-twilio-runtime": "^3.0.0",
     "axios": "^1.13.5",
-    "file-type": "^21.3.0",
+    "file-type": "^16.0.0",
     "form-data": "^4.0.5"
   },
   "devDependencies": {
