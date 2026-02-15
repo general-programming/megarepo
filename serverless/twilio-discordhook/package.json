@@ -11,7 +11,7 @@
   ],
   "dependencies": {
     "@twilio-labs/serverless-twilio-runtime": "^2.0.0",
-    "axios": "^0.24.0",
+    "axios": "^0.21.0",
     "file-type": "^14.1.4",
     "form-data": "^3.0.0"
   },
