@@ -13,7 +13,7 @@ require (
 	github.com/go-redis/redis/v9 v9.0.0-rc.2
 	github.com/google/certificate-transparency-go v1.1.4
 	github.com/googollee/go-socket.io v1.6.2
-	github.com/gorilla/websocket v1.5.0
+	github.com/gorilla/websocket v1.5.3
 	github.com/hertz-contrib/pprof v0.1.2
 	github.com/hertz-contrib/websocket v0.0.1
 	github.com/influxdata/influxdb-client-go/v2 v2.12.1
