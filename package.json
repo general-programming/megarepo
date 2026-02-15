@@ -22,10 +22,6 @@
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-n": "^17.24.0",
     "eslint-plugin-promise": "^7.2.1",
-    "postal-mime": "^2.7.3",
     "semistandard": "^17.0.0"
-  },
-  "peerDependencies": {
-    "postal-mime": "^1.0.16"
   }
 }
