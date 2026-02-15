@@ -2,7 +2,7 @@
   "name": "mailhook",
   "version": "0.0.0",
   "devDependencies": {
-    "@cloudflare/puppeteer": "^1.0.2",
+    "@cloudflare/puppeteer": "^0.0.15",
     "@cloudflare/workers-types": "^4.20250420.0",
     "postal-mime": "^2.4.3",
     "typescript": "^5.8.3",
