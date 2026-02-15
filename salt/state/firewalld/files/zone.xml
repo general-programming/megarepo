@@ -128,6 +128,11 @@
   <masquerade/>
   {%- endif %}
 {%- endif %}
+{%- if 'forward' in zone %}
+  {%- if zone.forward %}
+  <forward/>
+  {%- endif %}
+{%- endif %}
 {%- if 'forward_ports' in zone %}
   {%- for v in zone.forward_ports %}
     {%- if 'comment' in v %}

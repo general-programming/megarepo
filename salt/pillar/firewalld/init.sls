@@ -101,6 +101,7 @@ firewalld:
       description: Trusted Zone
       target: ACCEPT
       masquerade: true
+      forward: true
       interfaces:
         - tailscale0
 {% else %}
