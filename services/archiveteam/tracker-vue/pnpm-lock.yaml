@@ -26,7 +26,7 @@ specifiers:
 dependencies:
   esbuild: 0.16.10
   filesize: 10.0.6
-  protobufjs: 7.1.2
+  protobufjs: 7.2.5
   vue: 3.2.45
   vue-router: 4.1.6_vue@3.2.45
   zstandard-wasm: 1.5.0-rev.5
@@ -43,7 +43,7 @@ devDependencies:
   eslint-plugin-vue: 9.8.0_eslint@8.30.0
   npm-run-all2: 5.0.2
   prettier: 2.8.1
-  protobufjs-cli: 1.0.2_protobufjs@7.1.2
+  protobufjs-cli: 1.0.2_protobufjs@7.2.5
   typescript: 4.7.4
   vite: 4.0.3_@types+node@18.11.17
   vue-tsc: 1.0.16_typescript@4.7.4
@@ -1572,8 +1572,8 @@ packages:
     resolution: {integrity: sha512-OO0pH2lK6a0hZnAdau5ItzHPI6pUlvI7jMVnxUQRtw4owF2wk8lOSabtGDCTP4Ggrg2MbGnWO9X8K1t4+fGMDw==}
     dev: true
 
-  /fsevents/2.3.2:
-    resolution: {integrity: sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==}
+  /fsevents/2.3.3:
+    resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
     requiresBuild: true
@@ -1867,8 +1867,8 @@ packages:
     resolution: {integrity: sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==}
     dev: true
 
-  /long/5.2.1:
-    resolution: {integrity: sha512-GKSNGeNAtw8IryjjkhZxuKB3JzlcLTwjtiQCHKvqQet81I93kXslhDQruGI/QsddO83mcDToBVy7GqGS/zYf/A==}
+  /long/5.3.2:
+    resolution: {integrity: sha512-mNAgZ1GmyNhD7AuqnTG3/VQ26o760+ZYBPKjPvugO8+nLbYfX6TVpJPseBvopbdY+qpZ/lKUnmEc1LeZYS3QAA==}
 
   /lru-cache/5.1.1:
     resolution: {integrity: sha512-KpNARQA3Iwv+jTA0utUVVbrh+Jlrr1Fv0e56GGzAFOXN7dk/FviaDW8LHmK52DlcH4WP2n6gI8vN1aesBFgo9w==}
@@ -2156,7 +2156,7 @@ packages:
     hasBin: true
     dev: true
 
-  /protobufjs-cli/1.0.2_protobufjs@7.1.2:
+  /protobufjs-cli/1.0.2_protobufjs@7.2.5:
     resolution: {integrity: sha512-cz9Pq9p/Zs7okc6avH20W7QuyjTclwJPgqXG11jNaulfS3nbVisID8rC+prfgq0gbZE0w9LBFd1OKFF03kgFzg==}
     engines: {node: '>=12.0.0'}
     hasBin: true
@@ -2170,14 +2170,14 @@ packages:
       glob: 8.0.3
       jsdoc: 3.6.11
       minimist: 1.2.7
-      protobufjs: 7.1.2
+      protobufjs: 7.2.5
       semver: 7.3.8
       tmp: 0.2.1
       uglify-js: 3.17.4
     dev: true
 
-  /protobufjs/7.1.2:
-    resolution: {integrity: sha512-4ZPTPkXCdel3+L81yw3dG6+Kq3umdWKh7Dc7GW/CpNk4SX3hK58iPCWeCyhVTDrbkNeKrYNZ7EojM5WDaEWTLQ==}
+  /protobufjs/7.2.5:
+    resolution: {integrity: sha512-gGXRSXvxQ7UiPgfw8gevrfRWcTlSbOFg+p/N+JVJEK5VhueL2miT6qTymqAmjr1Q5WbOCyJbyrk6JfWKwlFn6A==}
     engines: {node: '>=12.0.0'}
     requiresBuild: true
     dependencies:
@@ -2192,7 +2192,7 @@ packages:
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.0
       '@types/node': 18.11.17
-      long: 5.2.1
+      long: 5.3.2
 
   /punycode/2.1.1:
     resolution: {integrity: sha512-XRsRjdf+j5ml+y/6GKHPZbrF/8p2Yga0JPtdqTIY2Xe5ohJPD9saDJJLPvp9+NSBprVvevdXZybnj2cv8OEd0A==}
@@ -2255,7 +2255,7 @@ packages:
     engines: {node: '>=14.18.0', npm: '>=8.0.0'}
     hasBin: true
     optionalDependencies:
-      fsevents: 2.3.2
+      fsevents: 2.3.3
     dev: true
 
   /run-parallel/1.2.0:
@@ -2515,7 +2515,7 @@ packages:
       resolve: 1.22.1
       rollup: 3.8.0
     optionalDependencies:
-      fsevents: 2.3.2
+      fsevents: 2.3.3
     dev: true
 
   /vue-eslint-parser/9.1.0_eslint@8.30.0:
