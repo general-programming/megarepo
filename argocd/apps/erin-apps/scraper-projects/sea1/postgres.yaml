@@ -21,7 +21,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: postgres-rw-hostport
+  name: postgres-rw
   annotations:
     tailscale.com/expose: "true"
     tailscale.com/hostname: "svc-scraperdb-postgres"
@@ -29,7 +29,6 @@ spec:
   ports:
     - name: postgres
       port: 5432
-      nodePort: 32345
       protocol: TCP
       targetPort: 5432
   selector:
