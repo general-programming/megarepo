@@ -12,9 +12,9 @@ import (
 	"github.com/general-programming/gocommon"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/fastpb_gen"
 	"github.com/general-programming/megarepo/services/archiveteam/leaderboard2/model"
-	"github.com/go-redis/redis/v9"
 	"github.com/hertz-contrib/pprof"
 	"github.com/hertz-contrib/websocket"
+	"github.com/redis/go-redis/v9"
 	"go.uber.org/ratelimit"
 	"go.uber.org/zap"
 )
