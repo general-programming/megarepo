@@ -1,8 +1,0 @@
-gunicorn
-gevent
-flask
-plaid-python
-requests[security]
-redis
-hiredis
-stripe
