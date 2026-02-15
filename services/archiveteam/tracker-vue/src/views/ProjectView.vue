@@ -49,7 +49,7 @@ let launchSocket = (project: string): WebSocket => {
 
 const router = useRouter();
 const route = useRoute();
-const socket = ref(launchSocket(route.params.project));
+const socket = ref(launchSocket(route.params.project as string));
 const items: { [key: string]: archiveteam_tracker.TrackerEvent[] } = reactive(
   {}
 );
@@ -97,8 +97,8 @@ onBeforeUnmount(() => {
           for this project.
         </p>
         <div class="projects">
-          <div v-for="(items, project) in items" :key="project" class="project">
-            <ProjectTracker :items="items" :project="project" />
+          <div v-for="(projectItems, project) in items" :key="project" class="project">
+            <ProjectTracker :items="projectItems" :project="project as string" />
           </div>
         </div>
       </div>
