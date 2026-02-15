@@ -59,6 +59,7 @@ firewalld:
     public:
       short: public
       description: Public Zone
+      masquerade: true
       services:
         - http
         - https
