@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(kustomize build:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(kubectl get:*)"
+    ]
+  }
+}
