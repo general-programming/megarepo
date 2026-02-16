@@ -9,6 +9,8 @@ metadata:
   annotations:
     reloader.stakater.com/auto: "true"
 spec:
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: ipfs
