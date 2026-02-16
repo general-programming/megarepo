@@ -26,6 +26,7 @@ resources:
   - docspell.yaml
   - bsky-pds.yaml
   - cerebro.yaml
+  - coder.yaml
   - deluge.yaml
   - keycloak.yaml
   - netbox.yaml
