@@ -11,8 +11,11 @@ coder:
       value: "https://coder.owo.me"
     - name: CODER_WILDCARD_ACCESS_URL
       value: "*.coder.owo.me"
-    - name: CODER_OAUTH2_GITHUB_DEFAULT_PROVIDER_ENABLE
-      value: "false"
+
+  # Load GitHub OAuth secrets from Vault
+  envFrom:
+    - secretRef:
+        name: coder-secrets
 
   # TLS is handled by Cloudflare tunnel
   tls:
