@@ -10,5 +10,6 @@ data:
   99-init.sh: |
     #!/usr/bin/env sh
     set -xe
+    ipfs repo migrate
     ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin '["https://ipfs.owo.me", "http://localhost:3000", "http://127.0.0.1:5001"]'
     ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods '["PUT", "POST"]'
