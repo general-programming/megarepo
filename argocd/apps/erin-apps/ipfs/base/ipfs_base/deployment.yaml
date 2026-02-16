@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: ipfs
-        image: ipfs/kubo:v0.33.2
+        image: ipfs/kubo:v0.39.0
         envFrom:
         - configMapRef:
             name: ipfs-config
