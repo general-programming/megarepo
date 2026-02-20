@@ -42,7 +42,7 @@ spec:
         additionalArguments:
           - "--providers.kubernetesingress.ingressendpoint.publishedservice=traefik/traefik-helm"
     repoURL: https://traefik.github.io/charts
-    targetRevision: 39.0.1
+    targetRevision: 39.0.2
   syncPolicy:
     automated:
       prune: true
