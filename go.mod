@@ -9,7 +9,7 @@ require (
 	github.com/bytedance/sonic v1.15.0
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.10.4
-	github.com/google/certificate-transparency-go v1.3.2
+	github.com/google/certificate-transparency-go v1.3.3
 	github.com/googollee/go-socket.io v1.7.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/hertz-contrib/pprof v0.1.2
