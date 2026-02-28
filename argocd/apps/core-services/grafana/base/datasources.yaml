@@ -19,7 +19,7 @@ stringData:
       type: prometheus
       access: proxy
       orgId: 1
-      url: http://vmselect.sea1.generalprogramming.org:8481/select/0/prometheus
+      url: http://svc-vmselect-sea1.victoriametrics.svc.cluster.local:8481/select/0/prometheus
       editable: false
     - name: VM-OCI
       type: prometheus

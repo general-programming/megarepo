@@ -6,3 +6,4 @@ resources:
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml
+  - vmselect-sea1-egress.yaml

@@ -37,18 +37,18 @@ spec:
         memory: "1Gi"
     serviceSpec:
       spec:
-        type: LoadBalancer
+        type: ClusterIP
       metadata:
         annotations:
-          external-dns.alpha.kubernetes.io/hostname: vmselect.sea1.generalprogramming.org
+          tailscale.com/expose: "true"
+          tailscale.com/hostname: "svc-vmselect-sea1"
   vminsert:
     replicaCount: 3
     serviceSpec:
       spec:
-        type: LoadBalancer
+        type: ClusterIP
       metadata:
         annotations:
-          external-dns.alpha.kubernetes.io/hostname: vminsert.sea1.generalprogramming.org
           tailscale.com/expose: "true"
           tailscale.com/hostname: "svc-vminsert-sea1"
     insertPorts:
