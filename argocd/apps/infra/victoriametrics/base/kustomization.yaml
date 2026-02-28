@@ -25,6 +25,18 @@ patches:
         value:
           - vm-webhook-service.victoriametrics.svc
           - vm-webhook-service.victoriametrics.svc.cluster.local
+  # Patch vm-metrics-certs with same DNS names
+  - target:
+      group: cert-manager.io
+      version: v1
+      kind: Certificate
+      name: vm-metrics-certs
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames
+        value:
+          - vm-webhook-service.victoriametrics.svc
+          - vm-webhook-service.victoriametrics.svc.cluster.local
   # Patch the ValidatingWebhookConfiguration so cert-manager's CA injector
   # populates the caBundle fields from the vm-serving-cert Certificate.
   # Uses an explicit target+JSON patch instead of strategic merge patch to
