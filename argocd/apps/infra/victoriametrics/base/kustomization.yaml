@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: victoriametrics
 resources:
-  - github.com/VictoriaMetrics/operator/config/base?ref=v0.68.1
+  - github.com/VictoriaMetrics/operator/config/base-with-webhook?ref=v0.68.1
   - agent_scrape_pod.yaml
   - agent_scrape_service.yaml
   - agent_scrape_state_metrics.yaml
