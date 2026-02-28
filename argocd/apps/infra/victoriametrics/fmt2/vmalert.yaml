@@ -12,6 +12,5 @@ spec:
   remoteWrite:
     url: "http://vminsert-fmt2-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
   # Select all VMRule resources across all namespaces.
-  ruleSelector: {}
-  ruleNamespaceSelector: {}
+  selectAllByDefault: true
   evaluationInterval: 1m

@@ -1,0 +1,27 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: node-disk
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: node-disk
+      rules:
+        - alert: NodeDataDiskLowSpace
+          expr: node_filesystem_avail_bytes{mountpoint="/var/mnt/data"} < 256e9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low disk space on data mount ({{ $labels.instance }})"
+            description: "Available space on /var/mnt/data is {{ $value | humanize }}B, below 256GB threshold."
+    - name: node-disk-test
+      rules:
+        - alert: NodeDataDiskTestSpace
+          expr: node_filesystem_avail_bytes{mountpoint="/var/mnt/data"} > 256e9
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High disk space on data mount ({{ $labels.instance }}) for testing"
+            description: "Available space on /var/mnt/data is {{ $value | humanize }}B, above 256GB threshold."
