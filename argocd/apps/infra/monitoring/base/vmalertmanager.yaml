@@ -5,7 +5,7 @@ metadata:
   name: alertmanager
   namespace: monitoring
 spec:
-  replicaCount: 1
+  replicaCount: 2
   # Discover all VMAlertmanagerConfig resources in this namespace.
   # Empty selector matches all labels.
   # nil configNamespaceSelector = only look in this namespace (monitoring).
