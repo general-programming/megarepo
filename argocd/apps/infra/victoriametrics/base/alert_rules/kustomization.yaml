@@ -3,5 +3,11 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: victoriametrics
 resources:
+  # Stock VictoriaMetrics rules from https://github.com/VictoriaMetrics/VictoriaMetrics/tree/master/deployment/docker/rules
+  - alerts-cluster.yaml
+  - alerts-health.yaml
+  - alerts-vmagent.yaml
+  - alerts-vmalert.yaml
+  # Our rules
   - node-disk.yaml
   - resources-memory.yaml
