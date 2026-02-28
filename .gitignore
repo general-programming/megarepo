@@ -28,7 +28,6 @@ infrastructure/docker_swarm/registry/docker-swarm.yml
 # Language garbage
 node_modules/
 *.egg-info
-serverless/twilio-discordhook/.envrc
 .envrc_secret
 infrastructure/docker_swarm/dex/config.yaml
 infrastructure/docker_swarm/traefik/traefik_users.passwd
