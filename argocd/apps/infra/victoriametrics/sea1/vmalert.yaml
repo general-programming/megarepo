@@ -13,7 +13,7 @@ spec:
   notifier:
     url: "http://vmalertmanager-alertmanager.monitoring.svc.cluster.local:9093"
   remoteWrite:
-    url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
+    url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus"
   # Select all VMRule resources across all namespaces.
   selectAllByDefault: true
   evaluationInterval: 1m
