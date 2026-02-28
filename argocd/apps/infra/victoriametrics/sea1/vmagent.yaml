@@ -11,6 +11,8 @@ spec:
       replacement: "sea1"
     - target_label: "cluster"
       replacement: "sea1-k8s"
+  extraArgs:
+    enableTCP6: "true"
   remoteWrite:
     - url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
     - url: "http://vminsert.fmt2.generalprogramming.org:8480/insert/0/prometheus/api/v1/write"
