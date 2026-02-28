@@ -1,0 +1,35 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: resources-memory
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: resources-memory
+      rules:
+        - alert: NodeLowMemory
+          expr: node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low available memory on {{ $labels.instance }}"
+            description: "Only {{ $value | humanizePercentage }} of RAM available (includes reclaimable caches)."
+
+        - alert: NodeSwapHighUsage
+          expr: (node_memory_SwapTotal_bytes - node_memory_SwapFree_bytes) / node_memory_SwapTotal_bytes > 0.5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "High swap usage on {{ $labels.instance }}"
+            description: "Swap is {{ $value | humanizePercentage }} used — system may be under memory pressure."
+
+        - alert: NodeOOMKill
+          expr: increase(node_vmstat_oom_kill[5m]) > 0
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OOM kill on {{ $labels.instance }}"
+            description: "The kernel OOM killer fired — a process was killed due to memory exhaustion."

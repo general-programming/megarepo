@@ -4,3 +4,4 @@ kind: Kustomization
 namespace: victoriametrics
 resources:
   - node-disk.yaml
+  - resources-memory.yaml

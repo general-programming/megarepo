@@ -15,13 +15,30 @@ spec:
           annotations:
             summary: "Low disk space on data mount ({{ $labels.instance }})"
             description: "Available space on /var/mnt/data is {{ $value | humanize }}B, below 256GB threshold."
-    - name: node-disk-test
-      rules:
-        - alert: NodeDataDiskTestSpace
-          expr: node_filesystem_avail_bytes{mountpoint="/var/mnt/data"} > 256e9
+
+        - alert: RootFilesystemLowSpace
+          expr: node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes < 0.1
           for: 5m
           labels:
             severity: warning
           annotations:
-            summary: "High disk space on data mount ({{ $labels.instance }}) for testing"
-            description: "Available space on /var/mnt/data is {{ $value | humanize }}B, above 256GB threshold."
+            summary: "Low disk space on {{ $labels.mountpoint }} ({{ $labels.instance }})"
+            description: "Filesystem {{ $labels.mountpoint }} has {{ $value | humanizePercentage }} free."
+
+        - alert: NodeFilesystemLowInodes
+          expr: node_filesystem_files_free{fstype!~"tmpfs|fuse.lxcfs|squashfs"} / node_filesystem_files < 0.1
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Low inodes on {{ $labels.mountpoint }} ({{ $labels.instance }})"
+            description: "Filesystem {{ $labels.mountpoint }} has {{ $value | humanizePercentage }} inodes free."
+
+        - alert: NodeDiskIOSaturation
+          expr: rate(node_disk_io_time_seconds_total[5m]) > 0.9
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Disk I/O saturation on {{ $labels.device }} ({{ $labels.instance }})"
+            description: "Device {{ $labels.device }} is busy {{ $value | humanizePercentage }} of the time."
