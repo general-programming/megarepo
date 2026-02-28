@@ -1,9 +1,0 @@
----
-# Annotate the VM operator's ValidatingWebhookConfiguration so cert-manager's
-# CA injector populates the caBundle fields automatically from vm-serving-cert.
-apiVersion: admissionregistration.k8s.io/v1
-kind: ValidatingWebhookConfiguration
-metadata:
-  name: vm-validating-webhook-configuration
-  annotations:
-    cert-manager.io/inject-ca-from: victoriametrics/vm-serving-cert

@@ -14,4 +14,17 @@ images:
   newName: victoriametrics/operator
   newTag: v0.68.1
 patches:
-  - path: patch_webhook_annotation.yaml
+  # Patch the ValidatingWebhookConfiguration so cert-manager's CA injector
+  # populates the caBundle fields from the vm-serving-cert Certificate.
+  # Uses an explicit target+JSON patch instead of strategic merge patch to
+  # avoid namespace-matching issues with cluster-scoped resources.
+  - target:
+      group: admissionregistration.k8s.io
+      version: v1
+      kind: ValidatingWebhookConfiguration
+      name: vm-validating-webhook-configuration
+    patch: |-
+      - op: add
+        path: /metadata/annotations
+        value:
+          cert-manager.io/inject-ca-from: victoriametrics/vm-serving-cert
