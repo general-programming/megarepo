@@ -1,0 +1,38 @@
+authentik:
+  secret_key: ""  # Injected via AUTHENTIK_SECRET_KEY env from vault
+  postgresql:
+    host: "authentik-db-rw"
+    name: "authentik"
+    user: "authentik"
+    password: ""  # Injected via AUTHENTIK_POSTGRESQL__PASSWORD env from CNPG secret
+
+global:
+  env:
+    - name: AUTHENTIK_SECRET_KEY
+      valueFrom:
+        secretKeyRef:
+          name: authentik-secrets
+          key: secret_key
+    - name: AUTHENTIK_POSTGRESQL__PASSWORD
+      valueFrom:
+        secretKeyRef:
+          name: authentik-db-app
+          key: password
+
+postgresql:
+  enabled: false
+
+redis:
+  enabled: true
+  master:
+    persistence:
+      enabled: true
+      size: 1Gi
+
+server:
+  ingress:
+    enabled: false
+  replicas: 1
+
+worker:
+  replicas: 1

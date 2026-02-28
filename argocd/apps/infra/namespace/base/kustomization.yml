@@ -21,6 +21,7 @@ resources:
   - shared-db.yaml
 
   # apps
+  - authentik.yaml
   - grafana.yaml
   - librenms.yaml
   - docspell.yaml
