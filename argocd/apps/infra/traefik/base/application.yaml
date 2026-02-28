@@ -18,8 +18,9 @@ spec:
           kind: DaemonSet
           updateStrategy:
             type: RollingUpdate
-        dashboard:
-          enabled: false
+        ingressRoute:
+          dashboard:
+            enabled: false
         logs:
           access:
             enabled: true
@@ -35,12 +36,9 @@ spec:
             cloudflarewarp:
               moduleName: github.com/BetterCorp/cloudflarewarp
               version: v1.3.3
-        ports:
-          websecure:
-            middlewares:
-              - traefik-cloudflare-realip@kubernetescrd
         additionalArguments:
           - "--providers.kubernetesingress.ingressendpoint.publishedservice=traefik/traefik-helm"
+          - "--entrypoints.websecure.http.middlewares=traefik-cloudflare-realip@kubernetescrd"
     repoURL: https://traefik.github.io/charts
     targetRevision: 39.0.2
   syncPolicy:
