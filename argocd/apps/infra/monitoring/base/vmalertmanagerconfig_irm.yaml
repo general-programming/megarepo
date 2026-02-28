@@ -1,0 +1,26 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanagerConfig
+metadata:
+  name: grafana-irm
+  namespace: monitoring
+spec:
+  # This sub-route matches all alerts and forwards them to Grafana Cloud IRM.
+  # It is merged into the root VMAlertmanager config by the operator.
+  route:
+    receiver: grafana-irm
+    group_by: ['alertname', 'cluster', 'namespace']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+  receivers:
+    - name: grafana-irm
+      webhook_configs:
+        - urlSecret:
+            # Created by vault_alertmanager_irm.yaml via VaultStaticSecret.
+            # Vault path: apps/alertmanager, key: irm_config
+            name: alertmanager-irm-secret
+            key: irm_config
+          send_resolved: true
+          http_config:
+            follow_redirects: true

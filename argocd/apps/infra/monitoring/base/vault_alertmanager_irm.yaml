@@ -1,0 +1,16 @@
+---
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
+metadata:
+  name: vault-alertmanager-irm
+  namespace: monitoring
+spec:
+  type: kv-v2
+  mount: secret
+  # Store the Grafana IRM webhook URL here:
+  #   vault kv put secret/apps/alertmanager irm_config=https://oncall-prod-...grafana.net/oncall/integrations/v1/alertmanager/<token>/
+  path: apps/alertmanager
+  destination:
+    name: alertmanager-irm-secret
+    create: true
+  refreshAfter: 30s

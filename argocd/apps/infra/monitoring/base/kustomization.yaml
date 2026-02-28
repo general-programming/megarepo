@@ -10,8 +10,13 @@ resources:
 - upstream_node_exporter/nodeExporter-serviceAccount.yaml
 # - upstream_node_exporter/nodeExporter-serviceMonitor.yaml
 
-# scraping jobs 
+# scraping jobs
 - scrape_cadvisor.yaml
+
+# alertmanager
+- vmalertmanager.yaml
+- vmalertmanagerconfig_irm.yaml
+- vault_alertmanager_irm.yaml
 patches:
   - path: patch_nodeexporter_sa.yaml
 helmCharts:
