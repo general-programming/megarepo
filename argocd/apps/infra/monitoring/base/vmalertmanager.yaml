@@ -8,10 +8,8 @@ spec:
   replicaCount: 1
   # Discover all VMAlertmanagerConfig resources in this namespace.
   # Empty selector matches all labels.
+  # nil configNamespaceSelector = only look in this namespace (monitoring).
   configSelector: {}
-  configNamespaceSelector:
-    matchLabels:
-      kubernetes.io/metadata.name: monitoring
   # Public routing config lives here in the repo.
   # Private receiver config (webhook URLs) lives in VMAlertmanagerConfig,
   # which references secrets synced from Vault.

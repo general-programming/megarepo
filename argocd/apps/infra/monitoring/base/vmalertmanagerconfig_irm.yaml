@@ -16,11 +16,9 @@ spec:
   receivers:
     - name: grafana-irm
       webhook_configs:
-        - urlSecret:
+        - url_secret:
             # Created by vault_alertmanager_irm.yaml via VaultStaticSecret.
             # Vault path: apps/alertmanager, key: irm_config
             name: alertmanager-irm-secret
             key: irm_config
           send_resolved: true
-          http_config:
-            follow_redirects: true
