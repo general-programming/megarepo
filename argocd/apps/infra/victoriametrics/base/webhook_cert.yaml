@@ -1,0 +1,26 @@
+---
+# Self-signed issuer scoped to this namespace, used only for the webhook cert.
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: vm-selfsigned-issuer
+  namespace: victoriametrics
+spec:
+  selfSigned: {}
+---
+# TLS certificate for the VM operator validating webhook server.
+# cert-manager's CA injector reads the cert-manager.io/inject-ca-from annotation
+# on the ValidatingWebhookConfiguration and injects the CA bundle automatically.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vm-serving-cert
+  namespace: victoriametrics
+spec:
+  dnsNames:
+    - vm-webhook-service.victoriametrics.svc
+    - vm-webhook-service.victoriametrics.svc.cluster.local
+  issuerRef:
+    kind: Issuer
+    name: vm-selfsigned-issuer
+  secretName: webhook-server-cert
