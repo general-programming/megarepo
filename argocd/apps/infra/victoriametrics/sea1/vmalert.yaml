@@ -1,0 +1,20 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: vmalert
+  namespace: victoriametrics
+spec:
+  replicaCount: 1
+  # Note: sea1 vmagent ships metrics to fmt2 vminsert.
+  # If alerting against sea1-originating metrics, point datasource to fmt2 vmselect instead:
+  #   http://vmselect.fmt2.generalprogramming.org:8481/select/0/prometheus
+  datasource:
+    url: "http://vmselect-sea1-victoriametrics.victoriametrics.svc.cluster.local:8481/select/0/prometheus"
+  notifier:
+    url: "http://vmalertmanager-alertmanager.monitoring.svc.cluster.local:9093"
+  remoteWrite:
+    url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
+  # Select all VMRule resources across all namespaces.
+  ruleSelector: {}
+  ruleNamespaceSelector: {}
+  evaluationInterval: 1m

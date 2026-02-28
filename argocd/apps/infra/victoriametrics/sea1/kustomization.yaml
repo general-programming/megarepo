@@ -5,4 +5,5 @@ resources:
   - ../base
   - cluster.yaml
   - vmagent.yaml
+  - vmalert.yaml
   - sea1_scrape.yaml

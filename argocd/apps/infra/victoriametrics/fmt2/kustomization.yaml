@@ -5,3 +5,4 @@ resources:
   - ../base
   - cluster.yaml
   - vmagent.yaml
+  - vmalert.yaml

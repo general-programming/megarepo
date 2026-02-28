@@ -1,0 +1,17 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlert
+metadata:
+  name: vmalert
+  namespace: victoriametrics
+spec:
+  replicaCount: 1
+  datasource:
+    url: "http://vmselect-fmt2-victoriametrics.victoriametrics.svc.cluster.local:8481/select/0/prometheus"
+  notifier:
+    url: "http://vmalertmanager-alertmanager.monitoring.svc.cluster.local:9093"
+  remoteWrite:
+    url: "http://vminsert-fmt2-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
+  # Select all VMRule resources across all namespaces.
+  ruleSelector: {}
+  ruleNamespaceSelector: {}
+  evaluationInterval: 1m
