@@ -9,5 +9,6 @@ resources:
   - alerts-vmagent.yaml
   - alerts-vmalert.yaml
   # Our rules
+  - alerts-argocd.yaml
   - node-disk.yaml
   - resources-memory.yaml
