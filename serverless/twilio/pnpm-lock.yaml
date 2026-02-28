@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       '@twilio/runtime-handler':
-        specifier: 2.0.1
-        version: 2.0.1
+        specifier: 2.1.0
+        version: 2.1.0
       axios:
         specifier: ^1.13.6
         version: 1.13.6(debug@3.2.7)
@@ -156,8 +156,8 @@ packages:
   '@twilio-labs/serverless-runtime-types@4.0.1':
     resolution: {integrity: sha512-JepyB0ggxmAKISKHfxZa8UyLPdKsFaoD4Tk/8TY4qxMusJVnSEZZQ8ecMgVhmlXINVb5m2Ybw8N+iXL10DticQ==}
 
-  '@twilio/runtime-handler@2.0.1':
-    resolution: {integrity: sha512-Yx26E5MRDsANd8mQ4cJasS4B1HIE1cLAk06pQi5T9q9RimkiRThxZQnhlfuPgPPRXHqXdmr9IN3UE5Vo2pGpzA==}
+  '@twilio/runtime-handler@2.1.0':
+    resolution: {integrity: sha512-IUDJKDW0f9EsEkx73JGTXFWyPxHtWr3kz4B7tFncben7W97pIMfMgboJtpNLkbdYpLw6w/PNUXLPCJO4LcWEZg==}
 
   '@types/body-parser@1.19.6':
     resolution: {integrity: sha512-HLFeCYgz89uk22N5Qg3dvGvsv46B8GLvKKo1zKG4NybA8U2DiEO3w9lqGg29t/tfLRJpJ6iQxnVw4OnB7MoM9g==}
@@ -180,9 +180,6 @@ packages:
 
   '@types/express@4.17.21':
     resolution: {integrity: sha512-ejlPM315qwLpaQlQDTjPdsUFSc6ZsP4AN6AlWnogPjQ7CVi7PYF3YVz+CY3jE2pwYf7E/7HlDAN0rV2GxTG0HQ==}
-
-  '@types/express@4.17.7':
-    resolution: {integrity: sha512-dCOT5lcmV/uC2J9k0rPafATeeyz+99xTt54ReX11/LObZgfzJqZNcW27zGhYyX+9iSEGXGt5qLPwRSvBZcLvtQ==}
 
   '@types/http-cache-semantics@4.2.0':
     resolution: {integrity: sha512-L3LgimLHXtGkWikKnsPg0/VFx9OGZaC+eN1u4r+OB1XRqH3meBIAVC2zr1WdMH+RHmnRkqliQAOHNJ/E0j/e0Q==}
@@ -1709,10 +1706,10 @@ snapshots:
       - debug
       - supports-color
 
-  '@twilio/runtime-handler@2.0.1':
+  '@twilio/runtime-handler@2.1.0':
     dependencies:
       '@twilio-labs/serverless-runtime-types': 4.0.1(debug@3.2.7)
-      '@types/express': 4.17.7
+      '@types/express': 4.17.21
       chalk: 4.1.2
       common-tags: 1.8.2
       cookie-parser: 1.4.7
@@ -1749,7 +1746,7 @@ snapshots:
 
   '@types/execa@0.9.0':
     dependencies:
-      '@types/node': 11.15.54
+      '@types/node': 25.3.2
 
   '@types/express-serve-static-core@4.19.8':
     dependencies:
@@ -1759,13 +1756,6 @@ snapshots:
       '@types/send': 1.2.1
 
   '@types/express@4.17.21':
-    dependencies:
-      '@types/body-parser': 1.19.6
-      '@types/express-serve-static-core': 4.19.8
-      '@types/qs': 6.14.0
-      '@types/serve-static': 2.2.0
-
-  '@types/express@4.17.7':
     dependencies:
       '@types/body-parser': 1.19.6
       '@types/express-serve-static-core': 4.19.8
