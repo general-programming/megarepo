@@ -2,10 +2,6 @@ data "authentik_flow" "default_source_authentication" {
   slug = "default-source-authentication"
 }
 
-data "authentik_flow" "default_source_enrollment" {
-  slug = "default-source-enrollment"
-}
-
 data "vault_kv_secret_v2" "github_oauth" {
   mount = "secret"
   name  = "app/authentik/github"
@@ -42,16 +38,10 @@ resource "authentik_policy_expression" "github_org_check" {
     orgs_response.raise_for_status()
     orgs = orgs_response.json()
 
-    # `orgs` will be formatted like this
-    # [
-    #     {
-    #         "login": "goauthentik",
-    #         [...]
-    #     }
-    # ]
     user_matched = any(org['login'] == accepted_org for org in orgs)
     if not user_matched:
         ak_message(f"User is not member of {accepted_org}.")
+
     return user_matched
   EOF
 }
@@ -60,7 +50,7 @@ resource "authentik_source_oauth" "github" {
   name                = "GitHub"
   slug                = "github"
   authentication_flow = data.authentik_flow.default_source_authentication.id
-  enrollment_flow     = data.authentik_flow.default_source_enrollment.id
+  enrollment_flow     = authentik_flow.default_source_enrollment.uuid
   provider_type       = "github"
 
   # Match users to emails as GitHub is outside our control. GitHub validates emails.
