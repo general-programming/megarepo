@@ -29,7 +29,6 @@ resources:
   - cerebro.yaml
   - coder.yaml
   - deluge.yaml
-  - keycloak.yaml
   - netbox.yaml
   - sentry.yaml
 
