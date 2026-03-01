@@ -1,12 +1,3 @@
-terraform {
-  required_providers {
-    random = {
-      source  = "hashicorp/random"
-      version = "~> 3.0"
-    }
-  }
-}
-
 resource "random_password" "authentik_secret_key" {
   length  = 60
   special = false
