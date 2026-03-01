@@ -19,3 +19,8 @@ terraform {
 module "authentik" {
   source   = "./authentik"
 }
+
+module "authentik_app_grafana" {
+  source      = "./authentik/app-grafana"
+  group_uuids = module.authentik.group_uuids
+}
