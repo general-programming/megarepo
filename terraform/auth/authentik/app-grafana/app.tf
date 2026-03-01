@@ -1,11 +1,18 @@
 resource "random_uuid" "grafana_oauth2_client_secret_random" {
 }
 
+resource "random_password" "grafana_admin_password" {
+  length  = 32
+  special = true
+}
+
 resource "vault_generic_secret" "grafana_oauth" {
   path      = "secret/app/grafana/fmt2"
   data_json = jsonencode({
     oauth_client_id     = "grafana"
     oauth_client_secret = random_uuid.grafana_oauth2_client_secret_random.result
+    admin-user          = "admin"
+    admin-password      = random_password.grafana_admin_password.result
   })
 }
 
