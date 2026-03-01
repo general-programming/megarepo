@@ -103,7 +103,7 @@ grafana.ini:
     client_secret: $__file{/etc/secrets/grafana_secrets/oauth_client_secret}
     scopes: openid email profile
     auth_url: "https://auth.generalprogramming.org/application/o/authorize/"
-    token_url: "https://auth.generalprogramming.orgapplication/o/token/"
+    token_url: "https://auth.generalprogramming.org/application/o/token/"
     api_url: "https://auth.generalprogramming.org/application/o/userinfo/"
     role_attribute_path: "contains(groups[*], 'superadmin') && 'GrafanaAdmin' || contains(groups[*], 'admins') && 'Admin' || contains(groups[*], 'users') && 'Editor' || 'Viewer'"
     allow_assign_grafana_admin: true
