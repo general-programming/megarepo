@@ -6,12 +6,14 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "format": "prettier --write '**/*.{js,css,json,md}'"
+    "format": "prettier --write '**/*.{js,css,json,md}'",
+    "start": "wrangler dev",
+    "deploy": "wrangler deploy"
   },
   "author": "erin <erin@generalprogramming.org>",
   "license": "MIT",
   "devDependencies": {
-    "prettier": "^3.0.0"
-  },
-  "dependencies": {}
+    "prettier": "^3.8.1",
+    "wrangler": "^4.69.0"
+  }
 }

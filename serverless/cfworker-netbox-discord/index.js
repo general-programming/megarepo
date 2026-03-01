@@ -191,12 +191,18 @@ async function handleRequest(request) {
     ];
 
     // Create the payload.
-    let title;
+    let title = '';
+
+    if (body.object_type) {
+        title += body.object_type + ' ';
+    } else if (body.model) {
+        title += body.model + ' ';
+    }
 
     if (body.data.name) {
-        title = `${body.model} '${body.data.name}' ${body.event}`;
+        title += `'${body.data.name}' ${body.event}`;
     } else {
-        title = `${body.model} ${body.event}`;
+        title += `${body.event}`;
     }
 
     const payload = {
@@ -206,7 +212,7 @@ async function handleRequest(request) {
                 title: title,
                 // HTTPS only. No exceptions.
                 // eslint-disable-next-line no-undef
-                url: `https://${NETBOX_DOMAIN}/extras/changelog/?request_id=${body.request_id}`,
+                url: `https://${NETBOX_DOMAIN}/core/changelog/?request_id=${body.request_id}`,
                 color: Math.round(Math.random() * COLOR_MAX),
                 fields: fields,
                 footer: {
