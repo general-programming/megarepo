@@ -44,11 +44,19 @@ spec:
             name: netbox-env
         - secretRef:
             name: netbox-secrets
+        - secretRef:
+            name: netbox-oidc
         volumeMounts:
         # Configs
         - name: ldap-config
           subPath: ldap_config.py
           mountPath: /etc/netbox/config/ldap/ldap_config.py
+        - name: ldap-config
+          subPath: authentik.py
+          mountPath: /etc/netbox/config/authentik.py
+        - name: ldap-config
+          subPath: custom_pipeline.py
+          mountPath: /opt/netbox/netbox/netbox/custom_pipeline.py
         # PVC
         - name: netbox-media
           mountPath: /opt/netbox/netbox/media
@@ -62,6 +70,10 @@ spec:
             items:
             - key: ldap_config.py
               path: ldap_config.py
+            - key: authentik.py
+              path: authentik.py
+            - key: custom_pipeline.py
+              path: custom_pipeline.py
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -113,11 +125,19 @@ spec:
             name: netbox-env
         - secretRef:
             name: netbox-secrets
+        - secretRef:
+            name: netbox-oidc
         volumeMounts:
         # Configs
         - name: ldap-config
           subPath: ldap_config.py
           mountPath: /etc/netbox/config/ldap/ldap_config.py
+        - name: ldap-config
+          subPath: authentik.py
+          mountPath: /etc/netbox/config/authentik.py
+        - name: ldap-config
+          subPath: custom_pipeline.py
+          mountPath: /opt/netbox/netbox/netbox/custom_pipeline.py
         # PVC
         - name: netbox-media
           mountPath: /opt/netbox/netbox/media
@@ -131,3 +151,7 @@ spec:
             items:
             - key: ldap_config.py
               path: ldap_config.py
+            - key: custom_pipeline.py
+              path: custom_pipeline.py
+            - key: authentik.py
+              path: authentik.py

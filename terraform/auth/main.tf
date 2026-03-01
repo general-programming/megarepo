@@ -29,3 +29,8 @@ module "authentik_app_matrix_owo" {
   source      = "./authentik/app-matrix"
   group_uuids = module.authentik.group_uuids
 }
+
+module "authentik_app_netbox" {
+  source      = "./authentik/app-netbox"
+  group_uuids = module.authentik.group_uuids
+}
