@@ -27,7 +27,7 @@ resource "authentik_provider_oauth2" "matrix" {
   allowed_redirect_uris = [
     {
       matching_mode = "strict",
-      url           = "https://matrix.owo.me/_synapse/client/oidc/callback"
+      url           = "https://matrix-auth.owo.me/upstream/callback/01JCSXTW4RZVHV7H7YB2G3YWNE"
     }
   ]
 }
