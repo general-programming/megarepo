@@ -19,10 +19,6 @@ We have many points of presence in our space.
 * FMT2 - Partnership with Lasagna, Ltd (AS208590) and many others with shared management of many resources.
 * IAD2 - Oracle Cloud, Ashburn
 * ORD1 - Oracle Cloud, Chicago
-* Temporary Edge Sites
-  * IAD1 - Virtual router running on Hetzner Cloud, America Region.
-  * HEL1 - Virtual router running on Hetzner Cloud, Europe Region.
-  * DFW1 - Virtual router running at a colocation facility in Dallas, Texas, USA.
 
 
 ## Vault setup
