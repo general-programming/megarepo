@@ -1,3 +1,0 @@
-[submodule "services/svg-render-server"]
-	path = services/svg-render-server
-	url = git@github.com:general-programming/svg-render-server.git
