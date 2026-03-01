@@ -50,14 +50,15 @@ async function handleRequest(request) {
         encoder.encode(bodyText),
     );
 
-    //   if (!verified) {
-    //     return new Response(
-    //       JSON.stringify({
-    //         error: 'bad_hmac',
-    //       }),
-    //       { status: 500 },
-    //     )
-    //   }
+    if (!verified) {
+        console.warn('Payload HMAC failed to parse.');
+        //     return new Response(
+        //       JSON.stringify({
+        //         error: 'bad_hmac',
+        //       }),
+        //       { status: 500 },
+        //     )
+    }
 
     console.log(body);
 
