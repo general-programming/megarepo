@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: netbox
-        image: netboxcommunity/netbox:v4.4-3.4.2
+        image: netboxcommunity/netbox:v4.5-4.0.1
         resources: {}
         env:
           - name: DB_NAME
@@ -88,7 +88,7 @@ spec:
     spec:
       containers:
       - name: netbox-worker
-        image: netboxcommunity/netbox:v4.4-3.4.2
+        image: netboxcommunity/netbox:v4.5-4.0.1
         command:
           - /opt/netbox/venv/bin/python
           - /opt/netbox/netbox/manage.py
