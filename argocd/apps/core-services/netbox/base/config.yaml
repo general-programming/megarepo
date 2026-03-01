@@ -76,6 +76,9 @@ data:
     SOCIAL_AUTH_OIDC_SECRET = _read_secret('oidc_secret', environ.get('SOCIAL_AUTH_OIDC_SECRET', ''))
     SOCIAL_AUTH_OIDC_SCOPE = environ.get('SOCIAL_AUTH_OIDC_SCOPE').split(' ')
     LOGOUT_REDIRECT_URL = environ.get('LOGOUT_REDIRECT_URL')
+    API_TOKEN_PEPPERS = {
+        1: environ.get('API_TOKEN_PEPPER')
+    }
 
     SOCIAL_AUTH_PIPELINE = (
         ###################

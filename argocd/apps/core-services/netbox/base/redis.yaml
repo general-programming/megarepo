@@ -20,6 +20,8 @@ spec:
     matchLabels:
       app: netbox-redis
   replicas: 1
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
