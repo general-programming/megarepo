@@ -11,8 +11,7 @@ resource "random_uuid" "grafana_oauth2_client_secret_random" {
 resource "vault_generic_secret" "oidc_secret" {
   path      = "secret/app/netbox/oidc"
   data_json = jsonencode({
-    oidc_id     = "netbox_owo"
-    oidc_secret = random_uuid.grafana_oauth2_client_secret_random.result
+    SOCIAL_AUTH_OIDC_SECRET = random_uuid.grafana_oauth2_client_secret_random.result
   })
 }
 
@@ -27,7 +26,7 @@ resource "authentik_provider_oauth2" "netbox" {
   allowed_redirect_uris = [
     {
       matching_mode = "strict",
-      url           = "https://netbox.owo.me/oauth/complete/oidc/"
+      url           = "https://netbox.generalprogramming.org/oauth/complete/oidc/"
     }
   ]
 }
