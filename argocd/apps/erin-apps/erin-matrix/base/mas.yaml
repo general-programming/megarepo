@@ -33,6 +33,8 @@ spec:
         envFrom:
           - secretRef:
               name: mas-secrets
+          - secretRef:
+              name: oidc-secrets
       containers:
       - name: mas
         image: ghcr.io/element-hq/matrix-authentication-service:1.0.0

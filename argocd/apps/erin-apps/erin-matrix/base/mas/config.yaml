@@ -68,9 +68,9 @@ upstream_oauth2:
   providers:
     - id: 01JCSXTW4RZVHV7H7YB2G3YWNE
       human_name: genprog
-      issuer: https://sso.generalprogramming.org/realms/master
+      issuer: https://auth.generalprogramming.org/application/o/matrix_owo
       token_endpoint_auth_method: client_secret_basic
-      client_id: matrix_synapse
+      client_id: matrix_owo
       client_secret: "SECRET_oidc_secret"
       scope: "openid profile email"
       claims_imports:

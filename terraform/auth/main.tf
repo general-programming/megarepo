@@ -24,3 +24,8 @@ module "authentik_app_grafana" {
   source      = "./authentik/app-grafana"
   group_uuids = module.authentik.group_uuids
 }
+
+module "authentik_app_matrix_owo" {
+  source      = "./authentik/app-matrix"
+  group_uuids = module.authentik.group_uuids
+}
