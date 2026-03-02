@@ -29,4 +29,4 @@ spec:
   containerTemplate:
     image:
       repository: clickhouse/clickhouse-server
-      tag: "25.3.6.10034"
+      tag: "25.3"
