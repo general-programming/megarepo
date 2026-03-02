@@ -25,7 +25,7 @@ sentry:
   existingSecretKey: sentry_secret_key
 
 symbolicator:
-  enabled: true
+  enabled: false
 
 metrics:
   enabled: true
