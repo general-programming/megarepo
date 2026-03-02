@@ -84,7 +84,6 @@ externalClickhouse:
   password: ""
   database: default
   singleNode: false
-  clusterName: sentry
 
 # ZK
 zookeeper:
