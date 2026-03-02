@@ -18,6 +18,7 @@ resources:
   - local-path-storage.yaml
   - cnpg-system.yaml
   - mariadb-operator.yaml
+  - clickhouse-operator.yaml
   - shared-db.yaml
 
   # apps
