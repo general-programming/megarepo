@@ -8,3 +8,9 @@ helmCharts:
     repo: https://helm.altinity.com
     version: 0.26.0
     namespace: clickhouse-operator
+    valuesInline:
+      configs:
+        files:
+          config.yaml:
+            watch:
+              namespaces: [""]
