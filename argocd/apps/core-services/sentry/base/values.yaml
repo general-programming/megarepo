@@ -1,5 +1,6 @@
 ---
-ipv6: true
+# idk maybe broken?
+# ipv6: true
 
 user:
   create: false
