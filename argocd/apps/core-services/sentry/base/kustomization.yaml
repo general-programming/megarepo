@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: sentry
 resources:
   - database.yaml
+  - clickhouse.yaml
 helmCharts:
   - name: sentry
     releaseName: sentry

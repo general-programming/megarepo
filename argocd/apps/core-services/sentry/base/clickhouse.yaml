@@ -1,0 +1,32 @@
+---
+apiVersion: "clickhouse.altinity.com/v1"
+kind: ClickHouseInstallation
+metadata:
+  name: sentry-clickhouse
+spec:
+  configuration:
+    zookeeper:
+      nodes:
+        - host: sentry-zookeeper.sentry.svc.cluster.local
+          port: 2181
+    clusters:
+      - name: sentry
+        layout:
+          shardsCount: 1
+          replicasCount: 3
+    users:
+      default/networks/ip:
+        - "0.0.0.0/0"
+  defaults:
+    templates:
+      dataVolumeClaimTemplate: clickhouse-data
+  templates:
+    volumeClaimTemplates:
+      - name: clickhouse-data
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          storageClassName: ceph-rbd-xfs
+          resources:
+            requests:
+              storage: 200Gi

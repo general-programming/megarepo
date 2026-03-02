@@ -72,6 +72,20 @@ filestore:
       size: 16Gi
       persistentWorkers: true
 
+# ClickHouse
+clickhouse:
+  enabled: false
+
+externalClickhouse:
+  host: clickhouse-sentry-clickhouse.sentry.svc.cluster.local
+  tcpPort: 9000
+  httpPort: 8123
+  username: default
+  password: ""
+  database: default
+  singleNode: false
+  clusterName: sentry
+
 # ZK
 zookeeper:
   persistence:
