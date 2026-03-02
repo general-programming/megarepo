@@ -13,6 +13,7 @@ system:
   adminEmail: "support@generalprogramming.org"
 
 ingress:
+  enabled: true
   hostname: sentry.generalprogramming.org
   regexPathStyle: traefik
   annotations:
