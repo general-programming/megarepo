@@ -83,7 +83,7 @@ externalClickhouse:
   username: default
   password: ""
   database: default
-  singleNode: false
+  singleNode: true
   clusterName: default
 
 # ZK
