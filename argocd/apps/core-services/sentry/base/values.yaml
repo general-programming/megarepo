@@ -84,6 +84,7 @@ externalClickhouse:
   password: ""
   database: default
   singleNode: false
+  clusterName: default
 
 # ZK
 zookeeper:
