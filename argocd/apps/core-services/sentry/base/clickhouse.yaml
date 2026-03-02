@@ -2,7 +2,7 @@
 apiVersion: clickhouse.com/v1alpha1
 kind: KeeperCluster
 metadata:
-  name: sentry
+  name: sentry-keeper
 spec:
   replicas: 3
   dataVolumeClaimSpec:
@@ -15,7 +15,7 @@ spec:
 apiVersion: clickhouse.com/v1alpha1
 kind: ClickHouseCluster
 metadata:
-  name: sentry
+  name: sentry-clickhouse
 spec:
   replicas: 2
   dataVolumeClaimSpec:
@@ -25,4 +25,4 @@ spec:
       requests:
         storage: 16Gi
   keeperClusterRef:
-    name: sentry
+    name: sentry-keeper
