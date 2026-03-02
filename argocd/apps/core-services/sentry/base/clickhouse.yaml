@@ -26,3 +26,7 @@ spec:
         storage: 16Gi
   keeperClusterRef:
     name: sentry
+  containerTemplate:
+    image:
+      repository: clickhouse/clickhouse-server
+      tag: "25.3"
