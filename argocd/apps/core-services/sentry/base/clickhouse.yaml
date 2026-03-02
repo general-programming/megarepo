@@ -13,13 +13,14 @@ spec:
       - name: sentry
         layout:
           shardsCount: 1
-          replicasCount: 3
+          replicasCount: 2
     users:
       default/networks/ip:
         - "0.0.0.0/0"
   defaults:
     templates:
       dataVolumeClaimTemplate: clickhouse-data
+      podTemplate: clickhouse:sentry
   templates:
     volumeClaimTemplates:
       - name: clickhouse-data
@@ -29,4 +30,10 @@ spec:
           storageClassName: ceph-rbd-xfs
           resources:
             requests:
-              storage: 200Gi
+              storage: 64Gi
+    podTemplates:
+      - name: clickhouse:sentry
+        spec:
+          containers:
+            - name: clickhouse-pod
+              image: clickhouse/clickhouse-server:26.2
