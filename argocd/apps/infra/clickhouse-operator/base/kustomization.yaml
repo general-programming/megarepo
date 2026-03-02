@@ -4,4 +4,11 @@ kind: Kustomization
 namespace: clickhouse-operator
 resources:
   - https://github.com/ClickHouse/clickhouse-operator/releases/latest/download/clickhouse-operator.yaml
+patches:
+  - patch: |
+      $patch: delete
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: clickhouse-operator
 
