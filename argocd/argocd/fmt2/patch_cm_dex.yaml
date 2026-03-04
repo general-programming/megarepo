@@ -8,22 +8,3 @@ metadata:
   namespace: argocd
 data:
   url: https://fmt2-argo.generalprogramming.org
-  dex.config: |
-    logger:
-      level: debug
-    connectors:
-    - type: oidc
-      id: vault
-      name: Vault
-      config:
-        issuer: http://10.65.67.27:8201/v1/identity/oidc/provider/default
-        clientID: vzs7h6HINWYepuD9A09RfKbn5owAIAfE
-        clientSecret: hvo_secret_xn0vuvVfjITei4lMIyhbPqXi0Qp4UoJXagb0eBsGUOga7l8DSYRBbebMBDzzog1P
-        insecureEnableGroups: true
-        insecureSkipEmailVerified: true
-        scopes:
-        - user
-        claimMapping:
-          preferred_username: username
-          email: username
-        userNameKey: username
