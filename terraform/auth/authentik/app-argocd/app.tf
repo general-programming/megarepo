@@ -3,6 +3,7 @@ resource "authentik_application" "argocd" {
   slug              = var.slug
   meta_launch_url   = var.domain
   protocol_provider = authentik_provider_oauth2.argocd.id
+  meta_icon = "https://raw.githubusercontent.com/argoproj/argo-cd/master/ui/src/assets/images/argo.png"
 }
 
 resource "random_uuid" "grafana_oauth2_client_secret_random" {

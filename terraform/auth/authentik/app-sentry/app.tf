@@ -39,5 +39,5 @@ resource "authentik_application" "sentry" {
   name              = "sentry"
   slug              = "sentry"
   protocol_provider = authentik_provider_saml.sentry.id
-  meta_icon         = "https://sentry.io/_static/getsentry/images/favicon.png"
+  meta_icon = "https://raw.githubusercontent.com/getsentry/sentry/master/static/images/logo-sentry.svg"
 }
