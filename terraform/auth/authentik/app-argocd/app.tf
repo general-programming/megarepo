@@ -9,7 +9,7 @@ resource "random_uuid" "grafana_oauth2_client_secret_random" {
 }
 
 resource "vault_generic_secret" "oidc_secret" {
-  path      = "secret/app/argocd/${var.slug}/oidc"
+  path      = "secret/app/argocd/${var.cluster}/oidc"
   data_json = jsonencode({
     oidc_issuer = "https://auth.generalprogramming.org/application/o/${var.slug}/"
     oidc_id     = var.slug
