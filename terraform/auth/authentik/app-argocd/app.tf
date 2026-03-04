@@ -1,24 +1,25 @@
-resource "authentik_application" "netbox" {
-  name              = "Netbox"
-  slug              = "netbox"
-  meta_launch_url   = "https://netbox.generalprogramming.org"
-  protocol_provider = authentik_provider_oauth2.netbox.id
+resource "authentik_application" "argocd" {
+  name              = "ArgoCD (${var.cluster})"
+  slug              = var.slug
+  meta_launch_url   = var.domain
+  protocol_provider = authentik_provider_oauth2.argocd.id
 }
 
 resource "random_uuid" "grafana_oauth2_client_secret_random" {
 }
 
 resource "vault_generic_secret" "oidc_secret" {
-  path      = "secret/app/netbox/oidc"
+  path      = "secret/app/argocd/${var.slug}/oidc"
   data_json = jsonencode({
-    SOCIAL_AUTH_OIDC_SECRET = random_uuid.grafana_oauth2_client_secret_random.result
+    oidc_id     = var.slug
+    oidc_secret = random_uuid.grafana_oauth2_client_secret_random.result
   })
 }
 
-resource "authentik_provider_oauth2" "netbox" {
-  name               = "netbox"
-  client_id          = "netbox"
-  client_secret      = vault_generic_secret.oidc_secret.data.SOCIAL_AUTH_OIDC_SECRET
+resource "authentik_provider_oauth2" "argocd" {
+  name               = var.slug
+  client_id          = var.slug
+  client_secret      = vault_generic_secret.oidc_secret.data.oidc_secret
   authorization_flow = data.authentik_flow.authorization_implicit_flow.id
   invalidation_flow  = data.authentik_flow.invalidation_flow.id
   signing_key        = data.authentik_certificate_key_pair.generated.id
@@ -26,8 +27,12 @@ resource "authentik_provider_oauth2" "netbox" {
   allowed_redirect_uris = [
     {
       matching_mode = "strict",
-      url           = "https://netbox.generalprogramming.org/oauth/complete/oidc/"
-    }
+      url           = "${var.domain}/auth/callback"
+    },
+    {
+      matching_mode = "strict",
+      url           = "${var.domain}/api/dex/callback"
+    },
   ]
 }
 
@@ -52,4 +57,10 @@ data "authentik_certificate_key_pair" "generated" {
   name              = "authentik Self-signed Certificate"
   fetch_certificate = true
   fetch_key         = false
+}
+
+output "oauth2_client_secret" {
+  description = "OAuth2 Client Secret for the ArgoCD application"
+  value       = vault_generic_secret.oidc_secret.data.oidc_secret
+  sensitive   = true
 }
