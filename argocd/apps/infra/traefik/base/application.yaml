@@ -40,7 +40,7 @@ spec:
           - "--providers.kubernetesingress.ingressendpoint.publishedservice=traefik/traefik-helm"
           - "--entrypoints.websecure.http.middlewares=traefik-cloudflare-realip@kubernetescrd"
     repoURL: https://traefik.github.io/charts
-    targetRevision: 39.0.2
+    targetRevision: 39.0.5
   syncPolicy:
     automated:
       prune: true
