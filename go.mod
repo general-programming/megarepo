@@ -5,7 +5,7 @@ go 1.24.0
 replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v0.9.1
 
 require (
-	github.com/bytedance/gopkg v0.1.3
+	github.com/bytedance/gopkg v0.1.4
 	github.com/bytedance/sonic v1.15.0
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.10.4
