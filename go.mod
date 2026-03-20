@@ -15,7 +15,7 @@ require (
 	github.com/hertz-contrib/pprof v0.1.2
 	github.com/hertz-contrib/websocket v0.2.0
 	github.com/influxdata/influxdb-client-go/v2 v2.14.0
-	github.com/klauspost/compress v1.18.4
+	github.com/klauspost/compress v1.18.5
 	github.com/redis/go-redis/v9 v9.18.0
 	go.uber.org/ratelimit v0.3.1
 	go.uber.org/zap v1.27.1
