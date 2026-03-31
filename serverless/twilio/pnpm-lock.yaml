@@ -13,7 +13,7 @@ importers:
         version: 2.0.1
       axios:
         specifier: ^1.13.6
-        version: 1.14.0(debug@3.2.7)
+        version: 1.14.1(debug@3.2.7)
       file-type:
         specifier: ^22.0.0
         version: 22.0.0
@@ -316,8 +316,8 @@ packages:
     resolution: {integrity: sha512-Xcz9l0z7y9yQ9rdDaxlmaI4uJHf/T8g9hOEzJcsEqX2SjCj4J20uK7+ldkDHMbpJDK76wF7xEIgxc/vSlsfw5w==}
     engines: {node: '>=10.12.0'}
 
-  axios@1.14.0:
-    resolution: {integrity: sha512-3Y8yrqLSwjuzpXuZ0oIYZ/XGgLwUIBU3uLvbcpb0pidD9ctpShJd43KSlEEkVQg6DS0G9NKyzOvBfUtDKEyHvQ==}
+  axios@1.14.1:
+    resolution: {integrity: sha512-vF/aB4vrIzLyOb2TB9gpuE8gusNHpZqk2ZZcAqSnRjW5IcY7tFSBEurD2tbakohj0Rw5xMHYwjSqOGSfr0iewA==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -1219,6 +1219,9 @@ packages:
     resolution: {integrity: sha512-nDywThFk1i4BQK4twPQ6TA4RT8bDY96yeuCVBWL3ePARCiEKDRSrNGbFIgUJpLp+XeIR65v8ra7WuJOFUBtkMA==}
     engines: {node: '>=8'}
 
+  plain-crypto-js@4.2.1:
+    resolution: {integrity: sha512-Wv41p4/aEMq03JjDqi0JxPYT4aoMbbQMSM8ur4QkjvjGEeuYvI7rGkqLcOZ7K1iThQGvpNvJnxRWcNodCNuEEQ==}
+
   process@0.11.10:
     resolution: {integrity: sha512-cdGef/drWFoydD1JsMzuFf8100nZl+GT+yacc2bEced5f9Rjk4z+WtFUTBu9PhOi9j/jfmBPu0mMEY4wIdAF8A==}
     engines: {node: '>= 0.6.0'}
@@ -1901,10 +1904,11 @@ snapshots:
 
   atomically@1.7.0: {}
 
-  axios@1.14.0(debug@3.2.7):
+  axios@1.14.1(debug@3.2.7):
     dependencies:
       follow-redirects: 1.15.11(debug@3.2.7)
       form-data: 4.0.5
+      plain-crypto-js: 4.2.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
       - debug
@@ -2830,6 +2834,8 @@ snapshots:
     dependencies:
       find-up: 3.0.0
 
+  plain-crypto-js@4.2.1: {}
+
   process@0.11.10: {}
 
   proxy-addr@2.0.7:
@@ -3158,7 +3164,7 @@ snapshots:
 
   twilio@4.23.0(debug@3.2.7):
     dependencies:
-      axios: 1.14.0(debug@3.2.7)
+      axios: 1.14.1(debug@3.2.7)
       dayjs: 1.11.20
       https-proxy-agent: 5.0.1
       jsonwebtoken: 9.0.3
@@ -3172,7 +3178,7 @@ snapshots:
 
   twilio@5.13.1:
     dependencies:
-      axios: 1.14.0(debug@3.2.7)
+      axios: 1.14.1(debug@3.2.7)
       dayjs: 1.11.20
       https-proxy-agent: 5.0.1
       jsonwebtoken: 9.0.3
