@@ -6,5 +6,5 @@ helmCharts:
     releaseName: alloy
     namespace: loki
     repo: https://grafana.github.io/helm-charts
-    version: 1.6.2
+    version: 1.7.0
     valuesFile: alloy-values.yaml
