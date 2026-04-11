@@ -13,7 +13,7 @@
   "author": "erin <erin@generalprogramming.org>",
   "license": "MIT",
   "devDependencies": {
-    "prettier": "^3.8.1",
-    "wrangler": "^4.69.0"
+    "prettier": "^3.8.2",
+    "wrangler": "^4.81.1"
   }
 }
