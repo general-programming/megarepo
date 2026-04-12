@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/theessem/mastodon
-  tag: nightly.2026-02-09  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon
+  tag: nightly.2026-04-11  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon
 
 mastodon:
   hooks:
@@ -13,8 +13,8 @@ mastodon:
   streaming:
     image:
       repository: ghcr.io/theessem/mastodon-streaming
-      tag: nightly.2026-02-09  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
-    
+      tag: nightly.2026-04-11  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
+
     replicas: 3
 
   # very IMPORTANT
@@ -97,7 +97,7 @@ mastodon:
     # login + password set in vault
     existingSecret: mastodon-smtp
     from_address: automated@coolmathgam.es
-  
+
   web:
     replicas: 3
 
@@ -115,7 +115,7 @@ ingress:
     - host: coolmathgam.es
       paths:
         - path: "/"
-  
+
   tls: null
 
   streaming:
@@ -152,14 +152,14 @@ elasticsearch:
   master:
     replicaCount: 3
     heapSize: 1g
-  
+
   data:
     replicaCount: 3
     heapSize: 2g
 
   coordinating:
     replicaCount: 0
-  
+
   ingest:
     enabled: false
     replicaCount: 0
