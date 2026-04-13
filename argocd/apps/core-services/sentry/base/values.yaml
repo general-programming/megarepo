@@ -12,11 +12,9 @@ system:
   url: "https://sentry.generalprogramming.org"
   adminEmail: "support@generalprogramming.org"
 
-ingress:
+traefikIngressRoute:
   enabled: true
-  ingressClassName: traefik-helm
   hostname: sentry.generalprogramming.org
-  regexPathStyle: traefik
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
