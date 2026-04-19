@@ -27,6 +27,9 @@ sentry:
   features:
     enableProfiling: true
     enableSpan: true
+  web:
+    logLevel: debug
+    logFormat: machine
 
 relay:
   logging:
