@@ -24,6 +24,9 @@ traefikIngressRoute:
 sentry:
   existingSecret: sentry-secrets
   existingSecretKey: sentry_secret_key
+  features:
+    enableProfiling: true
+    enableSpan: true
   web:
     logLevel: DEBUG
 
