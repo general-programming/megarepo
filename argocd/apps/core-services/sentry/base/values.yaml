@@ -6,7 +6,7 @@ user:
   create: false
 
 hooks:
-  preUpgrade: true
+  preUpgrade: false
 
 system:
   url: "https://sentry.generalprogramming.org"
