@@ -17,7 +17,7 @@ kind: Cluster
 metadata:
   name: matrix-db
 spec:
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.3-standard-trixie
   instances: 2
   primaryUpdateStrategy: unsupervised
   affinity:
@@ -36,7 +36,7 @@ kind: Cluster
 metadata:
   name: matrix-mas-db
 spec:
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.3-standard-trixie
   instances: 2
   primaryUpdateStrategy: unsupervised
   affinity:

@@ -4,7 +4,7 @@ kind: Cluster
 metadata:
   name: coder-db
 spec:
-  imageName: ghcr.io/cloudnative-pg/postgresql:18.1-standard-trixie
+  imageName: ghcr.io/cloudnative-pg/postgresql:18.3-standard-trixie
   instances: 2
   primaryUpdateStrategy: unsupervised
   affinity:
