@@ -27,8 +27,10 @@ sentry:
   features:
     enableProfiling: true
     enableSpan: true
-  web:
-    logLevel: DEBUG
+
+relay:
+  logging:
+    level: debug
 
 symbolicator:
   enabled: false
