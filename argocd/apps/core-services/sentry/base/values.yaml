@@ -25,7 +25,7 @@ sentry:
   existingSecret: sentry-secrets
   existingSecretKey: sentry_secret_key
   web:
-    logLevel: INFO
+    logLevel: DEBUG
 
 symbolicator:
   enabled: false
