@@ -10,7 +10,7 @@ spec:
       - ReadWriteOnce
     resources:
       requests:
-        storage: 1Gi
+        storage: 32Gi
 ---
 apiVersion: clickhouse.com/v1alpha1
 kind: ClickHouseCluster
@@ -23,7 +23,7 @@ spec:
       - ReadWriteOnce
     resources:
       requests:
-        storage: 16Gi
+        storage: 32Gi
   keeperClusterRef:
     name: sentry
   containerTemplate:
