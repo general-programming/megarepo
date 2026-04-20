@@ -21,8 +21,8 @@ importers:
         specifier: ^4.0.5
         version: 4.0.5
       twilio:
-        specifier: ^5.12.2
-        version: 5.13.1
+        specifier: ^6.0.0
+        version: 6.0.0
     devDependencies:
       twilio-run:
         specifier: ^5.0.1
@@ -1482,9 +1482,9 @@ packages:
     resolution: {integrity: sha512-LdNBQfOe0dY2oJH2sAsrxazpgfFQo5yXGxe96QA8UWB5uu+433PrUbkv8gQ5RmrRCqUTPQ0aOrIyAdBr1aB03Q==}
     engines: {node: '>=14.0'}
 
-  twilio@5.13.1:
-    resolution: {integrity: sha512-sT+PkhptF4Mf7t8eXFFvPQx4w5VHnBIPXbltGPMFRe+R2GxfRdMuFbuNA/cEm0aQR6LFQOn33+fhClg+TjRVqQ==}
-    engines: {node: '>=14.0'}
+  twilio@6.0.0:
+    resolution: {integrity: sha512-MAie5DJ3KLpcKlDaYtNzsKMQXcCi+YHWKvZjuSpm27vJAO/l8PanJA0LkkJ03sbh+Kwe5NeL0Q2+y6IjNUYeUA==}
+    engines: {node: '>=20.0.0'}
 
   type-fest@0.13.1:
     resolution: {integrity: sha512-34R7HTnG0XIJcBSn5XhDd7nNFPRcXYRZrBB2O2jdKqYODldSzBAqzsWoZYYvduky73toYS/ESqxPvkDf/F0XMg==}
@@ -3170,7 +3170,7 @@ snapshots:
       - debug
       - supports-color
 
-  twilio@5.13.1:
+  twilio@6.0.0:
     dependencies:
       axios: 1.15.0(debug@3.2.7)
       dayjs: 1.11.20
