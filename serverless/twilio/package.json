@@ -12,7 +12,7 @@
     "axios": "^1.13.6",
     "file-type": "^22.0.0",
     "form-data": "^4.0.5",
-    "twilio": "^5.12.2"
+    "twilio": "^6.0.0"
   },
   "devDependencies": {
     "twilio-run": "^5.0.1"
