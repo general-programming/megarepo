@@ -18,6 +18,14 @@ metadata:
   name: sentry
 spec:
   replicas: 2
+  containerTemplate:
+    resources:
+      requests:
+        cpu: "1"
+        memory: "6Gi"
+      limits:
+        cpu: "2"
+        memory: "8Gi"
   dataVolumeClaimSpec:
     accessModes:
       - ReadWriteOnce
