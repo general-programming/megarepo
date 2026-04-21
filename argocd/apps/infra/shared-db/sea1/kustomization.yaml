@@ -5,3 +5,11 @@ resources:
   - scylla.yaml
   - postgres.yaml
   - postgres-timescaledb.yaml
+  - secrets.yaml
+helmCharts:
+  - name: meilisearch
+    releaseName: meilisearch
+    namespace: shared-db
+    repo: https://meilisearch.github.io/meilisearch-kubernetes
+    version: 0.32.0
+    valuesFile: meilisearch-values.yaml

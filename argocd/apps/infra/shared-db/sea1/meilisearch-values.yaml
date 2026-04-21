@@ -1,0 +1,18 @@
+environment:
+  MEILI_NO_ANALYTICS: true
+  MEILI_ENV: production
+
+auth:
+  existingMasterKeySecret: meilisearch-master-key
+
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 32Gi
+
+service:
+  type: ClusterIP
+  port: 7700
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "svc-meilisearch-sea1"
