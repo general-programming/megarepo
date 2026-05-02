@@ -65,7 +65,7 @@ importers:
         version: 3.8.3
       protobufjs-cli:
         specifier: ^2.0.0
-        version: 2.0.1(protobufjs@8.0.3)
+        version: 2.0.3(protobufjs@8.0.3)
       typescript:
         specifier: ~6.0.0
         version: 6.0.3
@@ -1489,12 +1489,12 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
-  protobufjs-cli@2.0.1:
-    resolution: {integrity: sha512-wtlV7LjE8GHi+cF3c4DWCfxPZCXbNNqRCZxypfIBQWgQSqvZqrrFtnQTHB9IgsbXMqQ6eVJWJeKCSTMzAchjXw==}
+  protobufjs-cli@2.0.3:
+    resolution: {integrity: sha512-LYd12aooRovyKGdQk5jHxcKl7Dw26zYRLaP1WuCgq3hytOsdqtgrkwynbbmKvY1mP/bPPTUoaUMZP9ioIcJH6g==}
     engines: {node: '>=12.0.0'}
     hasBin: true
     peerDependencies:
-      protobufjs: ^8.0.0
+      protobufjs: '>=8.0.2 <9'
 
   protobufjs@8.0.3:
     resolution: {integrity: sha512-LBYnMWkKLB8fE/ljROPDbCl7mgLSlI+oBe1fAAr5MTqFg4TIi0tYrVVurJvQggOjnUYMQtEZBjrej59ojMNTHQ==}
@@ -1939,7 +1939,7 @@ snapshots:
   '@babel/template@7.28.6':
     dependencies:
       '@babel/code-frame': 7.29.0
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@babel/types': 7.29.0
 
   '@babel/traverse@7.29.0':
@@ -1947,7 +1947,7 @@ snapshots:
       '@babel/code-frame': 7.29.0
       '@babel/generator': 7.29.1
       '@babel/helper-globals': 7.28.0
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@babel/template': 7.28.6
       '@babel/types': 7.29.0
       debug: 4.4.3
@@ -2385,14 +2385,14 @@ snapshots:
       '@babel/core': 7.29.0
       '@babel/helper-module-imports': 7.28.6
       '@babel/helper-plugin-utils': 7.28.6
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@vue/compiler-sfc': 3.5.33
     transitivePeerDependencies:
       - supports-color
 
   '@vue/compiler-core@3.5.33':
     dependencies:
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@vue/shared': 3.5.33
       entities: 7.0.1
       estree-walker: 2.0.2
@@ -2870,7 +2870,7 @@ snapshots:
 
   jsdoc@4.0.5:
     dependencies:
-      '@babel/parser': 7.29.2
+      '@babel/parser': 7.29.3
       '@jsdoc/salty': 0.2.12
       '@types/markdown-it': 14.1.2
       bluebird: 3.7.2
@@ -3163,7 +3163,7 @@ snapshots:
 
   prettier@3.8.3: {}
 
-  protobufjs-cli@2.0.1(protobufjs@8.0.3):
+  protobufjs-cli@2.0.3(protobufjs@8.0.3):
     dependencies:
       chalk: 4.1.2
       escodegen: 1.14.3
