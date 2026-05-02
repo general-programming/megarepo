@@ -6,7 +6,7 @@ replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v
 
 require (
 	github.com/bytedance/gopkg v0.1.4
-	github.com/bytedance/sonic v1.15.0
+	github.com/bytedance/sonic v1.15.1
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.10.4
 	github.com/google/certificate-transparency-go v1.3.3
@@ -25,7 +25,7 @@ require (
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/benbjohnson/clock v1.3.5 // indirect
-	github.com/bytedance/sonic/loader v0.5.0 // indirect
+	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
 	github.com/cloudwego/gopkg v0.1.10 // indirect
