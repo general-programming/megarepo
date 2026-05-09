@@ -65,7 +65,7 @@ importers:
         version: 3.8.3
       protobufjs-cli:
         specifier: ^2.0.0
-        version: 2.0.3(protobufjs@8.0.3)
+        version: 2.2.0(protobufjs@8.0.3)
       typescript:
         specifier: ~6.0.0
         version: 6.0.3
@@ -1485,12 +1485,12 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
-  protobufjs-cli@2.0.3:
-    resolution: {integrity: sha512-LYd12aooRovyKGdQk5jHxcKl7Dw26zYRLaP1WuCgq3hytOsdqtgrkwynbbmKvY1mP/bPPTUoaUMZP9ioIcJH6g==}
+  protobufjs-cli@2.2.0:
+    resolution: {integrity: sha512-vpGt6STprj8FFm5x5w0mOrIISgtmoMKZt0X74N7Lyd0VWNHX6pDPp0iF0MEegSnwkeErh0wdFfIQfbhcgUaBdw==}
     engines: {node: '>=12.0.0'}
     hasBin: true
     peerDependencies:
-      protobufjs: '>=8.0.2 <9'
+      protobufjs: '>=8.1.0 <9'
 
   protobufjs@8.0.3:
     resolution: {integrity: sha512-LBYnMWkKLB8fE/ljROPDbCl7mgLSlI+oBe1fAAr5MTqFg4TIi0tYrVVurJvQggOjnUYMQtEZBjrej59ojMNTHQ==}
@@ -1542,6 +1542,11 @@ packages:
 
   semver@7.7.4:
     resolution: {integrity: sha512-vFKC2IEtQnVhpT78h1Yp8wzwrf8CM+MzKMHGJZfBtzhZNycRFnXsHk6E5TxIkkMsgNS7mdX3AGB7x2QM2di4lA==}
+    engines: {node: '>=10'}
+    hasBin: true
+
+  semver@7.8.0:
+    resolution: {integrity: sha512-AcM7dV/5ul4EekoQ29Agm5vri8JNqRyj39o0qpX6vDF2GZrtutZl5RwgD1XnZjiTAfncsJhMI48QQH3sN87YNA==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -1935,7 +1940,7 @@ snapshots:
   '@babel/template@7.28.6':
     dependencies:
       '@babel/code-frame': 7.29.0
-      '@babel/parser': 7.29.3
+      '@babel/parser': 7.29.0
       '@babel/types': 7.29.0
 
   '@babel/traverse@7.29.0':
@@ -1943,7 +1948,7 @@ snapshots:
       '@babel/code-frame': 7.29.0
       '@babel/generator': 7.29.1
       '@babel/helper-globals': 7.28.0
-      '@babel/parser': 7.29.3
+      '@babel/parser': 7.29.0
       '@babel/template': 7.28.6
       '@babel/types': 7.29.0
       debug: 4.4.3
@@ -2294,7 +2299,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.56.0
       debug: 4.4.3
       minimatch: 9.0.9
-      semver: 7.7.4
+      semver: 7.8.0
       tinyglobby: 0.2.16
       ts-api-utils: 2.4.0(typescript@6.0.3)
       typescript: 6.0.3
@@ -3153,7 +3158,7 @@ snapshots:
 
   prettier@3.8.3: {}
 
-  protobufjs-cli@2.0.3(protobufjs@8.0.3):
+  protobufjs-cli@2.2.0(protobufjs@8.0.3):
     dependencies:
       chalk: 4.1.2
       escodegen: 1.14.3
@@ -3163,7 +3168,7 @@ snapshots:
       jsdoc: 4.0.5
       minimist: 1.2.8
       protobufjs: 8.0.3
-      semver: 7.7.4
+      semver: 7.8.0
       tmp: 0.2.5
       uglify-js: 3.19.3
 
@@ -3223,6 +3228,8 @@ snapshots:
   semver@6.3.1: {}
 
   semver@7.7.4: {}
+
+  semver@7.8.0: {}
 
   shebang-command@2.0.0:
     dependencies:
@@ -3342,7 +3349,7 @@ snapshots:
       eslint-visitor-keys: 5.0.1
       espree: 11.2.0
       esquery: 1.7.0
-      semver: 7.7.4
+      semver: 7.8.0
     transitivePeerDependencies:
       - supports-color
 
