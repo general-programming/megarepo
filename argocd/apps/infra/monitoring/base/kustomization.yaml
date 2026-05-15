@@ -23,7 +23,7 @@ helmCharts:
   - name: prometheus-smartctl-exporter
     releaseName: prometheus-smartctl-exporter
     repo: https://prometheus-community.github.io/helm-charts
-    version: 0.16.0
+    version: 0.16.1
     valuesInline:
       podAnnotations:
         prometheus.io/scrape: "true"
