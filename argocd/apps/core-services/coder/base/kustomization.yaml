@@ -9,5 +9,5 @@ helmCharts:
     releaseName: coder
     namespace: coder
     repo: https://helm.coder.com/v2
-    version: 2.33.3
+    version: 2.33.6
     valuesFile: values.yaml
