@@ -29,7 +29,7 @@
     "@vue/tsconfig": "^0.9.0",
     "eslint": "^10.0.0",
     "eslint-plugin-vue": "^10.8.0",
-    "npm-run-all2": "^8.0.4",
+    "npm-run-all2": "^9.0.0",
     "prettier": "^3.8.1",
     "protobufjs-cli": "^2.0.0",
     "typescript": "~6.0.0",
