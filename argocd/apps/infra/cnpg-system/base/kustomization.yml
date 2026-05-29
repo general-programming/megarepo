@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: cnpg-system
 resources:
   - images.yaml
+  - https://github.com/cloudnative-pg/artifacts/image-catalogs?ref=main
 helmCharts:
   - name: cloudnative-pg
     repo: https://cloudnative-pg.github.io/charts
