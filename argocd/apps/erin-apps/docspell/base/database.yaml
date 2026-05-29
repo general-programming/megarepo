@@ -10,6 +10,12 @@ spec:
   affinity:
     enablePodAntiAffinity: true
     podAntiAffinityType: required
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: generalprogramming.org/no-database
+                operator: DoesNotExist
   storage:
     storageClass: local-path
     size: 4Gi

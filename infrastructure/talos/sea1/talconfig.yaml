@@ -43,6 +43,10 @@ nodes:
     ipAddress: "10.3.6.3"
     installDisk: /dev/sda
     controlPlane: false
+    # Keep CloudNativePG databases off this one-off wobscale-rack node.
+    # CNPG Clusters carry a nodeAffinity that refuses nodes with this label.
+    nodeLabels:
+      generalprogramming.org/no-database: "true"
     nameservers:
       - 10.3.0.3
       - 10.65.67.6
