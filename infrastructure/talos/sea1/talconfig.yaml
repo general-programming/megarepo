@@ -1,7 +1,7 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.12.6
-kubernetesVersion: v1.35.2
+talosVersion: v1.13.2
+kubernetesVersion: v1.36.0
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
@@ -154,3 +154,13 @@ patches:
         serviceSubnets:
           - 10.96.0.0/12
           - d40:10:96::/108
+  - # Disable NIC tx checksum offload — works around the flannel VXLAN bad-UDP-checksum
+    # bug (virtio_net + kernel offload corrupts inner checksums on encapsulated traffic,
+    # silently dropping cross-node UDP/DNS). All nodes use ens18 (virtio_net).
+    # ref: flannel-io/flannel#1279, siderolabs/talos#8873
+    |-
+    apiVersion: v1alpha1
+    kind: EthernetConfig
+    name: ens18
+    features:
+      tx-checksum-ip-generic: false

@@ -103,3 +103,13 @@ patches:
         serviceSubnets:
             - 10.96.0.0/12
             - fc00:cafe:cafe:2::/64
+  - # Disable NIC tx checksum offload — works around the flannel VXLAN bad-UDP-checksum
+    # bug (virtio_net + kernel offload corrupts inner checksums on encapsulated traffic,
+    # silently dropping cross-node UDP/DNS). ref: flannel-io/flannel#1279, siderolabs/talos#8873
+    # NOTE: confirm the NIC name on fmt2 — `talosctl -n <node> get links` (assumed ens18).
+    |-
+    apiVersion: v1alpha1
+    kind: EthernetConfig
+    name: ens18
+    features:
+      tx-checksum-ip-generic: false
