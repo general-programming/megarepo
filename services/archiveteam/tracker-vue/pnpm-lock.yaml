@@ -65,7 +65,7 @@ importers:
         version: 3.8.3
       protobufjs-cli:
         specifier: ^2.0.0
-        version: 2.4.2(protobufjs@8.4.2)
+        version: 2.5.4(protobufjs@8.4.2)
       typescript:
         specifier: ~6.0.0
         version: 6.0.3
@@ -819,6 +819,11 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  acorn@8.17.0:
+    resolution: {integrity: sha512-xRQbDb9BnwDafYNn6Vwl839DYVjqXYb1XVGtWAZ1kcDc6iwAL4hg3B1dZlRiuENFeO2H53gFG3in621AdERVAg==}
+    engines: {node: '>=0.4.0'}
+    hasBin: true
+
   ajv@6.15.0:
     resolution: {integrity: sha512-fgFx7Hfoq60ytK2c7DhnF8jIvzYgOMxfugjLOSMHjLIPgenqa7S7oaagATUq99mV6IYvN2tRmC0wnTYX6iPbMw==}
 
@@ -1512,12 +1517,12 @@ packages:
     engines: {node: '>=14'}
     hasBin: true
 
-  protobufjs-cli@2.4.2:
-    resolution: {integrity: sha512-dz7TvVs+tf0CQqS7wU+MsUH/5mNZAXmRD6PxxbjBk7DaL0AbjAJzVnV+B1w4qslCnL5TwlwCfPchd/us8AmfBQ==}
+  protobufjs-cli@2.5.4:
+    resolution: {integrity: sha512-EfQ8CmU0tLv/nL6SuXpr1gH2KUJRlJgMWx82E7+U9O4SwrEk5Husl+YRZHbQr8ZdD4NdxQgj522CIcXrf5L+tg==}
     engines: {node: '>=12.0.0'}
     hasBin: true
     peerDependencies:
-      protobufjs: ^8.4.2
+      protobufjs: ^8.6.3
 
   protobufjs@8.4.2:
     resolution: {integrity: sha512-64rfNzkWOZAIazXzpBFPWq6F9up6gMvTzjE2oWIzApx2N/dqVUEE7+bCn2+40780dFVtKOUab8QfxJ6KJDWbqA==}
@@ -1655,11 +1660,6 @@ packages:
 
   ufo@1.6.4:
     resolution: {integrity: sha512-JFNbkD1Svwe0KvGi8GOeLcP4kAWQ609twvCdcHxq1oSL8svv39ZuSvajcD8B+5D0eL4+s1Is2D/O6KN3qcTeRA==}
-
-  uglify-js@3.19.3:
-    resolution: {integrity: sha512-v3Xu+yuwBXisp6QYTcH4UbH+xYJXqnq2m/LtQVWKWzYc1iehYnLixoQDN9FH6/j9/oybfd6W9Ghwkl8+UMKTKQ==}
-    engines: {node: '>=0.8.0'}
-    hasBin: true
 
   underscore@1.13.8:
     resolution: {integrity: sha512-DXtD3ZtEQzc7M8m4cXotyHR+FAS18C64asBYY5vqZexfYryNNnDc02W4hKg3rdQuqOYas1jkseX0+nZXjTXnvQ==}
@@ -2558,7 +2558,13 @@ snapshots:
     dependencies:
       acorn: 8.16.0
 
+  acorn-jsx@5.3.2(acorn@8.17.0):
+    dependencies:
+      acorn: 8.17.0
+
   acorn@8.16.0: {}
+
+  acorn@8.17.0: {}
 
   ajv@6.15.0:
     dependencies:
@@ -2799,8 +2805,8 @@ snapshots:
 
   espree@9.6.1:
     dependencies:
-      acorn: 8.16.0
-      acorn-jsx: 5.3.2(acorn@8.16.0)
+      acorn: 8.17.0
+      acorn-jsx: 5.3.2(acorn@8.17.0)
       eslint-visitor-keys: 3.4.3
 
   esprima@4.0.1: {}
@@ -3216,7 +3222,7 @@ snapshots:
 
   prettier@3.8.3: {}
 
-  protobufjs-cli@2.4.2(protobufjs@8.4.2):
+  protobufjs-cli@2.5.4(protobufjs@8.4.2):
     dependencies:
       chalk: 4.1.2
       escodegen: 1.14.3
@@ -3226,9 +3232,7 @@ snapshots:
       jsdoc: 4.0.5
       minimist: 1.2.8
       protobufjs: 8.4.2
-      semver: 7.8.1
       tmp: 0.2.7
-      uglify-js: 3.19.3
 
   protobufjs@8.4.2:
     dependencies:
@@ -3353,8 +3357,6 @@ snapshots:
   uc.micro@2.1.0: {}
 
   ufo@1.6.4: {}
-
-  uglify-js@3.19.3: {}
 
   underscore@1.13.8: {}
 
