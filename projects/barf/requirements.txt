@@ -1,8 +1,0 @@
-click
-napalm
-napalm-vyos
-hvac
-magic-logger
-gql
-aiohttp
-dnspython

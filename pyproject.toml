@@ -1,2 +1,20 @@
-[tool.isort]
-profile = "black"
+[tool.uv.workspace]
+members = ["projects/barf", "scripts"]
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["barf"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.18",
+]

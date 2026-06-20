@@ -9,4 +9,13 @@
     git
     talosctl
   ];
+
+  # https://devenv.sh/languages/python/
+  languages.python = {
+    enable = true;
+    uv = {
+      enable = true;
+      sync.enable = true;
+    };
+  };
 }
