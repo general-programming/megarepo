@@ -13,7 +13,7 @@ importers:
         version: 2.0.1
       axios:
         specifier: ^1.13.6
-        version: 1.16.1(debug@3.2.7)
+        version: 1.18.0(debug@3.2.7)
       file-type:
         specifier: ^22.0.0
         version: 22.0.1
@@ -22,7 +22,7 @@ importers:
         version: 4.0.6
       twilio:
         specifier: ^6.0.0
-        version: 6.0.2(debug@3.2.7)
+        version: 6.0.2
     devDependencies:
       twilio-run:
         specifier: ^5.0.1
@@ -316,11 +316,8 @@ packages:
     resolution: {integrity: sha512-Xcz9l0z7y9yQ9rdDaxlmaI4uJHf/T8g9hOEzJcsEqX2SjCj4J20uK7+ldkDHMbpJDK76wF7xEIgxc/vSlsfw5w==}
     engines: {node: '>=10.12.0'}
 
-  axios@1.16.0:
-    resolution: {integrity: sha512-6hp5CwvTPlN2A31g5dxnwAX0orzM7pmCRDLnZSX772mv8WDqICwFjowHuPs04Mc8deIld1+ejhtaMn5vp6b+1w==}
-
-  axios@1.16.1:
-    resolution: {integrity: sha512-caYkukvroVPO8KrzuJEb50Hm07KwfBZPEC3VeFHTsqWHvKTsy54hjJz9BS/cdaypROE2rH6xvm9mHX4fgWkr3A==}
+  axios@1.18.0:
+    resolution: {integrity: sha512-E32NzpYKp++W7XRe52rHiXV2ehxmh3wbdgO7MHeFM+vqxLBYHzt0ElkiImtOBxtOmyp0yoC8C6uESVV84Y2/hw==}
 
   balanced-match@1.0.2:
     resolution: {integrity: sha512-3oSeUO0TMV67hN1AmbXsK4yaqU7tjiHlbxRDZOpH0KW9+CeX4bRAaX0Anxt0tx2MrpRpWwQaPwIlISEJhYU5Pw==}
@@ -721,13 +718,9 @@ packages:
       debug:
         optional: true
 
-  form-data@2.5.5:
-    resolution: {integrity: sha512-jqdObeR2rxZZbPSGL+3VckHMYtu+f9//KXBsVny6JSX/pa38Fy+bGjuG8eW/H6USNQWhLi8Num++cU2yOCNz4A==}
+  form-data@2.5.6:
+    resolution: {integrity: sha512-Ogz/E85h9tlfJzpI6TuFpGcHZFhLrb9Gw8wq9v40CxSCPnv7ahKr6Xgtkn0KYCDQJ8DNn5VoMO8EXr9V5PadyA==}
     engines: {node: '>= 0.12'}
-
-  form-data@4.0.5:
-    resolution: {integrity: sha512-8RipRLol37bNs2bhoV67fiTEvdTrbMUYcFTiy3+wuuOnUog2QBHCZWXDRijWQfAkhBj2Uf5UnVaiWwA5vdd82w==}
-    engines: {node: '>= 6'}
 
   form-data@4.0.6:
     resolution: {integrity: sha512-vKatAh4SlVfgbv+YtmhiRjhEMJsYpsG1Y2rMQtR+SVSbytsSD1YGzDIcrAJmdFec88u/+VoGmxnl+80gL1tRCQ==}
@@ -1697,7 +1690,7 @@ snapshots:
       debug: 4.4.3
       fast-redact: 1.5.0
       file-type: 17.1.6
-      form-data: 2.5.5
+      form-data: 2.5.6
       got: 11.8.6
       hpagent: 0.1.2
       mime-types: 2.1.35
@@ -1908,18 +1901,10 @@ snapshots:
 
   atomically@1.7.0: {}
 
-  axios@1.16.0(debug@3.2.7):
+  axios@1.18.0(debug@3.2.7):
     dependencies:
       follow-redirects: 1.16.0(debug@3.2.7)
-      form-data: 4.0.5
-      proxy-from-env: 2.1.0
-    transitivePeerDependencies:
-      - debug
-
-  axios@1.16.1(debug@3.2.7):
-    dependencies:
-      follow-redirects: 1.16.0(debug@3.2.7)
-      form-data: 4.0.5
+      form-data: 4.0.6
       https-proxy-agent: 5.0.1
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
@@ -2371,7 +2356,7 @@ snapshots:
     optionalDependencies:
       debug: 3.2.7
 
-  form-data@2.5.5:
+  form-data@2.5.6:
     dependencies:
       asynckit: 0.4.0
       combined-stream: 1.0.8
@@ -2379,14 +2364,6 @@ snapshots:
       hasown: 2.0.4
       mime-types: 2.1.35
       safe-buffer: 5.2.1
-
-  form-data@4.0.5:
-    dependencies:
-      asynckit: 0.4.0
-      combined-stream: 1.0.8
-      es-set-tostringtag: 2.1.0
-      hasown: 2.0.4
-      mime-types: 2.1.35
 
   form-data@4.0.6:
     dependencies:
@@ -3183,7 +3160,7 @@ snapshots:
 
   twilio@4.23.0(debug@3.2.7):
     dependencies:
-      axios: 1.16.0(debug@3.2.7)
+      axios: 1.18.0(debug@3.2.7)
       dayjs: 1.11.20
       https-proxy-agent: 5.0.1
       jsonwebtoken: 9.0.3
@@ -3195,9 +3172,9 @@ snapshots:
       - debug
       - supports-color
 
-  twilio@6.0.2(debug@3.2.7):
+  twilio@6.0.2:
     dependencies:
-      axios: 1.16.0(debug@3.2.7)
+      axios: 1.18.0(debug@3.2.7)
       dayjs: 1.11.20
       https-proxy-agent: 5.0.1
       jsonwebtoken: 9.0.3
