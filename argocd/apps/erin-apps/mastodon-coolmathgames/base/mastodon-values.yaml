@@ -156,10 +156,20 @@ elasticsearch:
   master:
     replicaCount: 3
     heapSize: 1g
+    resources:
+      requests:
+        memory: 2Gi
+      limits:
+        memory: 2Gi
 
   data:
     replicaCount: 3
     heapSize: 2g
+    resources:
+      requests:
+        memory: 4Gi
+      limits:
+        memory: 4Gi
 
   coordinating:
     replicaCount: 0
