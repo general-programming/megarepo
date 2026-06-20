@@ -8,7 +8,7 @@ require (
 	github.com/bytedance/gopkg v0.1.4
 	github.com/bytedance/sonic v1.15.2
 	github.com/cloudwego/fastpb v0.0.6
-	github.com/cloudwego/hertz v0.10.4
+	github.com/cloudwego/hertz v0.10.5
 	github.com/google/certificate-transparency-go v1.3.3
 	github.com/googollee/go-socket.io v1.7.0
 	github.com/gorilla/websocket v1.5.3
@@ -28,8 +28,8 @@ require (
 	github.com/bytedance/sonic/loader v0.5.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudwego/base64x v0.1.6 // indirect
-	github.com/cloudwego/gopkg v0.1.10 // indirect
-	github.com/cloudwego/netpoll v0.7.2 // indirect
+	github.com/cloudwego/gopkg v0.2.0 // indirect
+	github.com/cloudwego/netpoll v0.7.3 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/felixge/fgprof v0.9.5 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
