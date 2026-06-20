@@ -6,7 +6,7 @@ replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v
 
 require (
 	github.com/bytedance/gopkg v0.1.4
-	github.com/bytedance/sonic v1.15.1
+	github.com/bytedance/sonic v1.15.2
 	github.com/cloudwego/fastpb v0.0.6
 	github.com/cloudwego/hertz v0.10.4
 	github.com/google/certificate-transparency-go v1.3.3
