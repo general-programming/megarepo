@@ -11,5 +11,5 @@ helmCharts:
     releaseName: meilisearch
     namespace: shared-db
     repo: https://meilisearch.github.io/meilisearch-kubernetes
-    version: 0.32.0
+    version: 0.33.0
     valuesFile: meilisearch-values.yaml
