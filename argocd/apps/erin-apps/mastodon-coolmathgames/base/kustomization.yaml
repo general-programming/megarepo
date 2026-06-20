@@ -6,8 +6,8 @@ resources:
 helmCharts:
   - name: mastodon
     releaseName: mastodon
-    repo: https://small-hack.github.io/mastodon-helm-chart
-    version: 11.3.0
+    repo: https://codeberg.org/api/packages/open-engineering/helm
+    version: 12.0.4
     valuesFile: mastodon-values.yaml
     namespace: mastodon-coolmathgames
 images:
