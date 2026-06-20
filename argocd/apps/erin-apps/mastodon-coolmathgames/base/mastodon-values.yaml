@@ -144,6 +144,9 @@ elasticsearch:
   default:
     storageClass: ceph-rbd-xfs
 
+  image:
+    repository: bitnamilegacy/elasticsearch:8
+
   preset: small_cluster
 
   metrics:
