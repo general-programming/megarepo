@@ -1,0 +1,7 @@
+# whoops, for some reason that ceph rook prefixed the namespace to the csi name
+# now we gotta hack in ceph. as a prefix because of that
+drivers:
+  cephfs:
+    name: "ceph.cephfs.csi.ceph.com"
+  rbd:
+    name: "ceph.rbd.csi.ceph.com"

@@ -16,5 +16,5 @@ helmCharts:
     releaseName: ceph-csi-drivers
     repo: https://ceph.github.io/ceph-csi-operator
     version: v1.0.1
-    # valuesFile: rook_csi_values.yaml
+    valuesFile: rook_csi_values.yaml
     namespace: ceph
