@@ -1,7 +1,7 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.13.2
-kubernetesVersion: v1.36.0
+talosVersion: v1.13.4
+kubernetesVersion: v1.36.1
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
