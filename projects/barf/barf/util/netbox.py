@@ -7,13 +7,10 @@ from gql.transport.aiohttp import AIOHTTPTransport
 
 
 def get_nb_client() -> Client:
-    # Select your transport with a defined url endpoint
     transport = AIOHTTPTransport(
         url="https://netbox.generalprogramming.org/graphql/",
         headers={"Authorization": f"Token {os.environ['NETBOX_API_KEY']}"},
     )
-
-    # Create a GraphQL client using the defined transport
     return Client(transport=transport, fetch_schema_from_transport=True)
 
 

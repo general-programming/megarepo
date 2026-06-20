@@ -13,6 +13,9 @@ dependencies = [
     "dnspython",
 ]
 
+[project.scripts]
+barf = "barf.cli:cli"
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

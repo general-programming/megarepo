@@ -13,6 +13,7 @@
   # https://devenv.sh/languages/python/
   languages.python = {
     enable = true;
+    venv.enable = true;
     uv = {
       enable = true;
       sync.enable = true;
