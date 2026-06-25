@@ -26,7 +26,7 @@ spec:
           replicas: 5
           exposeGossipAndRPCPorts: true
     repoURL: https://helm.releases.hashicorp.com
-    targetRevision: 2.0.0
+    targetRevision: 2.0.1
   syncPolicy:
     automated:
       prune: true
