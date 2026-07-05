@@ -59,10 +59,7 @@ class VyOSHost(BaseHost):
     KEPT_PATHS = (
         # VyOS platform-managed config and hardware facts.
         ("interfaces", "loopback"),
-        ("system", "config-management"),
-        ("system", "conntrack"),
-        ("system", "console"),
-        ("system", "login"),
+        ("system", "login", "user", "vyos"),
         # Interface details not yet modeled in network.yml (hw-id,
         # vifs, dhcp/static addresses, ipv6 autoconf).
         ("interfaces", "ethernet"),
@@ -71,8 +68,6 @@ class VyOSHost(BaseHost):
         # tunnel and port-forwards; sea69's OSPF).
         ("interfaces", "wireguard"),
         ("protocols", "bgp"),
-        ("protocols", "ospf"),
-        ("protocols", "static"),
         ("vpn", "ipsec", "site-to-site"),
     )
 

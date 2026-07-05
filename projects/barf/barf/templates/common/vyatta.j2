@@ -13,6 +13,13 @@ set system name-server '{{ dns_server }}'
 
 set system syslog local facility all level info
 set system syslog local facility local7 level debug
+set system console device ttyS0 speed 115200
+set system config-management commit-revisions 100
+
+{# Conntrack helpers: the vyatta-era defaults, set explicitly. #}
+{% for module in ["ftp", "h323", "nfs", "pptp", "sip", "sqlnet", "tftp"] %}
+set system conntrack modules {{ module }}
+{% endfor %}
 
 {# NTP: serve time to internal ranges only (the VyOS factory default);
    the pre-chrony installs shipped with 0.0.0.0/0 + ::/0. #}
@@ -46,3 +53,4 @@ set service ssh disable-password-authentication
 set system login user supertech authentication public-keys {{ ssh_key.split(" ")[2] }} key {{ ssh_key.split(" ")[1] }}
 set system login user supertech authentication public-keys {{ ssh_key.split(" ")[2] }} type {{ ssh_key.split(" ")[0] }}
 {% endfor %}
+

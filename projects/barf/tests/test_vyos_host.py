@@ -155,7 +155,8 @@ class TestVyOSDiffConfig:
         self.wire(
             monkeypatch,
             {
-                "system": {"host-name": "oldname", "conntrack": {"modules": "ftp"}},
+                "system": {"host-name": "oldname"},
+                "interfaces": {"ethernet": {"eth0": {"hw-id": "aa:bb"}}},
                 "service": {"ssh": {"port": "22"}},
             },
         )
@@ -167,9 +168,9 @@ class TestVyOSDiffConfig:
         assert "- set system host-name oldname" in diff.text
         assert "+ set system time-zone UTC" in diff.text
         # Ownership is the default: unrendered, unkept config (ssh) is
-        # a real removal; kept config (conntrack) is counted only.
+        # a real removal; kept config (ethernet hw-id) is counted only.
         assert "- set service ssh port 22" in diff.text
-        assert "conntrack" not in diff.text
+        assert "hw-id" not in diff.text
         assert "device-only" in diff.text
 
     def test_secret_values_redacted(self, monkeypatch):
@@ -214,16 +215,18 @@ class TestVyOSPushRenderedConfig:
     def test_owned_deletes_come_before_sets(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            # conntrack is kept, so the delete collapse anchors at the
-            # name-server node instead of rising to bare "system".
+            # host-name survives (also rendered), so the delete
+            # collapse anchors at the name-server node instead of
+            # rising to bare "system".
             {
                 "system": {
                     "name-server": ["2606:4700::1111", "2606:4700::1001"],
-                    "conntrack": {"modules": "ftp"},
+                    "host-name": "testbox",
                 }
             },
         )
         make_host().push_rendered_config(
+            "set system host-name testbox\n"
             "set system name-server 2606:4700:4700::1111\n"
             "set system name-server 2606:4700:4700::1001\n"
         )
@@ -239,8 +242,17 @@ class TestVyOSPushRenderedConfig:
     def test_kept_config_is_merged_not_deleted(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            # conntrack is kept; the stale host-name is owned.
-            {"system": {"host-name": "old", "conntrack": {"modules": "ftp"}}},
+            # The vyos user and ethernet hw-id are kept; the stale
+            # host-name is owned. The kept login config also anchors
+            # the delete collapse below bare "system", as on any real
+            # device.
+            {
+                "system": {
+                    "host-name": "old",
+                    "login": {"user": {"vyos": {"level": "admin"}}},
+                },
+                "interfaces": {"ethernet": {"eth0": {"hw-id": "aa:bb"}}},
+            },
         )
         make_host().push_rendered_config("set system host-name testbox\n")
         assert calls.configure == [
