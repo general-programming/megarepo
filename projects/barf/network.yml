@@ -21,8 +21,8 @@ profiles:
         - network: 10.65.67.0/24
           area: 0
       redistribute:
-        bgp:
-          metric-type: 2
+        - protocol: bgp
+          metric_type: 2
     nat:
       masquerade:
         - interface: eth1
@@ -116,11 +116,11 @@ hosts:
         - network: 10.36.75.0/24
           area: 0.0.0.0
       interfaces:
-        eth0:
-          mtu-ignore: true
+        - name: eth0
+          mtu_ignore: true
       redistribute:
-        bgp:
-          metric-type: 2
+        - protocol: bgp
+          metric_type: 2
     interfaces:
       - name: eth0
         description: external

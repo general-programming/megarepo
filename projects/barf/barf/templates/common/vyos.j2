@@ -21,19 +21,17 @@ set service ntp allow-client address ::1/128
 set service ntp allow-client address fc00::/7
 set service ntp allow-client address fe80::/10
 
-{% for net in device.ospf.get("networks", []) %}
+{% for net in device.ospf.networks %}
 set protocols ospf area {{ net.area }} network {{ net.network }}
 {% endfor %}
-{% for iface, options in device.ospf.get("interfaces", {}).items() %}
-{% for option, value in options.items() %}
-set protocols ospf interface {{ iface }} {{ option }}{% if value is not sameas true %} {{ value }}{% endif %}
+{% for iface in device.ospf.interfaces %}
+{% if iface.mtu_ignore %}
+set protocols ospf interface {{ iface.name }} mtu-ignore
+{% endif %}
+{% endfor %}
+{% for redist in device.ospf.redistribute %}
+set protocols ospf redistribute {{ redist.protocol }}{% if redist.metric_type %} metric-type {{ redist.metric_type }}{% endif %}
 
-{% endfor %}
-{% endfor %}
-{% for proto, options in device.ospf.get("redistribute", {}).items() %}
-{% for option, value in (options or {}).items() %}
-set protocols ospf redistribute {{ proto }} {{ option }} {{ value }}
-{% endfor %}
 {% endfor %}
 {% for route in device.static_routes %}
 {% if route.get("interface") %}

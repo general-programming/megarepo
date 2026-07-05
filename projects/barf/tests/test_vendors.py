@@ -246,7 +246,7 @@ class TestParseNatRules:
 
 
 class TestOspfAndStaticRoutes:
-    def test_from_meta_passes_blocks_through(self):
+    def test_from_meta_parses_typed_ospf(self):
         host = BaseHost.from_meta(
             "testbox",
             {
@@ -254,19 +254,38 @@ class TestOspfAndStaticRoutes:
                 "asn": 64512,
                 "ospf": {
                     "networks": [{"network": "10.36.75.0/24", "area": "0.0.0.0"}],
-                    "interfaces": {"eth0": {"mtu-ignore": True}},
-                    "redistribute": {"bgp": {"metric-type": 2}},
+                    "interfaces": [{"name": "eth0", "mtu_ignore": True}],
+                    "redistribute": [{"protocol": "bgp", "metric_type": 2}],
                 },
                 "static_routes": [{"network": "10.213.8.0/21", "interface": "wg51820"}],
             },
         )
-        assert host.ospf["networks"][0]["network"] == "10.36.75.0/24"
-        assert host.ospf["interfaces"]["eth0"]["mtu-ignore"] is True
+        assert host.ospf
+        net = host.ospf.networks[0]
+        assert (net.network, net.area) == ("10.36.75.0/24", "0.0.0.0")
+        assert host.ospf.interfaces[0].name == "eth0"
+        assert host.ospf.interfaces[0].mtu_ignore is True
+        redist = host.ospf.redistribute[0]
+        assert (redist.protocol, redist.metric_type) == ("bgp", 2)
         assert host.static_routes == [
             {"network": "10.213.8.0/21", "interface": "wg51820"}
         ]
 
+    def test_numeric_area_is_kept_verbatim(self):
+        # Areas render as spelled per device ("0" vs "0.0.0.0"): path
+        # diffs are textual.
+        host = BaseHost.from_meta(
+            "testbox",
+            {
+                "role": "vpn",
+                "asn": 64512,
+                "ospf": {"networks": [{"network": "10.0.0.0/24", "area": 0}]},
+            },
+        )
+        assert host.ospf.networks[0].area == "0"
+
     def test_defaults_are_empty(self):
         host = BaseHost(hostname="x", role="vpn")
-        assert host.ospf == {}
+        assert not host.ospf
+        assert host.ospf.networks == []
         assert host.static_routes == []

@@ -275,15 +275,66 @@ def parse_nat_rules(
 
 @dataclass
 class OSPFNetwork:
-    network: ipaddress.IPv4Network
-    area: int
+    """One network announced into an OSPF area."""
 
-    @classmethod
-    def from_dict(cls, data: dict) -> OSPFNetwork:
-        return cls(
-            network=ipaddress.IPv4Network(data["network"]),
-            area=data["area"],
-        )
+    network: str
+    # Spelled as the device has it committed ("0" vs "0.0.0.0"): path
+    # diffs are textual.
+    area: str
+
+
+@dataclass
+class OSPFInterface:
+    """Per-interface OSPF options."""
+
+    name: str
+    mtu_ignore: bool = False
+
+
+@dataclass
+class OSPFRedistribute:
+    """A protocol redistributed into OSPF."""
+
+    protocol: str
+    metric_type: Optional[int] = None
+
+
+@dataclass
+class OSPFConfig:
+    networks: List[OSPFNetwork] = field(default_factory=list)
+    interfaces: List[OSPFInterface] = field(default_factory=list)
+    redistribute: List[OSPFRedistribute] = field(default_factory=list)
+
+    def __bool__(self) -> bool:
+        return bool(self.networks or self.interfaces or self.redistribute)
+
+
+def parse_ospf(ospf_meta: dict) -> OSPFConfig:
+    """Parse a network.yml ``ospf:`` block into the typed model.
+
+    Vendor-neutral snake_case keys; each vendor template translates to
+    its own dialect.
+    """
+    return OSPFConfig(
+        networks=[
+            OSPFNetwork(network=entry["network"], area=str(entry["area"]))
+            for entry in ospf_meta.get("networks", [])
+        ],
+        interfaces=[
+            OSPFInterface(
+                name=entry["name"],
+                mtu_ignore=entry.get("mtu_ignore", False),
+            )
+            for entry in ospf_meta.get("interfaces", [])
+        ],
+        redistribute=[
+            OSPFRedistribute(
+                protocol=entry["protocol"],
+                metric_type=entry.get("metric_type"),
+            )
+            for entry in ospf_meta.get("redistribute", [])
+        ],
+    )
 
 
 @dataclass
@@ -344,11 +395,8 @@ class BaseHost:
         self.role = role
         self.config_context = config_context or {}
         self.nat_masquerades, self.nat_port_forwards = parse_nat_rules(nat or {})
-        # Declarative routing blocks, rendered as-is by the templates:
-        # ospf: {networks: [{network, area}], interfaces: {name: {opt:
-        # value|true}}, redistribute: {proto: {opt: value}}};
+        self.ospf = parse_ospf(ospf or {})
         # static_routes: [{network, interface | next-hop}].
-        self.ospf = ospf or {}
         self.static_routes = static_routes or []
 
         if not vlan_map:
