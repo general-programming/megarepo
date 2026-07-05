@@ -3,6 +3,7 @@ set system update-check url https://raw.githubusercontent.com/vyos/vyos-nightly-
 set service ssh port 22
 set protocols bfd profile bgp echo-mode
 set protocols bfd profile bgp interval echo-interval 50
+set service https api rest
 set service https api keys id vaultadmin key '{{ secrets.vyos_api_password }}'
 
 set firewall global-options all-ping enable
