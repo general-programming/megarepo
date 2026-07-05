@@ -5,9 +5,27 @@
     ":dependencyDashboard"
   ],
   "argocd": {
-    "fileMatch": ["argocd/.+\\.yaml$"]
+    "managerFilePatterns": ["/argocd/.+\\.yaml$/"]
   },
   "prHourlyLimit": 10,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Update *_VERSION vars in GitHub workflows tagged with a renovate comment",
+      "managerFilePatterns": ["/^\\.github/workflows/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+?)(?: versioning=(?<versioning>[^\\s]+))?(?: extractVersion=(?<extractVersion>[^\\s]+))?\\n\\s*[A-Z_]+_VERSION: \"?(?<currentValue>[^\\s\"]+)\"?"
+      ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update image tags with inline '# renovate:' annotations in argocd values files",
+      "managerFilePatterns": ["/^argocd/.+\\.ya?ml$/"],
+      "matchStrings": [
+        "tag:\\s*\"?(?<currentValue>[^\\s\"]+)\"?\\s*#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>[^\\s]+)(?:\\s+versioning=(?<versioning>[^\\s]+))?"
+      ]
+    }
+  ],
   "packageRules": [
     {
       "matchPackageNames": [
