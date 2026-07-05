@@ -142,15 +142,20 @@ class LinuxBirdHost(BaseHost):
     def push_rendered_config(self, rendered: str) -> None:
         """Write the rendered files, remove stale ones, and apply.
 
-        Apply is deliberately conservative:
-          * changed WireGuard configs are applied live with
-            ``wg syncconf`` (no interface bounce);
-          * interfaces for stale links are downed and their files
-            removed; brand-new links are brought up with ``ifup``;
-          * bird is reloaded once at the end when its files changed.
-        Changed ifupdown configs are NOT bounced -- their pre/post
-        hooks only run on ifdown/ifup, which would drop BGP; they take
-        effect on the next boot or manual bounce.
+        Per-interface apply, least disruptive action that makes the
+        device match the files:
+          * brand-new links are brought up with ``ifup``;
+          * a changed ifupdown config bounces its interface
+            (``ifdown --force`` + ``ifup``) -- its pre/post hooks only
+            run there. Links bounce one at a time, so the fabric's
+            other links keep carrying;
+          * a changed WireGuard config alone is applied live with
+            ``wg syncconf`` (no bounce);
+          * stale links are downed and their files removed.
+        bird is reloaded once at the end when its files changed
+        (restarted via systemd if the daemon is not running), and the
+        reload output is verified: a parse failure raises and bird
+        keeps its old config.
         """
         files = parse_rendered_files(rendered)
         with self._open_ssh() as ssh:
@@ -163,29 +168,21 @@ class LinuxBirdHost(BaseHost):
                 raise RuntimeError(f"{self.hostname}: mkdir failed: {out}")
 
             bird_changed = False
-            new_interfaces = []
+            wg_changed: dict = {}  # interface -> wg conf path
+            ifupdown_changed: dict = {}  # interface -> was on device
             for path, content in files.items():
                 if remote[path] == content:
                     continue
                 mode = 0o600 if path.startswith("/etc/wireguard/") else 0o644
                 ssh.write_file(path, content, mode=mode)
 
+                interface = path.rsplit("/", 1)[1].removesuffix(".conf")
                 if path.startswith("/etc/bird/"):
                     bird_changed = True
                 elif path.startswith("/etc/wireguard/"):
-                    interface = path.rsplit("/", 1)[1].removesuffix(".conf")
-                    if remote[path] is None:
-                        new_interfaces.append(interface)
-                    else:
-                        # Live-apply key/peer/port changes; never bounces.
-                        rc, out = ssh.run(
-                            f"wg syncconf {interface} {shlex.quote(path)}"
-                        )
-                        if rc != 0:
-                            raise RuntimeError(
-                                f"{self.hostname}: wg syncconf {interface}"
-                                f" failed: {out}"
-                            )
+                    wg_changed[interface] = path
+                else:
+                    ifupdown_changed[interface] = remote[path] is not None
 
             # Stale links: down the interface (best effort -- it may
             # already be gone), then drop both files.
@@ -196,19 +193,49 @@ class LinuxBirdHost(BaseHost):
                     ssh.run(f"ip link del {interface} 2>/dev/null")
                 ssh.run(f"rm -f {shlex.quote(path)}")
 
-            for interface in sorted(set(new_interfaces)):
+            # One link at a time: the fabric's other links keep
+            # carrying while each interface converges.
+            for interface, existed in sorted(ifupdown_changed.items()):
+                if existed:
+                    # Changed stanza on a live link: hooks (mtu,
+                    # link-local, wg setconf) only run on a bounce.
+                    ssh.run(f"ifdown --force {interface} 2>/dev/null")
                 rc, out = ssh.run(f"ifup {interface}")
                 if rc != 0:
                     raise RuntimeError(
                         f"{self.hostname}: ifup {interface} failed: {out}"
                     )
 
-            if bird_changed:
-                # Success prints "Reconfigured" (or "Reconfiguration in
-                # progress" while sessions drain); anything else is a
-                # parse failure and bird keeps the old config.
-                rc, out = ssh.run("birdc configure")
-                if rc != 0 or "Reconfigur" not in out:
+            for interface, path in sorted(wg_changed.items()):
+                if interface in ifupdown_changed:
+                    continue  # the bounce above already ran wg setconf
+                # Live-apply key/peer/port changes; never bounces.
+                rc, out = ssh.run(f"wg syncconf {interface} {shlex.quote(path)}")
+                if rc != 0:
                     raise RuntimeError(
-                        f"{self.hostname}: birdc configure failed: {out}"
+                        f"{self.hostname}: wg syncconf {interface} failed: {out}"
                     )
+
+            if bird_changed:
+                self._reload_bird(ssh)
+
+    def _reload_bird(self, ssh: DeviceSSH) -> None:
+        """Reload bird, restarting the unit when it is not running.
+
+        ``birdc configure`` exits 0 even when the new config is
+        rejected, so success is verified from its output: anything
+        without "Reconfigur" means bird kept the old config.
+        """
+        rc, _out = ssh.run("systemctl is-active --quiet bird")
+        if rc != 0:
+            rc, out = ssh.run("systemctl restart bird")
+            if rc != 0:
+                raise RuntimeError(f"{self.hostname}: systemctl restart bird: {out}")
+            rc, out = ssh.run("systemctl is-active --quiet bird")
+            if rc != 0:
+                raise RuntimeError(f"{self.hostname}: bird did not come up: {out}")
+            return
+
+        rc, out = ssh.run("birdc configure")
+        if rc != 0 or "Reconfigur" not in out:
+            raise RuntimeError(f"{self.hostname}: birdc configure failed: {out}")

@@ -34,6 +34,7 @@ class FakeSSH:
         self.remote_files = remote_files
         self.commands: list = []
         self.written: dict = {}
+        self.bird_active = True
 
     def __enter__(self):
         return self
@@ -50,6 +51,11 @@ class FakeSSH:
         if command.startswith("ls -1 "):
             listed = [p for p in self.remote_files if "/wg" in p]
             return (0, "\n".join(sorted(listed)))
+        if command.startswith("systemctl is-active"):
+            return (0 if self.bird_active else 3), ""
+        if command.startswith("systemctl restart bird"):
+            self.bird_active = True
+            return 0, ""
         if command.startswith("birdc configure"):
             return 0, "Reconfigured"
         return 0, ""
@@ -125,6 +131,8 @@ def test_push_writes_applies_and_cleans(leaf):
         {
             # Existing interface with an outdated key: syncconf, no bounce.
             WG_PATH: "PrivateKey = OLD\n",
+            IFUP_PATH: "iface wg51070 inet manual\n",
+            BIRD_PATH: "router id 1.2.3.4;\n",
             # Rotated-away link still on disk: downed and deleted.
             STALE_WG: "old",
             STALE_IFUP: "old",
@@ -132,17 +140,38 @@ def test_push_writes_applies_and_cleans(leaf):
     )
     host.push_rendered_config(rendered_script())
 
-    # wg conf written 0600, others 0644.
+    # wg conf written 0600; only the changed file is written.
     assert ssh.written[WG_PATH][1] == 0o600
-    assert ssh.written[BIRD_PATH][1] == 0o644
+    assert list(ssh.written) == [WG_PATH]
     joined = "\n".join(ssh.commands)
     assert f"wg syncconf wg51070 {WG_PATH}" in joined
-    # The interface already existed: applied live, never bounced.
-    assert "ifup" not in joined
+    # Only the wg conf changed: applied live, never bounced.
+    assert "ifup wg51070" not in joined
+    assert "ifdown --force wg51070" not in joined
     assert "ifdown --force wg51825" in joined
     assert f"rm -f {STALE_WG}" in joined
     assert f"rm -f {STALE_IFUP}" in joined
-    assert "birdc configure" in joined
+    # bird files untouched: no reload.
+    assert "birdc configure" not in joined
+
+
+def test_push_bounces_changed_ifupdown(leaf):
+    host, ssh = leaf
+    ssh.remote_files.update(
+        {
+            WG_PATH: "PrivateKey = OLD\n",
+            # Live link whose stanza changed (e.g. gained the
+            # link-local post-up): hooks only run on a bounce.
+            IFUP_PATH: "iface wg51070 inet static\n",
+            BIRD_PATH: "router id 1.2.3.4;\n",
+        }
+    )
+    host.push_rendered_config(rendered_script())
+    joined = "\n".join(ssh.commands)
+    assert "ifdown --force wg51070" in joined
+    assert "ifup wg51070" in joined
+    # The bounce re-runs wg setconf; no separate syncconf.
+    assert "syncconf" not in joined
 
 
 def test_push_brings_up_brand_new_links(leaf):
@@ -151,7 +180,19 @@ def test_push_brings_up_brand_new_links(leaf):
     host.push_rendered_config(rendered_script())
     joined = "\n".join(ssh.commands)
     assert "ifup wg51070" in joined
+    # New link: nothing to bounce or live-patch.
+    assert "ifdown --force wg51070" not in joined
     assert "syncconf" not in joined
+    assert "birdc configure" in joined
+
+
+def test_push_restarts_dead_bird(leaf):
+    host, ssh = leaf
+    ssh.bird_active = False
+    host.push_rendered_config(rendered_script())
+    joined = "\n".join(ssh.commands)
+    assert "systemctl restart bird" in joined
+    assert "birdc configure" not in joined
 
 
 def test_push_skips_apply_when_unchanged(leaf):
