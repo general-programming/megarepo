@@ -1,0 +1,12 @@
+# {{ interface.name }} - {{ interface.description or "loopback" }} (barf-managed; deploy overwrites)
+# Anchor addresses on a dummy interface (the VyOS dum0 pattern): the
+# host's stable fabric identity, independent of any physical link.
+# `inet manual` + explicit address adds handles any v4/v6 mix.
+auto {{ interface.name }}
+iface {{ interface.name }} inet manual
+        pre-up ip link add $IFACE type dummy
+        post-up ip link set $IFACE up
+{% for address in interface.addresses %}
+        post-up ip addr add {{ address }} dev $IFACE
+{% endfor %}
+        post-down ip link del $IFACE

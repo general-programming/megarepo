@@ -142,12 +142,18 @@ hosts:
     asn: 4280805528
     type: linux
     role: vpn
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        address: 2602:fa6d:f:aaaa::f06/128
+        management: true
     # Prefixes this host originates into the fabric (bird static
     # anchors in conf.d/genprog.conf).
     networks:
       - 192.168.3.0/24
       - 172.19.69.0/24
       - 172.19.70.0/24
+      - 2602:fa6d:f:aaaa::f06/128
     bird:
       router_id: 192.168.3.1
       # ECMP the two spines and pin hv-originated traffic to the

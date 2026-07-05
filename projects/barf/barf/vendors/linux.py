@@ -55,6 +55,7 @@ class LinuxBirdHost(BaseHost):
     OWNED_GLOBS = (
         "/etc/wireguard/wg[0-9][0-9][0-9][0-9][0-9].conf",
         "/etc/network/interfaces.d/wg[0-9][0-9][0-9][0-9][0-9].conf",
+        "/etc/network/interfaces.d/dum[0-9].conf",
     )
 
     def _open_ssh(self) -> DeviceSSH:

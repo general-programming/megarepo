@@ -1,9 +1,11 @@
+import ipaddress
+
 import pytest
 
 from barf.common import render_template
 from barf.model import wireguard
 from barf.model.wireguard import WGKeypair, WGNetworkLink
-from barf.vendors import BaseHost
+from barf.vendors import BaseHost, HostInterface
 from barf.vendors.linux import LinuxBirdHost, parse_rendered_files
 
 
@@ -168,6 +170,30 @@ def test_genprog_conf_unnumbered():
     # The RA beacon FRR needs for interface-mode discovery.
     assert 'interface "wg51070", "wg51134" {' in conf
     assert "default lifetime 0;" in conf
+
+
+def test_dummy_interface():
+    leaf = make_leaf(
+        interfaces=[
+            HostInterface(
+                name="dum0",
+                type="VPNLink",
+                _description="underlay loopback",
+                addresses=[ipaddress.ip_interface("2001:db8:aaaa::6/128")],
+                management=True,
+            )
+        ]
+    )
+    files = render_files(leaf)
+    conf = files["/etc/network/interfaces.d/dum0.conf"]
+    # The VyOS dum0 pattern: a stable identity on a dummy interface.
+    assert "pre-up ip link add $IFACE type dummy" in conf
+    assert "post-up ip addr add 2001:db8:aaaa::6/128 dev $IFACE" in conf
+    assert "post-up ip link set $IFACE up" in conf
+
+
+def test_no_dummy_without_interfaces():
+    assert not [p for p in render_files() if "dum" in p]
 
 
 def test_bird_local_conf():

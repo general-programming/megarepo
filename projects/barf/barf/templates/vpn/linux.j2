@@ -19,6 +19,12 @@ cat << 'BARF_FILE' > /etc/network/interfaces.d/wg{{ link.link_id }}.conf
 BARF_FILE
 
 {% endfor %}
+{% for interface in device.interfaces if interface.name.startswith("dum") %}
+cat << 'BARF_FILE' > /etc/network/interfaces.d/{{ interface.name }}.conf
+{% include "vpn/linux/dummy.j2" %}
+BARF_FILE
+
+{% endfor %}
 {% set router_id = device.bird.get("router_id") %}
 {% if not router_id %}
 {% set numbered = namespace(ip=None) %}
