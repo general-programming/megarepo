@@ -170,12 +170,13 @@ class TestVyOSDiffConfig:
         assert "+ set system host-name testbox" in diff.text
         assert "- set system host-name oldname" in diff.text
         assert "+ set system time-zone UTC" in diff.text
-        # Ownership is the default: unrendered, unkept config (ssh) is
-        # a real removal; the kept vyos user is counted only, and the
-        # ignored hw-id vanishes from the diff entirely.
+        # Everything unrendered is a real removal now — including the
+        # factory vyos account — while ignored hw-id vanishes from the
+        # diff entirely.
         assert "- set service ssh port 22" in diff.text
+        assert "- set system login user vyos level admin" in diff.text
         assert "hw-id" not in diff.text
-        assert "device-only" in diff.text
+        assert "device-only" not in diff.text
 
     def test_secret_values_redacted(self, monkeypatch):
         self.wire(monkeypatch, {})
@@ -243,26 +244,23 @@ class TestVyOSPushRenderedConfig:
         ]
         assert calls.saved is True
 
-    def test_kept_config_is_merged_not_deleted(self, monkeypatch):
+    def test_ignored_config_is_never_deleted(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            # The vyos user is kept and the ethernet hw-id is ignored;
-            # the stale host-name is owned. The kept login config also
-            # anchors the delete collapse below bare "system", as on
-            # any real device.
+            # The rendered time-zone anchors the delete collapse below
+            # bare "system"; the ignored ethernet hw-id must survive.
             {
-                "system": {
-                    "host-name": "old",
-                    "login": {"user": {"vyos": {"level": "admin"}}},
-                },
+                "system": {"host-name": "old", "time-zone": "UTC"},
                 "interfaces": {"ethernet": {"eth0": {"hw-id": "aa:bb"}}},
             },
         )
-        make_host().push_rendered_config("set system host-name testbox\n")
+        make_host().push_rendered_config(
+            "set system host-name testbox\nset system time-zone UTC\n"
+        )
         assert calls.configure == [
             # The stale value collapses to its node: host-name has no
-            # other running config beneath it. Neither the kept login
-            # nor the ignored hw-id may appear as deletes.
+            # other running config beneath it. The ignored hw-id may
+            # not appear as a delete.
             {"op": "delete", "path": ["system", "host-name"]},
             {"op": "set", "path": ["system", "host-name", "testbox"]},
         ]

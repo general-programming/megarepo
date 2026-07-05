@@ -366,10 +366,6 @@ class BaseHost:
         return False
 
     @property
-    def device_username(self):
-        return "admin"
-
-    @property
     def is_templatable(self):
         """Whether the host can be templated."""
         return self.TEMPLATABLE

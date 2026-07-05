@@ -56,10 +56,11 @@ class VyOSHost(BaseHost):
     # coverage grows; seeded from a 2026-07-05 fleet survey of every
     # device-only path. Never drop a prefix while devices still carry
     # intentional out-of-band config under it.
-    KEPT_PATHS = (
-        # VyOS platform-managed config and hardware facts.
-        ("system", "login", "user", "vyos"),
-    )
+    # Nothing is kept: the whole config tree is owned. (The vyos
+    # factory account is deliberately deleted — supertech is the only
+    # unix account, and first deploys against fresh installs clean the
+    # default vyos/vyos credentials automatically.)
+    KEPT_PATHS = ()
 
     # Dropped from diffs entirely: never deleted, never listed, never
     # counted. hw-id is a recorded hardware fact, not intent — MAC
@@ -70,10 +71,6 @@ class VyOSHost(BaseHost):
     @property
     def can_bfd(self) -> bool:
         return True
-
-    @property
-    def device_username(self):
-        return "vyos"
 
     def interface_prefix(self, interface):
         if interface.management:
