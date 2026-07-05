@@ -5,7 +5,7 @@ from jinja2 import Environment, PackageLoader, Undefined, make_logging_undefined
 log = logging.getLogger(__name__)
 
 jinja_env = Environment(
-    loader=PackageLoader(__package__),
+    loader=PackageLoader("barf"),
     autoescape=False,
     undefined=make_logging_undefined(log, base=Undefined),
     trim_blocks=True,

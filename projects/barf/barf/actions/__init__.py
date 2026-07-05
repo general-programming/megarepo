@@ -1,5 +1,7 @@
+import functools
+import ipaddress
 import logging
-from typing import Tuple
+from typing import Any, Optional, Tuple
 
 import hvac
 import netmiko
@@ -8,14 +10,17 @@ from napalm import get_network_driver
 from barf.vendors import BaseHost
 
 
-def get_secret(secret: str, key: str = "secret") -> str:
-    """Vault secret fetcher.
+@functools.lru_cache(maxsize=128)
+def get_secret(secret: str, key: Optional[str] = "secret") -> Any:
+    """Vault secret fetcher, cached per (secret, key) for the process.
 
     Args:
-        secret (str): The secret's path.
+        secret: The secret's path.
+        key: The key to return from the secret, or None for the whole
+            secret dict.
 
     Returns:
-        str: The secret's value.
+        The secret's value, or the full secret dict when key is None.
     """
     vault = hvac.Client()
     response = vault.secrets.kv.v2.read_secret_version(
@@ -99,7 +104,11 @@ def push_config(device: BaseHost, config: str):
     addresses = [
         f"{device.hostname}.generalprogramming.org",
         device.management_address.ip.compressed,
-        device.address,
+        # May be a str straight from network.yml or an ipaddress
+        # interface; normalize and drop any prefix length.
+        ipaddress.ip_interface(str(device.address)).ip.compressed
+        if device.address
+        else None,
     ]
 
     while addresses:

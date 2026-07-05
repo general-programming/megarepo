@@ -1,36 +1,30 @@
 import concurrent.futures
 import logging
+import time
+from typing import Optional
 
 import click
 
+from barf.util.images import PROVIDERS
 from barf.util.network import load_network
 from barf.util.secrets import VaultSecrets
-from barf.util.vyos_api import vyos_api_show
+from barf.vendors import BaseHost
 
 log = logging.getLogger(__name__)
 
 
-def _parse_version(output: str) -> str:
-    """Pull the version string out of ``show version`` output."""
-    for line in output.splitlines():
-        if line.lower().startswith("version:"):
-            return line.split(":", 1)[1].strip()
-    return output.strip().splitlines()[0] if output.strip() else "-"
+def _resolve_targets(hosts: list[BaseHost], target: str) -> list[BaseHost]:
+    """The hosts selected by TARGET (a hostname, or "all")."""
+    if target == "all":
+        return hosts
+
+    matches = [h for h in hosts if h.hostname == target]
+    if not matches:
+        raise click.ClickException(f"unknown device {target!r}")
+    return matches
 
 
-def _parse_uptime(output: str) -> str:
-    """Pull a human uptime out of ``show system uptime`` output."""
-    for line in output.splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        if line.lower().startswith("uptime:"):
-            return line.split(":", 1)[1].strip()
-        return line
-    return "-"
-
-
-def _print_table(headers, rows):
+def _print_table(headers: list[str], rows: list[list]) -> None:
     widths = [len(h) for h in headers]
     for row in rows:
         for i, cell in enumerate(row):
@@ -51,31 +45,236 @@ def device():
 
 @device.command("status")
 @click.argument("filename", default="network.yml", type=click.Path(exists=True))
-def device_status(filename):
+def device_status(filename: str) -> None:
     """Show management endpoint, uptime, and version for all VyOS devices."""
     hosts, _links, _global_meta = load_network(filename)
-    secrets = VaultSecrets()
-    key = secrets.vyos_api_password
+
+    # Fail fast on Vault problems in the main thread, and prime the shared
+    # secret cache so the probes below never touch Vault themselves.
+    VaultSecrets().vyos_api_password
 
     vyos_hosts = [host for host in hosts if host.devicetype == "vyos"]
 
-    def fetch(host):
+    # Prime the release fetch once here; cached_property is not thread-safe.
+    provider = PROVIDERS["vyos"]
+    try:
+        latest = provider.latest_version
+    except Exception as e:  # noqa: BLE001 - the table is still useful offline
+        log.warning("Could not fetch the latest VyOS release: %s", e)
+        latest = None
+
+    def fetch(host: BaseHost) -> list:
         log.debug("Processing device %s", host.hostname)
         address = host.management_ip
         if not address:
-            return [host.hostname, "-", "-", "-", "error: no reachable address"]
+            return [host.hostname, "-", "-", "-", "-", "error: no reachable address"]
 
         try:
-            version = _parse_version(vyos_api_show(address, key, ["version"]))
-            uptime = _parse_uptime(vyos_api_show(address, key, ["system", "uptime"]))
-            return [host.hostname, address, uptime, version, "ok"]
+            version = host.human_version()
+            uptime = host.uptime()
+            return [host.hostname, address, uptime, version, latest or "?", "ok"]
         except Exception as e:  # noqa: BLE001 - report the failure in the table
             log.debug("Failed to reach %s via %s: %s", host.hostname, address, e)
-            return [host.hostname, address, "-", "-", f"error: {e}"]
+            return [host.hostname, address, "-", "-", "-", f"error: {e}"]
 
     rows = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         for row in pool.map(fetch, vyos_hosts):
             rows.append(row)
 
-    _print_table(["DEVICE", "ENDPOINT", "UPTIME", "VERSION", "STATUS"], rows)
+    _print_table(["DEVICE", "ENDPOINT", "UPTIME", "VERSION", "LATEST", "STATUS"], rows)
+
+
+def wait_for_device_alive(
+    host: BaseHost,
+    changed_from: Optional[str] = None,
+    initial_wait: int = 15,
+    interval: int = 5,
+    timeout: int = 900,
+) -> str:
+    """Block until a device answers on its API, returning its version.
+
+    Waits ``initial_wait`` seconds up front, then polls every ``interval``
+    seconds. A rebooting device can keep answering on the old image for a
+    while, so pass its pre-reboot version as ``changed_from``: polls
+    reporting that version keep waiting instead of being taken as alive.
+    """
+    click.echo(f"[{host.hostname}] waiting for the device to come alive", nl=False)
+    time.sleep(initial_wait)
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        version = host.version()
+        if version is not None and version != changed_from:
+            click.echo("")
+            return version
+        click.echo(".", nl=False)
+        time.sleep(interval)
+
+    click.echo("")
+    raise click.ClickException(f"{host.hostname} did not come back within {timeout}s")
+
+
+@device.command("update")
+@click.argument("target")
+@click.option(
+    "--stage",
+    is_flag=True,
+    help="Only preload the image onto devices; do not drain or reboot.",
+)
+@click.option(
+    "--drain-wait",
+    default=5,
+    show_default=True,
+    help="Seconds to wait after the BGP shutdown before rebooting.",
+)
+@click.option(
+    "--yes", is_flag=True, help="Do not ask for confirmation before rebooting."
+)
+@click.option(
+    "--filename",
+    default="network.yml",
+    show_default=True,
+    type=click.Path(exists=True),
+)
+def device_update(
+    target: str, stage: bool, drain_wait: int, yes: bool, filename: str
+) -> None:
+    """Update TARGET (a hostname, or "all") to the latest image."""
+    hosts, _links, _global_meta = load_network(filename)
+
+    # Fail fast on Vault problems in the main thread, and prime the shared
+    # secret cache so probes and vendor calls never touch Vault themselves.
+    VaultSecrets().vyos_api_password
+
+    targets = []
+    for host in _resolve_targets(hosts, target):
+        if host.image_provider is None:
+            click.echo(
+                f"skip {host.hostname}: no image provider for {host.devicetype!r}"
+            )
+            continue
+        targets.append(host)
+
+    if not targets:
+        raise click.ClickException("no updatable devices selected")
+
+    # Reboot leaves before spines so the spine safety gate stays meaningful.
+    targets.sort(key=lambda h: h.is_spine)
+
+    all_vyos = [h for h in hosts if h.devicetype == "vyos"]
+
+    def run_update(host: BaseHost) -> str:
+        provider = host.image_provider
+        if provider is None:  # filtered above; keeps the type checker honest
+            raise click.ClickException(f"{host.hostname}: no image provider")
+        prefix = f"[{host.hostname}]"
+
+        address = host.management_ip
+        if not address:
+            raise click.ClickException(f"{host.hostname}: no reachable address")
+
+        click.echo(f"{prefix} checking running version via {address}")
+        version = host.version()
+        if version is None:
+            raise click.ClickException(
+                f"{host.hostname}: API unreachable via {address}"
+            )
+        if provider.is_current(version):
+            return "already current"
+
+        image = provider.download()
+        latest = provider.latest_version
+
+        if stage:
+            return host.update_host(str(image), stage=True, version=latest)
+
+        click.echo(f"{prefix} running fleet safety checks")
+        host.safe_to_reboot(all_vyos)
+
+        if not yes and not click.confirm(
+            f"{prefix} install, drain BGP, and reboot now?"
+        ):
+            result = host.update_host(str(image), stage=True, version=latest)
+            return f"{result} (reboot declined)"
+
+        host.update_host(str(image), stage=False, drain_wait=drain_wait, version=latest)
+
+        click.echo(f"{prefix} device rebooting")
+        new_version = wait_for_device_alive(host, changed_from=version)
+        if not provider.is_current(new_version):
+            raise click.ClickException(
+                f"{host.hostname} came back on {new_version!r}, expected {latest}"
+            )
+
+        warning = host.verify_routing()
+        if warning:
+            click.echo(f"{prefix} warning: {warning}")
+
+        return f"updated to {latest}"
+
+    results = []
+    failed = False
+    for host in targets:
+        try:
+            results.append([host.hostname, run_update(host)])
+        except Exception as e:  # noqa: BLE001 - report per-device failures
+            message = e.message if isinstance(e, click.ClickException) else str(e)
+            results.append([host.hostname, f"failed: {message}"])
+            failed = True
+            if not stage:
+                click.echo(
+                    "aborting remaining devices: a failed update reduces"
+                    " redundancy for the rest of the fleet",
+                    err=True,
+                )
+                break
+
+    click.echo("")
+    _print_table(["DEVICE", "RESULT"], results)
+
+    if failed:
+        raise SystemExit(1)
+
+
+@device.command("cleanup")
+@click.argument("target")
+@click.option(
+    "--filename",
+    default="network.yml",
+    show_default=True,
+    type=click.Path(exists=True),
+)
+def device_cleanup(target: str, filename: str) -> None:
+    """Run housekeeping on TARGET (a hostname, or "all").
+
+    For VyOS this removes system images that are neither running nor the
+    default boot image.
+    """
+    hosts, _links, _global_meta = load_network(filename)
+    candidates = _resolve_targets(hosts, target)
+
+    results = []
+    failed = False
+    for host in candidates:
+        try:
+            actions = host.cleanup_host()
+        except NotImplementedError as e:
+            if target != "all":
+                raise click.ClickException(str(e)) from e
+            results.append([host.hostname, "skipped: no cleanup support"])
+            continue
+        except Exception as e:  # noqa: BLE001 - report per-device failures
+            results.append([host.hostname, f"failed: {e}"])
+            failed = True
+            continue
+
+        for action in actions:
+            click.echo(f"[{host.hostname}] {action}")
+        results.append([host.hostname, "; ".join(actions) or "nothing to do"])
+
+    click.echo("")
+    _print_table(["DEVICE", "RESULT"], results)
+
+    if failed:
+        raise SystemExit(1)

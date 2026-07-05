@@ -1,6 +1,18 @@
 [tool.uv.workspace]
 members = ["projects/barf", "scripts"]
 
+[tool.ty.src]
+include = ["projects/barf"]
+# Not ty-clean yet; drop these from the exclude list as they get fixed.
+# Tests are excluded because their duck-typed fakes (SimpleNamespace
+# hosts etc.) are intentional.
+exclude = [
+    "projects/barf/barf/cli/generate.py",
+    "projects/barf/barf/model/wireguard.py",
+    "projects/barf/barf/util/netbox.py",
+    "projects/barf/tests",
+]
+
 [tool.ruff]
 line-length = 120
 
@@ -16,5 +28,6 @@ indent-style = "space"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.1.1",
     "ruff>=0.15.18",
 ]

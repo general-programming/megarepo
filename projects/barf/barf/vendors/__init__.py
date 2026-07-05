@@ -1,21 +1,27 @@
 from __future__ import annotations
 
+import concurrent.futures
 import functools
 import ipaddress
+import logging
 import secrets
 import socket
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
-from typing import TYPE_CHECKING, Callable, List, Optional
+from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
 import dns.resolver
 import hvac
+import hvac.exceptions
 
 from barf.model import get_vault
 from barf.model.wireguard import get_wg_keys
 
 if TYPE_CHECKING:
     from barf.model.wireguard import WGKeypair
+    from barf.util.images import ImageProvider
+
+log = logging.getLogger(__name__)
 
 
 # ruff: noqa: E402
@@ -196,16 +202,18 @@ class BaseHost:
         self,
         hostname: str,
         role: str,
-        address: ipaddress.IPv4Interface = None,
-        ip6_address: ipaddress.IPv46nterface = None,
-        asn: int = None,
-        interfaces: List[HostInterface] = None,
-        nameservers: List[str] = None,
-        extra_config: Optional[str] = None,
+        # Addresses may be strs straight from network.yml or ipaddress
+        # interfaces from Netbox.
+        address: Optional[ipaddress.IPv4Interface | str] = None,
+        ip6_address: Optional[ipaddress.IPv6Interface | str] = None,
+        asn: Optional[int] = None,
+        interfaces: Optional[List[HostInterface]] = None,
+        nameservers: Optional[List[str]] = None,
+        extra_config: Optional[List[str]] = None,
         snmp_location: Optional[str] = None,
-        networks: List[str] = None,
+        networks: Optional[List[str]] = None,
         cloud_init: bool = False,
-        vlan_map: Optional[NetworkVLAN] = None,
+        vlan_map: Optional[Dict[int, NetworkVLAN]] = None,
         config_context: Optional[dict] = None,
         **kwargs,
     ):
@@ -233,9 +241,8 @@ class BaseHost:
     def devicetype(self):
         return self.DEVICETYPE
 
-    @staticmethod
     @property
-    def can_bfd():
+    def can_bfd(self) -> bool:
         return False
 
     @property
@@ -285,7 +292,10 @@ class BaseHost:
 
         return self.secret(
             self.hostname,
-            functools.partial(tacacs_generator, f"{self.address.compressed}/32"),
+            functools.partial(
+                tacacs_generator,
+                f"{ipaddress.ip_interface(str(self.address)).ip.compressed}/32",
+            ),
             secret_path="tacacs-keys",
         )["key"]
 
@@ -334,7 +344,9 @@ class BaseHost:
         return list(hosts)
 
     @property
-    def management_address(self) -> Optional[ipaddress.IPv4Interface]:
+    def management_address(
+        self,
+    ) -> Optional[ipaddress.IPv4Interface | ipaddress.IPv6Interface]:
         """Return the management address for this host."""
         for interface in self.interfaces:
             if interface.management:
@@ -345,16 +357,12 @@ class BaseHost:
 
         return None
 
-    @property
-    @lru_cache
-    def management_ip(self) -> Optional[str]:
-        """Return the first endpoint for this host answering on port 443.
+    def _endpoint_candidates(self) -> List[str]:
+        """Addresses to try for reaching this host, most specific first.
 
-        Probes the FQDN, management address, and host addresses in order,
-        mirroring ``actions.push_config``, then falls back to interface
-        addresses with external (global) ones first. The check runs once
-        per host; the result is cached for the lifetime of the object.
-        Returns ``None`` if nothing is reachable.
+        FQDN, management address, and host addresses in order, mirroring
+        ``actions.push_config``, then interface addresses with external
+        (global) ones first, deduplicated.
         """
         candidates = [f"{self.hostname}.generalprogramming.org"]
         if self.management_address:
@@ -376,14 +384,158 @@ class BaseHost:
         interface_ips.sort(key=lambda ip: not ip.is_global)
         candidates.extend(ip.compressed for ip in interface_ips)
 
-        for address in dict.fromkeys(candidates):
+        return list(dict.fromkeys(candidates))
+
+    @lru_cache
+    def _probe_endpoint(self, port: int) -> Optional[str]:
+        """The first candidate answering on ``port``, probed once per host."""
+        for address in self._endpoint_candidates():
             try:
-                with socket.create_connection((address, 443), timeout=2):
+                with socket.create_connection((address, port), timeout=2):
                     return address
             except OSError:
                 continue
 
         return None
+
+    @property
+    def management_ip(self) -> Optional[str]:
+        """The first endpoint answering on the HTTPS API port (443)."""
+        return self._probe_endpoint(443)
+
+    @property
+    def ssh_ip(self) -> Optional[str]:
+        """The first endpoint answering on SSH (22).
+
+        Probed separately from ``management_ip``: sshd and the API can be
+        bound to different addresses (as the fleet's stale listen-address
+        drift demonstrated).
+        """
+        return self._probe_endpoint(22)
+
+    def require_management_ip(self) -> str:
+        """``management_ip``, raising when nothing is reachable."""
+        address = self.management_ip
+        if not address:
+            raise RuntimeError(f"{self.hostname}: no reachable address")
+        return address
+
+    def human_version(self) -> str:
+        """The running software version, e.g. ``2026.06.30-0048-rolling``.
+
+        Raises when the device is unreachable. Vendors that can report
+        their version override this.
+        """
+        raise NotImplementedError(
+            f"{self.devicetype!r} devices do not report a version"
+        )
+
+    def version(self) -> Optional[str]:
+        """``human_version``, or None when unsupported or unreachable.
+
+        Doubles as the fleet liveness probe, so placeholder output ("-",
+        empty) from a half-booted device also counts as not alive.
+        """
+        try:
+            reported = self.human_version()
+        except Exception:  # noqa: BLE001 - unreachable is an expected outcome
+            return None
+
+        if reported in ("", "-"):
+            return None
+        return reported
+
+    def uptime(self) -> str:
+        """The device's human-readable uptime.
+
+        Vendors that can report their uptime override this.
+        """
+        raise NotImplementedError(
+            f"{self.devicetype!r} devices do not report an uptime"
+        )
+
+    def safe_to_reboot(self, fleet: List[BaseHost]) -> bool:
+        """Whether rebooting this host leaves the fleet redundant.
+
+        Probes the other fleet members in parallel and raises
+        RuntimeError with the reason if this reboot would take down the
+        last live spine or leaf.
+        """
+        others = [h for h in fleet if h.hostname != self.hostname]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
+            alive = dict(
+                zip(
+                    (other.hostname for other in others),
+                    pool.map(lambda h: h.version() is not None, others),
+                )
+            )
+
+        spines = [o.hostname for o in others if o.is_spine and alive[o.hostname]]
+        leaves = [o.hostname for o in others if not o.is_spine and alive[o.hostname]]
+        log.debug("Alive spines: %s, alive leaves: %s", spines, leaves)
+
+        if self.is_spine and not spines:
+            raise RuntimeError(
+                f"refusing to reboot {self.hostname}: no other spine is online"
+            )
+        if not leaves:
+            raise RuntimeError(
+                f"refusing to reboot {self.hostname}: no other leaf is alive"
+            )
+        return True
+
+    @property
+    def image_provider(self) -> Optional["ImageProvider"]:
+        """The upstream image provider for this devicetype, if any."""
+        # Imported lazily to keep barf.util optional at import time.
+        from barf.util.images import PROVIDERS
+
+        return PROVIDERS.get(self.devicetype)
+
+    def verify_routing(self) -> Optional[str]:
+        """Post-reboot routing health check.
+
+        Returns a human-readable warning, or None when healthy or not
+        applicable. Vendors with a routing plane override this.
+        """
+        return None
+
+    def update_host(
+        self,
+        filename: str,
+        stage: bool,
+        drain_wait: int = 5,
+        version: Optional[str] = None,
+    ) -> str:
+        """Stage a new system image onto the device, optionally rebooting.
+
+        Args:
+            filename: Local path of the image to push.
+            stage: Only preload the image; do not drain or reboot.
+            drain_wait: Seconds to wait for traffic to drain before the
+                reboot, where the vendor supports draining.
+            version: Image version; vendors derive it from the filename
+                when not given.
+
+        Returns:
+            A short human-readable result.
+
+        Vendors that support in-place image updates override this.
+        """
+        raise NotImplementedError(
+            f"{self.devicetype!r} devices do not support image updates"
+        )
+
+    def cleanup_host(self) -> List[str]:
+        """Run housekeeping tasks on the device.
+
+        Returns:
+            Human-readable descriptions of the actions taken.
+
+        Vendors with housekeeping tasks (e.g. old image removal) override
+        this.
+        """
+        raise NotImplementedError(f"{self.devicetype!r} devices do not support cleanup")
 
     def secret(
         self,

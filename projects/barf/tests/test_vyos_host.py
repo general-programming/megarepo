@@ -1,0 +1,131 @@
+from types import SimpleNamespace
+
+import pytest
+
+from barf.vendors import BaseHost
+from barf.vendors.vyos import VyOSHost, _parse_uptime, _parse_version
+
+SHOW_VERSION = """
+Version:          VyOS 2026.03.28-0028-rolling
+Release train:    current
+
+Built by:         autobuild@vyos.net
+Built on:         Sat 28 Mar 2026 02:48 UTC
+"""
+
+SHOW_UPTIME = """
+Uptime: 9w 6h 53m 36s
+
+Load average:
+1  minute:   0.00%
+"""
+
+
+def test_parse_version_strips_vyos_prefix():
+    assert _parse_version(SHOW_VERSION) == "2026.03.28-0028-rolling"
+
+
+def test_parse_version_without_prefix():
+    assert _parse_version("Version: 1.5.0") == "1.5.0"
+
+
+def test_parse_version_fallback_first_line():
+    assert _parse_version("VyOS 2026.06.30-0048-rolling\nsomething") == (
+        "2026.06.30-0048-rolling"
+    )
+
+
+def test_parse_version_empty():
+    assert _parse_version("") == "-"
+
+
+def test_parse_uptime():
+    assert _parse_uptime(SHOW_UPTIME) == "9w 6h 53m 36s"
+
+
+def test_parse_uptime_fallback_first_line():
+    assert _parse_uptime("up 4 days\n") == "up 4 days"
+
+
+def test_parse_uptime_empty():
+    assert _parse_uptime("") == "-"
+
+
+def make_host(hostname: str = "testbox") -> VyOSHost:
+    return VyOSHost(hostname=hostname, role="vpn", asn=64512)
+
+
+@pytest.fixture
+def api(monkeypatch):
+    """Fake the API surface _api_show touches; returns a settable output."""
+    env = SimpleNamespace(output="")
+    monkeypatch.setattr(VyOSHost, "management_ip", "10.0.0.9")
+    monkeypatch.setattr(
+        "barf.util.secrets.VaultSecrets",
+        lambda: SimpleNamespace(vyos_api_password="key"),
+    )
+    monkeypatch.setattr(
+        "barf.util.vyos_api.vyos_api_show",
+        lambda address, key, path, timeout=10: env.output,
+    )
+    return env
+
+
+def test_human_version_via_api(api):
+    api.output = SHOW_VERSION
+    assert make_host().human_version() == "2026.03.28-0028-rolling"
+
+
+def test_uptime_via_api(api):
+    api.output = SHOW_UPTIME
+    assert make_host().uptime() == "9w 6h 53m 36s"
+
+
+def test_version_treats_placeholder_output_as_dead(api):
+    # version() is the liveness probe: a half-booted API answering with
+    # empty data must not count as alive.
+    api.output = ""
+    assert make_host().human_version() == "-"
+    assert make_host().version() is None
+
+
+def test_base_version_is_none_when_unsupported():
+    host = BaseHost(hostname="testbox", role="vpn")
+    with pytest.raises(NotImplementedError):
+        host.human_version()
+    # version() wraps human_version and swallows the failure.
+    assert host.version() is None
+
+
+def alive_host(hostname: str, alive: bool = True) -> VyOSHost:
+    host = VyOSHost(hostname=hostname, role="vpn", asn=64512)
+    host.version = (lambda: "x") if alive else (lambda: None)
+    return host
+
+
+def test_safe_to_reboot_with_redundancy():
+    me = alive_host("fmt2-vpn-leaf-1")
+    fleet = [me, alive_host("fmt2-vpn-spine-1"), alive_host("fmt2-vpn-leaf-2")]
+    assert me.safe_to_reboot(fleet) is True
+
+
+def test_safe_to_reboot_refuses_last_spine():
+    me = alive_host("fmt2-vpn-spine-1")
+    fleet = [
+        me,
+        alive_host("fmt2-vpn-spine-2", alive=False),
+        alive_host("fmt2-vpn-leaf-1"),
+    ]
+    with pytest.raises(RuntimeError, match="no other spine is online"):
+        me.safe_to_reboot(fleet)
+
+
+def test_safe_to_reboot_refuses_last_leaf():
+    me = alive_host("fmt2-vpn-leaf-1")
+    fleet = [
+        me,
+        alive_host("fmt2-vpn-spine-1"),
+        alive_host("fmt2-vpn-leaf-2", alive=False),
+    ]
+    with pytest.raises(RuntimeError, match="no other leaf is alive"):
+        me.safe_to_reboot(fleet)
