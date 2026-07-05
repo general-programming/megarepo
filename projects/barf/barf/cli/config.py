@@ -13,13 +13,17 @@ from barf.vendors import BaseHost
 log = logging.getLogger(__name__)
 
 
-def _load_targets(filename: str, target: str) -> Tuple[List[BaseHost], list, dict]:
-    """Load network.yml and select the templatable hosts for TARGET."""
+def _load_targets(
+    filename: str, targets: Tuple[str, ...]
+) -> Tuple[List[BaseHost], list, dict]:
+    """Load network.yml and select the templatable hosts for TARGETS."""
     hosts, links, global_meta = load_network(filename)
-    targets = [h for h in resolve_targets(hosts, target) if h.is_templatable]
-    if not targets:
-        raise click.ClickException(f"no templatable devices selected by {target!r}")
-    return targets, links, global_meta
+    selected = [h for h in resolve_targets(hosts, targets) if h.is_templatable]
+    if not selected:
+        raise click.ClickException(
+            f"no templatable devices selected by {', '.join(targets)!r}"
+        )
+    return selected, links, global_meta
 
 
 def _secrets():
@@ -44,21 +48,21 @@ def config():
 
 
 @config.command("generate")
-@click.argument("target")
+@click.argument("targets", nargs=-1, required=True)
 @_FILENAME_OPTION
-def config_generate(target: str, filename: str) -> None:
-    """Render configs for TARGET (a hostname, or "all") into output/."""
-    targets, links, global_meta = _load_targets(filename, target)
+def config_generate(targets: Tuple[str, ...], filename: str) -> None:
+    """Render configs for TARGETS (hostnames, or "all") into output/."""
+    targets_hosts, links, global_meta = _load_targets(filename, targets)
     secrets = _secrets()
 
-    for host in targets:
+    for host in targets_hosts:
         rendered = render_host_config(host, links, global_meta, secrets)
         path = write_rendered_config(host, rendered)
         click.echo(f"[{host.hostname}] wrote {path}")
 
 
 @config.command("diff")
-@click.argument("target")
+@click.argument("targets", nargs=-1, required=True)
 @_FILENAME_OPTION
 @click.option(
     "--show-device-only",
@@ -71,15 +75,15 @@ def config_generate(target: str, filename: str) -> None:
     help="Do not redact secret values in the diff output.",
 )
 def config_diff(
-    target: str, filename: str, show_device_only: bool, show_secrets: bool
+    targets: Tuple[str, ...], filename: str, show_device_only: bool, show_secrets: bool
 ) -> None:
-    """Diff rendered configs against TARGET (a hostname, or "all")."""
-    targets, links, global_meta = _load_targets(filename, target)
+    """Diff rendered configs against TARGETS (hostnames, or "all")."""
+    targets_hosts, links, global_meta = _load_targets(filename, targets)
     secrets = _secrets()
 
     results = []
     failed = False
-    for host in targets:
+    for host in targets_hosts:
         rendered = render_host_config(host, links, global_meta, secrets)
         try:
             diff = host.diff_config(
@@ -108,13 +112,13 @@ def config_diff(
 
 
 @config.command("deploy")
-@click.argument("target")
+@click.argument("targets", nargs=-1, required=True)
 @_FILENAME_OPTION
 @click.option(
     "--yes", is_flag=True, help="Do not ask for confirmation before deploying."
 )
-def config_deploy(target: str, filename: str, yes: bool) -> None:
-    """Deploy rendered configs to TARGET (a hostname, or "all").
+def config_deploy(targets: Tuple[str, ...], filename: str, yes: bool) -> None:
+    """Deploy rendered configs to TARGETS (hostnames, or "all").
 
     Configs are merged into the device's running config, except for
     config sections the vendor declares as owned (e.g. VyOS
@@ -122,12 +126,12 @@ def config_deploy(target: str, filename: str, yes: bool) -> None:
     truth and stale device config is deleted. The diff is shown and
     confirmed per device before anything is pushed.
     """
-    targets, links, global_meta = _load_targets(filename, target)
+    targets_hosts, links, global_meta = _load_targets(filename, targets)
     secrets = _secrets()
 
     results = []
     failed = False
-    for host in targets:
+    for host in targets_hosts:
         rendered = render_host_config(host, links, global_meta, secrets)
         try:
             diff = host.diff_config(rendered)

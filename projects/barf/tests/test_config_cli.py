@@ -154,3 +154,72 @@ def test_deploy_declined_pushes_nothing(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     assert host.pushed == []
     assert "declined" in result.output
+
+
+def test_diff_multiple_targets(monkeypatch, tmp_path):
+    hosts = [
+        FakeHost(
+            "box1", diff=DeployDiff(text="", has_changes=False, summary="no changes")
+        ),
+        FakeHost(
+            "box2", diff=DeployDiff(text="+ set x", has_changes=True, summary="+1")
+        ),
+        FakeHost(
+            "box3", diff=DeployDiff(text="", has_changes=False, summary="no changes")
+        ),
+    ]
+    filename = wire(monkeypatch, tmp_path, hosts)
+
+    result = CliRunner().invoke(
+        config, ["diff", "box1", "box3", "--filename", filename]
+    )
+    assert result.exit_code == 0, result.output
+    assert "box1" in result.output
+    assert "box3" in result.output
+    # box2 was not selected.
+    assert "box2" not in result.output
+
+
+def test_deploy_multiple_targets(monkeypatch, tmp_path):
+    hosts = [
+        FakeHost(
+            "box1", diff=DeployDiff(text="+ set x", has_changes=True, summary="+1")
+        ),
+        FakeHost(
+            "box2", diff=DeployDiff(text="+ set y", has_changes=True, summary="+1")
+        ),
+    ]
+    filename = wire(monkeypatch, tmp_path, hosts)
+
+    result = CliRunner().invoke(
+        config, ["deploy", "box1", "box2", "--yes", "--filename", filename]
+    )
+    assert result.exit_code == 0, result.output
+    assert hosts[0].pushed and hosts[1].pushed
+
+
+def test_all_is_mutually_exclusive_with_named_targets(monkeypatch, tmp_path):
+    filename = wire(monkeypatch, tmp_path, [FakeHost("box1")])
+
+    result = CliRunner().invoke(config, ["diff", "all", "box1", "--filename", filename])
+    assert result.exit_code != 0
+    assert "cannot be combined" in result.output
+
+
+def test_duplicate_targets_deduplicated(monkeypatch, tmp_path):
+    host = FakeHost(
+        "box1", diff=DeployDiff(text="", has_changes=False, summary="no changes")
+    )
+    filename = wire(monkeypatch, tmp_path, [host])
+
+    result = CliRunner().invoke(
+        config, ["diff", "box1", "box1", "--filename", filename]
+    )
+    assert result.exit_code == 0, result.output
+    assert result.output.count("box1") == 1
+
+
+def test_no_targets_is_a_usage_error(monkeypatch, tmp_path):
+    filename = wire(monkeypatch, tmp_path, [FakeHost("box1")])
+    result = CliRunner().invoke(config, ["diff", "--filename", filename])
+    assert result.exit_code != 0
