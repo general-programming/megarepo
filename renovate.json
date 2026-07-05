@@ -32,7 +32,8 @@
         "ghcr.io/theessem/mastodon",
         "ghcr.io/theessem/mastodon-streaming"
       ],
-      "versioning": "regex:^nightly\\.(?<major>\\d+)-(?<minor>\\d+)-(?<patch>\\d+)$"
+      "versioning": "regex:^nightly\\.(?<major>\\d+)-(?<minor>\\d+)-(?<patch>\\d+)$",
+      "groupName": "mastodon"
     }
   ]
 }
