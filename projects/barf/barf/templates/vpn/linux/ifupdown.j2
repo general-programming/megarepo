@@ -1,0 +1,24 @@
+{%- set our_side = link.side_a if link.side_a == device else link.side_b -%}
+# wg{{ link.link_id }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }} (barf-managed; deploy overwrites)
+auto wg{{ link.link_id }}
+{% if link.unnumbered %}
+# Unnumbered fabric link (RFC 5549): no global address at all, only a
+# deterministic link-local (fe80::<host id>) the BGP session runs on.
+# `inet manual` because `inet static` refuses to parse without an
+# address -- but manual applies no mtu and does not bring the link up,
+# so both happen explicitly below.
+iface wg{{ link.link_id }} inet manual
+        pre-up ip link add $IFACE mtu 1420 type wireguard
+        pre-up wg setconf $IFACE /etc/wireguard/$IFACE.conf
+        post-up ip link set $IFACE up
+        post-up ip addr add fe80::{{ device.host_id }}/64 dev $IFACE
+        post-down ip link del $IFACE
+{% else %}
+iface wg{{ link.link_id }} inet static
+        address {{ link.get_ip(our_side) }}
+        netmask 255.255.255.254
+        mtu 1420
+        pre-up ip link add $IFACE type wireguard
+        pre-up wg setconf $IFACE /etc/wireguard/$IFACE.conf
+        post-down ip link del $IFACE
+{% endif %}

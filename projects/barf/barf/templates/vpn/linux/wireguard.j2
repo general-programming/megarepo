@@ -1,0 +1,17 @@
+{%- set our_side = link.side_a if link.side_a == device else link.side_b -%}
+{%- set other_peer = link.side_b if link.side_a == device else link.side_a -%}
+# wg{{ link.link_id }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }} (barf-managed; deploy overwrites)
+[Interface]
+ListenPort = {{ link.link_id }}
+PrivateKey = {{ link.wg_privkey(our_side) }}
+
+[Peer]
+PublicKey = {{ link.wg_pubkey(other_peer) }}
+# Route anything the fabric learns through the tunnel; BGP decides.
+# ::/0 matters even on v4-only networks: unnumbered BGP runs over
+# link-local IPv6, which WireGuard drops unless allowed here.
+AllowedIPs = 0.0.0.0/0, ::/0
+{% if other_peer.wg_endpoint %}
+Endpoint = {{ other_peer.wg_endpoint }}:{{ link.link_id }}
+PersistentKeepalive = 10
+{% endif %}

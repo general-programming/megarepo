@@ -33,11 +33,25 @@ class DeviceSSH:
     a fallback.
     """
 
-    def __init__(self, host: "BaseHost", address: str, connect_timeout: int = 10):
+    def __init__(
+        self,
+        host: "BaseHost",
+        address: str,
+        connect_timeout: int = 10,
+        username: Optional[str] = None,
+    ):
+        """Connect to ``address``.
+
+        Args:
+            host: The device this connection belongs to.
+            address: The address to connect to.
+            connect_timeout: Socket timeout for each auth attempt.
+            username: Log in as this user with keys only, instead of
+                the shared supertech user (whose Vault password is the
+                fallback). Linux hosts are managed as root.
+        """
         self.host = host
         self.address = address
-
-        self.username, password = get_supertech_creditentials(host)
 
         self.client = paramiko.SSHClient()
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
@@ -46,14 +60,18 @@ class DeviceSSH:
         # every offered agent key against MaxAuthTries, so one combined
         # attempt can get the transport dropped ("saw EOF") before password
         # auth is ever tried -- and key-only fleets never need the password.
-        attempts = [
-            {"allow_agent": True, "look_for_keys": True},
-            {
-                "password": password,
-                "allow_agent": False,
-                "look_for_keys": False,
-            },
-        ]
+        attempts = [{"allow_agent": True, "look_for_keys": True}]
+        if username:
+            self.username = username
+        else:
+            self.username, password = get_supertech_creditentials(host)
+            attempts.append(
+                {
+                    "password": password,
+                    "allow_agent": False,
+                    "look_for_keys": False,
+                }
+            )
         errors = []
         for extra_args in attempts:
             try:
@@ -152,6 +170,16 @@ class DeviceSSH:
         raise RuntimeError(
             f"md5 mismatch for {remote} on {self.host.hostname} after {attempts} copies"
         )
+
+    def write_file(self, remote: str, content: str, mode: int = 0o644) -> None:
+        """Write ``content`` to ``remote`` over SFTP, setting ``mode``."""
+        sftp = self.client.open_sftp()
+        try:
+            with sftp.open(remote, "w") as f:
+                f.write(content)
+            sftp.chmod(remote, mode)
+        finally:
+            sftp.close()
 
     def _upload_script(self, name: str, content: str) -> str:
         """Upload a script to /tmp, returning its remote path."""

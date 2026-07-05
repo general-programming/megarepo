@@ -1,0 +1,111 @@
+# /etc/bird/conf.d/genprog.conf - barf-managed fabric for {{ device.hostname }}.
+# DO NOT HAND-EDIT: `barf config deploy {{ device.hostname }}` overwrites it.
+#
+# Contents:
+#   GENPROG_ASN       -- this host's ASN from network.yml.
+#   genprog_export    -- what the fabric hears from us: our originated
+#                        prefixes plus routes learned over BGP.
+#   genprog_originate -- static (reject) anchors for network.yml
+#                        `networks:`; bird only exports routes that
+#                        exist in a table, so announcing a prefix means
+#                        anchoring it here. The base config keeps these
+#                        anchors out of the kernel.
+#   genprog_fabric    -- shared session settings; every WireGuard
+#                        fabric link gets one `protocol bgp` from it.
+#   radv              -- RA beacon on unnumbered interfaces. FRR's
+#                        `neighbor <if> interface v6only` learns its
+#                        peer from received RAs; without this beacon
+#                        the VyOS side idles forever. `default
+#                        lifetime 0` = never advertise as a gateway.
+#   bfd               -- fast liveness on the wg fabric interfaces.
+#
+# Unnumbered links (RFC 5549): one IPv6 link-local session per
+# interface carries BOTH address families; IPv4 routes ride IPv6
+# next-hops via the extended-nexthop capability, and the kernel
+# installs them as `via inet6 fe80::...`. Numbered links keep the
+# classic session on the link /31.
+define GENPROG_ASN = {{ device.asn }};
+
+filter genprog_export {
+	if source ~ [ RTS_STATIC, RTS_BGP ] then accept;
+	reject;
+}
+{% set import_filter = device.bird.get("import_filter") %}
+{% set nets = namespace(v4=[], v6=[]) %}
+{% for network in device.networks %}
+{% if ":" in network %}
+{% set nets.v6 = nets.v6 + [network] %}
+{% else %}
+{% set nets.v4 = nets.v4 + [network] %}
+{% endif %}
+{% endfor %}
+{% if nets.v4 %}
+
+protocol static genprog_originate {
+	ipv4;
+{% for network in nets.v4 %}
+	route {{ network }} reject;
+{% endfor %}
+}
+{% endif %}
+{% if nets.v6 %}
+
+protocol static genprog_originate6 {
+	ipv6;
+{% for network in nets.v6 %}
+	route {{ network }} reject;
+{% endfor %}
+}
+{% endif %}
+
+template bgp genprog_fabric {
+	local as GENPROG_ASN;
+	hold time 30;
+	keepalive time 10;
+	ipv4 {
+		import {% if import_filter %}filter {{ import_filter }}{% else %}all{% endif %};
+		export filter genprog_export;
+		next hop self;
+		extended next hop on;
+	};
+	ipv6 {
+		import {% if import_filter %}filter {{ import_filter }}{% else %}all{% endif %};
+		export filter genprog_export;
+		next hop self;
+	};
+}
+{% for link in vpn_links %}
+{% set our_side = link.side_a if link.side_a == device else link.side_b %}
+{% set other_peer = link.side_b if link.side_a == device else link.side_a %}
+{% set pname = other_peer.hostname | replace("-", "_") %}
+
+protocol bgp {{ pname }} from genprog_fabric {
+{% if link.unnumbered %}
+	# Passive: the FRR side dials our link-local once it sees an RA.
+	interface "wg{{ link.link_id }}";
+	neighbor range fe80::/10 as {{ other_peer.asn }};
+	dynamic name "{{ pname }}_";
+{% else %}
+	source address {{ link.get_ip(our_side) }};
+	neighbor {{ link.get_ip(other_peer) }} as {{ other_peer.asn }};
+{% endif %}
+}
+{% endfor %}
+{% set unnumbered_links = vpn_links | selectattr("unnumbered") | list %}
+{% if unnumbered_links %}
+
+protocol radv {
+	interface {% for link in unnumbered_links %}"wg{{ link.link_id }}"{{ ", " if not loop.last else "" }}{% endfor %} {
+		max ra interval 15;
+		default lifetime 0;
+	};
+}
+{% endif %}
+
+protocol bfd {
+	interface "wg*" {
+		min rx interval 150 ms;
+		min tx interval 150 ms;
+		idle tx interval 1500 ms;
+	};
+}

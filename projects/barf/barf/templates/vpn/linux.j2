@@ -1,124 +1,43 @@
+#!/bin/sh
+# Rendered by barf for {{ device.hostname }}.
+#
+# One quoted heredoc per barf-owned file. `barf config diff|deploy`
+# parses these BARF_FILE blocks into a path -> content map and manages
+# the files over SSH; running this script by hand writes the exact
+# same contents (the delimiter is quoted, so nothing expands).
+set -e
+mkdir -p /etc/wireguard /etc/network/interfaces.d /etc/bird/conf.d
+
 {% for link in vpn_links %}
-    {%- set interface_name = "wg" ~ link.link_id -%}
-    {%- set port = link.link_id -%}
-    {%- if link.side_a == device -%}
-        {%- set our_side = link.side_a -%}
-        {%- set other_peer = link.side_b -%}
-    {%- else -%}
-        {%- set our_side = link.side_b -%}
-        {%- set other_peer = link.side_a -%}
-    {%- endif -%}
-cat << EOF > /etc/wireguard/{{ interface_name }}.conf
-# {{ interface_name }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }}
-[Interface]
-ListenPort = {{ port }}
-PrivateKey = {{ link.wg_privkey(our_side) }}
+cat << 'BARF_FILE' > /etc/wireguard/wg{{ link.link_id }}.conf
+{% include "vpn/linux/wireguard.j2" %}
+BARF_FILE
+chmod 600 /etc/wireguard/wg{{ link.link_id }}.conf
 
-[Peer]
-PublicKey = {{ link.wg_pubkey(other_peer) }}
-AllowedIPs = 0.0.0.0/0, ::/0
-    {%- if other_peer.address %}
+cat << 'BARF_FILE' > /etc/network/interfaces.d/wg{{ link.link_id }}.conf
+{% include "vpn/linux/ifupdown.j2" %}
+BARF_FILE
 
-Endpoint = {{ other_peer.address }}:{{ port }}
-PersistentKeepalive = 10
-    {% endif %}
-EOF
-cat << EOF > /etc/network/interfaces.d/{{ interface_name }}.conf
-# {{ interface_name }} - {{ link.side_a.hostname }} -> {{ link.side_b.hostname }}
-auto {{ interface_name }}
-iface {{ interface_name }} inet static
-{% if not link.unnumbered %}
-        address {{ link.get_ip(our_side) }}
+{% endfor %}
+{% set router_id = device.bird.get("router_id") %}
+{% if not router_id %}
+{% set numbered = namespace(ip=None) %}
+{% for link in vpn_links if not link.unnumbered %}
+{% set our_side = link.side_a if link.side_a == device else link.side_b %}
+{% if numbered.ip is none %}
+{% set numbered.ip = link.get_ip(our_side) %}
 {% endif %}
-        netmask  255.255.255.254
-        mtu 1420
-        pre-up ip link add \$IFACE type wireguard
-        pre-up wg setconf \$IFACE /etc/wireguard/\$IFACE.conf
-        post-down ip link del \$IFACE
-EOF
 {% endfor %}
+{% set router_id = numbered.ip or "192.0.2.1" %}
+{% endif %}
+cat << 'BARF_FILE' > /etc/bird/bird.conf
+{% include "vpn/linux/bird.conf.j2" %}
+BARF_FILE
 
-{# --- stock bird2 config: base + a conf.d/*.conf include --- #}
-{% set router_id = namespace(value=None) %}
-{% for link in vpn_links %}
-    {%- set our_side = link.side_a if link.side_a == device else link.side_b -%}
-    {%- if router_id.value is none and not link.unnumbered -%}
-        {%- set router_id.value = link.get_ip(our_side) -%}
-    {%- endif -%}
-{% endfor %}
-mkdir -p /etc/bird/conf.d
-cat << EOF > /etc/bird/bird.conf
-# barf-managed stock config. Drop-in configs live in /etc/bird/conf.d/*.conf
-# (genprog.conf is the barf-managed fabric; add your own files alongside it).
-log syslog all;
-router id {{ router_id.value or device.management or "192.0.2.1" }};
+cat << 'BARF_FILE' > /etc/bird/conf.d/genprog.conf
+{% include "vpn/linux/genprog.conf.j2" %}
+BARF_FILE
 
-protocol device {
-	scan time 10;
-}
-
-protocol kernel {
-	ipv4 {
-		export all;
-	};
-}
-
-protocol kernel {
-	ipv6 {
-		export all;
-	};
-}
-
-include "/etc/bird/conf.d/*.conf";
-EOF
-
-{# --- the fabric: BGP to each spine + BFD, dual-stack --- #}
-cat << EOF > /etc/bird/conf.d/genprog.conf
-# barf-managed fabric config for {{ device.hostname }} -- do not hand-edit.
-define GENPROG_ASN = {{ device.asn }};
-
-filter genprog_export {
-	if source ~ [ RTS_STATIC, RTS_BGP ] then accept;
-	reject;
-}
-
-template bgp genprog_fabric {
-	local as GENPROG_ASN;
-	hold time 30;
-	keepalive time 10;
-	ipv4 {
-		import all;
-		export filter genprog_export;
-		next hop self;
-	};
-	ipv6 {
-		import all;
-		export filter genprog_export;
-		next hop self;
-	};
-}
-{% for link in vpn_links %}
-    {%- if link.side_a == device -%}
-        {%- set our_side = link.side_a -%}
-        {%- set spine = link.side_b -%}
-    {%- else -%}
-        {%- set our_side = link.side_b -%}
-        {%- set spine = link.side_a -%}
-    {%- endif %}
-
-protocol bgp {{ spine.hostname | replace("-", "_") }} from genprog_fabric {
-	source address {{ link.get_ip(our_side) }};
-	neighbor {{ link.get_ip(spine) }} as {{ spine.asn }};
-}
-{% endfor %}
-
-protocol bfd {
-	interface "wg*" {
-		min rx interval 150 ms;
-		min tx interval 150 ms;
-		idle tx interval 1500 ms;
-	};
-}
-EOF
+birdc configure
 
 {% include 'common/all_suffix.j2' %}

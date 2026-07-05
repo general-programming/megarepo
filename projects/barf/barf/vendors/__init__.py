@@ -380,6 +380,7 @@ class BaseHost:
         host_id: Optional[int] = None,
         ospf: Optional[dict] = None,
         static_routes: Optional[List[dict]] = None,
+        bird: Optional[dict] = None,
         **kwargs,
     ):
         self.address = address
@@ -403,6 +404,10 @@ class BaseHost:
         self.ospf = parse_ospf(ospf or {})
         # static_routes: [{network, interface | next-hop}].
         self.static_routes = static_routes or []
+        # bird daemon knobs for linux hosts: router_id, krt_prefsrc,
+        # merge_paths, import_filter (a filter name defined by the
+        # host's human-owned conf.d drop-ins).
+        self.bird = bird or {}
 
         if not vlan_map:
             vlan_map = {}
@@ -868,6 +873,7 @@ class BaseHost:
             host_id=meta.get("id", None),
             ospf=meta.get("ospf", None),
             static_routes=meta.get("static_routes", None),
+            bird=meta.get("bird", None),
         )
 
     @classmethod

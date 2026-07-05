@@ -10,6 +10,9 @@ jinja_env = Environment(
     undefined=make_logging_undefined(log, base=Undefined),
     trim_blocks=True,
     lstrip_blocks=True,
+    # Included sub-templates otherwise lose their final newline, which
+    # glues heredoc terminators onto content in the linux file blocks.
+    keep_trailing_newline=True,
 )
 
 
