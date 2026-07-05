@@ -275,18 +275,18 @@ hosts:
       - 2606:4700:4700::1001
   sea1-vpn-spine-2:
     id: 17
-    ip6_address: 2602:fa6d:10:ffff::f12
+    ip6_address: 2602:fa6d:10:ffff::f13
     asn: 4280805529
     type: vyos
     role: vpn
     interfaces:
       - name: dum0
         description: underlay loopback
-        address: 2602:fa6d:f:aaaa::f12/128
+        address: 2602:fa6d:f:aaaa::f13/128
         management: true
       - name: eth0
         description: external
-        address: 2602:fa6d:10:ffff::f12/116
+        address: 2602:fa6d:10:ffff::f13/116
         dhcp: true
         ipv6_autoconf: true
       - name: eth1
@@ -368,6 +368,8 @@ links:
   sea21-hv-egg-irl:
     fmt2-vpn-spine-1: {}
     fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
+    sea1-vpn-spine-2: {}
   sea420-acc-v-hv2:
     fmt2-vpn-spine-1: {network: 172.31.255.44/31}
     fmt2-vpn-spine-2: {network: 172.31.255.46/31}
