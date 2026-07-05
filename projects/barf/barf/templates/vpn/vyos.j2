@@ -98,6 +98,11 @@ set protocols bgp system-as '{{ device.asn }}'
 set protocols bgp peer-group fabric address-family ipv4-unicast
 set protocols bgp peer-group fabric address-family ipv6-unicast
 set protocols bgp peer-group fabric capability extended-nexthop
+{# Numbered fabric peers (mikrotik) drop routes from the v6-only sea1
+   spine without this: it lets FRR set a resolvable IPv4 next-hop
+   instead of an unreachable one. Verified 2026-07-05 to fix
+   sea420<->sea1 receiving 0 prefixes. #}
+set protocols bgp peer-group fabric disable-connected-check
 set protocols bgp timers keepalive 10
 set protocols bgp timers holdtime 30
 

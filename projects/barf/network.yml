@@ -177,12 +177,6 @@ hosts:
     asn: 31898
     type: external
     role: vpn
-  fmt2-vpn-client-1:
-    id: 13
-    asn: 4280805532
-    management: 10.255.2.9
-    type: linux
-    role: vpn
   sea420-acc-v-hv2:
     id: 14
     asn: 4280805533
@@ -262,30 +256,27 @@ hosts:
 links:
   fmt2-vpn-leaf-1:
     fmt2-vpn-spine-1: {}     # rotated to derived port + pair keys
-    fmt2-vpn-spine-2: 51821
-    sea1-vpn-spine-1: 51829
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
   fmt2-vpn-leaf-2:
-    fmt2-vpn-spine-1: 51827
-    fmt2-vpn-spine-2: 51828
-    sea1-vpn-spine-1: 51830
+    fmt2-vpn-spine-1: {}
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
   sea69-acc-v-a-1:
-    fmt2-vpn-spine-1: 51823
-    fmt2-vpn-spine-2: 51824
-    sea1-vpn-spine-1: 51835
+    fmt2-vpn-spine-1: {}
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
   sea1-vpn-leaf-1:
-    fmt2-vpn-spine-1: 51845
-    fmt2-vpn-spine-2: 51846
-    sea1-vpn-spine-1: 51847
+    fmt2-vpn-spine-1: {}
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
   sea21-hv-egg-irl:
-    fmt2-vpn-spine-1: {port: 51825, network: 172.31.255.8/31}
-    fmt2-vpn-spine-2: {port: 51826, network: 172.31.255.10/31}
-  fmt2-vpn-client-1:
-    fmt2-vpn-spine-1: {port: 51839, network: 172.31.255.36/31}
-    fmt2-vpn-spine-2: {port: 51840, network: 172.31.255.38/31}
+    fmt2-vpn-spine-1: {network: 172.31.255.8/31}
+    fmt2-vpn-spine-2: {network: 172.31.255.10/31}
   sea420-acc-v-hv2:
-    fmt2-vpn-spine-1: {port: 51843, network: 172.31.255.44/31}
-    fmt2-vpn-spine-2: {port: 51844, network: 172.31.255.46/31}
-    sea1-vpn-spine-1: {port: 51836, network: 172.31.255.14/31}
+    fmt2-vpn-spine-1: {network: 172.31.255.44/31}
+    fmt2-vpn-spine-2: {network: 172.31.255.46/31}
+    sea1-vpn-spine-1: {network: 172.31.255.14/31}
 
   # oci-vpn-iad
   oracle-vpn-1-1:
