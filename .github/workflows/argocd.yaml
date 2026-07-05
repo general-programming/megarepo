@@ -1,0 +1,73 @@
+---
+name: argocd
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "argocd/**"
+      - ".github/workflows/argocd.yaml"
+  pull_request:
+    paths:
+      - "argocd/**"
+      - ".github/workflows/argocd.yaml"
+
+concurrency:
+  group: argocd-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: argocd
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kustomize
+        run: |
+          curl -fsSL "https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz" \
+            | sudo tar xz -C /usr/local/bin kustomize
+          kustomize version
+
+      - name: Build all overlays
+        run: |
+          set -u
+          fail=0
+          for d in $(find . -name kustomization.yaml -not -path '*/charts/*' \
+              | sed 's|/kustomization.yaml||;s|^\./||' | grep -v '/base' | sort); do
+            if kustomize build --enable-helm "$d" > /dev/null 2> "$RUNNER_TEMP/err.txt"; then
+              echo "OK   $d"
+            else
+              echo "FAIL $d"
+              sed 's/^/     /' "$RUNNER_TEMP/err.txt"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Validate raw YAML dirs (bootstrap, projects)
+        run: |
+          python3 -m pip install --quiet pyyaml
+          python3 - <<'PY'
+          import glob, yaml
+          for f in ["bootstrap.yaml", *glob.glob("bootstrap/*.yaml"), *glob.glob("projects/*.yaml")]:
+              docs = [d for d in yaml.safe_load_all(open(f)) if d]
+              assert docs, f"{f}: no documents"
+              print(f, "->", ", ".join(d["kind"] for d in docs))
+          PY
+
+      - name: Check vault helm pins match across clusters
+        run: |
+          python3 - <<'PY'
+          import yaml
+          def pins(path):
+              k = yaml.safe_load(open(path))
+              return {(c["name"], c["version"]) for c in k.get("helmCharts", [])}
+          a = pins("apps/infra/vault/fmt2/kustomization.yaml")
+          b = pins("apps/infra/vault/sea1/kustomization.yaml")
+          assert a == b, f"vault chart pins differ: fmt2={sorted(a)} sea1={sorted(b)}"
+          print("vault pins in lockstep:", sorted(a))
+          PY
