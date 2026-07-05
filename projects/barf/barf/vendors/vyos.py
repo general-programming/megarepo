@@ -59,9 +59,10 @@ class VyOSHost(BaseHost):
     KEPT_PATHS = (
         # VyOS platform-managed config and hardware facts.
         ("system", "login", "user", "vyos"),
-        # Interface details not yet modeled in network.yml (hw-id,
-        # vifs, dhcp/static addresses, ipv6 autoconf).
-        ("interfaces", "ethernet"),
+        # hw-id is a recorded hardware fact, not intent: MAC addresses
+        # change when VMs are reprovisioned, so never manage or delete
+        # it. "*" matches any interface name.
+        ("interfaces", "ethernet", "*", "hw-id"),
     )
 
     @property

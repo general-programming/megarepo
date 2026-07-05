@@ -126,6 +126,8 @@ class HostInterface:
     address: Optional[ipaddress.IPv4Interface] = None
     ip6_address: Optional[ipaddress.IPv6Interface] = None
     dhcp: bool = False
+    dhcpv6: bool = False
+    ipv6_autoconf: bool = False
     untagged_vlan: Optional[NetworkVLAN] = None
     tagged_vlans: List[NetworkVLAN] = field(default_factory=list)
     mtu: Optional[int] = None
@@ -810,6 +812,8 @@ class BaseHost:
                     enabled=interface.get("enabled", True),
                     addresses=addresses,
                     dhcp=interface.get("dhcp", False),
+                    dhcpv6=interface.get("dhcpv6", False),
+                    ipv6_autoconf=interface.get("ipv6_autoconf", False),
                     untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
                         NetworkVLAN(vid=vlan)

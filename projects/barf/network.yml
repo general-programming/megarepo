@@ -16,6 +16,7 @@ hosts:
       - name: eth0
         description: external uplink
         dhcp: true
+        ipv6_autoconf: true
         address: 2a0d:1a43:8008:420::1/64
       - name: eth1
         description: management vlan
@@ -37,6 +38,7 @@ hosts:
       - name: eth0
         description: external uplink
         dhcp: true
+        ipv6_autoconf: true
         address: 2a0d:1a43:8008:420::2/64
       - name: eth1
         description: management vlan
@@ -63,6 +65,16 @@ hosts:
         description: underlay loopback
         address: 10.255.2.3/32
         management: true
+      - name: eth0
+        vlan: 5
+        dhcp: true
+      - name: eth0
+        vlan: 99
+        dhcp: true
+        ipv6_autoconf: true
+      - name: eth0
+        vlan: 1000
+        dhcp: true
     ospf:
       networks:
         - network: 10.65.67.0/24
@@ -95,6 +107,13 @@ hosts:
         description: underlay loopback
         address: 10.255.2.4/32
         management: true
+      - name: eth0
+        dhcp: true
+        ipv6_autoconf: true
+      - name: eth1
+        dhcp: true
+      - name: eth2
+        dhcp: true
     ospf:
       networks:
         - network: 10.65.67.0/24
@@ -134,6 +153,8 @@ hosts:
       - name: eth0
         description: external
         dhcp: true
+        dhcpv6: true
+        ipv6_autoconf: true
       - name: dum0
         description: underlay loopback
         address: 10.255.2.5/32
@@ -200,6 +221,7 @@ hosts:
         description: external
         address: 2602:fa6d:10:ffff::f02/116
         dhcp: true
+        ipv6_autoconf: true
       - name: eth1
         description: internal
         address: 10.3.2.5/23
@@ -221,7 +243,10 @@ hosts:
         management: true
       - name: eth0
         description: external
-        address: 2602:fa6d:10:ffff::f01/116
+        addresses:
+          - 2602:fa6d:10:ffff::f01/116
+          - 199.255.18.162/32
+        ipv6_autoconf: true
       - name: eth1
         description: internal
         address: 10.3.2.4/23

@@ -346,3 +346,31 @@ class TestMinimalDeletePaths:
         assert minimal_delete_paths(removed, running) == [
             ("vpn", "ipsec", "esp-group", "OLD")
         ]
+
+
+class TestWildcardKept:
+    WILD = (("interfaces", "ethernet", "*", "hw-id"),)
+
+    def test_wildcard_matches_any_component(self):
+        for iface in ("eth0", "eth1"):
+            diff = diff_paths(
+                {("interfaces", "ethernet", iface, "hw-id", "aa:bb")},
+                set(),
+                kept=self.WILD,
+            )
+            assert not diff.has_changes
+            assert diff.device_only == [
+                ("interfaces", "ethernet", iface, "hw-id", "aa:bb")
+            ]
+
+    def test_wildcard_does_not_keep_other_leaves(self):
+        diff = diff_paths(
+            {("interfaces", "ethernet", "eth0", "mtu", "9000")},
+            set(),
+            kept=self.WILD,
+        )
+        assert diff.removed == [("interfaces", "ethernet", "eth0", "mtu", "9000")]
+
+    def test_path_shorter_than_prefix_is_not_kept(self):
+        diff = diff_paths({("interfaces", "ethernet")}, set(), kept=self.WILD)
+        assert diff.removed == [("interfaces", "ethernet")]

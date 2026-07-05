@@ -178,7 +178,18 @@ class ConfigDiff:
 
 
 def _is_kept(path: Tuple[str, ...], kept: PathPrefixes) -> bool:
-    return any(path[: len(prefix)] == prefix for prefix in kept)
+    """Whether ``path`` falls under a kept prefix.
+
+    A ``"*"`` component in a prefix matches any single path component,
+    e.g. ``("interfaces", "ethernet", "*", "hw-id")`` keeps the hw-id
+    of every ethernet interface.
+    """
+    for prefix in kept:
+        if len(path) < len(prefix):
+            continue
+        if all(p in ("*", c) for p, c in zip(prefix, path)):
+            return True
+    return False
 
 
 def diff_paths(

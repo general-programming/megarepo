@@ -27,9 +27,14 @@ set system conntrack modules {{ module }}
 {# NTP lives in common/vyos.j2: the allow-client syntax is chrony-era
    VyOS, not shared vyatta lineage. #}
 {% for interface in device.interfaces %}
-    {# DHCP interfaces. #}
+    {# Dynamic addressing: each mechanism is an independent flag. #}
     {% if interface.dhcp %}
 {{ device.interface_prefix(interface) }} address dhcp
+    {% endif %}
+    {% if interface.dhcpv6 %}
+{{ device.interface_prefix(interface) }} address dhcpv6
+    {% endif %}
+    {% if interface.ipv6_autoconf %}
 {{ device.interface_prefix(interface) }} ipv6 address autoconf
     {% endif %}
     {# Interface IPs, any mix of IPv4/IPv6. #}
