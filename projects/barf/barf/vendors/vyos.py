@@ -59,11 +59,13 @@ class VyOSHost(BaseHost):
     KEPT_PATHS = (
         # VyOS platform-managed config and hardware facts.
         ("system", "login", "user", "vyos"),
-        # hw-id is a recorded hardware fact, not intent: MAC addresses
-        # change when VMs are reprovisioned, so never manage or delete
-        # it. "*" matches any interface name.
-        ("interfaces", "ethernet", "*", "hw-id"),
     )
+
+    # Dropped from diffs entirely: never deleted, never listed, never
+    # counted. hw-id is a recorded hardware fact, not intent — MAC
+    # addresses change when VMs are reprovisioned. "*" matches any
+    # interface name.
+    IGNORED_PATHS = (("interfaces", "ethernet", "*", "hw-id"),)
 
     @property
     def can_bfd(self) -> bool:
@@ -148,7 +150,10 @@ class VyOSHost(BaseHost):
         running, candidate = reconcile_hashed_passwords(
             self.running_config_paths(), parse_set_commands(rendered)
         )
-        return diff_paths(running, candidate, kept=self.KEPT_PATHS), running
+        diff = diff_paths(
+            running, candidate, kept=self.KEPT_PATHS, ignored=self.IGNORED_PATHS
+        )
+        return diff, running
 
     def push_rendered_config(self, rendered: str) -> None:
         """Apply the rendered config via the HTTPS API and save it.

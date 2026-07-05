@@ -193,7 +193,10 @@ def _is_kept(path: Tuple[str, ...], kept: PathPrefixes) -> bool:
 
 
 def diff_paths(
-    running: ConfigPaths, candidate: ConfigPaths, kept: PathPrefixes = ()
+    running: ConfigPaths,
+    candidate: ConfigPaths,
+    kept: PathPrefixes = (),
+    ignored: PathPrefixes = (),
 ) -> ConfigDiff:
     """Diff two path sets; the candidate owns everything not ``kept``.
 
@@ -207,7 +210,10 @@ def diff_paths(
     Args:
         kept: Config path prefixes excluded from ownership
             (device-managed config, or sections network.yml does not
-            model yet).
+            model yet). Supports "*" wildcard components.
+        ignored: Like ``kept``, but the paths are dropped from the
+            diff entirely — never deleted, never listed, never counted
+            (pure noise like hw-id hardware facts).
     """
     added = candidate - running
     stale = running - candidate
@@ -218,6 +224,8 @@ def diff_paths(
     removed = []
     device_only = []
     for path in sorted(stale):
+        if _is_kept(path, ignored):
+            continue
         if not _is_kept(path, kept):
             removed.append(path)
         elif len(path) > 1 and path[:-1] in added_parents:

@@ -155,7 +155,10 @@ class TestVyOSDiffConfig:
         self.wire(
             monkeypatch,
             {
-                "system": {"host-name": "oldname"},
+                "system": {
+                    "host-name": "oldname",
+                    "login": {"user": {"vyos": {"level": "admin"}}},
+                },
                 "interfaces": {"ethernet": {"eth0": {"hw-id": "aa:bb"}}},
                 "service": {"ssh": {"port": "22"}},
             },
@@ -168,7 +171,8 @@ class TestVyOSDiffConfig:
         assert "- set system host-name oldname" in diff.text
         assert "+ set system time-zone UTC" in diff.text
         # Ownership is the default: unrendered, unkept config (ssh) is
-        # a real removal; kept config (ethernet hw-id) is counted only.
+        # a real removal; the kept vyos user is counted only, and the
+        # ignored hw-id vanishes from the diff entirely.
         assert "- set service ssh port 22" in diff.text
         assert "hw-id" not in diff.text
         assert "device-only" in diff.text
@@ -242,10 +246,10 @@ class TestVyOSPushRenderedConfig:
     def test_kept_config_is_merged_not_deleted(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            # The vyos user and ethernet hw-id are kept; the stale
-            # host-name is owned. The kept login config also anchors
-            # the delete collapse below bare "system", as on any real
-            # device.
+            # The vyos user is kept and the ethernet hw-id is ignored;
+            # the stale host-name is owned. The kept login config also
+            # anchors the delete collapse below bare "system", as on
+            # any real device.
             {
                 "system": {
                     "host-name": "old",
@@ -257,7 +261,8 @@ class TestVyOSPushRenderedConfig:
         make_host().push_rendered_config("set system host-name testbox\n")
         assert calls.configure == [
             # The stale value collapses to its node: host-name has no
-            # other running config beneath it.
+            # other running config beneath it. Neither the kept login
+            # nor the ignored hw-id may appear as deletes.
             {"op": "delete", "path": ["system", "host-name"]},
             {"op": "set", "path": ["system", "host-name", "testbox"]},
         ]

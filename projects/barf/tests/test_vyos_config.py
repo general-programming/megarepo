@@ -374,3 +374,33 @@ class TestWildcardKept:
     def test_path_shorter_than_prefix_is_not_kept(self):
         diff = diff_paths({("interfaces", "ethernet")}, set(), kept=self.WILD)
         assert diff.removed == [("interfaces", "ethernet")]
+
+
+class TestIgnoredPaths:
+    IGNORED = (("interfaces", "ethernet", "*", "hw-id"),)
+
+    def test_ignored_paths_vanish_from_the_diff(self):
+        diff = diff_paths(
+            {("interfaces", "ethernet", "eth0", "hw-id", "aa:bb")},
+            set(),
+            ignored=self.IGNORED,
+        )
+        assert not diff.has_changes
+        assert diff.removed == []
+        assert diff.device_only == []
+        assert "hw-id" not in format_diff(diff, show_device_only=True)
+        assert summarize_diff(diff) == "no changes"
+
+    def test_ignored_paths_never_collapse_into_deletes(self):
+        # hw-id stays in running, so a whole-interface (or wider)
+        # delete cannot swallow it: the collapse anchors at the mtu
+        # node, below the ignored sibling.
+        running = {
+            ("interfaces", "ethernet", "eth0", "hw-id", "aa:bb"),
+            ("interfaces", "ethernet", "eth0", "mtu", "9000"),
+        }
+        diff = diff_paths(running, set(), ignored=self.IGNORED)
+        assert diff.removed == [("interfaces", "ethernet", "eth0", "mtu", "9000")]
+        assert minimal_delete_paths(diff.removed, running) == [
+            ("interfaces", "ethernet", "eth0", "mtu")
+        ]
