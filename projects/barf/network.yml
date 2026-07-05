@@ -261,7 +261,7 @@ hosts:
       - set high-availability vrrp group internal address 10.3.2.1/23
 links:
   fmt2-vpn-leaf-1:
-    fmt2-vpn-spine-1: 51820
+    fmt2-vpn-spine-1: {}     # rotated to derived port + pair keys
     fmt2-vpn-spine-2: 51821
     sea1-vpn-spine-1: 51829
   fmt2-vpn-leaf-2:
