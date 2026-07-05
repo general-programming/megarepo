@@ -181,8 +181,8 @@ hosts:
         description: internal
         address: 10.3.2.5/23
     nameservers:
-      - 2606:4700::1111
-      - 2606:4700::1001
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
   sea1-vpn-leaf-1:
     asn: 4280805534
     management: 2602:fa6d:f:aaaa::f01
@@ -201,8 +201,8 @@ hosts:
         description: internal
         address: 10.3.2.4/23
     nameservers:
-      - 2606:4700::1111
-      - 2606:4700::1001
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
     networks:
       - 10.3.2.0/23
     extra_config:
