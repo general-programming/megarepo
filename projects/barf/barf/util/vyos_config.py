@@ -1,0 +1,184 @@
+"""Local VyOS config parsing and diffing.
+
+Both the rendered templates (flat ``set ...`` command lists) and the
+HTTPS API's ``/retrieve`` JSON tree are normalized into one canonical
+representation: a set of path tuples, one per ``set`` command. Diffing
+is then plain set arithmetic, done entirely on this machine — no config
+session is ever opened on the device.
+
+Merge semantics: barf deploys are merge candidates, so a diff reports
+what a merge would add or replace. Config that exists only on the
+device is reported separately for information; a merge never deletes
+it.
+"""
+
+import shlex
+from dataclasses import dataclass, field
+from typing import List, Set, Tuple, Union
+
+ConfigPaths = Set[Tuple[str, ...]]
+
+# Path components whose immediate child value is a secret. The value is
+# still diffed, only the display is redacted.
+_SECRET_NODES = {
+    "private-key",
+    "secret",
+    "password",
+    "passphrase",
+    "pre-shared-secret",
+    "plaintext-password",
+    "encrypted-password",
+}
+
+_REDACTED = "<redacted>"
+
+
+def parse_set_commands(text: str) -> ConfigPaths:
+    """Parse rendered config text into a set of path tuples.
+
+    Only ``set ...`` lines are considered; blanks, comments, and
+    ``delete``/op-mode lines are ignored. Values are shlex-tokenized so
+    the templates' inconsistent quoting (``'aes256'`` vs ``aes256``)
+    normalizes to the same path.
+    """
+    paths: ConfigPaths = set()
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if not line.startswith("set "):
+            continue
+        try:
+            tokens = shlex.split(line)
+        except ValueError:
+            # Unbalanced quotes; keep the raw split rather than dying.
+            tokens = line.split()
+        paths.add(tuple(tokens[1:]))
+    return paths
+
+
+def paths_from_api_json(data: Union[dict, str, list]) -> ConfigPaths:
+    """Flatten the ``/retrieve`` ``showConfig`` JSON tree into path tuples.
+
+    Leaves come back as a string (single value), a list of strings
+    (multi-value node), or an empty dict (valueless node); each becomes
+    the same path tuple its ``set`` command would produce.
+    """
+    paths: ConfigPaths = set()
+
+    def walk(node, prefix: Tuple[str, ...]) -> None:
+        if isinstance(node, dict):
+            if not node:
+                if prefix:
+                    paths.add(prefix)
+                return
+            for key, child in node.items():
+                walk(child, prefix + (str(key),))
+        elif isinstance(node, list):
+            for value in node:
+                paths.add(prefix + (str(value),))
+        else:
+            paths.add(prefix + (str(node),))
+
+    walk(data, ())
+    return paths
+
+
+@dataclass
+class ConfigDiff:
+    """The result of diffing a running config against a candidate.
+
+    Attributes:
+        added: Paths the merge would create.
+        replaced: Device paths sharing a parent with an added path —
+            the values a merge on a single-value node would overwrite.
+        device_only: Paths on the device that the candidate does not
+            mention at all; a merge leaves them untouched.
+    """
+
+    added: List[Tuple[str, ...]] = field(default_factory=list)
+    replaced: List[Tuple[str, ...]] = field(default_factory=list)
+    device_only: List[Tuple[str, ...]] = field(default_factory=list)
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.added)
+
+
+def diff_paths(running: ConfigPaths, candidate: ConfigPaths) -> ConfigDiff:
+    """Diff two path sets under merge semantics.
+
+    A device path counts as ``replaced`` (rather than ``device_only``)
+    when the candidate adds a different value under the same parent
+    path. Without the device's schema we cannot know whether a node is
+    single- or multi-valued, so this is a best-effort pairing — for a
+    multi-value node the "replaced" value would actually survive the
+    merge.
+    """
+    added = candidate - running
+    stale = running - candidate
+
+    added_parents = {path[:-1] for path in added if len(path) > 1}
+
+    replaced = []
+    device_only = []
+    for path in sorted(stale):
+        if len(path) > 1 and path[:-1] in added_parents:
+            replaced.append(path)
+        else:
+            device_only.append(path)
+
+    return ConfigDiff(
+        added=sorted(added),
+        replaced=replaced,
+        device_only=device_only,
+    )
+
+
+def _format_path(path: Tuple[str, ...], redact: bool) -> str:
+    if redact and len(path) > 1 and path[-2] in _SECRET_NODES:
+        path = path[:-1] + (_REDACTED,)
+    return " ".join(shlex.quote(component) for component in path)
+
+
+def format_diff(
+    diff: ConfigDiff, redact: bool = True, show_device_only: bool = False
+) -> str:
+    """Render a ConfigDiff as +/- ``set`` lines.
+
+    Args:
+        redact: Replace secret values (private keys, PSKs, passwords)
+            with a placeholder in the output.
+        show_device_only: Also list paths that exist only on the device.
+            They are informational; a merge deploy never removes them.
+    """
+    lines = []
+
+    for path in diff.replaced:
+        lines.append(f"- set {_format_path(path, redact)}")
+    for path in diff.added:
+        lines.append(f"+ set {_format_path(path, redact)}")
+
+    if show_device_only and diff.device_only:
+        lines.append("")
+        lines.append("# on device but not in the generated config (kept by merge):")
+        for path in diff.device_only:
+            lines.append(f"  set {_format_path(path, redact)}")
+    elif diff.device_only:
+        lines.append(
+            f"# {len(diff.device_only)} device-only paths hidden (--show-device-only)"
+        )
+
+    return "\n".join(lines)
+
+
+def summarize_diff(diff: ConfigDiff) -> str:
+    """A one-line human summary, e.g. ``+12 ~3 (47 device-only)``."""
+    if not diff.has_changes:
+        return "no changes"
+    parts = [f"+{len(diff.added)}"]
+    if diff.replaced:
+        parts.append(f"~{len(diff.replaced)}")
+    if diff.device_only:
+        parts.append(f"({len(diff.device_only)} device-only)")
+    return " ".join(parts)

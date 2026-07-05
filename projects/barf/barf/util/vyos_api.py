@@ -5,13 +5,14 @@ import ssl
 import urllib.parse
 import urllib.request
 from dataclasses import dataclass
+from typing import Optional
 
 log = logging.getLogger(__name__)
 
 
 def _vyos_api_request(
     host: str, key: str, endpoint: str, payload: dict, timeout: int = 10
-) -> str:
+):
     """POST a request to the VyOS HTTPS API.
 
     Args:
@@ -22,7 +23,8 @@ def _vyos_api_request(
         timeout: Socket timeout in seconds.
 
     Returns:
-        The command's raw text output.
+        The command's output: raw text for op-mode endpoints, a JSON
+        tree (dict) for ``/retrieve``.
 
     Raises:
         RuntimeError: If the API reports a failure.
@@ -64,6 +66,22 @@ def vyos_api_show(host: str, key: str, path: list, timeout: int = 10) -> str:
     return _vyos_api_request(
         host, key, "show", {"op": "show", "path": path}, timeout=timeout
     )
+
+
+def vyos_api_retrieve_config(
+    host: str, key: str, path: Optional[list] = None, timeout: int = 30
+) -> dict:
+    """Fetch (part of) the running config as a JSON tree via ``/retrieve``.
+
+    Args:
+        path: Config path to fetch, None/empty for the whole config.
+    """
+    data = _vyos_api_request(
+        host, key, "retrieve", {"op": "showConfig", "path": path or []}, timeout=timeout
+    )
+    if not isinstance(data, dict):
+        raise RuntimeError(f"unexpected /retrieve payload: {data!r}")
+    return data
 
 
 def vyos_api_image_delete(host: str, key: str, name: str, timeout: int = 60) -> str:

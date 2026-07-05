@@ -129,3 +129,49 @@ def test_safe_to_reboot_refuses_last_leaf():
     ]
     with pytest.raises(RuntimeError, match="no other leaf is alive"):
         me.safe_to_reboot(fleet)
+
+
+class TestVyOSDiffConfig:
+    """diff_config runs locally against the /retrieve JSON tree."""
+
+    def wire(self, monkeypatch, running: dict):
+        monkeypatch.setattr(VyOSHost, "management_ip", "10.0.0.9")
+        monkeypatch.setattr(
+            "barf.util.secrets.VaultSecrets",
+            lambda: SimpleNamespace(vyos_api_password="key"),
+        )
+        monkeypatch.setattr(
+            "barf.util.vyos_api.vyos_api_retrieve_config",
+            lambda address, key, path=None, timeout=30: running,
+        )
+
+    def test_no_changes(self, monkeypatch):
+        self.wire(monkeypatch, {"system": {"host-name": "testbox"}})
+        diff = make_host().diff_config("set system host-name testbox\n")
+        assert not diff.has_changes
+        assert diff.summary == "no changes"
+
+    def test_addition_and_replacement(self, monkeypatch):
+        self.wire(
+            monkeypatch,
+            {"system": {"host-name": "oldname"}, "service": {"ssh": {"port": "22"}}},
+        )
+        diff = make_host().diff_config(
+            "set system host-name testbox\nset system time-zone UTC\n"
+        )
+        assert diff.has_changes
+        assert "+ set system host-name testbox" in diff.text
+        assert "- set system host-name oldname" in diff.text
+        assert "+ set system time-zone UTC" in diff.text
+        # Device-only config (ssh) is counted, not shown, under merge
+        # semantics.
+        assert "ssh" not in diff.text
+        assert "device-only" in diff.text
+
+    def test_secret_values_redacted(self, monkeypatch):
+        self.wire(monkeypatch, {})
+        diff = make_host().diff_config(
+            "set interfaces wireguard wg1 private-key 'hunter2'\n"
+        )
+        assert "hunter2" not in diff.text
+        assert "<redacted>" in diff.text

@@ -2,6 +2,7 @@ import logging
 
 import click
 
+from barf.cli.config import config
 from barf.cli.device import device
 from barf.cli.generate import generate
 from barf.cli.validate import validate
@@ -19,6 +20,7 @@ def cli(verbose):
     )
 
 
+cli.add_command(config)
 cli.add_command(device)
 cli.add_command(generate)
 cli.add_command(validate)

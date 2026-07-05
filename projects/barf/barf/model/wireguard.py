@@ -109,7 +109,6 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
             mount_point="cluster-secrets",
             path=secret_path,
         )["data"]["data"]
-        print(response, secret_path)
         private_key = response["private_key"]
         public_key = response["public_key"]
         result = WGKeypair(

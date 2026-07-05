@@ -5,36 +5,13 @@ from typing import Optional
 
 import click
 
+from barf.cli.common import print_table, resolve_targets
 from barf.util.images import PROVIDERS
 from barf.util.network import load_network
 from barf.util.secrets import VaultSecrets
 from barf.vendors import BaseHost
 
 log = logging.getLogger(__name__)
-
-
-def _resolve_targets(hosts: list[BaseHost], target: str) -> list[BaseHost]:
-    """The hosts selected by TARGET (a hostname, or "all")."""
-    if target == "all":
-        return hosts
-
-    matches = [h for h in hosts if h.hostname == target]
-    if not matches:
-        raise click.ClickException(f"unknown device {target!r}")
-    return matches
-
-
-def _print_table(headers: list[str], rows: list[list]) -> None:
-    widths = [len(h) for h in headers]
-    for row in rows:
-        for i, cell in enumerate(row):
-            widths[i] = max(widths[i], len(str(cell)))
-
-    fmt = "  ".join("{:<" + str(w) + "}" for w in widths)
-    click.echo(fmt.format(*headers))
-    click.echo(fmt.format(*["-" * w for w in widths]))
-    for row in rows:
-        click.echo(fmt.format(*[str(c) for c in row]))
 
 
 @click.group()
@@ -82,7 +59,7 @@ def device_status(filename: str) -> None:
         for row in pool.map(fetch, vyos_hosts):
             rows.append(row)
 
-    _print_table(["DEVICE", "ENDPOINT", "UPTIME", "VERSION", "LATEST", "STATUS"], rows)
+    print_table(["DEVICE", "ENDPOINT", "UPTIME", "VERSION", "LATEST", "STATUS"], rows)
 
 
 def wait_for_device_alive(
@@ -148,7 +125,7 @@ def device_update(
     VaultSecrets().vyos_api_password
 
     targets = []
-    for host in _resolve_targets(hosts, target):
+    for host in resolve_targets(hosts, target):
         if host.image_provider is None:
             click.echo(
                 f"skip {host.hostname}: no image provider for {host.devicetype!r}"
@@ -231,7 +208,7 @@ def device_update(
                 break
 
     click.echo("")
-    _print_table(["DEVICE", "RESULT"], results)
+    print_table(["DEVICE", "RESULT"], results)
 
     if failed:
         raise SystemExit(1)
@@ -252,7 +229,7 @@ def device_cleanup(target: str, filename: str) -> None:
     default boot image.
     """
     hosts, _links, _global_meta = load_network(filename)
-    candidates = _resolve_targets(hosts, target)
+    candidates = resolve_targets(hosts, target)
 
     results = []
     failed = False
@@ -274,7 +251,7 @@ def device_cleanup(target: str, filename: str) -> None:
         results.append([host.hostname, "; ".join(actions) or "nothing to do"])
 
     click.echo("")
-    _print_table(["DEVICE", "RESULT"], results)
+    print_table(["DEVICE", "RESULT"], results)
 
     if failed:
         raise SystemExit(1)

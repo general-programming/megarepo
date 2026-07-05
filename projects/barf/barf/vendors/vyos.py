@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, List, Optional
 
 import click
 
-from barf.vendors import BaseHost
+from barf.vendors import BaseHost, DeployDiff
 
 if TYPE_CHECKING:
     from barf.util.vyos_api import SystemImage
@@ -49,6 +49,8 @@ def _script_ok(rc: int, output: str, marker: str) -> bool:
 
 class VyOSHost(BaseHost):
     DEVICETYPE = "vyos"
+    # Deploys still ride NAPALM (merge + commit); diffs are local.
+    NAPALM_DRIVER = "vyos"
 
     @property
     def can_bfd(self) -> bool:
@@ -92,6 +94,38 @@ class VyOSHost(BaseHost):
         from barf.util.vyos_api import vyos_api_image_delete
 
         vyos_api_image_delete(self.require_management_ip(), self._api_key(), name)
+
+    def running_config_paths(self):
+        """The device's running config as a set of ``set``-path tuples."""
+        from barf.util.vyos_api import vyos_api_retrieve_config
+        from barf.util.vyos_config import paths_from_api_json
+
+        data = vyos_api_retrieve_config(self.require_management_ip(), self._api_key())
+        return paths_from_api_json(data)
+
+    def diff_config(
+        self, rendered: str, *, redact: bool = True, show_device_only: bool = False
+    ) -> DeployDiff:
+        """Diff ``rendered`` against the running config, locally.
+
+        The running config comes off the HTTPS API as a JSON tree; both
+        sides are flattened to path sets and diffed on this machine. No
+        config session is opened on the device (unlike the NAPALM
+        compare the other vendors use).
+        """
+        from barf.util.vyos_config import (
+            diff_paths,
+            format_diff,
+            parse_set_commands,
+            summarize_diff,
+        )
+
+        diff = diff_paths(self.running_config_paths(), parse_set_commands(rendered))
+        return DeployDiff(
+            text=format_diff(diff, redact=redact, show_device_only=show_device_only),
+            has_changes=diff.has_changes,
+            summary=summarize_diff(diff),
+        )
 
     def system_images(self) -> List["SystemImage"]:
         """The installed system images, per ``show system image``."""

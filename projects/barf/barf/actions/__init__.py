@@ -1,10 +1,8 @@
 import functools
-import ipaddress
 import logging
 from typing import Any, Optional, Tuple
 
 import hvac
-import netmiko
 from napalm import get_network_driver
 
 from barf.vendors import BaseHost
@@ -43,29 +41,26 @@ def get_supertech_creditentials(host: BaseHost) -> Tuple[str, str]:
 
 
 def open_connection(host: BaseHost, hostname: str):
-    """Open a connection to a host.
+    """Open a NAPALM connection to a host.
 
     Args:
         host (BaseHost): The host to connect to.
+        hostname (str): The address to reach it on.
 
     Returns:
-        netmiko.base_connection.BaseConnection: The connection to the host.
+        The opened NAPALM device.
     """
     log = logging.getLogger("connection." + host.hostname)
+
+    device_driver = host.NAPALM_DRIVER
+    if not device_driver:
+        raise NotImplementedError(f"{host.devicetype!r} devices have no NAPALM driver")
+
     extra_args = {
         "allow_agent": True,
     }
-
-    # Get NAPALM driver for the device.
-    device_driver = host.DEVICETYPE
-    if device_driver == "cisco":
-        device_driver = "ios"
-    elif device_driver != "eos":
-        extra_args.update(
-            {
-                "port": 22,
-            }
-        )
+    if device_driver != "eos":
+        extra_args["port"] = 22
 
     driver = get_network_driver(device_driver)
     username, password = get_supertech_creditentials(host)
@@ -84,61 +79,3 @@ def open_connection(host: BaseHost, hostname: str):
     log.info("Connected.")
 
     return napalm_device
-
-
-def push_config(device: BaseHost, config: str):
-    log = logging.getLogger("configpush." + device.hostname)
-
-    # These platforms are only supported for now.
-    if device.DEVICETYPE not in ["vyos", "eos", "cisco"]:
-        return
-
-    # Check for the management IP, if it's not set, we can't do anything.
-    if not device.management_address:
-        log.error("No management IP set for device.")
-        return
-
-    # Attempt to connect with the FQDN.
-    # If that fails, connect with the IP directly.
-    napalm_device = None
-    addresses = [
-        f"{device.hostname}.generalprogramming.org",
-        device.management_address.ip.compressed,
-        # May be a str straight from network.yml or an ipaddress
-        # interface; normalize and drop any prefix length.
-        ipaddress.ip_interface(str(device.address)).ip.compressed
-        if device.address
-        else None,
-    ]
-
-    while addresses:
-        address = addresses.pop(0)
-        if not address:
-            continue
-
-        try:
-            napalm_device = open_connection(device, address)
-            break
-        except netmiko.exceptions.NetmikoTimeoutException as e:
-            log.error(e)
-            log.error("Failed to connect to %s", address)
-
-    if not napalm_device:
-        log.error("failed to connect to device")
-        return
-
-    napalm_device.load_merge_candidate(config=config)
-    log.info(napalm_device.compare_config())
-
-    confirmation = (
-        input(f"Confirm push for '{device.hostname}': [y]es/[N]/[d]iscard: ")
-        .lower()
-        .strip()
-    )
-
-    if confirmation == "y":
-        napalm_device.commit_config()
-        log.info("Pushing configuration.")
-    elif confirmation == "d":
-        napalm_device.discard_config()
-        log.info("Discarding configuration.")

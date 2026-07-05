@@ -1,15 +1,12 @@
 import json
 import logging
-import os
 import sys
 
 import click
-import yaml
 from gql import gql
 
 from barf.common import render_template
 from barf.util.netbox import IPAMHost, clean_hostname, get_nb_client
-from barf.util.network import load_network
 from barf.vendors import VENDOR_MAP
 
 log = logging.getLogger(__name__)
@@ -124,7 +121,7 @@ def _dns_entries(leases, output_json: bool = False):
 
 @click.group()
 def generate():
-    """Generate configs from Netbox and network.yml."""
+    """Generate DNS/DHCP/switch configs from Netbox."""
     pass
 
 
@@ -251,62 +248,3 @@ def generate_config():
                 secrets={},
             )
         )
-
-
-@generate.command("network")
-@click.argument("filename", default="network.yml", type=click.Path(exists=True))
-@click.option(
-    "--push-config",
-    is_flag=True,
-    default=False,
-    help="Push rendered configs to devices via napalm.",
-)
-@click.option("--push-host", default=None, help="Only render/push the named host.")
-def generate_network(filename, push_config, push_host):
-    """Render router/VPN configs from a network.yml file."""
-    # Imported lazily so `barf --help` does not pull in napalm/netmiko.
-    from barf.actions import push_config as push_config_to_device
-    from barf.util.secrets import VaultSecrets
-
-    hosts, links, global_meta = load_network(filename)
-    secrets = VaultSecrets()
-
-    for host in hosts:
-        host_log = logging.getLogger(host.hostname)
-
-        if push_host and host.hostname != push_host:
-            host_log.debug("Skipping host %s", host.hostname)
-            continue
-
-        if not host.is_templatable:
-            continue
-
-        role_meta = {}
-        if host.role == "vpn":
-            role_meta["vpn_links"] = [
-                link for link in links if host == link.side_a or host == link.side_b
-            ]
-
-        os.makedirs(f"output/{host.role}/cloud_init", exist_ok=True)
-
-        rendered_config = render_template(
-            f"{host.role}/{host.devicetype}.j2",
-            device=host,
-            secrets=secrets,
-            global_meta=global_meta,
-            **role_meta,
-        )
-
-        with open(f"output/{host.role}/{host.hostname}", "w") as f:
-            f.write(rendered_config)
-            host_log.info("Config saved.")
-
-        with open(f"output/{host.role}/cloud_init/{host.hostname}", "w") as f:
-            f.write("#cloud-config\n")
-            yaml.dump(
-                {"vyos_config_commands": [x for x in rendered_config.split("\n") if x]},
-                f,
-            )
-
-        if push_config:
-            push_config_to_device(host, rendered_config)

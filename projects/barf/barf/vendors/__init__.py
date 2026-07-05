@@ -194,9 +194,27 @@ class OSPFNetwork:
         )
 
 
+@dataclass
+class DeployDiff:
+    """A vendor-agnostic config diff, ready to print.
+
+    Attributes:
+        text: The printable diff body (may be empty).
+        has_changes: Whether deploying would change the device.
+        summary: A one-line human summary for tables.
+    """
+
+    text: str
+    has_changes: bool
+    summary: str
+
+
 class BaseHost:
     DEVICETYPE = "base"
     TEMPLATABLE = True
+    # NAPALM driver name for vendors that support config diff/deploy
+    # over the generic NAPALM path; None disables both.
+    NAPALM_DRIVER: Optional[str] = None
 
     def __init__(
         self,
@@ -360,9 +378,9 @@ class BaseHost:
     def _endpoint_candidates(self) -> List[str]:
         """Addresses to try for reaching this host, most specific first.
 
-        FQDN, management address, and host addresses in order, mirroring
-        ``actions.push_config``, then interface addresses with external
-        (global) ones first, deduplicated.
+        FQDN, management address, and host addresses in order, then
+        interface addresses with external (global) ones first,
+        deduplicated.
         """
         candidates = [f"{self.hostname}.generalprogramming.org"]
         if self.management_address:
@@ -525,6 +543,73 @@ class BaseHost:
         raise NotImplementedError(
             f"{self.devicetype!r} devices do not support image updates"
         )
+
+    def _napalm_address(self) -> Optional[str]:
+        """The address NAPALM should connect to (SSH by default)."""
+        return self.ssh_ip
+
+    def _napalm_connection(self):
+        """An open NAPALM connection to this host; the caller closes it."""
+        # Imported lazily so `barf --help` does not pull in napalm/netmiko.
+        from barf.actions import open_connection
+
+        address = self._napalm_address()
+        if not address:
+            raise RuntimeError(f"{self.hostname}: no reachable address")
+        return open_connection(self, address)
+
+    def diff_config(
+        self, rendered: str, *, redact: bool = True, show_device_only: bool = False
+    ) -> DeployDiff:
+        """Diff ``rendered`` against the device's running config.
+
+        The base implementation loads a NAPALM merge candidate and asks
+        the device to compare it, then discards the candidate. Vendors
+        that can diff locally (VyOS) override this.
+
+        Args:
+            rendered: The rendered candidate config.
+            redact: Hide secret values in the diff text, where the
+                vendor supports it.
+            show_device_only: Include config that exists only on the
+                device, where the vendor supports it.
+        """
+        if not self.NAPALM_DRIVER:
+            raise NotImplementedError(
+                f"{self.devicetype!r} devices do not support config diffs"
+            )
+
+        device = self._napalm_connection()
+        try:
+            device.load_merge_candidate(config=rendered)
+            text = device.compare_config() or ""
+            device.discard_config()
+        finally:
+            device.close()
+
+        has_changes = bool(text.strip())
+        return DeployDiff(
+            text=text,
+            has_changes=has_changes,
+            summary="changes pending" if has_changes else "no changes",
+        )
+
+    def push_rendered_config(self, rendered: str) -> None:
+        """Merge ``rendered`` into the device config and commit it.
+
+        Confirmation and diff display live in the CLI; this only pushes.
+        """
+        if not self.NAPALM_DRIVER:
+            raise NotImplementedError(
+                f"{self.devicetype!r} devices do not support config deploys"
+            )
+
+        device = self._napalm_connection()
+        try:
+            device.load_merge_candidate(config=rendered)
+            device.commit_config()
+        finally:
+            device.close()
 
     def cleanup_host(self) -> List[str]:
         """Run housekeeping tasks on the device.
