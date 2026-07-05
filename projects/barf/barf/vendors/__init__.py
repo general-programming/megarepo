@@ -362,6 +362,24 @@ class BaseHost:
         return list(hosts)
 
     @property
+    def wg_endpoint(self) -> Optional[str]:
+        """The address peers dial to reach this host's WireGuard.
+
+        The global IPv6 address when there is one (matching what the
+        fleet has deployed), else a global IPv4 address. None for hosts
+        without a global address (e.g. behind NAT): nobody can dial
+        them, so their peers must not render an endpoint and just
+        listen.
+        """
+        for candidate in (self.ip6_address, self.address):
+            if not candidate:
+                continue
+            ip = ipaddress.ip_interface(str(candidate)).ip
+            if ip.is_global:
+                return ip.compressed
+        return None
+
+    @property
     def management_address(
         self,
     ) -> Optional[ipaddress.IPv4Interface | ipaddress.IPv6Interface]:

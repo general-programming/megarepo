@@ -79,3 +79,29 @@ def test_management_and_ssh_ips_probe_their_own_ports(monkeypatch):
     assert host.management_ip is not None
     assert host.ssh_ip is not None
     assert ports == [443, 22]
+
+
+class TestWgEndpoint:
+    """wg_endpoint picks the address peers dial for WireGuard."""
+
+    def test_prefers_global_ipv6(self):
+        host = BaseHost(
+            hostname="x",
+            role="vpn",
+            address="79.110.170.6",
+            ip6_address="2a0d:1a43:8008:420::1",
+        )
+        assert host.wg_endpoint == "2a0d:1a43:8008:420::1"
+
+    def test_falls_back_to_global_ipv4(self):
+        host = BaseHost(hostname="x", role="vpn", address="79.110.170.6")
+        assert host.wg_endpoint == "79.110.170.6"
+
+    def test_private_address_means_no_endpoint(self):
+        # A NATed host (e.g. sea69-acc-v-a-1) cannot be dialed; peers
+        # must not render an endpoint for it.
+        host = BaseHost(hostname="x", role="vpn", address="10.36.75.234")
+        assert host.wg_endpoint is None
+
+    def test_no_addresses_means_no_endpoint(self):
+        assert BaseHost(hostname="x", role="vpn").wg_endpoint is None

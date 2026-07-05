@@ -1,16 +1,14 @@
 {% include 'common/vyos.j2' %}
 
-set vpn ipsec esp-group ESP_DEFAULT compression 'disable'
 set vpn ipsec esp-group ESP_DEFAULT lifetime '3600'
 set vpn ipsec esp-group ESP_DEFAULT mode 'tunnel'
 set vpn ipsec esp-group ESP_DEFAULT pfs enable
 set vpn ipsec esp-group ESP_DEFAULT proposal 1 encryption 'aes256'
 set vpn ipsec esp-group ESP_DEFAULT proposal 1 hash 'sha256'
 
-set vpn ipsec ike-group IKEv2_DEFAULT ikev2-reauth 'no'
 set vpn ipsec ike-group IKEv2_DEFAULT key-exchange 'ikev2'
 set vpn ipsec ike-group IKEv2_DEFAULT lifetime 28800
-set vpn ipsec ike-group IKEv2_DEFAULT mobike 'disable'
+set vpn ipsec ike-group IKEv2_DEFAULT disable-mobike
 set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 dh-group 5
 set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 encryption aes256
 set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 hash sha256
@@ -58,8 +56,8 @@ set interfaces wireguard {{ interface_name }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} public-key '{{ other_peer.wg_pubkey(port) }}'
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips 0.0.0.0/0
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} allowed-ips ::/0
-        {% if other_peer.address %}
-set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.ip6_address }}
+        {% if other_peer.wg_endpoint %}
+set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} address {{ other_peer.wg_endpoint }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} port {{ port }}
 set interfaces wireguard {{ interface_name }} peer {{ other_peer.hostname }} persistent-keepalive 10
         {% endif %}
