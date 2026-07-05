@@ -239,11 +239,8 @@ class TestVyOSPushRenderedConfig:
     def test_kept_config_is_merged_not_deleted(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            # ntp and conntrack are kept; the stale host-name is owned.
-            {
-                "service": {"ntp": {"server": "time1.vyos.net"}},
-                "system": {"host-name": "old", "conntrack": {"modules": "ftp"}},
-            },
+            # conntrack is kept; the stale host-name is owned.
+            {"system": {"host-name": "old", "conntrack": {"modules": "ftp"}}},
         )
         make_host().push_rendered_config("set system host-name testbox\n")
         assert calls.configure == [

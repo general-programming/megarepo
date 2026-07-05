@@ -63,8 +63,6 @@ class VyOSHost(BaseHost):
         ("system", "conntrack"),
         ("system", "console"),
         ("system", "login"),
-        ("system", "syslog"),
-        ("service", "ntp"),
         # Interface details not yet modeled in network.yml (hw-id,
         # vifs, dhcp/static addresses, ipv6 autoconf).
         ("interfaces", "ethernet"),

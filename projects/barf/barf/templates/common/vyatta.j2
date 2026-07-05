@@ -10,6 +10,18 @@ set service snmp contact '{{ global_meta.snmp_contact }}'
 {% for dns_server in device.nameservers %}
 set system name-server '{{ dns_server }}'
 {% endfor %}
+
+set system syslog local facility all level info
+set system syslog local facility local7 level debug
+
+{# NTP: serve time to internal ranges only (the VyOS factory default);
+   the pre-chrony installs shipped with 0.0.0.0/0 + ::/0. #}
+{% for allow in ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"] %}
+set service ntp allow-client address {{ allow }}
+{% endfor %}
+{% for ntp_server in ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] %}
+set service ntp server {{ ntp_server }}
+{% endfor %}
 {% for interface in device.interfaces %}
     {# DHCP interfaces. #}
     {% if interface.dhcp %}
