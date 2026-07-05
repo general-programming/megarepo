@@ -350,20 +350,33 @@ class BaseHost:
     def management_ip(self) -> Optional[str]:
         """Return the first endpoint for this host answering on port 443.
 
-        Probes the FQDN, management address, and primary address in order,
-        mirroring ``actions.push_config``. The check runs once per host;
-        the result is cached for the lifetime of the object. Returns
-        ``None`` if nothing is reachable.
+        Probes the FQDN, management address, and host addresses in order,
+        mirroring ``actions.push_config``, then falls back to interface
+        addresses with external (global) ones first. The check runs once
+        per host; the result is cached for the lifetime of the object.
+        Returns ``None`` if nothing is reachable.
         """
         candidates = [f"{self.hostname}.generalprogramming.org"]
         if self.management_address:
             candidates.append(self.management_address.ip.compressed)
-        if self.address:
-            # self.address may be a str straight from network.yml or an
-            # ipaddress interface; normalize and drop any prefix length.
-            candidates.append(ipaddress.ip_interface(str(self.address)).ip.compressed)
+        for host_address in (self.address, self.ip6_address):
+            if host_address:
+                # May be a str straight from network.yml or an ipaddress
+                # interface; normalize and drop any prefix length.
+                candidates.append(
+                    ipaddress.ip_interface(str(host_address)).ip.compressed
+                )
 
-        for address in candidates:
+        interface_ips = [
+            iface_address.ip
+            for interface in self.interfaces
+            for iface_address in (interface.ip6_address, interface.address)
+            if iface_address
+        ]
+        interface_ips.sort(key=lambda ip: not ip.is_global)
+        candidates.extend(ip.compressed for ip in interface_ips)
+
+        for address in dict.fromkeys(candidates):
             try:
                 with socket.create_connection((address, 443), timeout=2):
                     return address

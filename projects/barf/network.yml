@@ -101,12 +101,16 @@ hosts:
       - set protocols bgp peer-group internal address-family ipv4-unicast
       - set protocols bgp peer-group internal remote-as 4280805526
   sea69-acc-v-a-1:
+    address: 10.36.75.234
     asn: 4280805527
     type: vyos
     role: vpn
     networks:
       - 10.36.75.0/24
     interfaces:
+      - name: eth0
+        description: external
+        dhcp: true
       - name: dum0
         description: underlay loopback
         address: 10.255.2.5/32
