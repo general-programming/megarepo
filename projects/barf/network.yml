@@ -275,120 +275,45 @@ hosts:
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
 links:
-  # fmt2-vpn-leaf-1
-  51820:
-    side_a: fmt2-vpn-spine-1
-    side_b: fmt2-vpn-leaf-1
-  51821:
-    side_a: fmt2-vpn-spine-2
-    side_b: fmt2-vpn-leaf-1
-  51829:
-    side_a: sea1-vpn-spine-1
-    side_b: fmt2-vpn-leaf-1
-
-  # sea69-acc-v-a-1
-  51823:
-    side_a: fmt2-vpn-spine-1
-    side_b: sea69-acc-v-a-1
-  51824:
-    side_a: fmt2-vpn-spine-2
-    side_b: sea69-acc-v-a-1
-  51835:
-    side_a: sea1-vpn-spine-1
-    side_b: sea69-acc-v-a-1
-
-  # sea21-hv-egg-irl
-  51825:
-    side_a: fmt2-vpn-spine-1
-    side_b: sea21-hv-egg-irl
-    network: 172.31.255.8/31
-  51826:
-    side_a: fmt2-vpn-spine-2
-    side_b: sea21-hv-egg-irl
-    network: 172.31.255.10/31
-
-  # fmt2-vpn-leaf-2
-  51827:
-    side_a: fmt2-vpn-spine-1
-    side_b: fmt2-vpn-leaf-2
-  51828:
-    side_a: fmt2-vpn-spine-2
-    side_b: fmt2-vpn-leaf-2
-  51830:
-    side_a: sea1-vpn-spine-1
-    side_b: fmt2-vpn-leaf-2
+  fmt2-vpn-leaf-1:
+    fmt2-vpn-spine-1: 51820
+    fmt2-vpn-spine-2: 51821
+    sea1-vpn-spine-1: 51829
+  fmt2-vpn-leaf-2:
+    fmt2-vpn-spine-1: 51827
+    fmt2-vpn-spine-2: 51828
+    sea1-vpn-spine-1: 51830
+  sea69-acc-v-a-1:
+    fmt2-vpn-spine-1: 51823
+    fmt2-vpn-spine-2: 51824
+    sea1-vpn-spine-1: 51835
+  sea1-vpn-leaf-1:
+    fmt2-vpn-spine-1: 51845
+    fmt2-vpn-spine-2: 51846
+    sea1-vpn-spine-1: 51847
+  sea21-hv-egg-irl:
+    fmt2-vpn-spine-1: {port: 51825, network: 172.31.255.8/31}
+    fmt2-vpn-spine-2: {port: 51826, network: 172.31.255.10/31}
+  fmt2-vpn-client-1:
+    fmt2-vpn-spine-1: {port: 51839, network: 172.31.255.36/31}
+    fmt2-vpn-spine-2: {port: 51840, network: 172.31.255.38/31}
+  sea420-acc-v-hv2:
+    fmt2-vpn-spine-1: {port: 51843, network: 172.31.255.44/31}
+    fmt2-vpn-spine-2: {port: 51844, network: 172.31.255.46/31}
+    sea1-vpn-spine-1: {port: 51836, network: 172.31.255.14/31}
 
   # oci-vpn-iad
-  51831:
-    side_a: fmt2-vpn-spine-1
-    side_b: oracle-vpn-1-1
-    network: 172.31.255.20/31
-    secret: fmt2-oracle-vpn-1
-    ipsec: true
-  51832:
-    side_a: fmt2-vpn-spine-1
-    side_b: oracle-vpn-1-2
-    network: 172.31.255.22/31
-    secret: fmt2-oracle-vpn-2
-    ipsec: true
-  51833:
-    side_a: fmt2-vpn-spine-2
-    side_b: oracle-vpn-2-1
-    network: 172.31.255.24/31
-    secret: fmt2-oracle-vpn-3
-    ipsec: true
-  51834:
-    side_a: fmt2-vpn-spine-2
-    side_b: oracle-vpn-2-2
-    network: 172.31.255.26/31
-    secret: fmt2-oracle-vpn-4
-    ipsec: true
-
-  # fmt2-vpn-client
-  51839:
-    side_a: fmt2-vpn-spine-1
-    side_b: fmt2-vpn-client-1
-    network: 172.31.255.36/31
-  51840:
-    side_a: fmt2-vpn-spine-2
-    side_b: fmt2-vpn-client-1
-    network: 172.31.255.38/31
+  oracle-vpn-1-1:
+    fmt2-vpn-spine-1: {port: 51831, network: 172.31.255.20/31, secret: fmt2-oracle-vpn-1, ipsec: true}
+  oracle-vpn-1-2:
+    fmt2-vpn-spine-1: {port: 51832, network: 172.31.255.22/31, secret: fmt2-oracle-vpn-2, ipsec: true}
+  oracle-vpn-2-1:
+    fmt2-vpn-spine-2: {port: 51833, network: 172.31.255.24/31, secret: fmt2-oracle-vpn-3, ipsec: true}
+  oracle-vpn-2-2:
+    fmt2-vpn-spine-2: {port: 51834, network: 172.31.255.26/31, secret: fmt2-oracle-vpn-4, ipsec: true}
 
   # oci-vpn-ord
-  51841:
-    side_a: fmt2-vpn-spine-1
-    side_b: oci-vpn-ord-1-1
-    network: 172.31.255.40/31
-    secret: oci-vpn-ord-1-1
-    ipsec: true
-  51842:
-    side_a: fmt2-vpn-spine-1
-    side_b: oci-vpn-ord-1-2
-    network: 172.31.255.42/31
-    secret: oci-vpn-ord-1-2
-    ipsec: true
-
-  # sea420-acc-v-hv2
-  51843:
-    side_a: fmt2-vpn-spine-1
-    side_b: sea420-acc-v-hv2
-    network: 172.31.255.44/31
-  51844:
-    side_a: fmt2-vpn-spine-2
-    side_b: sea420-acc-v-hv2
-    network: 172.31.255.46/31
-  51836:
-    side_a: sea1-vpn-spine-1
-    side_b: sea420-acc-v-hv2
-    network: 172.31.255.14/31
-
-  # sea1-vpn-leaf-1
-  51845:
-    side_a: fmt2-vpn-spine-1
-    side_b: sea1-vpn-leaf-1
-  51846:
-    side_a: fmt2-vpn-spine-2
-    side_b: sea1-vpn-leaf-1
-  51847:
-    side_a: sea1-vpn-spine-1
-    side_b: sea1-vpn-leaf-1
+  oci-vpn-ord-1-1:
+    fmt2-vpn-spine-1: {port: 51841, network: 172.31.255.40/31, secret: oci-vpn-ord-1-1, ipsec: true}
+  oci-vpn-ord-1-2:
+    fmt2-vpn-spine-1: {port: 51842, network: 172.31.255.42/31, secret: oci-vpn-ord-1-2, ipsec: true}

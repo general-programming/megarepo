@@ -38,7 +38,8 @@ class WGKeypair:
 class WGNetworkLink(NetworkLink):
     """A link between two hosts using WireGuard."""
 
-    network: str
+    # None means an unnumbered link (interface-based BGP peering).
+    network: Optional[str]
     secret: Optional[str] = None
     ipsec: bool = False
 
