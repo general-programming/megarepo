@@ -68,7 +68,6 @@ node_exporter_service:
   service.running:
     - name: node_exporter
     - enable: True
-    - restart: True
     - watch:
       - file: node_exporter_service_file
       - user: node_exporter_user
