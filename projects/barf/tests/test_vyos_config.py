@@ -1,4 +1,6 @@
 from barf.util.vyos_config import (
+    reconcile_hashed_passwords,
+    verify_crypt_hash,
     ConfigDiff,
     diff_paths,
     format_diff,
@@ -184,3 +186,65 @@ class TestSummarizeDiff:
             device_only=[("c", "3")],
         )
         assert summarize_diff(diff) == "+2 ~1 (1 device-only)"
+
+
+# A real sha512-crypt vector from Ulrich Drepper's SHA-crypt spec:
+# crypt("Hello world!", "$6$saltstring").
+SPEC_HASH = (
+    "$6$saltstring$svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFN"
+    "jnQJuesI68u4OTLiBFdcbYEdFCoEOfaS35inz1"
+)
+
+
+class TestVerifyCryptHash:
+    def test_match(self):
+        assert verify_crypt_hash("Hello world!", SPEC_HASH) is True
+
+    def test_mismatch(self):
+        assert verify_crypt_hash("wrong password", SPEC_HASH) is False
+
+    def test_unknown_scheme_is_none(self):
+        assert verify_crypt_hash("x", "$y$j9T$salt$hash") is None
+        assert verify_crypt_hash("x", "not-a-hash") is None
+
+
+class TestReconcileHashedPasswords:
+    PREFIX = ("system", "login", "user", "supertech", "authentication")
+
+    def test_matching_password_produces_no_diff(self):
+        running = {self.PREFIX + ("encrypted-password", SPEC_HASH)}
+        candidate = {self.PREFIX + ("plaintext-password", "Hello world!")}
+        r, c = reconcile_hashed_passwords(running, candidate)
+        assert not diff_paths(r, c).has_changes
+
+    def test_changed_password_pairs_as_replacement(self):
+        running = {self.PREFIX + ("encrypted-password", SPEC_HASH)}
+        candidate = {self.PREFIX + ("plaintext-password", "new password")}
+        r, c = reconcile_hashed_passwords(running, candidate)
+        diff = diff_paths(r, c)
+        assert diff.added == [self.PREFIX + ("plaintext-password", "new password")]
+        assert diff.replaced == [self.PREFIX + ("plaintext-password", SPEC_HASH)]
+        # Both sides redact: neither the new password nor the old hash
+        # may appear in the printed diff.
+        text = format_diff(diff)
+        assert "new password" not in text
+        assert SPEC_HASH not in text
+
+    def test_unknown_scheme_left_alone(self):
+        running = {self.PREFIX + ("encrypted-password", "$y$j9T$salt$hash")}
+        candidate = {self.PREFIX + ("plaintext-password", "whatever")}
+        r, c = reconcile_hashed_passwords(running, candidate)
+        assert r == running
+        assert c == candidate
+
+    def test_password_without_device_counterpart_is_an_addition(self):
+        candidate = {self.PREFIX + ("plaintext-password", "hunter2")}
+        r, c = reconcile_hashed_passwords(set(), candidate)
+        assert diff_paths(r, c).added == [
+            self.PREFIX + ("plaintext-password", "hunter2")
+        ]
+
+    def test_other_paths_untouched(self):
+        running = {("system", "host-name", "r1")}
+        candidate = {("system", "host-name", "r2")}
+        assert reconcile_hashed_passwords(running, candidate) == (running, candidate)

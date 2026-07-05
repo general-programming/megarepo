@@ -117,10 +117,16 @@ class VyOSHost(BaseHost):
             diff_paths,
             format_diff,
             parse_set_commands,
+            reconcile_hashed_passwords,
             summarize_diff,
         )
 
-        diff = diff_paths(self.running_config_paths(), parse_set_commands(rendered))
+        # The device stores passwords hashed; verify our plaintext
+        # against its hash so unchanged passwords do not show as diffs.
+        running, candidate = reconcile_hashed_passwords(
+            self.running_config_paths(), parse_set_commands(rendered)
+        )
+        diff = diff_paths(running, candidate)
         return DeployDiff(
             text=format_diff(diff, redact=redact, show_device_only=show_device_only),
             has_changes=diff.has_changes,

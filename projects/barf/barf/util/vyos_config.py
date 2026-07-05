@@ -14,7 +14,7 @@ it.
 
 import shlex
 from dataclasses import dataclass, field
-from typing import List, Set, Tuple, Union
+from typing import List, Optional, Set, Tuple, Union
 
 ConfigPaths = Set[Tuple[str, ...]]
 
@@ -82,6 +82,67 @@ def paths_from_api_json(data: Union[dict, str, list]) -> ConfigPaths:
 
     walk(data, ())
     return paths
+
+
+def verify_crypt_hash(password: str, hashed: str) -> Optional[bool]:
+    """Whether ``password`` matches a unix crypt hash.
+
+    Returns:
+        True/False for a ``$6$`` (sha512-crypt) hash, or None when the
+        hash uses a scheme we cannot verify (callers should treat None
+        as "unknown", not as a mismatch).
+    """
+    # Imported lazily; passlib is only needed on the diff path. Its
+    # hash registry is populated at runtime, which ty cannot see.
+    from passlib.hash import sha512_crypt  # ty: ignore[unresolved-import]
+
+    if not hashed.startswith("$6$"):
+        return None
+    try:
+        return sha512_crypt.verify(password, hashed)
+    except ValueError:
+        return None
+
+
+def reconcile_hashed_passwords(
+    running: ConfigPaths, candidate: ConfigPaths
+) -> Tuple[ConfigPaths, ConfigPaths]:
+    """Match candidate ``plaintext-password`` against device hashes.
+
+    VyOS hashes ``plaintext-password`` into ``encrypted-password`` on
+    commit, so the two sides of a diff never match textually. For each
+    candidate plaintext with an encrypted counterpart on the device:
+
+    - hash matches the plaintext: the password is unchanged; the
+      candidate path is rewritten to the device's, so no diff shows.
+    - hash does not match: the device path is rewritten to the
+      candidate's node name, so the diff pairs them as a replacement.
+    - hash scheme unknown: both sides are left alone (the plaintext
+      shows as an addition rather than being silently swallowed).
+
+    Returns:
+        The adjusted (running, candidate) path sets.
+    """
+    running = set(running)
+    candidate = set(candidate)
+
+    for path in list(candidate):
+        if len(path) < 2 or path[-2] != "plaintext-password":
+            continue
+        prefix = path[:-2]
+
+        for device_path in [
+            r for r in running if r[:-1] == prefix + ("encrypted-password",)
+        ]:
+            matches = verify_crypt_hash(path[-1], device_path[-1])
+            if matches is True:
+                candidate.discard(path)
+                candidate.add(device_path)
+            elif matches is False:
+                running.discard(device_path)
+                running.add(prefix + ("plaintext-password", device_path[-1]))
+
+    return running, candidate
 
 
 @dataclass
