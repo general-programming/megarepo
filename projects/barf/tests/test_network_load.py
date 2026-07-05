@@ -65,3 +65,38 @@ def test_duplicate_port_is_an_error(tmp_path):
     dupe = NETWORK_YML.replace("port: 51900", "port: 51820")
     with pytest.raises(ValueError, match="port 51820 used by both"):
         load_network(write(tmp_path, dupe))
+
+
+PROFILE_YML = """
+global_meta:
+  ssh_keys: []
+  nameservers: [10.0.0.53, 1.1.1.1]
+profiles:
+  leaf: &leaf
+    asn: 65002
+    type: vyos
+    role: vpn
+    networks: [10.9.0.0/24]
+hosts:
+  leaf-1:
+    <<: *leaf
+  leaf-2:
+    <<: *leaf
+    nameservers: [9.9.9.9]
+"""
+
+
+def test_global_nameservers_default_and_override(tmp_path):
+    hosts, _links, _meta = load_network(write(tmp_path, PROFILE_YML))
+    leaf1 = next(h for h in hosts if h.hostname == "leaf-1")
+    leaf2 = next(h for h in hosts if h.hostname == "leaf-2")
+    assert leaf1.nameservers == ["10.0.0.53", "1.1.1.1"]
+    assert leaf2.nameservers == ["9.9.9.9"]
+
+
+def test_profiles_merge_and_are_otherwise_ignored(tmp_path):
+    hosts, _links, _meta = load_network(write(tmp_path, PROFILE_YML))
+    assert {h.hostname for h in hosts} == {"leaf-1", "leaf-2"}
+    leaf1 = next(h for h in hosts if h.hostname == "leaf-1")
+    assert leaf1.asn == 65002
+    assert leaf1.networks == ["10.9.0.0/24"]

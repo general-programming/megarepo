@@ -1,10 +1,38 @@
 global_meta:
   search_domain: generalprogramming.org
+  nameservers:
+    - 10.255.1.8
+    - 1.1.1.1
   snmp_public: genprogllc
   snmp_contact: support@generalprogramming.org
   snmp_location: General Programming Virtual Infrastructure
   ssh_keys:
     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
+profiles:
+  fmt2-leaf: &fmt2-leaf
+    asn: 4280805526
+    type: vyos
+    role: vpn
+    networks:
+      - 10.65.67.0/24
+      - 10.255.1.0/24
+    ospf:
+      networks:
+        - network: 10.65.67.0/24
+          area: 0
+      redistribute:
+        bgp:
+          metric-type: 2
+    nat:
+      masquerade:
+        - interface: eth1
+          source: 172.31.255.0/24
+    extra_config:
+      - set protocols bgp listen range 10.65.67.0/24 peer-group internal
+      - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
+      - set protocols bgp neighbor eth0.5 interface peer-group internal
+      - set protocols bgp peer-group internal address-family ipv4-unicast
+      - set protocols bgp peer-group internal remote-as 4280805526
 hosts:
   fmt2-vpn-spine-1:
     address: 79.110.170.6
@@ -25,9 +53,6 @@ hosts:
         description: underlay loopback
         address: 10.255.2.1/32
         management: true
-    nameservers:
-      - 10.255.1.8
-      - 1.1.1.1
   fmt2-vpn-spine-2:
     address: 79.110.170.7
     ip6_address: 2a0d:1a43:8008:420::2
@@ -47,19 +72,8 @@ hosts:
         description: underlay loopback
         address: 10.255.2.2/32
         management: true
-    nameservers:
-      - 10.255.1.8
-      - 1.1.1.1
   fmt2-vpn-leaf-1:
-    asn: 4280805526
-    type: vyos
-    role: vpn
-    nameservers:
-      - 10.255.1.8
-      - 1.1.1.1
-    networks:
-      - 10.65.67.0/24
-      - 10.255.1.0/24
+    <<: *fmt2-leaf
     interfaces:
       - name: dum0
         description: underlay loopback
@@ -75,33 +89,8 @@ hosts:
       - name: eth0
         vlan: 1000
         dhcp: true
-    ospf:
-      networks:
-        - network: 10.65.67.0/24
-          area: 0
-      redistribute:
-        bgp:
-          metric-type: 2
-    nat:
-      masquerade:
-        - interface: eth1
-          source: 172.31.255.0/24
-    extra_config:
-      - set protocols bgp listen range 10.65.67.0/24 peer-group internal
-      - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
-      - set protocols bgp neighbor eth0.5 interface peer-group internal
-      - set protocols bgp peer-group internal address-family ipv4-unicast
-      - set protocols bgp peer-group internal remote-as 4280805526
   fmt2-vpn-leaf-2:
-    asn: 4280805526
-    type: vyos
-    role: vpn
-    nameservers:
-      - 10.255.1.8
-      - 1.1.1.1
-    networks:
-      - 10.65.67.0/24
-      - 10.255.1.0/24
+    <<: *fmt2-leaf
     interfaces:
       - name: dum0
         description: underlay loopback
@@ -114,23 +103,6 @@ hosts:
         dhcp: true
       - name: eth2
         dhcp: true
-    ospf:
-      networks:
-        - network: 10.65.67.0/24
-          area: 0
-      redistribute:
-        bgp:
-          metric-type: 2
-    nat:
-      masquerade:
-        - interface: eth1
-          source: 172.31.255.0/24
-    extra_config:
-      - set protocols bgp listen range 10.65.67.0/24 peer-group internal
-      - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
-      - set protocols bgp neighbor eth0.5 interface peer-group internal
-      - set protocols bgp peer-group internal address-family ipv4-unicast
-      - set protocols bgp peer-group internal remote-as 4280805526
   sea69-acc-v-a-1:
     address: 10.36.75.234
     asn: 4280805527
@@ -159,9 +131,6 @@ hosts:
         description: underlay loopback
         address: 10.255.2.5/32
         management: true
-    nameservers:
-      - 10.255.1.8
-      - 1.1.1.1
   sea21-hv-egg-irl:
     asn: 4280805528
     type: linux

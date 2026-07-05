@@ -34,6 +34,9 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
         if meta["type"] not in VENDOR_MAP:
             raise ValueError("Invalid host type " + meta["type"])
 
+        # Hosts without their own nameservers inherit the global set.
+        meta.setdefault("nameservers", global_meta.get("nameservers", []))
+
         hostclass = VENDOR_MAP[meta["type"]]
         hosts.append(hostclass.from_meta(hostname=hostname, meta=meta))
 
