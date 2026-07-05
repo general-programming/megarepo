@@ -8,7 +8,7 @@ import click
 from barf.cli.common import print_table, resolve_targets
 from barf.util.images import PROVIDERS
 from barf.util.network import load_network
-from barf.util.render import render_host_config
+from barf.util.render import prefetch_link_keys, render_host_config
 from barf.util.secrets import VaultSecrets
 from barf.vendors import BaseHost
 
@@ -42,7 +42,9 @@ def device_status(filename: str) -> None:
         latest = None
 
     # Render in the main thread: templating may create missing secrets
-    # in Vault, which must not race across pool workers.
+    # in Vault, which must not race across pool workers. The read-only
+    # WG key fetches are warmed concurrently first.
+    prefetch_link_keys(vyos_hosts, links)
     secrets = VaultSecrets()
     rendered: dict[str, str] = {}
     render_errors: dict[str, str] = {}

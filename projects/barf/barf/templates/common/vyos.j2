@@ -9,6 +9,20 @@ set service https api keys id vaultadmin key '{{ secrets.vyos_api_password }}'
 set firewall global-options all-ping enable
 set firewall global-options broadcast-ping enable
 
+set service ntp server time1.vyos.net
+set service ntp server time2.vyos.net
+set service ntp server time3.vyos.net
+set service ntp allow-client address 10.0.0.0/8
+set service ntp allow-client address 127.0.0.0/8
+set service ntp allow-client address 169.254.0.0/16
+set service ntp allow-client address 172.16.0.0/12
+set service ntp allow-client address 192.168.0.0/16
+set service ntp allow-client address ::1/128
+set service ntp allow-client address fc00::/7
+set service ntp allow-client address fe80::/10
+set system syslog local facility all level info
+set system syslog local facility local7 level debug
+
 {% for rule in device.nat_masquerades %}
 set nat source rule {{ rule.rule }} outbound-interface name {{ rule.interface }}
 {% if rule.source %}

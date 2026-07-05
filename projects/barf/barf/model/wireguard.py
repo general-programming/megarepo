@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import concurrent.futures
 import ipaddress
 import subprocess
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Iterable, Optional, Tuple
 
 import hvac
 
@@ -12,6 +13,10 @@ from barf.model.network import NetworkLink
 
 if TYPE_CHECKING:
     from barf.vendors import BaseHost
+
+# Process-wide keypair cache. Without it every host render re-fetches
+# its peers' keys from Vault, one round trip per (host, port).
+_KEY_CACHE: dict[Tuple[str, int], "WGKeypair"] = {}
 
 
 @dataclass
@@ -90,6 +95,33 @@ def generate_wireguard_keys() -> WGKeypair:
     )
 
 
+def prefetch_wg_keys(pairs: Iterable[Tuple[str, int]], max_workers: int = 16) -> None:
+    """Warm the keypair cache with parallel Vault reads.
+
+    Vault KV v2 has no batch-read API, so "multi fetch" means doing the
+    per-secret reads concurrently. Each worker gets its own hvac client
+    (``get_vault`` builds one per call), so this is thread-safe.
+    """
+    missing = [pair for pair in dict.fromkeys(pairs) if pair not in _KEY_CACHE]
+    if not missing:
+        return
+
+    def fetch(pair: Tuple[str, int]) -> None:
+        # Read-only: warming a cache must never create secrets. A
+        # genuinely missing keypair is left for the render to generate
+        # (serially, in the main thread).
+        try:
+            get_wg_keys(*pair, generate_keys=False)
+        except ValueError:
+            pass
+
+    workers = min(max_workers, len(missing))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        # get_wg_keys fills the cache; consume the iterator to surface
+        # fetch errors here rather than mid-render.
+        list(pool.map(fetch, missing))
+
+
 def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
     """Get the WireGuard private, public keys for a host.
 
@@ -101,6 +133,10 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
     Returns:
         WGKeypair: The WireGuard keypair for the host.
     """
+    cached = _KEY_CACHE.get((host, port))
+    if cached is not None:
+        return cached
+
     secret_path = f"wg-{port}-{host}"
     vault = get_vault()
 
@@ -125,4 +161,5 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
             secret=result.to_dict(),
         )
 
+    _KEY_CACHE[(host, port)] = result
     return result

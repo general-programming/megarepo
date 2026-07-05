@@ -7,7 +7,11 @@ import click
 
 from barf.cli.common import print_table, resolve_targets
 from barf.util.network import load_network
-from barf.util.render import render_host_config, write_rendered_config
+from barf.util.render import (
+    prefetch_link_keys,
+    render_host_config,
+    write_rendered_config,
+)
 from barf.vendors import BaseHost
 
 log = logging.getLogger(__name__)
@@ -23,6 +27,9 @@ def _load_targets(
         raise click.ClickException(
             f"no templatable devices selected by {', '.join(targets)!r}"
         )
+    # Pull the WG keypairs for every involved link concurrently; the
+    # serial per-secret Vault reads otherwise dominate render time.
+    prefetch_link_keys(selected, links)
     return selected, links, global_meta
 
 
