@@ -3,6 +3,7 @@ from __future__ import annotations
 import functools
 import ipaddress
 import secrets
+import socket
 from dataclasses import dataclass, field
 from functools import cache, lru_cache
 from typing import TYPE_CHECKING, Callable, List, Optional
@@ -341,6 +342,33 @@ class BaseHost:
                     return interface.ip6_address
 
                 return interface.address
+
+        return None
+
+    @property
+    @lru_cache
+    def management_ip(self) -> Optional[str]:
+        """Return the first endpoint for this host answering on port 443.
+
+        Probes the FQDN, management address, and primary address in order,
+        mirroring ``actions.push_config``. The check runs once per host;
+        the result is cached for the lifetime of the object. Returns
+        ``None`` if nothing is reachable.
+        """
+        candidates = [f"{self.hostname}.generalprogramming.org"]
+        if self.management_address:
+            candidates.append(self.management_address.ip.compressed)
+        if self.address:
+            # self.address may be a str straight from network.yml or an
+            # ipaddress interface; normalize and drop any prefix length.
+            candidates.append(ipaddress.ip_interface(str(self.address)).ip.compressed)
+
+        for address in candidates:
+            try:
+                with socket.create_connection((address, 443), timeout=2):
+                    return address
+            except OSError:
+                continue
 
         return None
 
