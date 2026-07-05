@@ -20,15 +20,8 @@ set system config-management commit-revisions 100
 {% for module in ["ftp", "h323", "nfs", "pptp", "sip", "sqlnet", "tftp"] %}
 set system conntrack modules {{ module }}
 {% endfor %}
-
-{# NTP: serve time to internal ranges only (the VyOS factory default);
-   the pre-chrony installs shipped with 0.0.0.0/0 + ::/0. #}
-{% for allow in ["10.0.0.0/8", "127.0.0.0/8", "169.254.0.0/16", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7", "fe80::/10"] %}
-set service ntp allow-client address {{ allow }}
-{% endfor %}
-{% for ntp_server in ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"] %}
-set service ntp server {{ ntp_server }}
-{% endfor %}
+{# NTP lives in common/vyos.j2: the allow-client syntax is chrony-era
+   VyOS, not shared vyatta lineage. #}
 {% for interface in device.interfaces %}
     {# DHCP interfaces. #}
     {% if interface.dhcp %}

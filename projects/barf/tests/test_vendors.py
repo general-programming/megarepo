@@ -243,3 +243,30 @@ class TestParseNatRules:
         host = BaseHost(hostname="x", role="vpn")
         assert host.nat_masquerades == []
         assert host.nat_port_forwards == []
+
+
+class TestOspfAndStaticRoutes:
+    def test_from_meta_passes_blocks_through(self):
+        host = BaseHost.from_meta(
+            "testbox",
+            {
+                "role": "vpn",
+                "asn": 64512,
+                "ospf": {
+                    "networks": [{"network": "10.36.75.0/24", "area": "0.0.0.0"}],
+                    "interfaces": {"eth0": {"mtu-ignore": True}},
+                    "redistribute": {"bgp": {"metric-type": 2}},
+                },
+                "static_routes": [{"network": "10.213.8.0/21", "interface": "wg51820"}],
+            },
+        )
+        assert host.ospf["networks"][0]["network"] == "10.36.75.0/24"
+        assert host.ospf["interfaces"]["eth0"]["mtu-ignore"] is True
+        assert host.static_routes == [
+            {"network": "10.213.8.0/21", "interface": "wg51820"}
+        ]
+
+    def test_defaults_are_empty(self):
+        host = BaseHost(hostname="x", role="vpn")
+        assert host.ospf == {}
+        assert host.static_routes == []

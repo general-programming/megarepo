@@ -324,6 +324,8 @@ class BaseHost:
         vlan_map: Optional[Dict[int, NetworkVLAN]] = None,
         config_context: Optional[dict] = None,
         nat: Optional[dict] = None,
+        ospf: Optional[dict] = None,
+        static_routes: Optional[List[dict]] = None,
         **kwargs,
     ):
         self.address = address
@@ -340,6 +342,12 @@ class BaseHost:
         self.role = role
         self.config_context = config_context or {}
         self.nat_masquerades, self.nat_port_forwards = parse_nat_rules(nat or {})
+        # Declarative routing blocks, rendered as-is by the templates:
+        # ospf: {networks: [{network, area}], interfaces: {name: {opt:
+        # value|true}}, redistribute: {proto: {opt: value}}};
+        # static_routes: [{network, interface | next-hop}].
+        self.ospf = ospf or {}
+        self.static_routes = static_routes or []
 
         if not vlan_map:
             vlan_map = {}
@@ -825,6 +833,8 @@ class BaseHost:
             interfaces=interfaces,
             cloud_init=meta.get("cloud_init", False),
             nat=meta.get("nat", None),
+            ospf=meta.get("ospf", None),
+            static_routes=meta.get("static_routes", None),
         )
 
     @classmethod

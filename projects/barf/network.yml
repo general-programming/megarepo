@@ -63,13 +63,18 @@ hosts:
         description: underlay loopback
         address: 10.255.2.3/32
         management: true
+    ospf:
+      networks:
+        - network: 10.65.67.0/24
+          area: 0
+      redistribute:
+        bgp:
+          metric-type: 2
     nat:
       masquerade:
         - interface: eth1
           source: 172.31.255.0/24
     extra_config:
-      - set protocols ospf area 0 network 10.65.67.0/24
-      - set protocols ospf redistribute bgp metric-type 2
       - set protocols bgp listen range 10.65.67.0/24 peer-group internal
       - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
       - set protocols bgp neighbor eth0.5 interface peer-group internal
@@ -90,13 +95,18 @@ hosts:
         description: underlay loopback
         address: 10.255.2.4/32
         management: true
+    ospf:
+      networks:
+        - network: 10.65.67.0/24
+          area: 0
+      redistribute:
+        bgp:
+          metric-type: 2
     nat:
       masquerade:
         - interface: eth1
           source: 172.31.255.0/24
     extra_config:
-      - set protocols ospf area 0 network 10.65.67.0/24
-      - set protocols ospf redistribute bgp metric-type 2
       - set protocols bgp listen range 10.65.67.0/24 peer-group internal
       - set protocols bgp neighbor eth0.5 address-family ipv4-unicast
       - set protocols bgp neighbor eth0.5 interface peer-group internal
@@ -109,6 +119,16 @@ hosts:
     role: vpn
     networks:
       - 10.36.75.0/24
+    ospf:
+      networks:
+        - network: 10.36.75.0/24
+          area: 0.0.0.0
+      interfaces:
+        eth0:
+          mtu-ignore: true
+      redistribute:
+        bgp:
+          metric-type: 2
     interfaces:
       - name: eth0
         description: external
@@ -209,6 +229,13 @@ hosts:
       - 2606:4700:4700::1001
     networks:
       - 10.3.2.0/23
+    static_routes:
+      - network: 10.213.8.0/21
+        interface: wg51820
+      - network: 10.213.0.0/24
+        interface: wg51820
+      - network: 10.213.16.0/24
+        interface: wg51820
     nat:
       masquerade:
         - interface: eth0
