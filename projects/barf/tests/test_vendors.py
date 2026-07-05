@@ -158,3 +158,88 @@ class TestInterfaceAddresses:
             "10.255.2.9/32",
         ]
         assert eth0.addresses == [ipaddress.IPv4Interface("10.3.2.4/23")]
+
+
+class TestParseNatRules:
+    def test_masquerade_fan_out_numbers_from_10(self):
+        from barf.vendors import parse_nat_rules
+
+        masq, forwards = parse_nat_rules(
+            {
+                "masquerade": [
+                    {"interface": "eth0", "source": "10.3.2.0/23"},
+                    {
+                        "interface": "wg51820",
+                        "destinations": ["10.213.8.0/21", "10.213.0.0/24"],
+                    },
+                ]
+            }
+        )
+        assert forwards == []
+        assert [(m.rule, m.interface, m.source, m.destination) for m in masq] == [
+            (10, "eth0", "10.3.2.0/23", None),
+            (11, "wg51820", None, "10.213.8.0/21"),
+            (12, "wg51820", None, "10.213.0.0/24"),
+        ]
+
+    def test_port_forward_protocol_fan_out_numbers_from_100(self):
+        from barf.vendors import parse_nat_rules
+
+        _, forwards = parse_nat_rules(
+            {
+                "port_forwards": [
+                    {
+                        "name": "Torrent",
+                        "interface": "eth0",
+                        "port": 30888,
+                        "protocols": ["udp", "tcp"],
+                        "to": "10.3.2.10",
+                    }
+                ]
+            }
+        )
+        assert [(f.rule, f.protocol) for f in forwards] == [(100, "udp"), (101, "tcp")]
+        assert forwards[0].description == "Port Forward: Torrent-UDP to 10.3.2.10"
+
+    def test_explicit_rule_restarts_the_counter(self):
+        from barf.vendors import parse_nat_rules
+
+        masq, _ = parse_nat_rules(
+            {
+                "masquerade": [
+                    {"interface": "eth0", "source": "10.0.0.0/24"},
+                    {"interface": "eth1", "source": "10.1.0.0/24", "rule": 50},
+                    {"interface": "eth2", "source": "10.2.0.0/24"},
+                ]
+            }
+        )
+        assert [m.rule for m in masq] == [10, 50, 51]
+
+    def test_single_protocol_defaults_to_tcp(self):
+        from barf.vendors import parse_nat_rules
+
+        _, forwards = parse_nat_rules(
+            {
+                "port_forwards": [
+                    {"name": "Web", "interface": "eth0", "port": 80, "to": "10.0.0.5"}
+                ]
+            }
+        )
+        assert [(f.rule, f.protocol) for f in forwards] == [(100, "tcp")]
+
+    def test_from_meta_parses_nat(self):
+        host = BaseHost.from_meta(
+            "testbox",
+            {
+                "role": "vpn",
+                "asn": 64512,
+                "nat": {"masquerade": [{"interface": "eth0", "source": "10.0.0.0/24"}]},
+            },
+        )
+        assert host.nat_masquerades[0].rule == 10
+        assert host.nat_port_forwards == []
+
+    def test_no_nat_block(self):
+        host = BaseHost(hostname="x", role="vpn")
+        assert host.nat_masquerades == []
+        assert host.nat_port_forwards == []

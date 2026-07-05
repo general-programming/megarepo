@@ -75,8 +75,6 @@ class VyOSHost(BaseHost):
         ("protocols", "bgp"),
         ("protocols", "ospf"),
         ("protocols", "static"),
-        ("nat",),
-        ("service", "snmp"),
         ("vpn", "ipsec", "site-to-site"),
     )
 

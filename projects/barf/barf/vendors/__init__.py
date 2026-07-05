@@ -197,6 +197,81 @@ class HostInterface:
 
 
 @dataclass
+class NATMasquerade:
+    """One rendered ``nat source`` masquerade rule."""
+
+    rule: int
+    interface: str
+    source: Optional[str] = None
+    destination: Optional[str] = None
+
+
+@dataclass
+class PortForward:
+    """One rendered ``nat destination`` port-forward rule."""
+
+    rule: int
+    name: str
+    interface: str
+    protocol: str
+    port: int
+    to: str
+    translation_port: Optional[int] = None
+
+    @property
+    def description(self) -> str:
+        return f"Port Forward: {self.name}-{self.protocol.upper()} to {self.to}"
+
+
+def parse_nat_rules(
+    nat_meta: dict,
+) -> tuple[List[NATMasquerade], List[PortForward]]:
+    """Expand a network.yml ``nat:`` block into concrete rules.
+
+    Rule numbers are assigned deterministically from YAML order:
+    masquerades from 10, port-forwards from 100, one number per
+    fan-out (each entry in ``destinations``, each protocol in
+    ``protocols``). An explicit ``rule:`` on an entry restarts the
+    counter there.
+    """
+    masquerades = []
+    rule = 10
+    for entry in nat_meta.get("masquerade", []):
+        rule = entry.get("rule", rule)
+        destinations = entry.get("destinations") or [entry.get("destination")]
+        for destination in destinations:
+            masquerades.append(
+                NATMasquerade(
+                    rule=rule,
+                    interface=entry["interface"],
+                    source=entry.get("source"),
+                    destination=destination,
+                )
+            )
+            rule += 1
+
+    forwards = []
+    rule = 100
+    for entry in nat_meta.get("port_forwards", []):
+        rule = entry.get("rule", rule)
+        for protocol in entry.get("protocols") or [entry.get("protocol", "tcp")]:
+            forwards.append(
+                PortForward(
+                    rule=rule,
+                    name=entry["name"],
+                    interface=entry["interface"],
+                    protocol=protocol,
+                    port=entry["port"],
+                    to=entry["to"],
+                    translation_port=entry.get("translation_port"),
+                )
+            )
+            rule += 1
+
+    return masquerades, forwards
+
+
+@dataclass
 class OSPFNetwork:
     network: ipaddress.IPv4Network
     area: int
@@ -248,6 +323,7 @@ class BaseHost:
         cloud_init: bool = False,
         vlan_map: Optional[Dict[int, NetworkVLAN]] = None,
         config_context: Optional[dict] = None,
+        nat: Optional[dict] = None,
         **kwargs,
     ):
         self.address = address
@@ -263,6 +339,7 @@ class BaseHost:
         self.cloud_init = cloud_init
         self.role = role
         self.config_context = config_context or {}
+        self.nat_masquerades, self.nat_port_forwards = parse_nat_rules(nat or {})
 
         if not vlan_map:
             vlan_map = {}
@@ -747,6 +824,7 @@ class BaseHost:
             snmp_location=meta.get("location", None),
             interfaces=interfaces,
             cloud_init=meta.get("cloud_init", False),
+            nat=meta.get("nat", None),
         )
 
     @classmethod

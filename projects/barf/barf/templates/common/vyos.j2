@@ -8,3 +8,24 @@ set service https api keys id vaultadmin key '{{ secrets.vyos_api_password }}'
 
 set firewall global-options all-ping enable
 set firewall global-options broadcast-ping enable
+
+{% for rule in device.nat_masquerades %}
+set nat source rule {{ rule.rule }} outbound-interface name {{ rule.interface }}
+{% if rule.source %}
+set nat source rule {{ rule.rule }} source address {{ rule.source }}
+{% endif %}
+{% if rule.destination %}
+set nat source rule {{ rule.rule }} destination address {{ rule.destination }}
+{% endif %}
+set nat source rule {{ rule.rule }} translation address masquerade
+{% endfor %}
+{% for fwd in device.nat_port_forwards %}
+set nat destination rule {{ fwd.rule }} description '{{ fwd.description }}'
+set nat destination rule {{ fwd.rule }} inbound-interface name {{ fwd.interface }}
+set nat destination rule {{ fwd.rule }} protocol {{ fwd.protocol }}
+set nat destination rule {{ fwd.rule }} destination port {{ fwd.port }}
+set nat destination rule {{ fwd.rule }} translation address {{ fwd.to }}
+{% if fwd.translation_port %}
+set nat destination rule {{ fwd.rule }} translation port {{ fwd.translation_port }}
+{% endif %}
+{% endfor %}
