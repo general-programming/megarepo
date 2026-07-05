@@ -116,9 +116,11 @@ def config_diff(
 def config_deploy(target: str, filename: str, yes: bool) -> None:
     """Deploy rendered configs to TARGET (a hostname, or "all").
 
-    Configs are merged into the device's running config; nothing is
-    ever deleted from the device. The diff is shown and confirmed per
-    device before anything is pushed.
+    Configs are merged into the device's running config, except for
+    config sections the vendor declares as owned (e.g. VyOS
+    ``system name-server``): there the rendered config is the whole
+    truth and stale device config is deleted. The diff is shown and
+    confirmed per device before anything is pushed.
     """
     targets, links, global_meta = _load_targets(filename, target)
     secrets = _secrets()

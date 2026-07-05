@@ -1,4 +1,5 @@
 from barf.util.vyos_config import (
+    minimal_delete_paths,
     reconcile_hashed_passwords,
     verify_crypt_hash,
     ConfigDiff,
@@ -248,3 +249,92 @@ class TestReconcileHashedPasswords:
         running = {("system", "host-name", "r1")}
         candidate = {("system", "host-name", "r2")}
         assert reconcile_hashed_passwords(running, candidate) == (running, candidate)
+
+
+OWNED = (("system", "name-server"), ("vpn", "ipsec", "esp-group"))
+
+
+class TestOwnedSections:
+    def test_stale_owned_path_is_removed(self):
+        running = {("system", "name-server", "2606:4700::1111")}
+        candidate = {("system", "name-server", "2606:4700:4700::1111")}
+        diff = diff_paths(running, candidate, owned=OWNED)
+        assert diff.removed == [("system", "name-server", "2606:4700::1111")]
+        assert diff.added == [("system", "name-server", "2606:4700:4700::1111")]
+        assert diff.replaced == []
+        assert diff.device_only == []
+
+    def test_removal_alone_is_a_change(self):
+        running = {("system", "name-server", "1.1.1.1")}
+        diff = diff_paths(running, set(), owned=OWNED)
+        assert diff.has_changes
+        assert summarize_diff(diff) == "+0 -1"
+
+    def test_unowned_stale_paths_stay_device_only(self):
+        running = {("service", "ssh", "port", "22")}
+        diff = diff_paths(running, set(), owned=OWNED)
+        assert not diff.has_changes
+        assert diff.device_only == [("service", "ssh", "port", "22")]
+
+    def test_owned_wins_over_replaced_pairing(self):
+        # A stale value whose parent also gets a new value would pair
+        # as "replaced" (display-only); under an owned prefix it must
+        # be a real removal instead.
+        running = {("vpn", "ipsec", "esp-group", "E", "mode", "transport")}
+        candidate = {("vpn", "ipsec", "esp-group", "E", "mode", "tunnel")}
+        diff = diff_paths(running, candidate, owned=OWNED)
+        assert diff.removed == [("vpn", "ipsec", "esp-group", "E", "mode", "transport")]
+        assert diff.replaced == []
+
+    def test_removed_shown_as_minus_lines(self):
+        diff = ConfigDiff(removed=[("system", "name-server", "1.1.1.1")])
+        assert "- set system name-server 1.1.1.1" in format_diff(diff)
+
+
+class TestMinimalDeletePaths:
+    def test_leaf_delete_when_sibling_survives(self):
+        running = {
+            ("system", "name-server", "1.1.1.1"),
+            ("system", "name-server", "8.8.8.8"),
+        }
+        removed = [("system", "name-server", "1.1.1.1")]
+        assert minimal_delete_paths(removed, running, OWNED) == [
+            ("system", "name-server", "1.1.1.1")
+        ]
+
+    def test_collapses_to_node_when_subtree_fully_removed(self):
+        running = {
+            ("system", "name-server", "1.1.1.1"),
+            ("system", "name-server", "8.8.8.8"),
+            ("system", "host-name", "r1"),
+        }
+        removed = [
+            ("system", "name-server", "1.1.1.1"),
+            ("system", "name-server", "8.8.8.8"),
+        ]
+        assert minimal_delete_paths(removed, running, OWNED) == [
+            ("system", "name-server")
+        ]
+
+    def test_collapse_never_rises_above_the_owned_prefix(self):
+        # Even if name-server were the only thing under system on the
+        # device, the delete must not become "delete system".
+        running = {("system", "name-server", "1.1.1.1")}
+        removed = [("system", "name-server", "1.1.1.1")]
+        assert minimal_delete_paths(removed, running, OWNED) == [
+            ("system", "name-server")
+        ]
+
+    def test_collapses_whole_owned_group(self):
+        running = {
+            ("vpn", "ipsec", "esp-group", "OLD", "mode", "tunnel"),
+            ("vpn", "ipsec", "esp-group", "OLD", "lifetime", "3600"),
+            ("vpn", "ipsec", "esp-group", "E", "mode", "tunnel"),
+        }
+        removed = [
+            ("vpn", "ipsec", "esp-group", "OLD", "mode", "tunnel"),
+            ("vpn", "ipsec", "esp-group", "OLD", "lifetime", "3600"),
+        ]
+        assert minimal_delete_paths(removed, running, OWNED) == [
+            ("vpn", "ipsec", "esp-group", "OLD")
+        ]

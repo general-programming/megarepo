@@ -5,7 +5,6 @@ requires-python = ">=3.11"
 dependencies = [
     "click",
     "napalm",
-    "napalm-vyos",
     "hvac",
     "magic-logger",
     "gql",

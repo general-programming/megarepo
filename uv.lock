@@ -218,7 +218,6 @@ dependencies = [
     { name = "hvac" },
     { name = "magic-logger" },
     { name = "napalm" },
-    { name = "napalm-vyos" },
     { name = "passlib" },
 ]
 
@@ -231,7 +230,6 @@ requires-dist = [
     { name = "hvac" },
     { name = "magic-logger" },
     { name = "napalm" },
-    { name = "napalm-vyos" },
     { name = "passlib", specifier = ">=1.7.4" },
 ]
 
@@ -1110,18 +1108,6 @@ wheels = [
 ]
 
 [[package]]
-name = "napalm-vyos"
-version = "0.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "napalm" },
-    { name = "netmiko" },
-    { name = "paramiko" },
-    { name = "vyattaconfparser" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/c9/b2/cda2b22375bd1937a4b7fc0afe1561d306083d56df543966c4901caacb3d/napalm-vyos-0.2.1.tar.gz", hash = "sha256:24cf0207873b7a3d3b1f57d4290d937cfcaf9bdd22129b66b3227d4d0390bb93", size = 12621, upload-time = "2020-12-18T06:26:01.607Z" }
-
-[[package]]
 name = "ncclient"
 version = "0.7.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1803,15 +1789,6 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/53/0c/06f8b233b8fd13b9e5ee11424ef85419ba0d8ba0b3138bf360be2ff56953/urllib3-2.7.0.tar.gz", hash = "sha256:231e0ec3b63ceb14667c67be60f2f2c40a518cb38b03af60abc813da26505f4c", size = 433602, upload-time = "2026-05-07T16:13:18.596Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/7f/3e/5db95bcf282c52709639744ca2a8b149baccf648e39c8cc87553df9eae0c/urllib3-2.7.0-py3-none-any.whl", hash = "sha256:9fb4c81ebbb1ce9531cce37674bbc6f1360472bc18ca9a553ede278ef7276897", size = 131087, upload-time = "2026-05-07T16:13:17.151Z" },
-]
-
-[[package]]
-name = "vyattaconfparser"
-version = "0.5.5"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/5a/65/4994dd5e9efc234a815d1c1adf5b50e17b9ae3c11b36d3ee3c7139cfbae4/VyattaConfParser-0.5.5.tar.gz", hash = "sha256:d7974274663f3cffb02c3131f34c1eb73b627572551d7893c552863b7c18f6f3", size = 3086, upload-time = "2019-12-20T06:12:34.686Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/87/2b/0ffe63ff17498c82fbc55c28453205dc4f3d4bf55e7ab5765e8e147c976b/VyattaConfParser-0.5.5-py3-none-any.whl", hash = "sha256:6ac379953a3d715ef545c114901c89b5678b9ed0f9e12d71e56401411d2ee496", size = 4356, upload-time = "2019-12-20T06:12:31.97Z" },
 ]
 
 [[package]]

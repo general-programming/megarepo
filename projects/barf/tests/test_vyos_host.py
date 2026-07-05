@@ -175,3 +175,63 @@ class TestVyOSDiffConfig:
         )
         assert "hunter2" not in diff.text
         assert "<redacted>" in diff.text
+
+
+class TestVyOSPushRenderedConfig:
+    """push_rendered_config drives the HTTPS /configure endpoint."""
+
+    def wire(self, monkeypatch, running: dict):
+        monkeypatch.setattr(VyOSHost, "management_ip", "10.0.0.9")
+        monkeypatch.setattr(
+            "barf.util.secrets.VaultSecrets",
+            lambda: SimpleNamespace(vyos_api_password="key"),
+        )
+        monkeypatch.setattr(
+            "barf.util.vyos_api.vyos_api_retrieve_config",
+            lambda address, key, path=None, timeout=30: running,
+        )
+        calls = SimpleNamespace(configure=None, saved=False)
+        monkeypatch.setattr(
+            "barf.util.vyos_api.vyos_api_configure",
+            lambda address, key, ops, timeout=120: calls.__setattr__("configure", ops),
+        )
+        monkeypatch.setattr(
+            "barf.util.vyos_api.vyos_api_config_save",
+            lambda address, key, timeout=60: calls.__setattr__("saved", True),
+        )
+        return calls
+
+    def test_no_changes_pushes_nothing(self, monkeypatch):
+        calls = self.wire(monkeypatch, {"system": {"host-name": "testbox"}})
+        make_host().push_rendered_config("set system host-name testbox\n")
+        assert calls.configure is None
+        assert calls.saved is False
+
+    def test_owned_deletes_come_before_sets(self, monkeypatch):
+        calls = self.wire(
+            monkeypatch,
+            {"system": {"name-server": ["2606:4700::1111", "2606:4700::1001"]}},
+        )
+        make_host().push_rendered_config(
+            "set system name-server 2606:4700:4700::1111\n"
+            "set system name-server 2606:4700:4700::1001\n"
+        )
+        assert calls.configure == [
+            # Every stale value is being removed, so the whole node is
+            # deleted before the correct values are set.
+            {"op": "delete", "path": ["system", "name-server"]},
+            {"op": "set", "path": ["system", "name-server", "2606:4700:4700::1001"]},
+            {"op": "set", "path": ["system", "name-server", "2606:4700:4700::1111"]},
+        ]
+        assert calls.saved is True
+
+    def test_unowned_config_is_merged_not_deleted(self, monkeypatch):
+        calls = self.wire(
+            monkeypatch,
+            {"service": {"ssh": {"port": "22"}}, "system": {"host-name": "old"}},
+        )
+        make_host().push_rendered_config("set system host-name testbox\n")
+        assert calls.configure == [
+            {"op": "set", "path": ["system", "host-name", "testbox"]},
+        ]
+        assert calls.saved is True

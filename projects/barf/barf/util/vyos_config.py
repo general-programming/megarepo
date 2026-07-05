@@ -10,6 +10,11 @@ Merge semantics: barf deploys are merge candidates, so a diff reports
 what a merge would add or replace. Config that exists only on the
 device is reported separately for information; a merge never deletes
 it.
+
+Owned sections are the exception: for config path prefixes a vendor
+declares as owned (see ``VyOSHost.OWNED_PATHS``), the rendered config
+is the full truth — device paths under an owned prefix that the
+candidate does not render become real deletions.
 """
 
 import shlex
@@ -17,6 +22,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple, Union
 
 ConfigPaths = Set[Tuple[str, ...]]
+OwnedPaths = Tuple[Tuple[str, ...], ...]
 
 # Path components whose immediate child value is a secret. The value is
 # still diffed, only the display is redacted.
@@ -159,14 +165,21 @@ class ConfigDiff:
 
     added: List[Tuple[str, ...]] = field(default_factory=list)
     replaced: List[Tuple[str, ...]] = field(default_factory=list)
+    removed: List[Tuple[str, ...]] = field(default_factory=list)
     device_only: List[Tuple[str, ...]] = field(default_factory=list)
 
     @property
     def has_changes(self) -> bool:
-        return bool(self.added)
+        return bool(self.added or self.removed)
 
 
-def diff_paths(running: ConfigPaths, candidate: ConfigPaths) -> ConfigDiff:
+def _is_owned(path: Tuple[str, ...], owned: OwnedPaths) -> bool:
+    return any(path[: len(prefix)] == prefix for prefix in owned)
+
+
+def diff_paths(
+    running: ConfigPaths, candidate: ConfigPaths, owned: OwnedPaths = ()
+) -> ConfigDiff:
     """Diff two path sets under merge semantics.
 
     A device path counts as ``replaced`` (rather than ``device_only``)
@@ -175,6 +188,12 @@ def diff_paths(running: ConfigPaths, candidate: ConfigPaths) -> ConfigDiff:
     single- or multi-valued, so this is a best-effort pairing — for a
     multi-value node the "replaced" value would actually survive the
     merge.
+
+    Args:
+        owned: Config path prefixes the rendered config fully owns.
+            Device paths under an owned prefix that the candidate does
+            not render are real deletions (``removed``), not
+            informational ``device_only`` entries.
     """
     added = candidate - running
     stale = running - candidate
@@ -182,9 +201,12 @@ def diff_paths(running: ConfigPaths, candidate: ConfigPaths) -> ConfigDiff:
     added_parents = {path[:-1] for path in added if len(path) > 1}
 
     replaced = []
+    removed = []
     device_only = []
     for path in sorted(stale):
-        if len(path) > 1 and path[:-1] in added_parents:
+        if _is_owned(path, owned):
+            removed.append(path)
+        elif len(path) > 1 and path[:-1] in added_parents:
             replaced.append(path)
         else:
             device_only.append(path)
@@ -192,8 +214,37 @@ def diff_paths(running: ConfigPaths, candidate: ConfigPaths) -> ConfigDiff:
     return ConfigDiff(
         added=sorted(added),
         replaced=replaced,
+        removed=removed,
         device_only=device_only,
     )
+
+
+def minimal_delete_paths(
+    diff_removed: List[Tuple[str, ...]],
+    running: ConfigPaths,
+    owned: OwnedPaths,
+) -> List[Tuple[str, ...]]:
+    """Collapse removed leaf paths into the fewest delete commands.
+
+    A prefix is deleted wholly when every running path beneath it is
+    being removed (deleting the node also clears empty parents that
+    per-leaf deletes would leave behind). Collapsing never rises above
+    an owned prefix, so a delete can only ever touch owned config.
+    """
+    removed_set = set(diff_removed)
+    deletes = set()
+    for path in sorted(removed_set):
+        chosen = path
+        for i in range(1, len(path)):
+            prefix = path[:i]
+            if not _is_owned(prefix, owned):
+                continue
+            subtree = {r for r in running if r[: len(prefix)] == prefix}
+            if subtree and subtree <= removed_set:
+                chosen = prefix
+                break
+        deletes.add(chosen)
+    return sorted(deletes)
 
 
 def _format_path(path: Tuple[str, ...], redact: bool) -> str:
@@ -215,6 +266,8 @@ def format_diff(
     """
     lines = []
 
+    for path in diff.removed:
+        lines.append(f"- set {_format_path(path, redact)}")
     for path in diff.replaced:
         lines.append(f"- set {_format_path(path, redact)}")
     for path in diff.added:
@@ -234,12 +287,14 @@ def format_diff(
 
 
 def summarize_diff(diff: ConfigDiff) -> str:
-    """A one-line human summary, e.g. ``+12 ~3 (47 device-only)``."""
+    """A one-line human summary, e.g. ``+12 ~3 -2 (47 device-only)``."""
     if not diff.has_changes:
         return "no changes"
     parts = [f"+{len(diff.added)}"]
     if diff.replaced:
         parts.append(f"~{len(diff.replaced)}")
+    if diff.removed:
+        parts.append(f"-{len(diff.removed)}")
     if diff.device_only:
         parts.append(f"({len(diff.device_only)} device-only)")
     return " ".join(parts)

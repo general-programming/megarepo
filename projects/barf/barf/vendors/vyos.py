@@ -49,8 +49,18 @@ def _script_ok(rc: int, output: str, marker: str) -> bool:
 
 class VyOSHost(BaseHost):
     DEVICETYPE = "vyos"
-    # Deploys still ride NAPALM (merge + commit); diffs are local.
-    NAPALM_DRIVER = "vyos"
+
+    # Config sections barf fully owns. The rendered config is the whole
+    # truth under these prefixes: deploys delete device config we did
+    # not render. Grown section by section as network.yml/template
+    # coverage becomes exhaustive — never own a section while devices
+    # still carry intentional out-of-band config in it (e.g. the
+    # hand-built wireguard tunnels and NAT rules on sea1-vpn-leaf-1).
+    OWNED_PATHS = (
+        ("system", "name-server"),
+        ("vpn", "ipsec", "esp-group"),
+        ("vpn", "ipsec", "ike-group"),
+    )
 
     @property
     def can_bfd(self) -> bool:
@@ -113,12 +123,21 @@ class VyOSHost(BaseHost):
         config session is opened on the device (unlike the NAPALM
         compare the other vendors use).
         """
+        from barf.util.vyos_config import format_diff, summarize_diff
+
+        diff, _running = self._config_diff(rendered)
+        return DeployDiff(
+            text=format_diff(diff, redact=redact, show_device_only=show_device_only),
+            has_changes=diff.has_changes,
+            summary=summarize_diff(diff),
+        )
+
+    def _config_diff(self, rendered: str):
+        """The raw path diff plus the (reconciled) running path set."""
         from barf.util.vyos_config import (
             diff_paths,
-            format_diff,
             parse_set_commands,
             reconcile_hashed_passwords,
-            summarize_diff,
         )
 
         # The device stores passwords hashed; verify our plaintext
@@ -126,12 +145,32 @@ class VyOSHost(BaseHost):
         running, candidate = reconcile_hashed_passwords(
             self.running_config_paths(), parse_set_commands(rendered)
         )
-        diff = diff_paths(running, candidate)
-        return DeployDiff(
-            text=format_diff(diff, redact=redact, show_device_only=show_device_only),
-            has_changes=diff.has_changes,
-            summary=summarize_diff(diff),
-        )
+        return diff_paths(running, candidate, owned=self.OWNED_PATHS), running
+
+    def push_rendered_config(self, rendered: str) -> None:
+        """Apply the rendered config via the HTTPS API and save it.
+
+        One atomic ``/configure`` commit: deletions for owned sections
+        first (collapsed to whole-node deletes where possible), then
+        the additions as ``set`` ops. Merge semantics outside owned
+        sections — nothing else is deleted. No SSH or NAPALM involved.
+        """
+        from barf.util.vyos_api import vyos_api_config_save, vyos_api_configure
+        from barf.util.vyos_config import minimal_delete_paths
+
+        diff, running = self._config_diff(rendered)
+        if not diff.has_changes:
+            return
+
+        ops = [
+            {"op": "delete", "path": list(path)}
+            for path in minimal_delete_paths(diff.removed, running, self.OWNED_PATHS)
+        ]
+        ops += [{"op": "set", "path": list(path)} for path in diff.added]
+
+        address = self.require_management_ip()
+        vyos_api_configure(address, self._api_key(), ops)
+        vyos_api_config_save(address, self._api_key())
 
     def system_images(self) -> List["SystemImage"]:
         """The installed system images, per ``show system image``."""

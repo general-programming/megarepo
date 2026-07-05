@@ -10,16 +10,15 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 
-def _vyos_api_request(
-    host: str, key: str, endpoint: str, payload: dict, timeout: int = 10
-):
+def _vyos_api_request(host: str, key: str, endpoint: str, payload, timeout: int = 10):
     """POST a request to the VyOS HTTPS API.
 
     Args:
         host: Hostname or address to reach the device on.
         key: The API key (the ``vaultadmin`` key from Vault).
         endpoint: API endpoint, e.g. ``show`` or ``image``.
-        payload: The request body, e.g. ``{"op": "show", ...}``.
+        payload: The request body: an op dict (``{"op": "show", ...}``)
+            or, for ``/configure``, a list of op dicts.
         timeout: Socket timeout in seconds.
 
     Returns:
@@ -82,6 +81,23 @@ def vyos_api_retrieve_config(
     if not isinstance(data, dict):
         raise RuntimeError(f"unexpected /retrieve payload: {data!r}")
     return data
+
+
+def vyos_api_configure(host: str, key: str, ops: list, timeout: int = 120) -> str:
+    """Apply config operations via ``/configure`` (commits atomically).
+
+    Args:
+        ops: Ordered operations, e.g.
+            ``[{"op": "delete", "path": [...]}, {"op": "set", "path": [...]}]``.
+            The whole list is one commit; any failing op rolls back all
+            of them.
+    """
+    return _vyos_api_request(host, key, "configure", ops, timeout=timeout)
+
+
+def vyos_api_config_save(host: str, key: str, timeout: int = 60) -> str:
+    """Persist the running config to the boot config via ``/config-file``."""
+    return _vyos_api_request(host, key, "config-file", {"op": "save"}, timeout=timeout)
 
 
 def vyos_api_image_delete(host: str, key: str, name: str, timeout: int = 60) -> str:
