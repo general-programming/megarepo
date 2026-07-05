@@ -16,13 +16,10 @@ set system name-server '{{ dns_server }}'
 {{ device.interface_prefix(interface) }} address dhcp
 {{ device.interface_prefix(interface) }} ipv6 address autoconf
     {% endif %}
-    {# Interface IP #}
-    {% if interface.address %}
-{{ device.interface_prefix(interface) }} address {{ interface.address.with_prefixlen }}
-    {% endif %}
-    {% if interface.ip6_address %}
-{{ device.interface_prefix(interface) }} address {{ interface.ip6_address.with_prefixlen }}
-    {% endif %}
+    {# Interface IPs, any mix of IPv4/IPv6. #}
+    {% for addr in interface.addresses %}
+{{ device.interface_prefix(interface) }} address {{ addr.with_prefixlen }}
+    {% endfor %}
     {# Interface MTU. #}
     {% if interface.mtu %}
 {{ device.interface_prefix(interface) }} mtu {{ interface.mtu }}

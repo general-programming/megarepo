@@ -68,7 +68,6 @@ class VyOSHost(BaseHost):
         # Interface details not yet modeled in network.yml (hw-id,
         # vifs, dhcp/static addresses, ipv6 autoconf).
         ("interfaces", "ethernet"),
-        ("interfaces", "dummy"),
         # Hand-built links and their routing/NAT, not yet in
         # network.yml (e.g. sea1-vpn-leaf-1's wg51820 "/dev/hack"
         # tunnel and port-forwards; sea69's OSPF).

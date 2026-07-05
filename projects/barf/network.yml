@@ -192,7 +192,9 @@ hosts:
     interfaces:
       - name: dum0
         description: underlay loopback
-        address: 2602:fa6d:f:aaaa::f01/128
+        addresses:
+          - 2602:fa6d:f:aaaa::f01/128
+          - 10.255.2.9/32
         management: true
       - name: eth0
         description: external

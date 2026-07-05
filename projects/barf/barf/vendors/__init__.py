@@ -116,7 +116,13 @@ class HostInterface:
     mode: Optional[str] = None
     _description: Optional[str] = ""
     enabled: bool = True
-    # TODO: IPv6 support should be added.
+    # All addresses on the interface, any mix of IPv4/IPv6. `address`
+    # and `ip6_address` are kept in sync as the first of each family
+    # for templates and callers that want one; __post_init__ merges
+    # whichever of the three the constructor was given.
+    addresses: List[ipaddress.IPv4Interface | ipaddress.IPv6Interface] = field(
+        default_factory=list
+    )
     address: Optional[ipaddress.IPv4Interface] = None
     ip6_address: Optional[ipaddress.IPv6Interface] = None
     dhcp: bool = False
@@ -127,6 +133,15 @@ class HostInterface:
     cable: Optional[Cable] = None
     vrf: Optional[str] = None
     management: Optional[bool] = False
+
+    def __post_init__(self) -> None:
+        merged = []
+        for addr in (self.address, self.ip6_address, *self.addresses):
+            if addr and addr not in merged:
+                merged.append(addr)
+        self.addresses = merged
+        self.address = next((a for a in merged if a.version == 4), None)
+        self.ip6_address = next((a for a in merged if a.version == 6), None)
 
     @property
     def description(self) -> Optional[str]:
@@ -697,7 +712,10 @@ class BaseHost:
         """Create a host from a VPN network.yaml metadata entry."""
         interfaces = []
         for interface in meta.get("interfaces", []):
-            ip_address = interface.get("address", "")
+            # A single `address` and/or a list of `addresses`, any mix
+            # of IPv4/IPv6.
+            raw_addresses = [interface.get("address"), *interface.get("addresses", [])]
+            addresses = [ipaddress.ip_interface(raw) for raw in raw_addresses if raw]
 
             interfaces.append(
                 HostInterface(
@@ -705,16 +723,7 @@ class BaseHost:
                     type="VPNLink",
                     _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
-                    address=(
-                        ipaddress.IPv4Interface(ip_address)
-                        if ":" not in ip_address and ip_address
-                        else None
-                    ),
-                    ip6_address=(
-                        ipaddress.IPv6Interface(ip_address)
-                        if ":" in ip_address
-                        else None
-                    ),
+                    addresses=addresses,
                     dhcp=interface.get("dhcp", False),
                     untagged_vlan=NetworkVLAN(vid=interface.get("vlan")),
                     tagged_vlans=[
@@ -755,11 +764,11 @@ class BaseHost:
             except (ValueError, KeyError):
                 cable = None
 
-            # XXX: This will break if there are multiple IPs for this interface.
-            ip_address = ""
-
-            if "ip_addresses" in interface and interface["ip_addresses"]:
-                ip_address = interface["ip_addresses"][0]["address"]
+            addresses = [
+                ipaddress.ip_interface(entry["address"])
+                for entry in interface.get("ip_addresses") or []
+                if entry.get("address")
+            ]
 
             interfaces.append(
                 HostInterface(
@@ -767,16 +776,7 @@ class BaseHost:
                     type=interface["type"],
                     mode=interface["mode"],
                     _description=interface.get("description", None),
-                    address=(
-                        ipaddress.IPv4Interface(ip_address)
-                        if ":" not in ip_address and ip_address
-                        else None
-                    ),
-                    ip6_address=(
-                        ipaddress.IPv6Interface(ip_address)
-                        if ":" in ip_address
-                        else None
-                    ),
+                    addresses=addresses,
                     dhcp=False,
                     untagged_vlan=NetworkVLAN.from_netbox(interface["untagged_vlan"]),
                     tagged_vlans=[

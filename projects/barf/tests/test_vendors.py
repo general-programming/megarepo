@@ -105,3 +105,56 @@ class TestWgEndpoint:
 
     def test_no_addresses_means_no_endpoint(self):
         assert BaseHost(hostname="x", role="vpn").wg_endpoint is None
+
+
+class TestInterfaceAddresses:
+    """HostInterface carries all addresses; first-of-family shortcuts stay."""
+
+    def test_addresses_list_populates_family_shortcuts(self):
+        iface = HostInterface(
+            name="dum0",
+            type="VPNLink",
+            addresses=[
+                ipaddress.ip_interface("2602:fa6d:f:aaaa::f01/128"),
+                ipaddress.ip_interface("10.255.2.9/32"),
+            ],
+        )
+        assert iface.address == ipaddress.IPv4Interface("10.255.2.9/32")
+        assert iface.ip6_address == ipaddress.IPv6Interface("2602:fa6d:f:aaaa::f01/128")
+        assert len(iface.addresses) == 2
+
+    def test_scalar_kwargs_merge_into_addresses(self):
+        iface = HostInterface(
+            name="eth0",
+            type="VPNLink",
+            address=ipaddress.IPv4Interface("10.0.0.1/24"),
+        )
+        assert iface.addresses == [ipaddress.IPv4Interface("10.0.0.1/24")]
+
+    def test_no_addresses(self):
+        iface = HostInterface(name="eth0", type="VPNLink")
+        assert iface.addresses == []
+        assert iface.address is None
+        assert iface.ip6_address is None
+
+    def test_from_meta_accepts_address_and_addresses(self):
+        host = BaseHost.from_meta(
+            "testbox",
+            {
+                "role": "vpn",
+                "asn": 64512,
+                "interfaces": [
+                    {
+                        "name": "dum0",
+                        "addresses": ["2602:fa6d:f:aaaa::f01/128", "10.255.2.9/32"],
+                    },
+                    {"name": "eth0", "address": "10.3.2.4/23"},
+                ],
+            },
+        )
+        dum0, eth0 = host.interfaces
+        assert [a.with_prefixlen for a in dum0.addresses] == [
+            "2602:fa6d:f:aaaa::f01/128",
+            "10.255.2.9/32",
+        ]
+        assert eth0.addresses == [ipaddress.IPv4Interface("10.3.2.4/23")]
