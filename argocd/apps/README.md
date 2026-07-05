@@ -1,27 +1,24 @@
 # Apps
-This directory contains all of the applications you installed by using:
-```bash
-argocd-autopilot app create <APP_NAME> --app <APP_SPECIFIER> -p <PROJECT_NAME>
+
+Each app lives at `apps/<project>/<app>/`, where `<project>` matches an AppProject + ApplicationSet pair defined in `projects/`.
+
+## Layout
+
+```
+apps/<project>/<app>/base/       # shared manifests (kustomize base)
+apps/<project>/<app>/<cluster>/  # per-cluster overlay (fmt2, sea1, ...)
 ```
 
-## Application Types
-> If you don't specify the application `--type` argocd-autopilot will try to clone the source repository and infer the application type [automatically](https://argoproj.github.io/argo-cd/user-guide/tool_detection/#tool-detection)
+The ApplicationSets in `projects/` generate one Application per app directory per registered cluster, sourcing `apps/<project>/<app>/<cluster name>`. The cluster name is whatever the in-cluster was registered as on that datacenter's Argo instance (`argocd cluster set in-cluster --name <datacenter>`).
 
-* ### Directory application
-  Such an application references a specific directory at a given repo URL, path and revision. It will be persisted in the GitOps Repository as a single file at `apps/<APP_NAME>/<PROJECT_NAME>/config.json`.  
-  #### Example:  
-  ```bash
-  argocd-autopilot app create dir-example --app github.com/argoproj-labs/argocd-autopilot/examples/demo-dir/ -p <PROJECT_NAME> --type dir
-  ```
+## Adding an app
 
-* ### Kustomize application
-  A Kustomize application will have <u>exactly one</u>: `apps/<APP_NAME>/base/kustomization.yaml` file, and one or more `apps/<APP_NAME>/overlays/<PROJECT_NAME>/` folders.
+1. Create `apps/<project>/<app>/base/` with a `kustomization.yaml` holding the shared manifests.
+2. Create an overlay directory named after each cluster the app should run on, with a `kustomization.yaml` referencing `../base` plus any cluster-specific resources/patches.
+3. The Application deploys into a namespace named after the app directory. Register the namespace in `apps/infra/namespace/base/` so it is tracked.
 
-  The `apps/<APP_NAME>/base/kustomization.yaml` file is created the first time you create the application. The `apps/<APP_NAME>/overlays/<PROJECT_NAME>/` folder is created for each project you install this application on. So all overlays of the same application are using the same base `kustomization.yaml`.
-  #### Example:
-  Try running the following command:
-  ```bash
-  argocd-autopilot app create hello-world --app github.com/argoproj-labs/argocd-autopilot/examples/demo-app/ -p <PROJECT_NAME> --type kustomize
-  ```
+Note: every app directory generates an Application on **every** cluster. If an app has no overlay directory for a cluster, that cluster's Argo will show a broken Application for it. Add an overlay dir with an empty `kustomization.yaml` to silence it (`allowEmpty` is enabled everywhere).
 
-###### * If you did not create a project yet take a look at: [creating a project](https://argocd-autopilot.readthedocs.io/en/stable/Getting-Started/#add-a-project-and-an-application).
+## Secrets
+
+Never commit plaintext secrets. Put the secret in Vault and reference it with a `VaultStaticSecret` resource (see any existing `secret.yaml` for the pattern).

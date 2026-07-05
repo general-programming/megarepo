@@ -26,7 +26,7 @@ kubectl -n argocd get -o json secret argocd-initial-admin-secret | jq .data.pass
 - SEA1: https://sea1-argo.generalprogramming.org
 - FMT2: https://fmt2-argo.generalprogramming.org
 
-TODO: Add real authenication too.
+Login is via authentik (OIDC through dex). Members of the `admins` group get `role:admin`; everyone else is read-only.
 
 ## Adding a namespace
-Namespaces should be added in apps/infra/namespaces in order to keep track of all the namespaces that is sprayed in our cluster.
+Namespaces should be added in `apps/infra/namespace/base/` in order to keep track of all the namespaces that is sprayed in our cluster.

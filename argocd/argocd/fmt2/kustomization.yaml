@@ -5,7 +5,7 @@ resources:
   - ../base
   - secret.yaml
 patches:
-  - path: patch_cm_dex.yaml
+  - path: patch_argocd_url.yaml
     target:
       kind: ConfigMap
       name: argocd-cm
