@@ -20,20 +20,19 @@ def prefetch_link_keys(targets: List[BaseHost], links: List[WGNetworkLink]) -> N
     links; fetching them serially from Vault dominates render time, so
     pull them concurrently up front.
     """
-    from barf.model.wireguard import prefetch_wg_keys
+    from barf.model.wireguard import prefetch_keypairs
 
     target_names = {host.hostname for host in targets}
-    pairs = set()
+    paths = set()
     for link in links:
         # IPsec links have no WireGuard keypairs in Vault.
         if link.ipsec:
             continue
         if link.side_a.hostname in target_names or link.side_b.hostname in target_names:
-            port = int(link.link_id)
-            pairs.add((link.side_a.hostname, port))
-            pairs.add((link.side_b.hostname, port))
+            paths.add(link._key_path(link.side_a.hostname))
+            paths.add(link._key_path(link.side_b.hostname))
 
-    prefetch_wg_keys(sorted(pairs))
+    prefetch_keypairs(sorted(paths))
 
 
 def render_host_config(

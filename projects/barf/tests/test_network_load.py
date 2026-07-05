@@ -100,3 +100,50 @@ def test_profiles_merge_and_are_otherwise_ignored(tmp_path):
     leaf1 = next(h for h in hosts if h.hostname == "leaf-1")
     assert leaf1.asn == 65002
     assert leaf1.networks == ["10.9.0.0/24"]
+
+
+DERIVED_YML = """
+global_meta:
+  ssh_keys: []
+hosts:
+  spine-1:
+    id: 1
+    asn: 65001
+    type: vyos
+    role: vpn
+  leaf-1:
+    id: 3
+    asn: 65002
+    type: vyos
+    role: vpn
+  leaf-2:
+    asn: 65003
+    type: vyos
+    role: vpn
+links:
+  leaf-1:
+    spine-1: {}
+"""
+
+
+def test_derived_port_from_host_ids(tmp_path):
+    _hosts, links, _meta = load_network(write(tmp_path, DERIVED_YML))
+    link = links[0]
+    # 51000 + min(1,3)*64 + max(1,3)
+    assert link.link_id == 51000 + 1 * 64 + 3
+    assert link.pinned is False
+
+
+def test_pinned_port_sets_pinned_flag(tmp_path):
+    src = DERIVED_YML.replace("spine-1: {}", "spine-1: 51820")
+    _hosts, links, _meta = load_network(write(tmp_path, src))
+    assert links[0].link_id == 51820
+    assert links[0].pinned is True
+
+
+def test_derivation_without_ids_is_an_error(tmp_path):
+    src = DERIVED_YML.replace(
+        "links:\n  leaf-1:\n    spine-1: {}", "links:\n  leaf-2:\n    spine-1: {}"
+    )
+    with pytest.raises(ValueError, match="needs an `id`"):
+        load_network(write(tmp_path, src))

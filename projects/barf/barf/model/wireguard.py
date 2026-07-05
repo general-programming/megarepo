@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import concurrent.futures
 import ipaddress
-import subprocess
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Iterable, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, Optional
 
 import hvac
 
@@ -14,9 +13,9 @@ from barf.model.network import NetworkLink
 if TYPE_CHECKING:
     from barf.vendors import BaseHost
 
-# Process-wide keypair cache. Without it every host render re-fetches
-# its peers' keys from Vault, one round trip per (host, port).
-_KEY_CACHE: dict[Tuple[str, int], "WGKeypair"] = {}
+# Process-wide keypair cache keyed by Vault secret path. Without it
+# every host render re-fetches its peers' keys from Vault.
+_KEY_CACHE: dict[str, "WGKeypair"] = {}
 
 
 @dataclass
@@ -42,6 +41,31 @@ class WGNetworkLink(NetworkLink):
     network: Optional[str]
     secret: Optional[str] = None
     ipsec: bool = False
+    # True when network.yml pins the port explicitly. Pinned links use
+    # the legacy port-based Vault key paths; derived links use the
+    # pair-based paths — so unpinning a link in network.yml is the
+    # whole per-link migration (new port, new paths, fresh keys).
+    pinned: bool = True
+
+    @property
+    def pair(self) -> str:
+        """Canonical, order-free name for the two endpoints."""
+        return "--".join(sorted([self.side_a.hostname, self.side_b.hostname]))
+
+    def _key_path(self, hostname: str) -> str:
+        if self.pinned:
+            return f"wg-{self.link_id}-{hostname}"
+        return f"wglink-{self.pair}-{hostname}"
+
+    def wg_keys(self, host: "BaseHost") -> "WGKeypair":
+        """The WireGuard keypair for ``host``'s side of this link."""
+        return fetch_keypair(self._key_path(host.hostname))
+
+    def wg_privkey(self, host: "BaseHost") -> str:
+        return self.wg_keys(host).private_key
+
+    def wg_pubkey(self, host: "BaseHost") -> str:
+        return self.wg_keys(host).public_key
 
     def get_ip(self, host: "BaseHost", with_netmask: bool = False) -> str:
         """Return the IP address of the host on this link."""
@@ -75,70 +99,71 @@ class WGNetworkLink(NetworkLink):
 
 
 def generate_wireguard_keys() -> WGKeypair:
-    """Generate a WireGuard private & public key.
+    """Generate a WireGuard keypair (Curve25519 per RFC 7748).
 
-    Requires that the 'wg' command is available on PATH
-
-    Returns:
-        (str, str): (private_key, public_key)
+    Pure Python via the cryptography library — no `wg` binary needed;
+    the kernel clamps the scalar on use exactly as `wg genkey` would.
     """
+    from base64 import b64encode
 
-    privkey = subprocess.check_output("wg genkey", shell=True).decode("utf-8").strip()
-    pubkey = (
-        subprocess.check_output(f"echo '{privkey}' | wg pubkey", shell=True)
-        .decode("utf-8")
-        .strip()
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
+
+    private = X25519PrivateKey.generate()
+    priv_raw = private.private_bytes(
+        serialization.Encoding.Raw,
+        serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    )
+    pub_raw = private.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw
     )
 
     return WGKeypair(
-        public_key=pubkey,
-        private_key=privkey,
+        public_key=b64encode(pub_raw).decode(),
+        private_key=b64encode(priv_raw).decode(),
     )
 
 
-def prefetch_wg_keys(pairs: Iterable[Tuple[str, int]], max_workers: int = 16) -> None:
+def prefetch_keypairs(secret_paths: Iterable[str], max_workers: int = 16) -> None:
     """Warm the keypair cache with parallel Vault reads.
 
     Vault KV v2 has no batch-read API, so "multi fetch" means doing the
     per-secret reads concurrently. Each worker gets its own hvac client
     (``get_vault`` builds one per call), so this is thread-safe.
     """
-    missing = [pair for pair in dict.fromkeys(pairs) if pair not in _KEY_CACHE]
+    missing = [p for p in dict.fromkeys(secret_paths) if p not in _KEY_CACHE]
     if not missing:
         return
 
-    def fetch(pair: Tuple[str, int]) -> None:
+    def fetch(secret_path: str) -> None:
         # Read-only: warming a cache must never create secrets. A
         # genuinely missing keypair is left for the render to generate
         # (serially, in the main thread).
         try:
-            get_wg_keys(*pair, generate_keys=False)
+            fetch_keypair(secret_path, generate_keys=False)
         except ValueError:
             pass
 
     workers = min(max_workers, len(missing))
     with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        # get_wg_keys fills the cache; consume the iterator to surface
-        # fetch errors here rather than mid-render.
+        # fetch_keypair fills the cache; consume the iterator to
+        # surface fetch errors here rather than mid-render.
         list(pool.map(fetch, missing))
 
 
-def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
-    """Get the WireGuard private, public keys for a host.
+def fetch_keypair(secret_path: str, generate_keys: bool = True) -> WGKeypair:
+    """Get the WireGuard keypair stored at a Vault secret path.
 
     Args:
-        host (str): The host to get the WireGuard keypair for.
-        port (int): The port to get the WireGuard keypair for.
-        generate_keys (bool): Whether to generate a new keypair if one doesn't exist.
-
-    Returns:
-        WGKeypair: The WireGuard keypair for the host.
+        secret_path: The cluster-secrets path holding the keypair.
+        generate_keys: Whether to generate (and store) a new keypair if
+            one doesn't exist.
     """
-    cached = _KEY_CACHE.get((host, port))
+    cached = _KEY_CACHE.get(secret_path)
     if cached is not None:
         return cached
 
-    secret_path = f"wg-{port}-{host}"
     vault = get_vault()
 
     try:
@@ -162,5 +187,5 @@ def get_wg_keys(host: str, port: int, generate_keys: bool = True) -> WGKeypair:
             secret=result.to_dict(),
         )
 
-    _KEY_CACHE[(host, port)] = result
+    _KEY_CACHE[secret_path] = result
     return result

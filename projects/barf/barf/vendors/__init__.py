@@ -15,10 +15,8 @@ import hvac
 import hvac.exceptions
 
 from barf.model import get_vault
-from barf.model.wireguard import get_wg_keys
 
 if TYPE_CHECKING:
-    from barf.model.wireguard import WGKeypair
     from barf.util.images import ImageProvider
 
 log = logging.getLogger(__name__)
@@ -377,6 +375,7 @@ class BaseHost:
         vlan_map: Optional[Dict[int, NetworkVLAN]] = None,
         config_context: Optional[dict] = None,
         nat: Optional[dict] = None,
+        host_id: Optional[int] = None,
         ospf: Optional[dict] = None,
         static_routes: Optional[List[dict]] = None,
         **kwargs,
@@ -394,6 +393,10 @@ class BaseHost:
         self.cloud_init = cloud_init
         self.role = role
         self.config_context = config_context or {}
+        # Small stable per-host index used to derive link ports
+        # (51000 + min*64 + max). Append-only: never reuse a retired
+        # host's id while surviving hosts may have shared a link.
+        self.host_id = host_id
         self.nat_masquerades, self.nat_port_forwards = parse_nat_rules(nat or {})
         self.ospf = parse_ospf(ospf or {})
         # static_routes: [{network, interface | next-hop}].
@@ -417,21 +420,6 @@ class BaseHost:
     def is_templatable(self):
         """Whether the host can be templated."""
         return self.TEMPLATABLE
-
-    @cache
-    def wg_keys(self, port: int) -> "WGKeypair":
-        """Return the WG keys for this host."""
-        return get_wg_keys(self.hostname, port)
-
-    @cache
-    def wg_pubkey(self, port: int):
-        """Return the WireGuard public key for this host."""
-        return self.wg_keys(port).public_key
-
-    @cache
-    def wg_privkey(self, port: int):
-        """Return the WireGuard private key for this host."""
-        return self.wg_keys(port).private_key
 
     @property
     def enable_password(self):
@@ -881,6 +869,7 @@ class BaseHost:
             interfaces=interfaces,
             cloud_init=meta.get("cloud_init", False),
             nat=meta.get("nat", None),
+            host_id=meta.get("id", None),
             ospf=meta.get("ospf", None),
             static_routes=meta.get("static_routes", None),
         )

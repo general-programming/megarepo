@@ -35,6 +35,7 @@ profiles:
       - set protocols bgp peer-group internal remote-as 4280805526
 hosts:
   fmt2-vpn-spine-1:
+    id: 1
     address: 79.110.170.6
     ip6_address: 2a0d:1a43:8008:420::1
     asn: 4280805525
@@ -54,6 +55,7 @@ hosts:
         address: 10.255.2.1/32
         management: true
   fmt2-vpn-spine-2:
+    id: 2
     address: 79.110.170.7
     ip6_address: 2a0d:1a43:8008:420::2
     asn: 4280805525
@@ -73,6 +75,7 @@ hosts:
         address: 10.255.2.2/32
         management: true
   fmt2-vpn-leaf-1:
+    id: 3
     <<: *fmt2-leaf
     interfaces:
       - name: dum0
@@ -90,6 +93,7 @@ hosts:
         vlan: 1000
         dhcp: true
   fmt2-vpn-leaf-2:
+    id: 4
     <<: *fmt2-leaf
     interfaces:
       - name: dum0
@@ -104,6 +108,7 @@ hosts:
       - name: eth2
         dhcp: true
   sea69-acc-v-a-1:
+    id: 5
     address: 10.36.75.234
     asn: 4280805527
     type: vyos
@@ -132,50 +137,60 @@ hosts:
         address: 10.255.2.5/32
         management: true
   sea21-hv-egg-irl:
+    id: 6
     asn: 4280805528
     type: linux
     role: vpn
   oracle-vpn-1-1:
+    id: 7
     address: 193.122.165.81
     asn: 31898
     type: external
     role: vpn
   oracle-vpn-1-2:
+    id: 8
     address: 150.136.206.67
     asn: 31898
     type: external
     role: vpn
   oracle-vpn-2-1:
+    id: 9
     address: 150.136.206.67
     asn: 31898
     type: external
     role: vpn
   oracle-vpn-2-2:
+    id: 10
     address: 129.213.189.84
     asn: 31898
     type: external
     role: vpn
   oci-vpn-ord-1-1:
+    id: 11
     address: 131.186.6.35
     asn: 31898
     type: external
     role: vpn
   oci-vpn-ord-1-2:
+    id: 12
     address: 131.186.1.114
     asn: 31898
     type: external
     role: vpn
   fmt2-vpn-client-1:
+    id: 13
     asn: 4280805532
     management: 10.255.2.9
     type: linux
     role: vpn
   sea420-acc-v-hv2:
+    id: 14
     asn: 4280805533
     type: mikrotik
     role: vpn
   # sea1
   sea1-vpn-spine-1:
+    id: 15
     # address: 79.110.170.6
     ip6_address: 2602:fa6d:10:ffff::f02
     asn: 4280805529
@@ -198,6 +213,7 @@ hosts:
       - 2606:4700:4700::1111
       - 2606:4700:4700::1001
   sea1-vpn-leaf-1:
+    id: 16
     asn: 4280805534
     management: 2602:fa6d:f:aaaa::f01
     type: vyos
