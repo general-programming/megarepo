@@ -13,7 +13,7 @@ mastodon:
   streaming:
     image:
       repository: ghcr.io/theessem/mastodon-streaming
-      tag: nightly.2026-06-25  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
+      tag: nightly.2026-07-05  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
 
     replicas: 3
 
