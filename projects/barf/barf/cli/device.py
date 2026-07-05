@@ -8,6 +8,7 @@ import click
 from barf.cli.common import print_table, resolve_targets
 from barf.util.images import PROVIDERS
 from barf.util.network import load_network
+from barf.util.render import render_host_config
 from barf.util.secrets import VaultSecrets
 from barf.vendors import BaseHost
 
@@ -23,8 +24,8 @@ def device():
 @device.command("status")
 @click.argument("filename", default="network.yml", type=click.Path(exists=True))
 def device_status(filename: str) -> None:
-    """Show management endpoint, uptime, and version for all VyOS devices."""
-    hosts, _links, _global_meta = load_network(filename)
+    """Show endpoint, uptime, firmware, and config drift for VyOS devices."""
+    hosts, links, global_meta = load_network(filename)
 
     # Fail fast on Vault problems in the main thread, and prime the shared
     # secret cache so the probes below never touch Vault themselves.
@@ -40,26 +41,83 @@ def device_status(filename: str) -> None:
         log.warning("Could not fetch the latest VyOS release: %s", e)
         latest = None
 
+    # Render in the main thread: templating may create missing secrets
+    # in Vault, which must not race across pool workers.
+    secrets = VaultSecrets()
+    rendered: dict[str, str] = {}
+    render_errors: dict[str, str] = {}
+    for host in vyos_hosts:
+        try:
+            rendered[host.hostname] = render_host_config(
+                host, links, global_meta, secrets
+            )
+        except Exception as e:  # noqa: BLE001 - report per-device in the table
+            render_errors[host.hostname] = str(e)
+
+    def firmware_cell(version: str) -> str:
+        if latest is None:
+            return "?"
+        if provider.is_current(version):
+            return "yes"
+        return f"no ({latest})"
+
+    def config_cell(host: BaseHost) -> str:
+        if host.hostname in render_errors:
+            return f"render error: {render_errors[host.hostname]}"
+        try:
+            diff = host.diff_config(rendered[host.hostname])
+        except Exception as e:  # noqa: BLE001 - report per-device in the table
+            return f"error: {e}"
+        return "yes" if not diff.has_changes else diff.summary
+
     def fetch(host: BaseHost) -> list:
         log.debug("Processing device %s", host.hostname)
         address = host.management_ip
         if not address:
-            return [host.hostname, "-", "-", "-", "-", "error: no reachable address"]
+            return [
+                host.hostname,
+                "-",
+                "-",
+                "-",
+                "-",
+                "-",
+                "error: no reachable address",
+            ]
 
         try:
             version = host.human_version()
             uptime = host.uptime()
-            return [host.hostname, address, uptime, version, latest or "?", "ok"]
         except Exception as e:  # noqa: BLE001 - report the failure in the table
             log.debug("Failed to reach %s via %s: %s", host.hostname, address, e)
-            return [host.hostname, address, "-", "-", "-", f"error: {e}"]
+            return [host.hostname, address, "-", "-", "-", "-", f"error: {e}"]
+
+        return [
+            host.hostname,
+            address,
+            uptime,
+            version,
+            firmware_cell(version),
+            config_cell(host),
+            "ok",
+        ]
 
     rows = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
         for row in pool.map(fetch, vyos_hosts):
             rows.append(row)
 
-    print_table(["DEVICE", "ENDPOINT", "UPTIME", "VERSION", "LATEST", "STATUS"], rows)
+    print_table(
+        [
+            "DEVICE",
+            "ENDPOINT",
+            "UPTIME",
+            "VERSION",
+            "LATEST FIRMWARE",
+            "CONFIG CONSISTENT",
+            "STATUS",
+        ],
+        rows,
+    )
 
 
 def wait_for_device_alive(
