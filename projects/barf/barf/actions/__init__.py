@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import functools
 import logging
-from typing import Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Tuple
 
 import hvac
 from napalm import get_network_driver
 
-from barf.vendors import BaseHost
+if TYPE_CHECKING:
+    from barf.vendors import BaseHost
 
 
 @functools.lru_cache(maxsize=128)

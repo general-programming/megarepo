@@ -22,6 +22,9 @@ import shlex
 from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple, Union
 
+# passlib's hash registry is populated at runtime, which ty cannot see.
+from passlib.hash import sha512_crypt  # ty: ignore[unresolved-import]
+
 ConfigPaths = Set[Tuple[str, ...]]
 PathPrefixes = Tuple[Tuple[str, ...], ...]
 
@@ -99,10 +102,6 @@ def verify_crypt_hash(password: str, hashed: str) -> Optional[bool]:
         hash uses a scheme we cannot verify (callers should treat None
         as "unknown", not as a mismatch).
     """
-    # Imported lazily; passlib is only needed on the diff path. Its
-    # hash registry is populated at runtime, which ty cannot see.
-    from passlib.hash import sha512_crypt  # ty: ignore[unresolved-import]
-
     if not hashed.startswith("$6$"):
         return None
     try:

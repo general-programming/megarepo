@@ -9,7 +9,7 @@ from typing import List
 import yaml
 
 from barf.common import render_template
-from barf.model.wireguard import WGNetworkLink
+from barf.model.wireguard import WGNetworkLink, prefetch_keypairs
 from barf.vendors import BaseHost
 
 
@@ -20,8 +20,6 @@ def prefetch_link_keys(targets: List[BaseHost], links: List[WGNetworkLink]) -> N
     links; fetching them serially from Vault dominates render time, so
     pull them concurrently up front.
     """
-    from barf.model.wireguard import prefetch_keypairs
-
     target_names = {host.hostname for host in targets}
     paths = set()
     for link in links:

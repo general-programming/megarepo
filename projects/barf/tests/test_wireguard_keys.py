@@ -1,6 +1,10 @@
+from base64 import b64decode
 from types import SimpleNamespace
 
+import hvac.exceptions
 import pytest
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from barf.model import wireguard
 from barf.model.wireguard import (
@@ -92,7 +96,7 @@ def test_prefetch_fetches_each_path_once(monkeypatch):
 def test_prefetch_link_keys_collects_both_sides_of_target_links(monkeypatch):
     captured = []
     monkeypatch.setattr(
-        "barf.model.wireguard.prefetch_keypairs",
+        "barf.util.render.prefetch_keypairs",
         lambda paths, max_workers=16: captured.extend(paths),
     )
 
@@ -121,8 +125,6 @@ def test_prefetch_link_keys_collects_both_sides_of_target_links(monkeypatch):
 
 
 def test_prefetch_never_generates_missing_keys(monkeypatch):
-    import hvac.exceptions
-
     class MissingVault:
         def __init__(self):
             def read(mount_point, path):
@@ -143,11 +145,6 @@ def test_prefetch_never_generates_missing_keys(monkeypatch):
 
 
 def test_generate_wireguard_keys_roundtrip():
-    from base64 import b64decode
-
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-
     keys = wireguard.generate_wireguard_keys()
     priv_raw = b64decode(keys.private_key)
     pub_raw = b64decode(keys.public_key)

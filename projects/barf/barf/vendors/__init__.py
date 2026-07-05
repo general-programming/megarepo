@@ -14,7 +14,9 @@ import dns.resolver
 import hvac
 import hvac.exceptions
 
+from barf.actions import open_connection
 from barf.model import get_vault
+from barf.util.images import PROVIDERS
 
 if TYPE_CHECKING:
     from barf.util.images import ImageProvider
@@ -657,9 +659,6 @@ class BaseHost:
     @property
     def image_provider(self) -> Optional["ImageProvider"]:
         """The upstream image provider for this devicetype, if any."""
-        # Imported lazily to keep barf.util optional at import time.
-        from barf.util.images import PROVIDERS
-
         return PROVIDERS.get(self.devicetype)
 
     def verify_routing(self) -> Optional[str]:
@@ -702,9 +701,6 @@ class BaseHost:
 
     def _napalm_connection(self):
         """An open NAPALM connection to this host; the caller closes it."""
-        # Imported lazily so `barf --help` does not pull in napalm/netmiko.
-        from barf.actions import open_connection
-
         address = self._napalm_address()
         if not address:
             raise RuntimeError(f"{self.hostname}: no reachable address")

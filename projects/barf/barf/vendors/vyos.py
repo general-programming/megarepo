@@ -5,6 +5,9 @@ from typing import TYPE_CHECKING, List, Optional
 
 import click
 
+# Module-style imports so tests can monkeypatch barf.util.<mod>.*
+# attributes and the patches are seen here.
+from barf.util import secrets, ssh, vyos_api, vyos_config, vyos_scripts
 from barf.vendors import BaseHost, DeployDiff
 
 if TYPE_CHECKING:
@@ -87,33 +90,26 @@ class VyOSHost(BaseHost):
 
     @staticmethod
     def _api_key() -> str:
-        # Imported lazily: barf.util.secrets reaches barf.actions, which
-        # imports this package back.
-        from barf.util.secrets import VaultSecrets
-
-        return VaultSecrets().vyos_api_password
+        return secrets.VaultSecrets().vyos_api_password
 
     def _api_show(self, path: List[str], timeout: int = 10) -> str:
         """Run an operational ``show`` command via the HTTPS API."""
-        from barf.util.vyos_api import vyos_api_show
-
-        return vyos_api_show(
+        return vyos_api.vyos_api_show(
             self.require_management_ip(), self._api_key(), path, timeout=timeout
         )
 
     def _api_image_delete(self, name: str) -> None:
         """Delete an installed system image via the HTTPS API."""
-        from barf.util.vyos_api import vyos_api_image_delete
-
-        vyos_api_image_delete(self.require_management_ip(), self._api_key(), name)
+        vyos_api.vyos_api_image_delete(
+            self.require_management_ip(), self._api_key(), name
+        )
 
     def running_config_paths(self):
         """The device's running config as a set of ``set``-path tuples."""
-        from barf.util.vyos_api import vyos_api_retrieve_config
-        from barf.util.vyos_config import paths_from_api_json
-
-        data = vyos_api_retrieve_config(self.require_management_ip(), self._api_key())
-        return paths_from_api_json(data)
+        data = vyos_api.vyos_api_retrieve_config(
+            self.require_management_ip(), self._api_key()
+        )
+        return vyos_config.paths_from_api_json(data)
 
     def diff_config(
         self, rendered: str, *, redact: bool = True, show_device_only: bool = False
@@ -125,29 +121,23 @@ class VyOSHost(BaseHost):
         config session is opened on the device (unlike the NAPALM
         compare the other vendors use).
         """
-        from barf.util.vyos_config import format_diff, summarize_diff
-
         diff, _running = self._config_diff(rendered)
         return DeployDiff(
-            text=format_diff(diff, redact=redact, show_device_only=show_device_only),
+            text=vyos_config.format_diff(
+                diff, redact=redact, show_device_only=show_device_only
+            ),
             has_changes=diff.has_changes,
-            summary=summarize_diff(diff),
+            summary=vyos_config.summarize_diff(diff),
         )
 
     def _config_diff(self, rendered: str):
         """The raw path diff plus the (reconciled) running path set."""
-        from barf.util.vyos_config import (
-            diff_paths,
-            parse_set_commands,
-            reconcile_hashed_passwords,
-        )
-
         # The device stores passwords hashed; verify our plaintext
         # against its hash so unchanged passwords do not show as diffs.
-        running, candidate = reconcile_hashed_passwords(
-            self.running_config_paths(), parse_set_commands(rendered)
+        running, candidate = vyos_config.reconcile_hashed_passwords(
+            self.running_config_paths(), vyos_config.parse_set_commands(rendered)
         )
-        diff = diff_paths(
+        diff = vyos_config.diff_paths(
             running, candidate, kept=self.KEPT_PATHS, ignored=self.IGNORED_PATHS
         )
         return diff, running
@@ -160,28 +150,23 @@ class VyOSHost(BaseHost):
         then the additions as ``set`` ops. Config under KEPT_PATHS is
         merged, never deleted. No SSH or NAPALM involved.
         """
-        from barf.util.vyos_api import vyos_api_config_save, vyos_api_configure
-        from barf.util.vyos_config import minimal_delete_paths
-
         diff, running = self._config_diff(rendered)
         if not diff.has_changes:
             return
 
         ops = [
             {"op": "delete", "path": list(path)}
-            for path in minimal_delete_paths(diff.removed, running)
+            for path in vyos_config.minimal_delete_paths(diff.removed, running)
         ]
         ops += [{"op": "set", "path": list(path)} for path in diff.added]
 
         address = self.require_management_ip()
-        vyos_api_configure(address, self._api_key(), ops)
-        vyos_api_config_save(address, self._api_key())
+        vyos_api.vyos_api_configure(address, self._api_key(), ops)
+        vyos_api.vyos_api_config_save(address, self._api_key())
 
     def system_images(self) -> List["SystemImage"]:
         """The installed system images, per ``show system image``."""
-        from barf.util.vyos_api import parse_system_images
-
-        return parse_system_images(self._api_show(["system", "image"]))
+        return vyos_api.parse_system_images(self._api_show(["system", "image"]))
 
     def human_version(self) -> str:
         return _parse_version(self._api_show(["version"]))
@@ -232,11 +217,6 @@ class VyOSHost(BaseHost):
         Returns:
             A short human-readable result.
         """
-        # Imported lazily: barf.util.ssh reaches barf.actions, which
-        # imports this package back.
-        from barf.util import vyos_scripts
-        from barf.util.ssh import DeviceSSH
-
         image = Path(filename)
         if version is None:
             version = image.name.removeprefix("vyos-").removesuffix(
@@ -269,10 +249,10 @@ class VyOSHost(BaseHost):
                 click.echo(f"{prefix} deleting stale image {version}")
                 self._api_image_delete(version)
 
-        with DeviceSSH(self, ssh_address) as ssh:
+        with ssh.DeviceSSH(self, ssh_address) as conn:
             if install_needed:
                 click.echo(f"{prefix} running pre-checks")
-                rc, out = ssh.run_script(
+                rc, out = conn.run_script(
                     "barf-precheck.sh",
                     vyos_scripts.precheck(remote_path, required_mb=required_mb),
                     echo_prefix=f"{prefix}   ",
@@ -281,13 +261,13 @@ class VyOSHost(BaseHost):
                     raise RuntimeError(f"{self.hostname}: pre-checks failed")
 
                 click.echo(f"{prefix} copying image")
-                ssh.put(image, remote_path, label=f"{prefix} {image.name}")
+                conn.put(image, remote_path, label=f"{prefix} {image.name}")
 
                 if stage:
                     return f"staged {version} at {remote_path}"
 
                 click.echo(f"{prefix} installing image")
-                rc, out = ssh.run_script(
+                rc, out = conn.run_script(
                     "barf-install.sh",
                     vyos_scripts.install(remote_path, version),
                     echo_prefix=f"{prefix}   ",
@@ -297,7 +277,7 @@ class VyOSHost(BaseHost):
 
             drain_bgp = bool(self.asn)
             click.echo(f"{prefix} launching detached drain+reboot")
-            log_path = ssh.run_detached(
+            log_path = conn.run_detached(
                 "barf-reboot.sh",
                 vyos_scripts.drain_and_reboot(version, drain_wait, drain_bgp),
             )
@@ -323,11 +303,9 @@ class VyOSHost(BaseHost):
         that still answers with a FAIL marker in its log means the script
         bailed and no reboot is coming.
         """
-        from barf.util.ssh import DeviceSSH
-
         try:
-            with DeviceSSH(self, ssh_address, connect_timeout=5) as ssh:
-                _rc, log_output = ssh.run(f"cat {log_path}", timeout=10)
+            with ssh.DeviceSSH(self, ssh_address, connect_timeout=5) as conn:
+                _rc, log_output = conn.run(f"cat {log_path}", timeout=10)
         except Exception:  # noqa: BLE001 - unreachable means the drain worked
             return None
 

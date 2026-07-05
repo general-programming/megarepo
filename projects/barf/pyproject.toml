@@ -22,3 +22,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["barf"]
+
+[tool.ruff.lint]
+# Defaults (E4, E7, E9, F) stay via extend-select. PLC0415: imports
+# belong at the top of the file; import cycles get fixed, not hidden.
+extend-select = ["PLC0415"]

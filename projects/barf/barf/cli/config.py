@@ -7,6 +7,7 @@ import click
 
 from barf.cli.common import print_table, resolve_targets
 from barf.util.network import load_network
+from barf.util.secrets import VaultSecrets
 from barf.util.render import (
     prefetch_link_keys,
     render_host_config,
@@ -34,9 +35,7 @@ def _load_targets(
 
 
 def _secrets():
-    """The Vault secret fetcher, imported lazily to keep --help fast."""
-    from barf.util.secrets import VaultSecrets
-
+    """The Vault secret fetcher (a seam tests monkeypatch)."""
     return VaultSecrets()
 
 

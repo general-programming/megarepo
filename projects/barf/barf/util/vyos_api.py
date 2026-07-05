@@ -7,6 +7,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Optional
 
+from barf.util.vyos_config import redact_path
+
 log = logging.getLogger(__name__)
 
 
@@ -16,8 +18,6 @@ def _redacted_for_log(payload):
     Only the debug log sees this copy; the real request body is
     untouched.
     """
-    from barf.util.vyos_config import redact_path
-
     if isinstance(payload, list):
         return [
             {**op, "path": list(redact_path(op["path"]))} if op.get("path") else op

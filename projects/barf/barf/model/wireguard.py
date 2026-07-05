@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import concurrent.futures
 import ipaddress
+from base64 import b64encode
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Iterable, Optional
 
 import hvac
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
 
 from barf.model import get_vault
 from barf.model.network import NetworkLink
@@ -104,11 +107,6 @@ def generate_wireguard_keys() -> WGKeypair:
     Pure Python via the cryptography library — no `wg` binary needed;
     the kernel clamps the scalar on use exactly as `wg genkey` would.
     """
-    from base64 import b64encode
-
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey
-
     private = X25519PrivateKey.generate()
     priv_raw = private.private_bytes(
         serialization.Encoding.Raw,

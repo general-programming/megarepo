@@ -3,6 +3,9 @@ from types import SimpleNamespace
 
 import click
 import pytest
+from click.testing import CliRunner
+
+from barf.vendors import DeployDiff
 
 from barf.cli.device import wait_for_device_alive
 
@@ -87,16 +90,12 @@ def run_status(monkeypatch, tmp_path, hosts, render_error=None):
 
     monkeypatch.setattr(device_cli, "render_host_config", render)
 
-    from click.testing import CliRunner
-
     return CliRunner().invoke(
         device_cli.device, ["status", str(network)], catch_exceptions=False
     )
 
 
 def test_status_current_and_consistent(monkeypatch, tmp_path):
-    from barf.vendors import DeployDiff
-
     host = FakeStatusHost(
         "box1", diff=DeployDiff(text="", has_changes=False, summary="no changes")
     )
@@ -110,8 +109,6 @@ def test_status_current_and_consistent(monkeypatch, tmp_path):
 
 
 def test_status_outdated_firmware_and_drift(monkeypatch, tmp_path):
-    from barf.vendors import DeployDiff
-
     host = FakeStatusHost(
         "box1",
         version="1.9",
@@ -127,8 +124,6 @@ def test_status_outdated_firmware_and_drift(monkeypatch, tmp_path):
 
 
 def test_status_render_error_still_reports(monkeypatch, tmp_path):
-    from barf.vendors import DeployDiff
-
     host = FakeStatusHost(
         "box1", diff=DeployDiff(text="", has_changes=False, summary="no changes")
     )

@@ -1,7 +1,7 @@
 import contextlib
 import ipaddress
 
-from barf.vendors import BaseHost, HostInterface
+from barf.vendors import BaseHost, HostInterface, parse_nat_rules
 
 
 def make_host():
@@ -162,8 +162,6 @@ class TestInterfaceAddresses:
 
 class TestParseNatRules:
     def test_masquerade_fan_out_numbers_from_10(self):
-        from barf.vendors import parse_nat_rules
-
         masq, forwards = parse_nat_rules(
             {
                 "masquerade": [
@@ -183,8 +181,6 @@ class TestParseNatRules:
         ]
 
     def test_port_forward_protocol_fan_out_numbers_from_100(self):
-        from barf.vendors import parse_nat_rules
-
         _, forwards = parse_nat_rules(
             {
                 "port_forwards": [
@@ -202,8 +198,6 @@ class TestParseNatRules:
         assert forwards[0].description == "Port Forward: Torrent-UDP to 10.3.2.10"
 
     def test_explicit_rule_restarts_the_counter(self):
-        from barf.vendors import parse_nat_rules
-
         masq, _ = parse_nat_rules(
             {
                 "masquerade": [
@@ -216,8 +210,6 @@ class TestParseNatRules:
         assert [m.rule for m in masq] == [10, 50, 51]
 
     def test_single_protocol_defaults_to_tcp(self):
-        from barf.vendors import parse_nat_rules
-
         _, forwards = parse_nat_rules(
             {
                 "port_forwards": [
