@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "devDependencies": {
     "@cloudflare/puppeteer": "^1.0.6",
-    "@cloudflare/workers-types": "^4.20260214.0",
+    "@cloudflare/workers-types": "^5.0.0",
     "postal-mime": "^2.7.3",
     "typescript": "^6.0.0",
     "wrangler": "^4.65.0"
