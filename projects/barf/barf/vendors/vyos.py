@@ -58,7 +58,6 @@ class VyOSHost(BaseHost):
     # intentional out-of-band config under it.
     KEPT_PATHS = (
         # VyOS platform-managed config and hardware facts.
-        ("interfaces", "loopback"),
         ("system", "login", "user", "vyos"),
         # Interface details not yet modeled in network.yml (hw-id,
         # vifs, dhcp/static addresses, ipv6 autoconf).

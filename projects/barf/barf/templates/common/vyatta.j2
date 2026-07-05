@@ -11,6 +11,10 @@ set service snmp contact '{{ global_meta.snmp_contact }}'
 set system name-server '{{ dns_server }}'
 {% endfor %}
 
+{# The factory-default empty loopback node; rendering it keeps the
+   owned diff clean instead of fighting the default on every image. #}
+set interfaces loopback lo
+
 set system syslog local facility all level info
 set system syslog local facility local7 level debug
 set system console device ttyS0 speed 115200
