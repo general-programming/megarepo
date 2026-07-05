@@ -151,10 +151,13 @@ class TestVyOSDiffConfig:
         assert not diff.has_changes
         assert diff.summary == "no changes"
 
-    def test_addition_and_replacement(self, monkeypatch):
+    def test_addition_and_removal(self, monkeypatch):
         self.wire(
             monkeypatch,
-            {"system": {"host-name": "oldname"}, "service": {"ssh": {"port": "22"}}},
+            {
+                "system": {"host-name": "oldname", "conntrack": {"modules": "ftp"}},
+                "service": {"ssh": {"port": "22"}},
+            },
         )
         diff = make_host().diff_config(
             "set system host-name testbox\nset system time-zone UTC\n"
@@ -163,9 +166,10 @@ class TestVyOSDiffConfig:
         assert "+ set system host-name testbox" in diff.text
         assert "- set system host-name oldname" in diff.text
         assert "+ set system time-zone UTC" in diff.text
-        # Device-only config (ssh) is counted, not shown, under merge
-        # semantics.
-        assert "ssh" not in diff.text
+        # Ownership is the default: unrendered, unkept config (ssh) is
+        # a real removal; kept config (conntrack) is counted only.
+        assert "- set service ssh port 22" in diff.text
+        assert "conntrack" not in diff.text
         assert "device-only" in diff.text
 
     def test_secret_values_redacted(self, monkeypatch):
@@ -210,7 +214,14 @@ class TestVyOSPushRenderedConfig:
     def test_owned_deletes_come_before_sets(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            {"system": {"name-server": ["2606:4700::1111", "2606:4700::1001"]}},
+            # conntrack is kept, so the delete collapse anchors at the
+            # name-server node instead of rising to bare "system".
+            {
+                "system": {
+                    "name-server": ["2606:4700::1111", "2606:4700::1001"],
+                    "conntrack": {"modules": "ftp"},
+                }
+            },
         )
         make_host().push_rendered_config(
             "set system name-server 2606:4700:4700::1111\n"
@@ -225,13 +236,20 @@ class TestVyOSPushRenderedConfig:
         ]
         assert calls.saved is True
 
-    def test_unowned_config_is_merged_not_deleted(self, monkeypatch):
+    def test_kept_config_is_merged_not_deleted(self, monkeypatch):
         calls = self.wire(
             monkeypatch,
-            {"service": {"ssh": {"port": "22"}}, "system": {"host-name": "old"}},
+            # ntp and conntrack are kept; the stale host-name is owned.
+            {
+                "service": {"ntp": {"server": "time1.vyos.net"}},
+                "system": {"host-name": "old", "conntrack": {"modules": "ftp"}},
+            },
         )
         make_host().push_rendered_config("set system host-name testbox\n")
         assert calls.configure == [
+            # The stale value collapses to its node: host-name has no
+            # other running config beneath it.
+            {"op": "delete", "path": ["system", "host-name"]},
             {"op": "set", "path": ["system", "host-name", "testbox"]},
         ]
         assert calls.saved is True

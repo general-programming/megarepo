@@ -10,6 +10,22 @@ from typing import Optional
 log = logging.getLogger(__name__)
 
 
+def _redacted_for_log(payload):
+    """``payload`` with secret values (passwords, PSKs) hidden.
+
+    Only the debug log sees this copy; the real request body is
+    untouched.
+    """
+    from barf.util.vyos_config import redact_path
+
+    if isinstance(payload, list):
+        return [
+            {**op, "path": list(redact_path(op["path"]))} if op.get("path") else op
+            for op in payload
+        ]
+    return payload
+
+
 def _vyos_api_request(host: str, key: str, endpoint: str, payload, timeout: int = 10):
     """POST a request to the VyOS HTTPS API.
 
@@ -45,7 +61,7 @@ def _vyos_api_request(host: str, key: str, endpoint: str, payload, timeout: int 
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
 
-    log.debug("POST %s payload=%s", url, payload)
+    log.debug("POST %s payload=%s", url, _redacted_for_log(payload))
     req = urllib.request.Request(url, data=body, method="POST")
     with urllib.request.urlopen(req, timeout=timeout, context=ctx) as resp:
         result = json.load(resp)

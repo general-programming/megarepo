@@ -11,10 +11,11 @@ what a merge would add or replace. Config that exists only on the
 device is reported separately for information; a merge never deletes
 it.
 
-Owned sections are the exception: for config path prefixes a vendor
-declares as owned (see ``VyOSHost.OWNED_PATHS``), the rendered config
-is the full truth — device paths under an owned prefix that the
-candidate does not render become real deletions.
+Ownership is exclusion-based: the rendered config is the full truth
+everywhere by default, and device paths the candidate does not render
+become real deletions — except under the "kept" path prefixes a vendor
+declares (see ``VyOSHost.KEPT_PATHS``), which cover device-managed
+config and sections not yet modeled in network.yml.
 """
 
 import shlex
@@ -22,7 +23,7 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Set, Tuple, Union
 
 ConfigPaths = Set[Tuple[str, ...]]
-OwnedPaths = Tuple[Tuple[str, ...], ...]
+PathPrefixes = Tuple[Tuple[str, ...], ...]
 
 # Path components whose immediate child value is a secret. The value is
 # still diffed, only the display is redacted.
@@ -156,11 +157,14 @@ class ConfigDiff:
     """The result of diffing a running config against a candidate.
 
     Attributes:
-        added: Paths the merge would create.
-        replaced: Device paths sharing a parent with an added path —
-            the values a merge on a single-value node would overwrite.
-        device_only: Paths on the device that the candidate does not
-            mention at all; a merge leaves them untouched.
+        added: Paths the deploy would create.
+        replaced: Kept device paths sharing a parent with an added path
+            — the values a merge on a single-value node would
+            overwrite.
+        removed: Device paths the deploy deletes (stale config outside
+            the kept prefixes).
+        device_only: Kept paths on the device that the candidate does
+            not mention at all; a deploy leaves them untouched.
     """
 
     added: List[Tuple[str, ...]] = field(default_factory=list)
@@ -173,27 +177,26 @@ class ConfigDiff:
         return bool(self.added or self.removed)
 
 
-def _is_owned(path: Tuple[str, ...], owned: OwnedPaths) -> bool:
-    return any(path[: len(prefix)] == prefix for prefix in owned)
+def _is_kept(path: Tuple[str, ...], kept: PathPrefixes) -> bool:
+    return any(path[: len(prefix)] == prefix for prefix in kept)
 
 
 def diff_paths(
-    running: ConfigPaths, candidate: ConfigPaths, owned: OwnedPaths = ()
+    running: ConfigPaths, candidate: ConfigPaths, kept: PathPrefixes = ()
 ) -> ConfigDiff:
-    """Diff two path sets under merge semantics.
+    """Diff two path sets; the candidate owns everything not ``kept``.
 
-    A device path counts as ``replaced`` (rather than ``device_only``)
-    when the candidate adds a different value under the same parent
-    path. Without the device's schema we cannot know whether a node is
-    single- or multi-valued, so this is a best-effort pairing — for a
-    multi-value node the "replaced" value would actually survive the
-    merge.
+    Device paths the candidate does not render are real deletions
+    (``removed``) by default. Under a ``kept`` prefix they are merely
+    informational: ``replaced`` when the candidate adds a different
+    value under the same parent path (best-effort — for a multi-value
+    node the value would actually survive the merge), ``device_only``
+    otherwise.
 
     Args:
-        owned: Config path prefixes the rendered config fully owns.
-            Device paths under an owned prefix that the candidate does
-            not render are real deletions (``removed``), not
-            informational ``device_only`` entries.
+        kept: Config path prefixes excluded from ownership
+            (device-managed config, or sections network.yml does not
+            model yet).
     """
     added = candidate - running
     stale = running - candidate
@@ -204,7 +207,7 @@ def diff_paths(
     removed = []
     device_only = []
     for path in sorted(stale):
-        if _is_owned(path, owned):
+        if not _is_kept(path, kept):
             removed.append(path)
         elif len(path) > 1 and path[:-1] in added_parents:
             replaced.append(path)
@@ -222,14 +225,14 @@ def diff_paths(
 def minimal_delete_paths(
     diff_removed: List[Tuple[str, ...]],
     running: ConfigPaths,
-    owned: OwnedPaths,
 ) -> List[Tuple[str, ...]]:
     """Collapse removed leaf paths into the fewest delete commands.
 
     A prefix is deleted wholly when every running path beneath it is
     being removed (deleting the node also clears empty parents that
-    per-leaf deletes would leave behind). Collapsing never rises above
-    an owned prefix, so a delete can only ever touch owned config.
+    per-leaf deletes would leave behind). Kept paths are never in the
+    removed set, so a subtree containing kept config can never fully
+    collapse — a delete structurally cannot touch kept config.
     """
     removed_set = set(diff_removed)
     deletes = set()
@@ -237,8 +240,6 @@ def minimal_delete_paths(
         chosen = path
         for i in range(1, len(path)):
             prefix = path[:i]
-            if not _is_owned(prefix, owned):
-                continue
             subtree = {r for r in running if r[: len(prefix)] == prefix}
             if subtree and subtree <= removed_set:
                 chosen = prefix
@@ -247,9 +248,17 @@ def minimal_delete_paths(
     return sorted(deletes)
 
 
+def redact_path(path) -> Tuple[str, ...]:
+    """A copy of ``path`` with its value hidden when under a secret node."""
+    path = tuple(path)
+    if len(path) > 1 and path[-2] in _SECRET_NODES:
+        return path[:-1] + (_REDACTED,)
+    return path
+
+
 def _format_path(path: Tuple[str, ...], redact: bool) -> str:
-    if redact and len(path) > 1 and path[-2] in _SECRET_NODES:
-        path = path[:-1] + (_REDACTED,)
+    if redact:
+        path = redact_path(path)
     return " ".join(shlex.quote(component) for component in path)
 
 
@@ -275,7 +284,7 @@ def format_diff(
 
     if show_device_only and diff.device_only:
         lines.append("")
-        lines.append("# on device but not in the generated config (kept by merge):")
+        lines.append("# on device but not in the generated config (kept):")
         for path in diff.device_only:
             lines.append(f"  set {_format_path(path, redact)}")
     elif diff.device_only:

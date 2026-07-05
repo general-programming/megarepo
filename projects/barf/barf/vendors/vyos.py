@@ -50,16 +50,35 @@ def _script_ok(rc: int, output: str, marker: str) -> bool:
 class VyOSHost(BaseHost):
     DEVICETYPE = "vyos"
 
-    # Config sections barf fully owns. The rendered config is the whole
-    # truth under these prefixes: deploys delete device config we did
-    # not render. Grown section by section as network.yml/template
-    # coverage becomes exhaustive — never own a section while devices
-    # still carry intentional out-of-band config in it (e.g. the
-    # hand-built wireguard tunnels and NAT rules on sea1-vpn-leaf-1).
-    OWNED_PATHS = (
-        ("system", "name-server"),
-        ("vpn", "ipsec", "esp-group"),
-        ("vpn", "ipsec", "ike-group"),
+    # Ownership is exclusion-based: barf owns the whole config —
+    # deploys delete device config we did not render — EXCEPT under
+    # these kept prefixes. Shrunk prefix by prefix as network.yml
+    # coverage grows; seeded from a 2026-07-05 fleet survey of every
+    # device-only path. Never drop a prefix while devices still carry
+    # intentional out-of-band config under it.
+    KEPT_PATHS = (
+        # VyOS platform-managed config and hardware facts.
+        ("interfaces", "loopback"),
+        ("system", "config-management"),
+        ("system", "conntrack"),
+        ("system", "console"),
+        ("system", "login"),
+        ("system", "syslog"),
+        ("service", "ntp"),
+        # Interface details not yet modeled in network.yml (hw-id,
+        # vifs, dhcp/static addresses, ipv6 autoconf).
+        ("interfaces", "ethernet"),
+        ("interfaces", "dummy"),
+        # Hand-built links and their routing/NAT, not yet in
+        # network.yml (e.g. sea1-vpn-leaf-1's wg51820 "/dev/hack"
+        # tunnel and port-forwards; sea69's OSPF).
+        ("interfaces", "wireguard"),
+        ("protocols", "bgp"),
+        ("protocols", "ospf"),
+        ("protocols", "static"),
+        ("nat",),
+        ("service", "snmp"),
+        ("vpn", "ipsec", "site-to-site"),
     )
 
     @property
@@ -145,15 +164,15 @@ class VyOSHost(BaseHost):
         running, candidate = reconcile_hashed_passwords(
             self.running_config_paths(), parse_set_commands(rendered)
         )
-        return diff_paths(running, candidate, owned=self.OWNED_PATHS), running
+        return diff_paths(running, candidate, kept=self.KEPT_PATHS), running
 
     def push_rendered_config(self, rendered: str) -> None:
         """Apply the rendered config via the HTTPS API and save it.
 
-        One atomic ``/configure`` commit: deletions for owned sections
-        first (collapsed to whole-node deletes where possible), then
-        the additions as ``set`` ops. Merge semantics outside owned
-        sections — nothing else is deleted. No SSH or NAPALM involved.
+        One atomic ``/configure`` commit: deletions of stale owned
+        config first (collapsed to whole-node deletes where possible),
+        then the additions as ``set`` ops. Config under KEPT_PATHS is
+        merged, never deleted. No SSH or NAPALM involved.
         """
         from barf.util.vyos_api import vyos_api_config_save, vyos_api_configure
         from barf.util.vyos_config import minimal_delete_paths
@@ -164,7 +183,7 @@ class VyOSHost(BaseHost):
 
         ops = [
             {"op": "delete", "path": list(path)}
-            for path in minimal_delete_paths(diff.removed, running, self.OWNED_PATHS)
+            for path in minimal_delete_paths(diff.removed, running)
         ]
         ops += [{"op": "set", "path": list(path)} for path in diff.added]
 

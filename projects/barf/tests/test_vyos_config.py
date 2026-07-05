@@ -114,21 +114,22 @@ class TestDiffPaths:
         assert diff.added == [("system", "host-name", "r1")]
         assert diff.has_changes
 
-    def test_changed_value_pairs_as_replaced(self):
+    def test_changed_value_is_removed_by_default(self):
+        # Ownership is the default: without a kept prefix the stale
+        # value is a real removal, not a display pairing.
         diff = diff_paths(
             {("system", "host-name", "old")},
             {("system", "host-name", "new")},
         )
         assert diff.added == [("system", "host-name", "new")]
-        assert diff.replaced == [("system", "host-name", "old")]
-        assert diff.device_only == []
+        assert diff.removed == [("system", "host-name", "old")]
+        assert diff.replaced == []
 
-    def test_device_only_is_not_a_change(self):
-        # Merge semantics: device-only config is reported but does not
-        # make the diff "dirty".
+    def test_kept_device_only_is_not_a_change(self):
         diff = diff_paths(
             {("service", "ssh", "port", "22")},
             set(),
+            kept=(("service", "ssh"),),
         )
         assert not diff.has_changes
         assert diff.device_only == [("service", "ssh", "port", "22")]
@@ -222,7 +223,8 @@ class TestReconcileHashedPasswords:
         running = {self.PREFIX + ("encrypted-password", SPEC_HASH)}
         candidate = {self.PREFIX + ("plaintext-password", "new password")}
         r, c = reconcile_hashed_passwords(running, candidate)
-        diff = diff_paths(r, c)
+        # system login is a kept prefix in real use.
+        diff = diff_paths(r, c, kept=(("system", "login"),))
         assert diff.added == [self.PREFIX + ("plaintext-password", "new password")]
         assert diff.replaced == [self.PREFIX + ("plaintext-password", SPEC_HASH)]
         # Both sides redact: neither the new password nor the old hash
@@ -251,14 +253,14 @@ class TestReconcileHashedPasswords:
         assert reconcile_hashed_passwords(running, candidate) == (running, candidate)
 
 
-OWNED = (("system", "name-server"), ("vpn", "ipsec", "esp-group"))
+KEPT = (("system", "conntrack"), ("service", "ntp"))
 
 
-class TestOwnedSections:
-    def test_stale_owned_path_is_removed(self):
+class TestKeptSections:
+    def test_stale_unkept_path_is_removed(self):
         running = {("system", "name-server", "2606:4700::1111")}
         candidate = {("system", "name-server", "2606:4700:4700::1111")}
-        diff = diff_paths(running, candidate, owned=OWNED)
+        diff = diff_paths(running, candidate, kept=KEPT)
         assert diff.removed == [("system", "name-server", "2606:4700::1111")]
         assert diff.added == [("system", "name-server", "2606:4700:4700::1111")]
         assert diff.replaced == []
@@ -266,25 +268,32 @@ class TestOwnedSections:
 
     def test_removal_alone_is_a_change(self):
         running = {("system", "name-server", "1.1.1.1")}
-        diff = diff_paths(running, set(), owned=OWNED)
+        diff = diff_paths(running, set(), kept=KEPT)
         assert diff.has_changes
         assert summarize_diff(diff) == "+0 -1"
 
-    def test_unowned_stale_paths_stay_device_only(self):
-        running = {("service", "ssh", "port", "22")}
-        diff = diff_paths(running, set(), owned=OWNED)
+    def test_kept_stale_paths_stay_device_only(self):
+        running = {("system", "conntrack", "modules", "ftp")}
+        diff = diff_paths(running, set(), kept=KEPT)
         assert not diff.has_changes
-        assert diff.device_only == [("service", "ssh", "port", "22")]
+        assert diff.device_only == [("system", "conntrack", "modules", "ftp")]
 
-    def test_owned_wins_over_replaced_pairing(self):
-        # A stale value whose parent also gets a new value would pair
-        # as "replaced" (display-only); under an owned prefix it must
-        # be a real removal instead.
+    def test_ownership_wins_over_replaced_pairing(self):
+        # A stale unkept value whose parent also gets a new value would
+        # pair as "replaced" (display-only); default ownership makes it
+        # a real removal instead.
         running = {("vpn", "ipsec", "esp-group", "E", "mode", "transport")}
         candidate = {("vpn", "ipsec", "esp-group", "E", "mode", "tunnel")}
-        diff = diff_paths(running, candidate, owned=OWNED)
+        diff = diff_paths(running, candidate, kept=KEPT)
         assert diff.removed == [("vpn", "ipsec", "esp-group", "E", "mode", "transport")]
         assert diff.replaced == []
+
+    def test_kept_replaced_pairing_still_works(self):
+        running = {("service", "ntp", "server", "time1.vyos.net")}
+        candidate = {("service", "ntp", "server", "time.cloudflare.com")}
+        diff = diff_paths(running, candidate, kept=KEPT)
+        assert diff.replaced == [("service", "ntp", "server", "time1.vyos.net")]
+        assert diff.removed == []
 
     def test_removed_shown_as_minus_lines(self):
         diff = ConfigDiff(removed=[("system", "name-server", "1.1.1.1")])
@@ -298,7 +307,7 @@ class TestMinimalDeletePaths:
             ("system", "name-server", "8.8.8.8"),
         }
         removed = [("system", "name-server", "1.1.1.1")]
-        assert minimal_delete_paths(removed, running, OWNED) == [
+        assert minimal_delete_paths(removed, running) == [
             ("system", "name-server", "1.1.1.1")
         ]
 
@@ -312,20 +321,19 @@ class TestMinimalDeletePaths:
             ("system", "name-server", "1.1.1.1"),
             ("system", "name-server", "8.8.8.8"),
         ]
-        assert minimal_delete_paths(removed, running, OWNED) == [
-            ("system", "name-server")
-        ]
+        assert minimal_delete_paths(removed, running) == [("system", "name-server")]
 
-    def test_collapse_never_rises_above_the_owned_prefix(self):
-        # Even if name-server were the only thing under system on the
-        # device, the delete must not become "delete system".
-        running = {("system", "name-server", "1.1.1.1")}
+    def test_collapse_stops_where_surviving_config_lives(self):
+        # host-name survives (kept or rendered), so the collapse rises
+        # to the name-server node but never to bare "system".
+        running = {
+            ("system", "name-server", "1.1.1.1"),
+            ("system", "host-name", "r1"),
+        }
         removed = [("system", "name-server", "1.1.1.1")]
-        assert minimal_delete_paths(removed, running, OWNED) == [
-            ("system", "name-server")
-        ]
+        assert minimal_delete_paths(removed, running) == [("system", "name-server")]
 
-    def test_collapses_whole_owned_group(self):
+    def test_collapses_whole_group(self):
         running = {
             ("vpn", "ipsec", "esp-group", "OLD", "mode", "tunnel"),
             ("vpn", "ipsec", "esp-group", "OLD", "lifetime", "3600"),
@@ -335,6 +343,6 @@ class TestMinimalDeletePaths:
             ("vpn", "ipsec", "esp-group", "OLD", "mode", "tunnel"),
             ("vpn", "ipsec", "esp-group", "OLD", "lifetime", "3600"),
         ]
-        assert minimal_delete_paths(removed, running, OWNED) == [
+        assert minimal_delete_paths(removed, running) == [
             ("vpn", "ipsec", "esp-group", "OLD")
         ]

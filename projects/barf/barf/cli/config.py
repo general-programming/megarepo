@@ -120,11 +120,12 @@ def config_diff(
 def config_deploy(targets: Tuple[str, ...], filename: str, yes: bool) -> None:
     """Deploy rendered configs to TARGETS (hostnames, or "all").
 
-    Configs are merged into the device's running config, except for
-    config sections the vendor declares as owned (e.g. VyOS
-    ``system name-server``): there the rendered config is the whole
-    truth and stale device config is deleted. The diff is shown and
-    confirmed per device before anything is pushed.
+    For vendors with declarative ownership (VyOS), the rendered config
+    is the whole truth: stale device config is deleted, except under
+    the vendor's kept prefixes (device-managed config and sections not
+    yet modeled in network.yml), which are merged and never deleted.
+    The diff is shown and confirmed per device before anything is
+    pushed.
     """
     targets_hosts, links, global_meta = _load_targets(filename, targets)
     secrets = _secrets()
