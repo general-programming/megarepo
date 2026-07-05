@@ -170,6 +170,20 @@ def test_genprog_conf_unnumbered():
     assert "default lifetime 0;" in conf
 
 
+def test_bird_local_conf():
+    leaf = make_leaf(
+        bird={"import_filter": "imp_fil", "local_conf": "filter imp_fil { accept; }\n"}
+    )
+    files = render_files(leaf)
+    # The host's hand-written config deploys as the first drop-in so
+    # its definitions parse before genprog.conf references them.
+    assert files["/etc/bird/conf.d/00-local.conf"] == "filter imp_fil { accept; }\n"
+
+
+def test_no_local_conf_no_file():
+    assert "/etc/bird/conf.d/00-local.conf" not in render_files()
+
+
 def test_genprog_conf_numbered():
     leaf = make_leaf(bird={})
     links = make_links(leaf, unnumbered=False)

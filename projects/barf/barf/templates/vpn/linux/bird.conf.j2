@@ -4,12 +4,14 @@
 # This file owns only the plumbing: logging, router id, and the
 # device/kernel protocols. Routing policy and the BGP fabric live in
 # drop-ins, included in GLOB (alphabetical) order:
-#   /etc/bird/conf.d/genprog.conf -- the barf-managed fabric (overwritten
-#                                    on every deploy).
+#   /etc/bird/conf.d/00-local.conf -- this host's hand-written config,
+#                                     tracked in network.yml (`bird:
+#                                     local_conf`). Sorts first so its
+#                                     definitions (e.g. the import
+#                                     filter genprog references) parse
+#                                     before genprog.conf.
+#   /etc/bird/conf.d/genprog.conf  -- the barf-managed fabric.
 #   /etc/bird/conf.d/<anything else> -- yours; barf never touches it.
-# Definitions genprog.conf references (e.g. the import filter named in
-# network.yml `bird: import_filter:`) must parse before it: put them in
-# a file that sorts earlier, e.g. 00-local.conf.
 log syslog all;
 router id {{ router_id }};
 

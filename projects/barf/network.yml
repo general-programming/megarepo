@@ -155,9 +155,59 @@ hosts:
       # the kernel could pick as a source).
       merge_paths: true
       krt_prefsrc: 192.168.3.1
-      # ERIN's prefix blacklist; defined in the human-owned
-      # /etc/bird/conf.d/00-local.conf on the host.
+      # ERIN's prefix blacklist; defined in local_conf below, which
+      # barf deploys as /etc/bird/conf.d/00-local.conf.
       import_filter: imp_fil
+      local_conf: |
+        # /etc/bird/conf.d/00-local.conf - sea21-hv-egg-irl's hand-written
+        # bird config, tracked in network.yml (bird: local_conf). Sorts
+        # before genprog.conf so imp_fil parses first.
+        timeformat base         iso long;
+        timeformat log          iso long;
+        timeformat protocol     iso long;
+        timeformat route        iso long;
+
+        # Mesh (wg1/wg2) connected routes into bird's tables.
+        protocol direct {
+                ipv4;
+                interface "wg*";
+        }
+
+        ############################# ERIN!
+        #### YOU ARE NOT ALLOWED TO TOUCH THE FUNCTION BELOW
+        #### ASK LINUX IF YOU WANT TO UPDATE
+        #### OR LINUX WILL REMOVE BIRD ENTIRELY FROM THIS HOST
+        function is_blacklisted()
+        prefix set no_erin_no;
+        {
+                no_erin_no = [
+                        # WG1 INTERFACE, GENPROG MANAGED
+                        172.19.69.0/24,
+
+                        # WG2 INTERFACE, GENPROG MANAGED
+                        172.19.79.0/24,
+
+                        # VMBR1, GENPROG MANAGED
+                        192.168.3.0/24,
+
+                        # PART OF WG1, UNKNOWN MAINTAINER
+                        192.168.40.0/24,
+
+                        # PART OF WG1, UNKNOWN MAINTAINER
+                        192.168.88.0/24
+                ];
+
+                if net ~ no_erin_no then return true;
+
+                return false;
+        }
+
+        filter imp_fil {
+                if is_blacklisted() then
+                        reject "REJECTED ", net, " from ", proto, " BGP BANNED PREFIX";
+
+                accept;
+        }
   oracle-vpn-1-1:
     id: 7
     address: 193.122.165.81

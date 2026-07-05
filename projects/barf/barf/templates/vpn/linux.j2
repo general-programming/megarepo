@@ -34,6 +34,15 @@ cat << 'BARF_FILE' > /etc/bird/bird.conf
 {% include "vpn/linux/bird.conf.j2" %}
 BARF_FILE
 
+{% if device.bird.get("local_conf") %}
+{# Host-specific human bird config, tracked in network.yml
+   (bird: local_conf). 00- so its definitions (e.g. the import
+   filter genprog references) parse before genprog.conf. #}
+cat << 'BARF_FILE' > /etc/bird/conf.d/00-local.conf
+{{ device.bird["local_conf"].rstrip("\n") }}
+BARF_FILE
+{% endif %}
+
 cat << 'BARF_FILE' > /etc/bird/conf.d/genprog.conf
 {% include "vpn/linux/genprog.conf.j2" %}
 BARF_FILE
