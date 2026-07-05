@@ -27,7 +27,7 @@ jobs:
       run:
         working-directory: argocd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install kustomize
         run: |
