@@ -4,6 +4,7 @@ kind: Kustomization
 namespace: tailscale-operator
 resources:
   - ../base
+  - connector.yaml
 helmCharts:
   - name: tailscale-operator
     releaseName: tailscale-operator
