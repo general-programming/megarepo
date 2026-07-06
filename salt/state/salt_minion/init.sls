@@ -35,8 +35,8 @@ salt_minion_keyring_dir:
 
 salt_minion_keyring:
   cmd.run:
-    - name: curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --dearmor -o /etc/apt/keyrings/salt-archive-keyring.pgp # noqa: 204
-    - creates: /etc/apt/keyrings/salt-archive-keyring.pgp
+    - name: curl -fsSL https://packages.broadcom.com/artifactory/api/security/keypair/SaltProjectKey/public | gpg --yes --dearmor -o /etc/apt/keyrings/salt-archive-keyring.pgp # noqa: 204
+    - unless: test -s /etc/apt/keyrings/salt-archive-keyring.pgp && ! grep -qa 'BEGIN PGP' /etc/apt/keyrings/salt-archive-keyring.pgp
     - require:
       - file: salt_minion_keyring_dir
 
