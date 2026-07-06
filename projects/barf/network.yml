@@ -421,11 +421,6 @@ hosts:
       masquerade:
         - interface: eth0
           source: 10.3.2.0/23
-        - interface: wg51820
-          destinations:
-            - 10.213.8.0/21
-            - 10.213.0.0/24
-            - 10.213.16.0/24
       port_forwards:
         - name: Torrent
           interface: eth0
