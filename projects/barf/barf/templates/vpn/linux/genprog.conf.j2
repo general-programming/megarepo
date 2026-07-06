@@ -24,13 +24,48 @@
 # next-hops via the extended-nexthop capability, and the kernel
 # installs them as `via inet6 fe80::...`. Numbered links keep the
 # classic session on the link /31.
+#
+# Geographic BGP path weighting: source = RTS_STATIC (our own
+# originated prefixes) get a large-community origin tag when this
+# host has a `site`; genprog_import_<neighbor site> filters below set
+# bgp_local_pref per origin-site tag on the way in. See
+# barf/util/sites.py for the distance math -- routers only see the
+# already-computed integers.
 define GENPROG_ASN = {{ device.asn }};
 
+{% set import_filter = device.bird.get("import_filter") %}
+{% set import_check_function = device.bird.get("import_check_function") %}
+{% set reject_blacklisted = 'if ' ~ import_check_function ~ '() then reject "REJECTED ", net, " from ", proto, " blacklisted";' %}
+
+{# Site-origin tags carry the fabric-wide community_asn (RFC 8195
+   Global Administrator), never the per-host ASN: bird's set grammar
+   cannot wildcard the first field of a large-community set, so
+   importers must be able to match the exact triplet. #}
 filter genprog_export {
-	if source ~ [ RTS_STATIC, RTS_BGP ] then accept;
+	if source = RTS_STATIC then {
+{% if origin_site %}
+		bgp_large_community.add(({{ community_asn }}, {{ SITE_ORIGIN_FUNC }}, {{ origin_site.id }}));
+{% endif %}
+		accept;
+	}
+	if source = RTS_BGP then accept;
 	reject;
 }
-{% set import_filter = device.bird.get("import_filter") %}
+{% for site_name, rules in site_import_rules.items() %}
+
+filter genprog_import_{{ site_name }} {
+{% if import_check_function %}
+	{{ reject_blacklisted }}
+{% endif %}
+{% for rule in rules %}
+	if bgp_large_community ~ [({{ community_asn }}, {{ SITE_ORIGIN_FUNC }}, {{ rule.site_id }})] then {
+		bgp_local_pref = {{ rule.local_pref }};
+		accept;
+	}
+{% endfor %}
+	accept;
+}
+{% endfor %}
 {% set nets = namespace(v4=[], v6=[]) %}
 {% for network in device.networks %}
 {% if ":" in network %}
@@ -58,26 +93,45 @@ protocol static genprog_originate6 {
 }
 {% endif %}
 
-template bgp genprog_fabric {
-	local as GENPROG_ASN;
-	hold time 30;
-	keepalive time 10;
+{% macro default_import() -%}
+{%- if import_filter -%}
+filter {{ import_filter }}
+{%- elif import_check_function -%}
+filter {
+		{{ reject_blacklisted }}
+		accept;
+	}
+{%- else -%}
+all
+{%- endif -%}
+{%- endmacro %}
+{# Both address-family channels; the import expression is the only
+   thing that varies between the shared template and the per-peer
+   site-weighted overrides below. #}
+{% macro channels(import_expr) %}
 	ipv4 {
-		import {% if import_filter %}filter {{ import_filter }}{% else %}all{% endif %};
+		import {{ import_expr }};
 		export filter genprog_export;
 		next hop self;
 		extended next hop on;
 	};
 	ipv6 {
-		import {% if import_filter %}filter {{ import_filter }}{% else %}all{% endif %};
+		import {{ import_expr }};
 		export filter genprog_export;
 		next hop self;
 	};
+{%- endmacro %}
+template bgp genprog_fabric {
+	local as GENPROG_ASN;
+	hold time 30;
+	keepalive time 10;
+{{ channels(default_import()) }}
 }
 {% for link in vpn_links %}
 {% set our_side = link.side_a if link.side_a == device else link.side_b %}
 {% set other_peer = link.side_b if link.side_a == device else link.side_a %}
 {% set pname = other_peer.hostname | replace("-", "_") %}
+{% set peer_rules_key = other_peer.site if other_peer.site in site_import_rules else None %}
 
 protocol bgp {{ pname }} from genprog_fabric {
 {% if link.unnumbered %}
@@ -88,6 +142,10 @@ protocol bgp {{ pname }} from genprog_fabric {
 {% else %}
 	source address {{ link.get_ip(our_side) }};
 	neighbor {{ link.get_ip(other_peer) }} as {{ other_peer.asn }};
+{% endif %}
+{% if peer_rules_key %}
+	# Geographic weighting: this neighbor is in site {{ peer_rules_key }}.
+{{ channels("filter genprog_import_" ~ peer_rules_key) }}
 {% endif %}
 }
 {% endfor %}

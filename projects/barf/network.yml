@@ -8,11 +8,28 @@ global_meta:
   snmp_location: General Programming Virtual Infrastructure
   ssh_keys:
     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
+  # Global Administrator field for the fabric's site-origin large
+  # communities (RFC 8195): one stable fabric-wide value so importers
+  # match the exact <community_asn>:<func>:<site_id> triplet. bird's
+  # set grammar cannot wildcard the first field (bird 2.17.5 rejected
+  # `(*, 1, 1)` on sea21), so per-host ASNs in the community are not
+  # an option. Any 4-byte value we control works; keep it stable.
+  community_asn: 4280805525
+  # Geographic sites backing BGP path weighting (barf/util/sites.py):
+  # every leaf peers with all 4 spines, so ECMP happily sprays
+  # same-site traffic through the other coast without this. Coords are
+  # approximate city-level lat/lon, plenty precise for weighting.
+  sites:
+    sea: {id: 1, coords: [47.61, -122.33]}
+    fmt2: {id: 2, coords: [37.55, -121.99]}
+    ord: {id: 3, coords: [41.97, -87.91]}
+    iad: {id: 4, coords: [38.95, -77.45]}
 profiles:
   fmt2-leaf: &fmt2-leaf
     asn: 4280805526
     type: vyos
     role: vpn
+    site: fmt2
     networks:
       - 10.65.67.0/24
       - 10.255.1.0/24
@@ -41,6 +58,7 @@ hosts:
     asn: 4280805525
     type: vyos
     role: vpn
+    site: fmt2
     interfaces:
       - name: eth0
         description: external uplink
@@ -61,6 +79,7 @@ hosts:
     asn: 4280805525
     type: vyos
     role: vpn
+    site: fmt2
     interfaces:
       - name: eth0
         description: external uplink
@@ -113,6 +132,7 @@ hosts:
     asn: 4280805527
     type: vyos
     role: vpn
+    site: sea
     networks:
       - 10.36.75.0/24
       - 172.19.84.0/24
@@ -142,6 +162,7 @@ hosts:
     asn: 4280805528
     type: linux
     role: vpn
+    site: sea
     interfaces:
       - name: dum0
         description: underlay loopback
@@ -161,13 +182,18 @@ hosts:
       # the kernel could pick as a source).
       merge_paths: true
       krt_prefsrc: 192.168.3.1
-      # ERIN's prefix blacklist; defined in local_conf below, which
-      # barf deploys as /etc/bird/conf.d/00-local.conf.
-      import_filter: imp_fil
+      # ERIN's prefix blacklist; is_blacklisted() is defined in
+      # local_conf below (barf deploys it as
+      # /etc/bird/conf.d/00-local.conf). Generated site-weighted import
+      # filters (genprog_import_<site> in conf.d/genprog.conf) call it
+      # first -- bird filters cannot call other filters, only
+      # functions, so the old standalone imp_fil filter had to go once
+      # this host got geographic weighting (site: sea above).
+      import_check_function: is_blacklisted
       local_conf: |
         # /etc/bird/conf.d/00-local.conf - sea21-hv-egg-irl's hand-written
         # bird config, tracked in network.yml (bird: local_conf). Sorts
-        # before genprog.conf so imp_fil parses first.
+        # before genprog.conf so is_blacklisted() parses first.
         timeformat base         iso long;
         timeformat log          iso long;
         timeformat protocol     iso long;
@@ -207,54 +233,54 @@ hosts:
 
                 return false;
         }
-
-        filter imp_fil {
-                if is_blacklisted() then
-                        reject "REJECTED ", net, " from ", proto, " BGP BANNED PREFIX";
-
-                accept;
-        }
   oracle-vpn-1-1:
     id: 7
     address: 193.122.165.81
     asn: 31898
     type: external
     role: vpn
+    site: iad
   oracle-vpn-1-2:
     id: 8
     address: 150.136.206.67
     asn: 31898
     type: external
     role: vpn
+    site: iad
   oracle-vpn-2-1:
     id: 9
     address: 150.136.206.67
     asn: 31898
     type: external
     role: vpn
+    site: iad
   oracle-vpn-2-2:
     id: 10
     address: 129.213.189.84
     asn: 31898
     type: external
     role: vpn
+    site: iad
   oci-vpn-ord-1-1:
     id: 11
     address: 131.186.6.35
     asn: 31898
     type: external
     role: vpn
+    site: ord
   oci-vpn-ord-1-2:
     id: 12
     address: 131.186.1.114
     asn: 31898
     type: external
     role: vpn
+    site: ord
   sea420-acc-v-hv2:
     id: 14
     asn: 4280805533
     type: mikrotik
     role: vpn
+    site: sea
   # sea1
   sea1-vpn-spine-1:
     id: 15
@@ -263,6 +289,7 @@ hosts:
     asn: 4280805529
     type: vyos
     role: vpn
+    site: sea
     interfaces:
       - name: dum0
         description: underlay loopback
@@ -285,6 +312,7 @@ hosts:
     asn: 4280805529
     type: vyos
     role: vpn
+    site: sea
     interfaces:
       - name: dum0
         description: underlay loopback
@@ -307,6 +335,7 @@ hosts:
     management: 2602:fa6d:f:aaaa::f01
     type: vyos
     role: vpn
+    site: sea
     cloudinit: true
     interfaces:
       - name: dum0

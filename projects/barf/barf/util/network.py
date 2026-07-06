@@ -3,6 +3,7 @@ from typing import List, Tuple
 import yaml
 
 from barf.model.wireguard import WGNetworkLink
+from barf.util.sites import parse_sites
 from barf.vendors import VENDOR_MAP, BaseHost
 
 
@@ -34,6 +35,16 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
         network = yaml.safe_load(f)
 
     global_meta = network["global_meta"]
+    # Sites (name -> Site(id, coords)) back the geographic BGP path
+    # weighting: large-community tagging on originate, local-pref on
+    # import. Raises on duplicate ids.
+    global_meta["sites"] = parse_sites(global_meta.get("sites"))
+    if global_meta["sites"] and not global_meta.get("community_asn"):
+        raise ValueError(
+            "global_meta: sites are defined but community_asn is missing;"
+            " site-origin large communities need a fabric-wide Global"
+            " Administrator value"
+        )
 
     hosts = []
     for hostname, meta in network["hosts"].items():
@@ -44,7 +55,10 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
         meta.setdefault("nameservers", global_meta.get("nameservers", []))
 
         hostclass = VENDOR_MAP[meta["type"]]
-        hosts.append(hostclass.from_meta(hostname=hostname, meta=meta))
+        host = hostclass.from_meta(hostname=hostname, meta=meta)
+        if host.site and host.site not in global_meta["sites"]:
+            raise ValueError(f"hosts: {host.hostname!r} has unknown site {host.site!r}")
+        hosts.append(host)
 
     def host_named(name: str, context: str) -> BaseHost:
         match = next((host for host in hosts if host.hostname == name), None)

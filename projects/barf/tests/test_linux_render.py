@@ -1,23 +1,14 @@
 import ipaddress
 
 import pytest
+from conftest import COMMUNITY_ASN, FMT2, SEA, SITES, make_link
 
-from barf.common import render_template
-from barf.model import wireguard
-from barf.model.wireguard import WGKeypair, WGNetworkLink
+from barf.util.render import render_host_config
+from barf.util.sites import BASE_LOCAL_PREF, haversine_km
 from barf.vendors import BaseHost, HostInterface
 from barf.vendors.linux import LinuxBirdHost, parse_rendered_files
 
-
-@pytest.fixture(autouse=True)
-def fake_keys(monkeypatch):
-    monkeypatch.setattr(
-        wireguard,
-        "fetch_keypair",
-        lambda path, generate_keys=True: WGKeypair(
-            public_key=f"PUB-{path}", private_key=f"PRIV-{path}"
-        ),
-    )
+pytestmark = pytest.mark.usefixtures("fake_keys")
 
 
 def make_leaf(**overrides) -> LinuxBirdHost:
@@ -47,31 +38,42 @@ def make_links(leaf: BaseHost, unnumbered: bool = True) -> list:
     )
     networks = [None, None] if unnumbered else ["172.31.255.8/31", "172.31.255.10/31"]
     return [
-        WGNetworkLink(
-            link_id=51070,
-            side_a=spine1,
-            side_b=leaf,
-            network=networks[0],
-            pinned=False,
-        ),
-        WGNetworkLink(
-            link_id=51134,
-            side_a=spine2,
-            side_b=leaf,
-            network=networks[1],
-            pinned=False,
-        ),
+        make_link(51070, spine1, leaf, network=networks[0]),
+        make_link(51134, spine2, leaf, network=networks[1]),
     ]
 
 
-def render_leaf(leaf=None, links=None) -> str:
+def make_sited_links(leaf: BaseHost, spine1_site=None, spine2_site=None) -> list:
+    """Two unnumbered spine links, spines optionally carrying a `site`."""
+    spine1 = BaseHost(
+        hostname="fmt2-vpn-spine-1",
+        role="vpn",
+        asn=65000,
+        address="1.1.1.1",
+        site=spine1_site,
+    )
+    spine2 = BaseHost(
+        hostname="sea1-vpn-spine-1",
+        role="vpn",
+        asn=65001,
+        address="1.0.0.1",
+        site=spine2_site,
+    )
+    return [
+        make_link(51070, spine1, leaf),
+        make_link(51134, spine2, leaf),
+    ]
+
+
+def render_leaf(leaf=None, links=None, sites=None) -> str:
     leaf = leaf or make_leaf()
-    return render_template(
-        "vpn/linux.j2",
-        device=leaf,
+    links = links if links is not None else make_links(leaf)
+    sites = sites if sites is not None else SITES
+    return render_host_config(
+        leaf,
+        links,
+        global_meta={"ssh_keys": [], "sites": sites, "community_asn": COMMUNITY_ASN},
         secrets={},
-        global_meta={"ssh_keys": []},
-        vpn_links=links if links is not None else make_links(leaf),
     )
 
 
@@ -222,3 +224,119 @@ def test_genprog_conf_numbered():
     assert "import all;" in conf
     # Numbered-only hosts advertise no RAs.
     assert "protocol radv" not in conf
+
+
+class TestGeographicWeighting:
+    """Large-community origin tagging + import local-pref (barf/util/sites.py)."""
+
+    def test_hosts_without_site_render_unchanged(self):
+        # No site anywhere: no tag, no generated import filters -- byte
+        # for byte the same as the pre-weighting behavior asserted by
+        # the tests above.
+        conf = render_files()["/etc/bird/conf.d/genprog.conf"]
+        assert "bgp_large_community" not in conf
+        assert "filter genprog_import_" not in conf
+        assert conf.count("import filter imp_fil;") == 2
+
+    def test_no_tag_when_device_has_no_site(self):
+        # A device with no site has nothing to weight against either:
+        # no tag on originate, and no generated import filters even
+        # though its neighbors have sites.
+        leaf = make_leaf(site=None)
+        links = make_sited_links(leaf, spine1_site="fmt2", spine2_site="sea")
+        conf = parse_rendered_files(render_leaf(leaf, links))[
+            "/etc/bird/conf.d/genprog.conf"
+        ]
+        assert "bgp_large_community.add" not in conf
+        assert "filter genprog_import_" not in conf
+
+    # A sited host cannot keep a standalone import_filter (see
+    # test_import_filter_with_site_weighting_is_an_error), so the
+    # weighted tests drop it from the bird meta like sea21's migration.
+    SITED_BIRD = {"router_id": "192.168.3.1", "merge_paths": True}
+
+    def test_origin_tag_present_with_site(self):
+        leaf = make_leaf(site="sea", bird=self.SITED_BIRD)
+        links = make_sited_links(leaf, spine1_site="fmt2", spine2_site="sea")
+        conf = parse_rendered_files(render_leaf(leaf, links))[
+            "/etc/bird/conf.d/genprog.conf"
+        ]
+        assert f"bgp_large_community.add(({COMMUNITY_ASN}, 1, 1));" in conf
+        # Tag is applied on RTS_STATIC (our own originates) only.
+        assert conf.index("RTS_STATIC") < conf.index("bgp_large_community.add")
+
+    def test_import_filters_generated_per_neighbor_site_with_exact_prefs(self):
+        leaf = make_leaf(site="sea", bird=self.SITED_BIRD)
+        links = make_sited_links(leaf, spine1_site="fmt2", spine2_site="sea")
+        conf = parse_rendered_files(render_leaf(leaf, links))[
+            "/etc/bird/conf.d/genprog.conf"
+        ]
+        assert "filter genprog_import_fmt2 {" in conf
+        assert "filter genprog_import_sea {" in conf
+
+        # Matches are exact triplets on the fabric-wide community_asn;
+        # bird 2.17.5 rejects a `*` in the first field of an lc set.
+        assert f"bgp_large_community ~ [({COMMUNITY_ASN}, 1, 1)]" in conf
+        assert f"bgp_large_community ~ [({COMMUNITY_ASN}, 1, 2)]" in conf
+        assert "(*," not in conf
+
+        d = haversine_km(SEA.coords, FMT2.coords)
+        # Heard from the fmt2 spine (base = d): origin sea is
+        # BASE - (d + d), origin fmt2 is BASE - (d + 0).
+        assert f"bgp_local_pref = {BASE_LOCAL_PREF - 2 * d};" in conf
+        assert f"bgp_local_pref = {BASE_LOCAL_PREF - d};" in conf
+        # Heard from the sea spine (base = 0): both origins collapse to
+        # BASE (origin sea) and BASE - d (origin fmt2) respectively --
+        # BASE - d is already covered above, BASE alone confirms it.
+        assert f"bgp_local_pref = {BASE_LOCAL_PREF};" in conf
+
+        # Each protocol instance overrides the shared template's import
+        # with its neighbor-site-specific filter.
+        assert "import filter genprog_import_fmt2;" in conf
+        assert "import filter genprog_import_sea;" in conf
+
+        # Untagged (no matching large-community) routes fall through to
+        # a plain accept -- no explicit local-pref set for them.
+        assert conf.count("accept;\n}") >= 2
+
+    def test_import_check_function_enforced_inside_generated_filter(self):
+        # sea21-hv-egg-irl's migration: bird filters cannot call other
+        # filters, only functions, so the blacklist moved from a
+        # standalone import_filter to import_check_function, called
+        # first inside every generated site-weighted import filter.
+        leaf = make_leaf(site="sea", bird={"import_check_function": "is_blacklisted"})
+        links = make_sited_links(leaf, spine1_site="fmt2", spine2_site="sea")
+        conf = parse_rendered_files(render_leaf(leaf, links))[
+            "/etc/bird/conf.d/genprog.conf"
+        ]
+        expected = (
+            'if is_blacklisted() then reject "REJECTED ", net, " from ", '
+            'proto, " blacklisted";'
+        )
+        # Present in both generated per-neighbor-site import filters
+        # (also in the base template's unused fallback, hence >= 2).
+        assert conf.count(expected) >= 2
+        # Precedes the site-match rules inside each generated filter.
+        fmt2_filter = conf.split("filter genprog_import_fmt2 {")[1].split("}\n")[0]
+        assert fmt2_filter.strip().startswith("if is_blacklisted()")
+        sea_filter = conf.split("filter genprog_import_sea {")[1].split("}\n")[0]
+        assert sea_filter.strip().startswith("if is_blacklisted()")
+
+    def test_import_filter_backward_compat_without_site_weighting(self):
+        # A neighbor with no site gets no generated filter; the legacy
+        # import_filter (or import_check_function) still governs the
+        # template's default import, unchanged from before geographic
+        # weighting existed.
+        leaf = make_leaf(bird={"import_filter": "imp_fil"})
+        conf = render_files(leaf)["/etc/bird/conf.d/genprog.conf"]
+        assert conf.count("import filter imp_fil;") == 2
+        assert "filter genprog_import_" not in conf
+
+    def test_import_filter_with_site_weighting_is_an_error(self):
+        # bird filters cannot call filters, so a standalone
+        # import_filter would silently stop applying on weighted peers;
+        # the render layer refuses the combination instead.
+        leaf = make_leaf(site="sea")  # default bird keeps import_filter
+        links = make_sited_links(leaf, spine1_site="fmt2", spine2_site="sea")
+        with pytest.raises(ValueError, match="import_check_function"):
+            render_leaf(leaf, links)

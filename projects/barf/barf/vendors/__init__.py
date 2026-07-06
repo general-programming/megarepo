@@ -381,6 +381,7 @@ class BaseHost:
         ospf: Optional[dict] = None,
         static_routes: Optional[List[dict]] = None,
         bird: Optional[dict] = None,
+        site: Optional[str] = None,
         **kwargs,
     ):
         self.address = address
@@ -406,8 +407,15 @@ class BaseHost:
         self.static_routes = static_routes or []
         # bird daemon knobs for linux hosts: router_id, krt_prefsrc,
         # merge_paths, import_filter (a filter name defined by the
-        # host's human-owned conf.d drop-ins).
+        # host's human-owned conf.d drop-ins), import_check_function (a
+        # bool function name from the same drop-ins, called first by
+        # every generated site-weighted import filter).
         self.bird = bird or {}
+        # Geographic site (network.yml global_meta.sites key) this host
+        # lives in, if any. Backs BGP large-community origin tagging
+        # and import local-pref weighting; hosts without one are
+        # untagged and unweighted, unchanged from before this existed.
+        self.site = site
 
         if not vlan_map:
             vlan_map = {}
@@ -874,6 +882,7 @@ class BaseHost:
             ospf=meta.get("ospf", None),
             static_routes=meta.get("static_routes", None),
             bird=meta.get("bird", None),
+            site=meta.get("site", None),
         )
 
     @classmethod

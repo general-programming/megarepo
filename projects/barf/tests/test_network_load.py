@@ -147,3 +147,66 @@ def test_derivation_without_ids_is_an_error(tmp_path):
     )
     with pytest.raises(ValueError, match="needs an `id`"):
         load_network(write(tmp_path, src))
+
+
+SITES_YML = """
+global_meta:
+  ssh_keys: []
+  community_asn: 4280805525
+  sites:
+    sea: {id: 1, coords: [47.61, -122.33]}
+    fmt2: {id: 2, coords: [37.55, -121.99]}
+hosts:
+  spine-1:
+    asn: 65001
+    type: vyos
+    role: vpn
+    site: fmt2
+  leaf-1:
+    asn: 65002
+    type: vyos
+    role: vpn
+    site: sea
+  leaf-2:
+    asn: 65003
+    type: vyos
+    role: vpn
+"""
+
+
+def test_sites_parse_and_hosts_carry_their_site(tmp_path):
+    hosts, _links, global_meta = load_network(write(tmp_path, SITES_YML))
+    assert global_meta["sites"]["sea"].id == 1
+    assert global_meta["sites"]["fmt2"].id == 2
+    by_name = {h.hostname: h for h in hosts}
+    assert by_name["spine-1"].site == "fmt2"
+    assert by_name["leaf-1"].site == "sea"
+    # Hosts without a `site:` are allowed (no tagging/weighting for them).
+    assert by_name["leaf-2"].site is None
+
+
+def test_unknown_host_site_is_an_error(tmp_path):
+    src = SITES_YML.replace("site: sea", "site: nowhere")
+    with pytest.raises(ValueError, match="unknown site 'nowhere'"):
+        load_network(write(tmp_path, src))
+
+
+def test_duplicate_site_id_is_an_error(tmp_path):
+    src = SITES_YML.replace(
+        "fmt2: {id: 2, coords: [37.55, -121.99]}",
+        "fmt2: {id: 1, coords: [37.55, -121.99]}",
+    )
+    with pytest.raises(ValueError, match="id 1 used by both"):
+        load_network(write(tmp_path, src))
+
+
+def test_no_sites_block_is_fine(tmp_path):
+    hosts, _links, global_meta = load_network(write(tmp_path, NETWORK_YML))
+    assert global_meta["sites"] == {}
+    assert all(h.site is None for h in hosts)
+
+
+def test_sites_without_community_asn_is_an_error(tmp_path):
+    src = SITES_YML.replace("  community_asn: 4280805525\n", "")
+    with pytest.raises(ValueError, match="community_asn is missing"):
+        load_network(write(tmp_path, src))
