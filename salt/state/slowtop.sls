@@ -1,0 +1,3 @@
+{{ saltenv }}:
+  '*':
+    - salt_minion
