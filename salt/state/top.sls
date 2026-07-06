@@ -8,6 +8,7 @@
     - sysctl
     - certs
     - sshd_config
+    - auto_updates
 
     # services
     - service_node_exporter
