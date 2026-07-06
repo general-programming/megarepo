@@ -42,7 +42,12 @@ jobs:
       - name: ruff format --check
         run: uvx "ruff@${RUFF_VERSION}" format --check .
 
+      # ty needs the project's third-party deps (hvac, etc.) resolvable, so
+      # build the workspace venv and point ty at it via --python.
+      - name: Sync workspace
+        run: uv sync --all-packages
+
       - name: ty
         # Scope lives in [tool.ty.src] in pyproject.toml: the repo is not
         # fully ty-clean yet, so not-yet-migrated paths are excluded there.
-        run: uvx "ty@${TY_VERSION}" check
+        run: uvx "ty@${TY_VERSION}" check --python .venv
