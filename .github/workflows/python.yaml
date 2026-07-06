@@ -1,0 +1,48 @@
+---
+name: python
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.py"
+      - "**/pyproject.toml"
+      - ".ruff.toml"
+      - "uv.lock"
+      - ".github/workflows/python.yaml"
+  pull_request:
+    paths:
+      - "**/*.py"
+      - "**/pyproject.toml"
+      - ".ruff.toml"
+      - "uv.lock"
+      - ".github/workflows/python.yaml"
+
+concurrency:
+  group: python-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # renovate: datasource=pypi depName=ruff
+      RUFF_VERSION: 0.15.20
+      # renovate: datasource=pypi depName=ty
+      TY_VERSION: 0.0.56
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: ruff check
+        run: uvx "ruff@${RUFF_VERSION}" check .
+
+      - name: ruff format --check
+        run: uvx "ruff@${RUFF_VERSION}" format --check .
+
+      - name: ty
+        # Scope lives in [tool.ty.src] in pyproject.toml: the repo is not
+        # fully ty-clean yet, so not-yet-migrated paths are excluded there.
+        run: uvx "ty@${TY_VERSION}" check

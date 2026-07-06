@@ -1,0 +1,36 @@
+---
+name: yamllint
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "**/*.yaml"
+      - "**/*.yml"
+      - ".yamllint.yaml"
+      - ".github/workflows/yamllint.yaml"
+  pull_request:
+    paths:
+      - "**/*.yaml"
+      - "**/*.yml"
+      - ".yamllint.yaml"
+      - ".github/workflows/yamllint.yaml"
+
+concurrency:
+  group: yamllint-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # renovate: datasource=pypi depName=yamllint
+      YAMLLINT_VERSION: 1.38.0
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: astral-sh/setup-uv@v6
+
+      - name: yamllint
+        run: uvx "yamllint@${YAMLLINT_VERSION}" --strict .
