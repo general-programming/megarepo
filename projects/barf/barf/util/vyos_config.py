@@ -6,16 +6,12 @@ representation: a set of path tuples, one per ``set`` command. Diffing
 is then plain set arithmetic, done entirely on this machine — no config
 session is ever opened on the device.
 
-Merge semantics: barf deploys are merge candidates, so a diff reports
-what a merge would add or replace. Config that exists only on the
-device is reported separately for information; a merge never deletes
-it.
-
-Ownership is exclusion-based: the rendered config is the full truth
-everywhere by default, and device paths the candidate does not render
-become real deletions — except under the "kept" path prefixes a vendor
-declares (see ``VyOSHost.KEPT_PATHS``), which cover device-managed
-config and sections not yet modeled in network.yml.
+Ownership is total: the rendered config is the full truth, and any
+device path the candidate does not render becomes a real deletion. The
+only exception is the "ignored" path prefixes a vendor declares (see
+``VyOSHost.IGNORED_PATHS``), which are dropped from the diff entirely —
+pure hardware facts like ``hw-id`` that are neither intent nor
+deletable.
 """
 
 import shlex
@@ -157,33 +153,26 @@ class ConfigDiff:
 
     Attributes:
         added: Paths the deploy would create.
-        replaced: Kept device paths sharing a parent with an added path
-            — the values a merge on a single-value node would
-            overwrite.
-        removed: Device paths the deploy deletes (stale config outside
-            the kept prefixes).
-        device_only: Kept paths on the device that the candidate does
-            not mention at all; a deploy leaves them untouched.
+        removed: Device paths the deploy deletes (stale config barf did
+            not render and does not ignore).
     """
 
     added: List[Tuple[str, ...]] = field(default_factory=list)
-    replaced: List[Tuple[str, ...]] = field(default_factory=list)
     removed: List[Tuple[str, ...]] = field(default_factory=list)
-    device_only: List[Tuple[str, ...]] = field(default_factory=list)
 
     @property
     def has_changes(self) -> bool:
         return bool(self.added or self.removed)
 
 
-def _is_kept(path: Tuple[str, ...], kept: PathPrefixes) -> bool:
-    """Whether ``path`` falls under a kept prefix.
+def _is_ignored(path: Tuple[str, ...], ignored: PathPrefixes) -> bool:
+    """Whether ``path`` falls under an ignored prefix.
 
     A ``"*"`` component in a prefix matches any single path component,
-    e.g. ``("interfaces", "ethernet", "*", "hw-id")`` keeps the hw-id
+    e.g. ``("interfaces", "ethernet", "*", "hw-id")`` ignores the hw-id
     of every ethernet interface.
     """
-    for prefix in kept:
+    for prefix in ignored:
         if len(path) < len(prefix):
             continue
         if all(p in ("*", c) for p, c in zip(prefix, path)):
@@ -194,50 +183,22 @@ def _is_kept(path: Tuple[str, ...], kept: PathPrefixes) -> bool:
 def diff_paths(
     running: ConfigPaths,
     candidate: ConfigPaths,
-    kept: PathPrefixes = (),
     ignored: PathPrefixes = (),
 ) -> ConfigDiff:
-    """Diff two path sets; the candidate owns everything not ``kept``.
+    """Diff two path sets; the candidate owns everything not ``ignored``.
 
-    Device paths the candidate does not render are real deletions
-    (``removed``) by default. Under a ``kept`` prefix they are merely
-    informational: ``replaced`` when the candidate adds a different
-    value under the same parent path (best-effort — for a multi-value
-    node the value would actually survive the merge), ``device_only``
-    otherwise.
-
-    Args:
-        kept: Config path prefixes excluded from ownership
-            (device-managed config, or sections network.yml does not
-            model yet). Supports "*" wildcard components.
-        ignored: Like ``kept``, but the paths are dropped from the
-            diff entirely — never deleted, never listed, never counted
-            (pure noise like hw-id hardware facts).
+    Ownership is total: every device path the candidate does not render
+    is a real deletion (``removed``). Paths under an ``ignored`` prefix
+    are the sole exception — dropped from the diff entirely, never
+    deleted, never listed, never counted (pure noise like hw-id
+    hardware facts). Supports "*" wildcard components.
     """
     added = candidate - running
     stale = running - candidate
 
-    added_parents = {path[:-1] for path in added if len(path) > 1}
+    removed = [path for path in sorted(stale) if not _is_ignored(path, ignored)]
 
-    replaced = []
-    removed = []
-    device_only = []
-    for path in sorted(stale):
-        if _is_kept(path, ignored):
-            continue
-        if not _is_kept(path, kept):
-            removed.append(path)
-        elif len(path) > 1 and path[:-1] in added_parents:
-            replaced.append(path)
-        else:
-            device_only.append(path)
-
-    return ConfigDiff(
-        added=sorted(added),
-        replaced=replaced,
-        removed=removed,
-        device_only=device_only,
-    )
+    return ConfigDiff(added=sorted(added), removed=removed)
 
 
 def minimal_delete_paths(
@@ -248,9 +209,7 @@ def minimal_delete_paths(
 
     A prefix is deleted wholly when every running path beneath it is
     being removed (deleting the node also clears empty parents that
-    per-leaf deletes would leave behind). Kept paths are never in the
-    removed set, so a subtree containing kept config can never fully
-    collapse — a delete structurally cannot touch kept config.
+    per-leaf deletes would leave behind).
     """
     removed_set = set(diff_removed)
     deletes = set()
@@ -280,48 +239,28 @@ def _format_path(path: Tuple[str, ...], redact: bool) -> str:
     return " ".join(shlex.quote(component) for component in path)
 
 
-def format_diff(
-    diff: ConfigDiff, redact: bool = True, show_device_only: bool = False
-) -> str:
+def format_diff(diff: ConfigDiff, redact: bool = True) -> str:
     """Render a ConfigDiff as +/- ``set`` lines.
 
     Args:
         redact: Replace secret values (private keys, PSKs, passwords)
             with a placeholder in the output.
-        show_device_only: Also list paths that exist only on the device.
-            They are informational; a merge deploy never removes them.
     """
     lines = []
 
     for path in diff.removed:
         lines.append(f"- set {_format_path(path, redact)}")
-    for path in diff.replaced:
-        lines.append(f"- set {_format_path(path, redact)}")
     for path in diff.added:
         lines.append(f"+ set {_format_path(path, redact)}")
-
-    if show_device_only and diff.device_only:
-        lines.append("")
-        lines.append("# on device but not in the generated config (kept):")
-        for path in diff.device_only:
-            lines.append(f"  set {_format_path(path, redact)}")
-    elif diff.device_only:
-        lines.append(
-            f"# {len(diff.device_only)} device-only paths hidden (--show-device-only)"
-        )
 
     return "\n".join(lines)
 
 
 def summarize_diff(diff: ConfigDiff) -> str:
-    """A one-line human summary, e.g. ``+12 ~3 -2 (47 device-only)``."""
+    """A one-line human summary, e.g. ``+12 -2``."""
     if not diff.has_changes:
         return "no changes"
     parts = [f"+{len(diff.added)}"]
-    if diff.replaced:
-        parts.append(f"~{len(diff.replaced)}")
     if diff.removed:
         parts.append(f"-{len(diff.removed)}")
-    if diff.device_only:
-        parts.append(f"({len(diff.device_only)} device-only)")
     return " ".join(parts)

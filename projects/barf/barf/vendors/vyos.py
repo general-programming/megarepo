@@ -53,18 +53,12 @@ def _script_ok(rc: int, output: str, marker: str) -> bool:
 class VyOSHost(BaseHost):
     DEVICETYPE = "vyos"
 
-    # Ownership is exclusion-based: barf owns the whole config —
-    # deploys delete device config we did not render — EXCEPT under
-    # these kept prefixes. Shrunk prefix by prefix as network.yml
-    # coverage grows; seeded from a 2026-07-05 fleet survey of every
-    # device-only path. Never drop a prefix while devices still carry
-    # intentional out-of-band config under it.
-    # Nothing is kept: the whole config tree is owned. (The vyos
-    # factory account is deliberately deleted — supertech is the only
-    # unix account, and first deploys against fresh installs clean the
+    # Ownership is total: barf owns the whole config tree, and deploys
+    # delete any device config we did not render. (The vyos factory
+    # account is deliberately deleted — supertech is the only unix
+    # account, and first deploys against fresh installs clean the
     # default vyos/vyos credentials automatically.)
-    KEPT_PATHS = ()
-
+    #
     # Dropped from diffs entirely: never deleted, never listed, never
     # counted. hw-id is a recorded hardware fact, not intent — MAC
     # addresses change when VMs are reprovisioned. "*" matches any
@@ -123,13 +117,13 @@ class VyOSHost(BaseHost):
         The running config comes off the HTTPS API as a JSON tree; both
         sides are flattened to path sets and diffed on this machine. No
         config session is opened on the device (unlike the NAPALM
-        compare the other vendors use).
+        compare the other vendors use). ``show_device_only`` has no
+        meaning here: barf owns the whole tree, so there is no
+        device-only set to surface.
         """
         diff, _running = self._config_diff(rendered)
         return DeployDiff(
-            text=vyos_config.format_diff(
-                diff, redact=redact, show_device_only=show_device_only
-            ),
+            text=vyos_config.format_diff(diff, redact=redact),
             has_changes=diff.has_changes,
             summary=vyos_config.summarize_diff(diff),
         )
@@ -141,9 +135,7 @@ class VyOSHost(BaseHost):
         running, candidate = vyos_config.reconcile_hashed_passwords(
             self.running_config_paths(), vyos_config.parse_set_commands(rendered)
         )
-        diff = vyos_config.diff_paths(
-            running, candidate, kept=self.KEPT_PATHS, ignored=self.IGNORED_PATHS
-        )
+        diff = vyos_config.diff_paths(running, candidate, ignored=self.IGNORED_PATHS)
         return diff, running
 
     def push_rendered_config(self, rendered: str) -> None:
@@ -151,8 +143,7 @@ class VyOSHost(BaseHost):
 
         One atomic ``/configure`` commit: deletions of stale owned
         config first (collapsed to whole-node deletes where possible),
-        then the additions as ``set`` ops. Config under KEPT_PATHS is
-        merged, never deleted. No SSH or NAPALM involved.
+        then the additions as ``set`` ops. No SSH or NAPALM involved.
         """
         diff, running = self._config_diff(rendered)
         if not diff.has_changes:

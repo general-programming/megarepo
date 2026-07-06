@@ -114,32 +114,28 @@ class TestDiffPaths:
         assert diff.added == [("system", "host-name", "r1")]
         assert diff.has_changes
 
-    def test_changed_value_is_removed_by_default(self):
-        # Ownership is the default: without a kept prefix the stale
-        # value is a real removal, not a display pairing.
+    def test_changed_value_is_removed(self):
+        # Ownership is total: the stale value is a real removal.
         diff = diff_paths(
             {("system", "host-name", "old")},
             {("system", "host-name", "new")},
         )
         assert diff.added == [("system", "host-name", "new")]
         assert diff.removed == [("system", "host-name", "old")]
-        assert diff.replaced == []
 
-    def test_kept_device_only_is_not_a_change(self):
-        diff = diff_paths(
-            {("service", "ssh", "port", "22")},
-            set(),
-            kept=(("service", "ssh"),),
-        )
-        assert not diff.has_changes
-        assert diff.device_only == [("service", "ssh", "port", "22")]
+    def test_unrendered_device_path_is_removed(self):
+        # Nothing is exempt from ownership: a path only on the device
+        # (not ignored) is deleted, not kept.
+        diff = diff_paths({("service", "ssh", "port", "22")}, set())
+        assert diff.has_changes
+        assert diff.removed == [("service", "ssh", "port", "22")]
 
 
 class TestFormatDiff:
     def test_plus_minus_lines(self):
         diff = ConfigDiff(
             added=[("system", "host-name", "new")],
-            replaced=[("system", "host-name", "old")],
+            removed=[("system", "host-name", "old")],
         )
         text = format_diff(diff)
         assert "- set system host-name old" in text
@@ -167,12 +163,6 @@ class TestFormatDiff:
         )
         assert "PUBKEY" in format_diff(diff)
 
-    def test_device_only_hidden_behind_flag(self):
-        diff = ConfigDiff(device_only=[("service", "ssh", "port", "22")])
-        assert "ssh" not in format_diff(diff)
-        assert "1 device-only paths hidden" in format_diff(diff)
-        assert "set service ssh port 22" in format_diff(diff, show_device_only=True)
-
     def test_values_with_spaces_are_quoted(self):
         diff = ConfigDiff(
             added=[("interfaces", "ethernet", "eth0", "description", "a b")]
@@ -184,10 +174,9 @@ class TestSummarizeDiff:
     def test_counts(self):
         diff = ConfigDiff(
             added=[("a", "1"), ("b", "2")],
-            replaced=[("a", "0")],
-            device_only=[("c", "3")],
+            removed=[("c", "3")],
         )
-        assert summarize_diff(diff) == "+2 ~1 (1 device-only)"
+        assert summarize_diff(diff) == "+2 -1"
 
 
 # A real sha512-crypt vector from Ulrich Drepper's SHA-crypt spec:
@@ -219,14 +208,15 @@ class TestReconcileHashedPasswords:
         r, c = reconcile_hashed_passwords(running, candidate)
         assert not diff_paths(r, c).has_changes
 
-    def test_changed_password_pairs_as_replacement(self):
+    def test_changed_password_shows_as_add_and_remove(self):
         running = {self.PREFIX + ("encrypted-password", SPEC_HASH)}
         candidate = {self.PREFIX + ("plaintext-password", "new password")}
         r, c = reconcile_hashed_passwords(running, candidate)
-        # system login is a kept prefix in real use.
-        diff = diff_paths(r, c, kept=(("system", "login"),))
+        diff = diff_paths(r, c)
         assert diff.added == [self.PREFIX + ("plaintext-password", "new password")]
-        assert diff.replaced == [self.PREFIX + ("plaintext-password", SPEC_HASH)]
+        # reconcile rewrites the device hash under plaintext-password so
+        # both sides share the node; a mismatch is a plain -old +new.
+        assert diff.removed == [self.PREFIX + ("plaintext-password", SPEC_HASH)]
         # Both sides redact: neither the new password nor the old hash
         # may appear in the printed diff.
         text = format_diff(diff)
@@ -253,47 +243,27 @@ class TestReconcileHashedPasswords:
         assert reconcile_hashed_passwords(running, candidate) == (running, candidate)
 
 
-KEPT = (("system", "conntrack"), ("service", "ntp"))
-
-
-class TestKeptSections:
-    def test_stale_unkept_path_is_removed(self):
+class TestOwnership:
+    def test_changed_leaf_is_add_and_remove(self):
         running = {("system", "name-server", "2606:4700::1111")}
         candidate = {("system", "name-server", "2606:4700:4700::1111")}
-        diff = diff_paths(running, candidate, kept=KEPT)
+        diff = diff_paths(running, candidate)
         assert diff.removed == [("system", "name-server", "2606:4700::1111")]
         assert diff.added == [("system", "name-server", "2606:4700:4700::1111")]
-        assert diff.replaced == []
-        assert diff.device_only == []
 
     def test_removal_alone_is_a_change(self):
         running = {("system", "name-server", "1.1.1.1")}
-        diff = diff_paths(running, set(), kept=KEPT)
+        diff = diff_paths(running, set())
         assert diff.has_changes
         assert summarize_diff(diff) == "+0 -1"
 
-    def test_kept_stale_paths_stay_device_only(self):
+    def test_unrendered_section_is_fully_removed(self):
+        # Ownership is total: even config network.yml never mentions
+        # (here a conntrack module) is deleted rather than kept.
         running = {("system", "conntrack", "modules", "ftp")}
-        diff = diff_paths(running, set(), kept=KEPT)
-        assert not diff.has_changes
-        assert diff.device_only == [("system", "conntrack", "modules", "ftp")]
-
-    def test_ownership_wins_over_replaced_pairing(self):
-        # A stale unkept value whose parent also gets a new value would
-        # pair as "replaced" (display-only); default ownership makes it
-        # a real removal instead.
-        running = {("vpn", "ipsec", "esp-group", "E", "mode", "transport")}
-        candidate = {("vpn", "ipsec", "esp-group", "E", "mode", "tunnel")}
-        diff = diff_paths(running, candidate, kept=KEPT)
-        assert diff.removed == [("vpn", "ipsec", "esp-group", "E", "mode", "transport")]
-        assert diff.replaced == []
-
-    def test_kept_replaced_pairing_still_works(self):
-        running = {("service", "ntp", "server", "time1.vyos.net")}
-        candidate = {("service", "ntp", "server", "time.cloudflare.com")}
-        diff = diff_paths(running, candidate, kept=KEPT)
-        assert diff.replaced == [("service", "ntp", "server", "time1.vyos.net")]
-        assert diff.removed == []
+        diff = diff_paths(running, set())
+        assert diff.has_changes
+        assert diff.removed == [("system", "conntrack", "modules", "ftp")]
 
     def test_removed_shown_as_minus_lines(self):
         diff = ConfigDiff(removed=[("system", "name-server", "1.1.1.1")])
@@ -348,7 +318,7 @@ class TestMinimalDeletePaths:
         ]
 
 
-class TestWildcardKept:
+class TestWildcardIgnored:
     WILD = (("interfaces", "ethernet", "*", "hw-id"),)
 
     def test_wildcard_matches_any_component(self):
@@ -356,23 +326,21 @@ class TestWildcardKept:
             diff = diff_paths(
                 {("interfaces", "ethernet", iface, "hw-id", "aa:bb")},
                 set(),
-                kept=self.WILD,
+                ignored=self.WILD,
             )
             assert not diff.has_changes
-            assert diff.device_only == [
-                ("interfaces", "ethernet", iface, "hw-id", "aa:bb")
-            ]
+            assert diff.removed == []
 
-    def test_wildcard_does_not_keep_other_leaves(self):
+    def test_wildcard_does_not_ignore_other_leaves(self):
         diff = diff_paths(
             {("interfaces", "ethernet", "eth0", "mtu", "9000")},
             set(),
-            kept=self.WILD,
+            ignored=self.WILD,
         )
         assert diff.removed == [("interfaces", "ethernet", "eth0", "mtu", "9000")]
 
-    def test_path_shorter_than_prefix_is_not_kept(self):
-        diff = diff_paths({("interfaces", "ethernet")}, set(), kept=self.WILD)
+    def test_path_shorter_than_prefix_is_not_ignored(self):
+        diff = diff_paths({("interfaces", "ethernet")}, set(), ignored=self.WILD)
         assert diff.removed == [("interfaces", "ethernet")]
 
 
@@ -387,8 +355,7 @@ class TestIgnoredPaths:
         )
         assert not diff.has_changes
         assert diff.removed == []
-        assert diff.device_only == []
-        assert "hw-id" not in format_diff(diff, show_device_only=True)
+        assert "hw-id" not in format_diff(diff)
         assert summarize_diff(diff) == "no changes"
 
     def test_ignored_paths_never_collapse_into_deletes(self):
