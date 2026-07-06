@@ -2,10 +2,10 @@
 apiVersion: tailscale.com/v1alpha1
 kind: Connector
 metadata:
-  name: connector-fmt2-internal
+  name: connector-fmt2
 spec:
   replicas: 2
-  hostnamePrefix: ts-pod-cidrs
+  hostnamePrefix: connector-fmt2
   subnetRouter:
     advertiseRoutes:
       - "10.65.67.0/24"
