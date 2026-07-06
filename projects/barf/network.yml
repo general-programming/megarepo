@@ -281,6 +281,29 @@ hosts:
     type: mikrotik
     role: vpn
     site: sea
+    # Management/API address. Private (not is_global), so peers still
+    # render no WireGuard endpoint for this host -- it dials out.
+    address: 10.3.0.1
+    # Prefixes this host originates into the fabric (its connected
+    # bridges; matches the hand-written `export` chain accepts).
+    networks:
+      - 10.3.0.0/23
+      - 10.3.6.0/27
+    bgp:
+      # Box-local BGP instance name. RouterOS has no default instance
+      # on this box, and `/routing/bgp/connection add` without one
+      # prompts interactively (hangs a scripted deploy).
+      instance: bgp-instance-1
+      # Foreign ASes this box reflects into the fabric. The
+      # linuxgemini wg link (port 63666) and its BGP session stay
+      # hand-managed (kept, outside barf's ownership scope); barf's
+      # generated genprog-out chain reproduces the hand `export`
+      # chain's toward-fabric behavior: reflect the AS, announce the
+      # connected link /31, and reject all other re-export.
+      transit:
+        - name: linuxgemini
+          remote_as: 4280806675
+          link_network: 172.22.255.2/31
   # sea1
   sea1-vpn-spine-1:
     id: 15

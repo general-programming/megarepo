@@ -162,6 +162,11 @@ def config_deploy(targets: Tuple[str, ...], filename: str, yes: bool) -> None:
 
         try:
             host.push_rendered_config(rendered)
+        except NotImplementedError:
+            # Vendors with diff support but no push yet (mikrotik):
+            # a skip, not a failure -- keep `deploy all` usable.
+            results.append([host.hostname, "skipped: no deploy support"])
+            continue
         except Exception as e:  # noqa: BLE001 - report per-device failures
             results.append([host.hostname, f"deploy failed: {e}"])
             failed = True

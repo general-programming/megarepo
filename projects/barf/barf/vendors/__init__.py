@@ -381,6 +381,7 @@ class BaseHost:
         ospf: Optional[dict] = None,
         static_routes: Optional[List[dict]] = None,
         bird: Optional[dict] = None,
+        bgp: Optional[dict] = None,
         site: Optional[str] = None,
         **kwargs,
     ):
@@ -411,6 +412,13 @@ class BaseHost:
         # bool function name from the same drop-ins, called first by
         # every generated site-weighted import filter).
         self.bird = bird or {}
+        # BGP policy knobs beyond plain fabric membership. transit:
+        # [{name, remote_as, link_network}] -- foreign ASes this host
+        # reflects into the fabric (the far side of those links is not
+        # barf-managed); presence flips the export posture from
+        # accept-all to explicit-accepts + reject, mirroring how such
+        # hosts are hand-configured.
+        self.bgp = bgp or {}
         # Geographic site (network.yml global_meta.sites key) this host
         # lives in, if any. Backs BGP large-community origin tagging
         # and import local-pref weighting; hosts without one are
@@ -882,6 +890,7 @@ class BaseHost:
             ospf=meta.get("ospf", None),
             static_routes=meta.get("static_routes", None),
             bird=meta.get("bird", None),
+            bgp=meta.get("bgp", None),
             site=meta.get("site", None),
         )
 

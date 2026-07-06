@@ -76,6 +76,23 @@ def render_host_config(
                 " set bird.import_check_function instead"
             )
 
+        # The mikrotik template only models numbered WireGuard links:
+        # an unnumbered link would render literal `remote.address=None`
+        # BGP connections, and an ipsec link would render as WireGuard
+        # (generating spurious keypairs into Vault). Fail fast instead
+        # of emitting broken config that the diff's ownership scoping
+        # would then silently drop.
+        if host.devicetype == "mikrotik":
+            for link in vpn_links:
+                if link.unnumbered or link.ipsec:
+                    kind = "unnumbered" if link.unnumbered else "ipsec"
+                    raise ValueError(
+                        f"{host.hostname}: {kind} link to"
+                        f" {link.side_a.hostname if link.side_a != host else link.side_b.hostname}"
+                        " is not supported on mikrotik hosts yet; pin a"
+                        " link `network:` in network.yml"
+                    )
+
     return render_template(
         f"{host.role}/{host.devicetype}.j2",
         device=host,
