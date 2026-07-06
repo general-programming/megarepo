@@ -239,15 +239,54 @@ class TestBGPInstance:
         assert "instance=" not in render()
 
 
-class TestUnsupportedLinks:
-    def test_unnumbered_link_fails_fast(self):
-        # Would otherwise render `remote.address=None` connections that
-        # RouterOS rejects and the diff's ownership scoping hides.
-        device = make_mikrotik()
-        spine = BaseHost(hostname="spine-x", role="vpn", asn=1, site="sea")
-        with pytest.raises(ValueError, match="unnumbered link"):
-            render(device, [make_link(51078, spine, device)])
+class TestUnnumbered:
+    """RFC 5549 links: link-local BGP via ND, no /31s.
 
+    Recipe live-verified against fmt2-vpn-spine-1 (2026-07-05): the
+    session establishes in seconds, but only exchanges prefixes with
+    afi=ip,ipv6 -- RouterOS's default afi=ip negotiates and then
+    silently moves nothing.
+    """
+
+    def _render(self):
+        device = make_mikrotik()
+        spine = BaseHost(
+            hostname="sea1-vpn-spine-1", role="vpn", asn=4280805529, site="sea"
+        )
+        return render(device, [make_link(51911, spine, device)])
+
+    def test_nd_enabled_per_unnumbered_interface(self):
+        conf = self._render()
+        nd_line = next(
+            line for line in conf.splitlines() if line.startswith("/ipv6/nd add")
+        )
+        assert nd_line == "/ipv6/nd add interface=wg51911 ra-interval=10s-15s"
+        # /ipv6/nd silently discards comment= (live-verified): rendering
+        # one would read as a forever-pending diff.
+        assert "comment" not in nd_line
+        assert "/ipv6/nd/prefix add prefix=none interface=wg51911" in conf
+
+    def test_connection_is_interface_local_with_both_afis(self):
+        conf = self._render()
+        conn = next(
+            line for line in conf.splitlines() if "/routing/bgp/connection add" in line
+        )
+        assert "local.address=wg51911" in conn
+        assert "remote.address" not in conn
+        assert "remote.as=4280805529" in conn
+        assert "afi=ip,ipv6" in conn
+        assert "input.filter=genprog-in-sea" in conn
+
+    def test_no_link_address_and_numbered_links_unaffected(self):
+        conf = self._render()
+        assert "/ip/address add" not in conf
+        # Numbered links keep the classic form with no afi override.
+        numbered = render()
+        assert "afi=" not in numbered
+        assert "/ipv6/nd" not in numbered
+
+
+class TestUnsupportedLinks:
     def test_ipsec_link_fails_fast(self):
         device = make_mikrotik()
         peer = BaseHost(hostname="oracle-x", role="vpn", asn=31898)

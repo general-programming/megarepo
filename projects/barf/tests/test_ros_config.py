@@ -272,3 +272,73 @@ class TestDiff:
         text = format_diff(d, redact=True)
         assert "OLD-SECRET" not in text and "PRIV-A" not in text
         assert "private-key: <redacted> -> <redacted>" in text
+
+
+class TestUnnumbered:
+    RENDERED = """
+/interface/wireguard add name=wg51911 listen-port=51911 mtu=1420 private-key="PRIV-C"
+/ipv6/nd add interface=wg51911 ra-interval=10s-15s comment="barf: unnumbered"
+/ipv6/nd/prefix add prefix=none interface=wg51911 comment="barf: unnumbered"
+/routing/bgp/connection add name=sea1-vpn-spine-1 templates=genprog-fabric local.address=wg51911 local.role=ebgp remote.as=4280805529 afi=ip,ipv6
+"""
+
+    DEVICE = {
+        "interface/wireguard": [
+            {
+                ".id": "*F",
+                "name": "wg51911",
+                "listen-port": "51911",
+                "mtu": "1420",
+                "private-key": "PRIV-C",
+            },
+        ],
+        "ipv6/nd": [
+            # RouterOS default entry and a hand LAN entry: never barf's.
+            {".id": "*1", "interface": "all", "default": "true", "disabled": "true"},
+            {".id": "*2", "interface": "bridge-internal"},
+        ],
+        "ipv6/nd/prefix": [
+            {
+                ".id": "*1",
+                "prefix": "fd94::/64",
+                "interface": "bridge-internal",
+                "dynamic": "true",
+            },
+        ],
+        "routing/bgp/connection": [
+            # Adopted unnumbered connection: identity by local interface.
+            {
+                ".id": "*5",
+                "name": "sea1-vpn-spine-1",
+                "templates": "genprog-fabric",
+                "local.address": "wg51911",
+                "local.role": "ebgp",
+                "remote.as": "4280805529",
+                "afi": "ip,ipv6",
+            },
+            # Foreign numbered session stays kept.
+            {
+                ".id": "*3",
+                "name": "bgp-linuxgemini1",
+                "remote.address": "172.22.255.2",
+                "remote.as": "4280806675",
+            },
+        ],
+    }
+
+    def test_unnumbered_connection_adopted_by_interface(self):
+        d = diff_items(parse_ros_commands(self.RENDERED), self.DEVICE)
+        # The connection matches by local.address -> no add, no change.
+        assert not [p for p, _props in d.added if p == "routing/bgp/connection"]
+        removed = [key for _p, key in d.removed]
+        assert "172.22.255.2" not in removed  # foreign session kept
+
+    def test_nd_entries_owned_only_on_fabric_interfaces(self):
+        d = diff_items(parse_ros_commands(self.RENDERED), self.DEVICE)
+        added = [(p, props.get("interface")) for p, props in d.added]
+        assert ("ipv6/nd", "wg51911") in added
+        assert ("ipv6/nd/prefix", "wg51911") in added
+        removed = [key for _p, key in d.removed]
+        # The disabled default (interface=all) and LAN entries are kept.
+        assert "all" not in removed
+        assert "bridge-internal" not in removed

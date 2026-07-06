@@ -78,11 +78,21 @@ def _on_owned_interface(item: dict, owned_names: frozenset) -> bool:
     return item.get("interface") in owned_names
 
 
-def _fabric_remote(item: dict, owned_names: frozenset) -> bool:
-    try:
-        return ip_address(item.get("remote.address", "")) in FABRIC_LINK_NET
-    except ValueError:
-        return False
+def _connection_identity(item: dict) -> Optional[str]:
+    """Numbered sessions key on the peer /31 address; unnumbered ones
+    (no remote.address -- the peer link-local is ND-discovered) key on
+    the local interface, which RouterOS allows one connection per."""
+    return item.get("remote.address") or item.get("local.address")
+
+
+def _fabric_connection(item: dict, owned_names: frozenset) -> bool:
+    addr = item.get("remote.address")
+    if addr:
+        try:
+            return ip_address(addr) in FABRIC_LINK_NET
+        except ValueError:
+            return False
+    return item.get("local.address") in owned_names
 
 
 def _named_genprog(key: str) -> Callable[[dict, frozenset], bool]:
@@ -114,8 +124,19 @@ COLLECTIONS: Dict[str, _Collection] = {
         ),
         _Collection(
             "routing/bgp/connection",
-            identity=lambda i: i.get("remote.address"),
-            owned=_fabric_remote,
+            identity=_connection_identity,
+            owned=_fabric_connection,
+        ),
+        _Collection(
+            # Per-interface ND config backing unnumbered BGP sessions.
+            "ipv6/nd",
+            identity=lambda i: i.get("interface"),
+            owned=_on_owned_interface,
+        ),
+        _Collection(
+            "ipv6/nd/prefix",
+            identity=lambda i: i.get("interface"),
+            owned=_on_owned_interface,
         ),
         _Collection(
             # Rules are ordered within their chain; identity by

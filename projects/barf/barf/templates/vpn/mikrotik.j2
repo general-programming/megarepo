@@ -16,7 +16,18 @@
 /interface/wireguard/peers add interface={{ interface_name }} name={{ other_peer.hostname }} public-key="{{ link.wg_pubkey(other_peer) }}" allowed-address=0.0.0.0/0,::/0
 {%- if other_peer.wg_endpoint %} endpoint-address={{ other_peer.wg_endpoint }} endpoint-port={{ link.link_id }} persistent-keepalive=10s{% endif %}
 
-{% if not link.unnumbered %}
+{% if link.unnumbered %}
+{# Unnumbered (RFC 5549): the BGP session rides link-locals. ND must
+   be enabled on the interface so we learn the peer's link-local from
+   its RAs, and prefix=none lets this side answer RAs without any
+   global address (live-verified on 7.22.3; ND multicast rides the
+   tunnel because allowed-address covers ::/0). #}
+{# /ipv6/nd entries silently discard comment= (accepted, never
+   stored -- live-verified), so none is rendered: it would read as a
+   forever-pending diff. #}
+/ipv6/nd add interface={{ interface_name }} ra-interval=10s-15s
+/ipv6/nd/prefix add prefix=none interface={{ interface_name }} comment="barf: {{ other_peer.hostname }} unnumbered BGP"
+{% else %}
 /ip/address add address={{ link.get_ip(our_side, with_netmask=True) }} interface={{ interface_name }} comment="barf: {{ other_peer.hostname }} link"
 {% endif %}
 {% endfor %}
@@ -61,11 +72,24 @@
 
 /routing/bgp/template add name=genprog-fabric as={{ device.asn }} hold-time=30s keepalive-time=10s{% if announced %} output.network=genprog-networks{% endif %}
 
+{# Unnumbered connections: local.address is the INTERFACE, no
+   remote.address (the peer's link-local is discovered via ND), and
+   afi=ip,ipv6 is mandatory -- the default afi=ip establishes but
+   exchanges zero prefixes (live-learned). IPv4 NLRIs then ride IPv6
+   next-hops via the extended-nexthop capability. #}
 {% for link in vpn_links %}
+    {%- set interface_name = "wg" ~ link.link_id -%}
     {%- set our_side = link.side_a if link.side_a == device else link.side_b -%}
     {%- set other_peer = link.side_b if link.side_a == device else link.side_a -%}
     {%- set weighted = site_import_rules.get(other_peer.site) -%}
-/routing/bgp/connection add name={{ other_peer.hostname }} templates=genprog-fabric{% if device.bgp.get("instance") %} instance={{ device.bgp.instance }}{% endif %} remote.address={{ link.get_ip(other_peer) }} remote.as={{ other_peer.asn }} local.address={{ link.get_ip(our_side) }} local.role=ebgp{% if weighted %} input.filter=genprog-in-{{ other_peer.site }}{% endif %}{% if origin_site %} output.filter-chain=genprog-out{% endif %} comment="barf: {{ other_peer.hostname }}"
+    {%- set instance = " instance=" ~ device.bgp.instance if device.bgp.get("instance") else "" -%}
+    {%- set policy = (" input.filter=genprog-in-" ~ other_peer.site if weighted else "")
+                   ~ (" output.filter-chain=genprog-out" if origin_site else "") -%}
+{% if link.unnumbered %}
+/routing/bgp/connection add name={{ other_peer.hostname }} templates=genprog-fabric{{ instance }} local.address={{ interface_name }} local.role=ebgp remote.as={{ other_peer.asn }} afi=ip,ipv6{{ policy }} comment="barf: {{ other_peer.hostname }}"
+{% else %}
+/routing/bgp/connection add name={{ other_peer.hostname }} templates=genprog-fabric{{ instance }} remote.address={{ link.get_ip(other_peer) }} remote.as={{ other_peer.asn }} local.address={{ link.get_ip(our_side) }} local.role=ebgp{{ policy }} comment="barf: {{ other_peer.hostname }}"
+{% endif %}
 {% endfor %}
 
 {% include 'common/all_suffix.j2' %}

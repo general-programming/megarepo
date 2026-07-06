@@ -428,11 +428,15 @@ links:
     fmt2-vpn-spine-2: {}
     sea1-vpn-spine-1: {}
     sea1-vpn-spine-2: {}
+  # Unnumbered (RFC 5549): link-local BGP sessions, no /31s. RouterOS
+  # side needs /ipv6/nd + nd/prefix=none per link and afi=ip,ipv6 on
+  # the connection (default afi=ip establishes but exchanges nothing);
+  # live-verified against fmt2-vpn-spine-1 2026-07-05.
   sea420-acc-v-hv2:
-    fmt2-vpn-spine-1: {network: 172.31.255.44/31}
-    fmt2-vpn-spine-2: {network: 172.31.255.46/31}
-    sea1-vpn-spine-1: {network: 172.31.255.14/31}
-    sea1-vpn-spine-2: {network: 172.31.255.16/31}
+    fmt2-vpn-spine-1: {}
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
+    sea1-vpn-spine-2: {}
 
   # oci-vpn-iad
   oracle-vpn-1-1:
