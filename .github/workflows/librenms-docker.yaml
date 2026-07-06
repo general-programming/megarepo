@@ -5,7 +5,7 @@ on:
   push:
     branches: [main]
     paths:
-      - "services/librenms/Dockerfile"
+      - "infrastructure/librenms/Dockerfile"
       - ".github/workflows/librenms-docker.yaml"
   schedule:
     # Weekly rebuild to pick up upstream librenms/librenms:latest changes.
@@ -47,7 +47,7 @@ jobs:
 
       - uses: docker/build-push-action@v7
         with:
-          context: services/librenms
+          context: infrastructure/librenms
           push: true
           pull: true
           tags: ${{ steps.meta.outputs.tags }}
