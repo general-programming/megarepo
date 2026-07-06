@@ -1,3 +1,6 @@
+{% set is_master = 'saltmaster' in salt['grains.get']('tags', []) %}
+{% set salt_pkgs = ['salt-minion'] + (['salt-master'] if is_master else []) %}
+
 {% if grains['os_family'] == 'RedHat' %}
 salt_minion_repo:
   file.managed:
@@ -16,7 +19,7 @@ salt_minion_repo_refresh:
 
 salt_minion_pkg:
   pkg.latest:
-    - name: salt-minion
+    - names: {{ salt_pkgs }}
     - refresh: True
     - require:
       - file: salt_minion_repo
@@ -59,7 +62,7 @@ salt_minion_pin:
 
 salt_minion_pkg:
   pkg.latest:
-    - name: salt-minion
+    - names: {{ salt_pkgs }}
     - refresh: True
     - require:
       - file: salt_minion_repo
@@ -72,3 +75,12 @@ salt_minion_service:
     - enable: True
     - watch:
       - pkg: salt_minion_pkg
+
+{% if is_master %}
+salt_master_service:
+  service.running:
+    - name: salt-master
+    - enable: True
+    - watch:
+      - pkg: salt_minion_pkg
+{% endif %}
