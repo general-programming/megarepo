@@ -16,6 +16,7 @@ import hvac.exceptions
 
 from barf.actions import open_connection
 from barf.model import get_vault
+from barf.util.firewall import FirewallGroups, parse_firewall
 from barf.util.images import PROVIDERS
 
 if TYPE_CHECKING:
@@ -408,6 +409,7 @@ class BaseHost:
         static_routes: Optional[List[dict]] = None,
         bird: Optional[dict] = None,
         bgp: Optional[dict] = None,
+        firewall: Optional[dict] = None,
         site: Optional[str] = None,
         **kwargs,
     ):
@@ -445,6 +447,9 @@ class BaseHost:
         # accept-all to explicit-accepts + reject, mirroring how such
         # hosts are hand-configured.
         self.bgp = bgp or {}
+        # Vendor-neutral firewall groups (address + interface). Filter
+        # rules are a later slice; see barf/util/firewall.py.
+        self.firewall: FirewallGroups = parse_firewall(firewall or {})
         # Geographic site (network.yml global_meta.sites key) this host
         # lives in, if any. Backs BGP large-community origin tagging
         # and import local-pref weighting; hosts without one are
@@ -922,6 +927,7 @@ class BaseHost:
             static_routes=meta.get("static_routes", None),
             bird=meta.get("bird", None),
             bgp=meta.get("bgp", None),
+            firewall=meta.get("firewall", None),
             site=meta.get("site", None),
         )
 

@@ -9,6 +9,23 @@ set service https api keys id vaultadmin key '{{ secrets.vyos_api_password }}'
 set firewall global-options all-ping enable
 set firewall global-options broadcast-ping enable
 
+{# Vendor-neutral firewall groups (barf/util/firewall.py). Address
+   members split by family into network-group / ipv6-network-group;
+   interface groups are flat, so include= nesting is resolved here. #}
+{% for group in device.firewall.address %}
+{% for member in group.members_v(4) %}
+set firewall group network-group {{ group.name }} network {{ member.address }}
+{% endfor %}
+{% for member in group.members_v(6) %}
+set firewall group ipv6-network-group {{ group.name }} network {{ member.address }}
+{% endfor %}
+{% endfor %}
+{% for group in device.firewall.interface %}
+{% for iface in device.firewall.resolved_interfaces(group.name) %}
+set firewall group interface-group {{ group.name }} interface {{ iface }}
+{% endfor %}
+{% endfor %}
+
 set service ntp server time1.vyos.net
 set service ntp server time2.vyos.net
 set service ntp server time3.vyos.net

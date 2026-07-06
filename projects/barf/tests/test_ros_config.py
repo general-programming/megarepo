@@ -13,8 +13,10 @@ from barf.vendors.mikrotik.ros_config import (
     format_diff,
     format_excluded,
     parse_ros_commands,
+    rendered_address_list_names,
     rendered_bridge_names,
     rendered_connection_ids,
+    rendered_interface_list_names,
     summarize_diff,
 )
 
@@ -558,3 +560,119 @@ class TestIgnored:
         assert "all" not in kept
         # A real hand ND entry is still surfaced as kept.
         assert "bridge-internal" in kept
+
+
+# --- Firewall groups ownership (address + interface lists) ---
+
+FW_RENDERED = """
+/ip/firewall/address-list add list=rfc1918 address=10.0.0.0/8
+/ip/firewall/address-list add list=trusted address=10.3.6.0/27 comment="internal"
+/ip/firewall/address-list add list=genprog-networks address=10.3.0.0/23 comment="barf: announced to the fabric"
+/ipv6/firewall/address-list add list=trusted address=2602:fa6d:10::/48 comment="cofractal"
+/interface/list add name=internal-wg-tunnels
+/interface/list/member add list=internal-wg-tunnels interface=wg51078
+/interface/list add name=internal-networks include=internal-wg-tunnels
+/interface/list/member add list=internal-networks interface=bridge-internal
+"""
+
+FW_DEVICE = {
+    "ip/firewall/address-list": [
+        {".id": "*1", "list": "rfc1918", "address": "10.0.0.0/8", "disabled": "false"},
+        {
+            ".id": "*2",
+            "list": "trusted",
+            "address": "10.3.6.0/27",
+            "comment": "internal",
+        },
+        {
+            ".id": "*3",
+            "list": "genprog-networks",
+            "address": "10.3.0.0/23",
+            "comment": "barf: announced to the fabric",
+        },
+        # A hand-written list barf does not model -> kept.
+        {".id": "*4", "list": "myhand", "address": "1.2.3.4"},
+    ],
+    "ipv6/firewall/address-list": [
+        {
+            ".id": "*5",
+            "list": "trusted",
+            "address": "2602:fa6d:10::/48",
+            "comment": "cofractal",
+        },
+    ],
+    "interface/list": [
+        # Built-in list (builtin=true) -> ignored, never listed.
+        {".id": "*b", "name": "all", "builtin": "true"},
+        {".id": "*6", "name": "internal-wg-tunnels", "builtin": "false"},
+        {
+            ".id": "*7",
+            "name": "internal-networks",
+            "include": "internal-wg-tunnels",
+            "builtin": "false",
+        },
+        # A hand list barf does not model -> kept.
+        {".id": "*8", "name": "handlist", "builtin": "false"},
+    ],
+    "interface/list/member": [
+        {".id": "*9", "list": "internal-wg-tunnels", "interface": "wg51078"},
+        {".id": "*10", "list": "internal-networks", "interface": "bridge-internal"},
+        # Member of a foreign list -> kept.
+        {".id": "*11", "list": "handlist", "interface": "eth5"},
+    ],
+}
+
+
+class TestFirewallGroupOwnership:
+    def _kept(self):
+        desired = parse_ros_commands(FW_RENDERED)
+        return {
+            (p, label)
+            for p, label, _i in excluded_items(
+                FW_DEVICE,
+                addrlist_names=rendered_address_list_names(desired),
+                iflist_names=rendered_interface_list_names(desired),
+            )
+        }
+
+    def test_modeled_groups_adopt_clean(self):
+        desired = parse_ros_commands(FW_RENDERED)
+        diff = diff_items(desired, FW_DEVICE)
+        # Address + interface groups match the device exactly.
+        assert not any(
+            "firewall/address-list" in p or p.startswith("interface/list")
+            for p, _ in diff.added
+        )
+        assert not any(
+            "firewall/address-list" in p or p.startswith("interface/list")
+            for p, _ in diff.removed
+        )
+
+    def test_owned_lists_not_kept(self):
+        kept = self._kept()
+        assert ("ip/firewall/address-list", "rfc1918:10.0.0.0/8") not in kept
+        assert ("ipv6/firewall/address-list", "trusted:2602:fa6d:10::/48") not in kept
+        assert ("interface/list", "internal-wg-tunnels") not in kept
+        assert (
+            "interface/list/member",
+            "internal-networks:bridge-internal",
+        ) not in kept
+
+    def test_foreign_lists_stay_kept(self):
+        kept = self._kept()
+        assert ("ip/firewall/address-list", "myhand:1.2.3.4") in kept
+        assert ("interface/list", "handlist") in kept
+        assert ("interface/list/member", "handlist:eth5") in kept
+
+    def test_builtin_interface_list_is_ignored(self):
+        # The stock `all` list is neither owned nor kept -- invisible.
+        assert ("interface/list", "all") not in self._kept()
+        diff = diff_items(parse_ros_commands(FW_RENDERED), FW_DEVICE)
+        assert ("interface/list", "all") not in diff.removed
+
+    def test_unmodeled_lists_are_removed(self):
+        # With no firewall rendered, the modeled collections own nothing
+        # they do not render: a genprog list on the device is stale.
+        diff = diff_items(parse_ros_commands(""), FW_DEVICE)
+        # myhand/handlist stay excluded (kept); nothing owned to remove.
+        assert diff.removed == []

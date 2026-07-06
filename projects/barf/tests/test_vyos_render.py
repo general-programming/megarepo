@@ -268,3 +268,56 @@ class TestStaticWireguard:
             "set interfaces wireguard wgtransit peer gemini persistent-keepalive 10"
             in conf
         )
+
+
+class TestFirewallGroups:
+    FW = {
+        "groups": {
+            "address": {
+                "rfc1918": ["10.0.0.0/8"],
+                "trusted": [
+                    {"address": "10.3.6.0/27", "comment": "internal"},
+                    "2602:fa6d:10::/48",
+                ],
+            },
+            "interface": {
+                "wg-tunnels": ["wg51078"],
+                "internal": {
+                    "interfaces": ["bridge-internal"],
+                    "include": ["wg-tunnels"],
+                },
+            },
+        }
+    }
+
+    def _conf(self) -> str:
+        device = VyOSHost(hostname="leaf-sea", role="vpn", asn=300, firewall=self.FW)
+        return render(device, [])
+
+    def test_v4_member_in_network_group(self):
+        assert (
+            "set firewall group network-group rfc1918 network 10.0.0.0/8"
+            in self._conf()
+        )
+
+    def test_v6_member_in_ipv6_network_group(self):
+        assert (
+            "set firewall group ipv6-network-group trusted network 2602:fa6d:10::/48"
+            in self._conf()
+        )
+
+    def test_interface_group_flattens_include(self):
+        conf = self._conf()
+        # VyOS interface-groups are flat, so `internal` absorbs the
+        # included wg-tunnels members.
+        assert (
+            "set firewall group interface-group internal interface bridge-internal"
+            in conf
+        )
+        assert "set firewall group interface-group internal interface wg51078" in conf
+
+    def test_no_groups_renders_nothing(self):
+        device = VyOSHost(hostname="leaf-sea", role="vpn", asn=300)
+        conf = render(device, [])
+        assert "firewall group network-group" not in conf
+        assert "firewall group interface-group" not in conf

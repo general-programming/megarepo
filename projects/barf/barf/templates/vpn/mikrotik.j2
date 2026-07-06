@@ -84,6 +84,26 @@
 /ip/firewall/address-list add list=genprog-networks address={{ network }} comment="barf: announced to the fabric"
 {% endfor %}
 
+{# Vendor-neutral firewall groups (barf/util/firewall.py). Address
+   members split by family into the v4/v6 address-list trees; interface
+   lists render their nesting via include=. Optional suffixes use a
+   {{ }} expression, not {% if %}: the jinja env has trim_blocks, so a
+   line ending in a block tag would swallow its newline. #}
+{% for group in device.firewall.address %}
+{% for member in group.members_v(4) %}
+/ip/firewall/address-list add list={{ group.name }} address={{ member.address }}{{ (' comment="' ~ member.comment ~ '"') if member.comment else '' }}
+{% endfor %}
+{% for member in group.members_v(6) %}
+/ipv6/firewall/address-list add list={{ group.name }} address={{ member.address }}{{ (' comment="' ~ member.comment ~ '"') if member.comment else '' }}
+{% endfor %}
+{% endfor %}
+{% for group in device.firewall.interface %}
+/interface/list add name={{ group.name }}{{ (' include=' ~ (group.include | join(','))) if group.include else '' }}
+{% for iface in group.interfaces %}
+/interface/list/member add list={{ group.name }} interface={{ iface }}
+{% endfor %}
+{% endfor %}
+
 {% if origin_site %}
 {# Tag our own originated prefixes with the origin-site large
    community (fabric-wide community_asn, RFC 8195 -- see

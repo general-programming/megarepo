@@ -340,6 +340,49 @@ hosts:
           link_network: 172.22.255.2/31
           remote_address: 172.22.255.2
           export_supernet: 172.22.255.0/24
+    # Vendor-neutral firewall groups (barf/util/firewall.py). Address
+    # groups split by family; interface groups render RouterOS `include`
+    # nesting natively and flatten for VyOS. Filter rules are a later
+    # slice -- these groups back the hand-written filter chains today.
+    firewall:
+      groups:
+        address:
+          rfc1918:
+            - 10.0.0.0/8
+            - 172.16.0.0/12
+            - 192.168.0.0/16
+          bogons:
+            - 0.0.0.0/8
+            - 10.0.0.0/8
+            - 100.64.0.0/10
+            - 127.0.0.0/8
+            - 169.254.0.0/16
+            - 172.16.0.0/12
+            - 192.0.0.0/24
+            - 192.0.2.0/24
+            - 192.168.0.0/16
+            - 198.18.0.0/15
+            - 198.51.100.0/24
+            - 203.0.113.0/24
+            - 233.252.0.0/24
+          trusted:
+            - {address: 79.110.170.0/24, comment: Lasagna Ltd in fmt2}
+            - {address: 10.3.6.0/27, comment: internal}
+            - {address: "2602:fa6d:10::/48", comment: cofractal-sea1}
+        interface:
+          internal-wg-tunnels:
+            interfaces: [linuxgemini1, wg51078, wg51142]
+          internal-networks:
+            interfaces: [bridge-internal]
+            include: [internal-wg-tunnels]
+          external-networks:
+            interfaces: [bridge1]
+          external-links:
+            interfaces: [1-MAIN, ether-pcie1]
+            include: [external-networks]
+          internal-links:
+            interfaces: [ether-pcie2]
+            include: [internal-networks]
   # sea1
   sea1-vpn-spine-1:
     id: 15

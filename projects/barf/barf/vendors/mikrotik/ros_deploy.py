@@ -124,6 +124,8 @@ def build_apply_commands(
         ros_config.rendered_bridge_names(desired),
         ros_config.rendered_connection_ids(desired),
         ros_config.rendered_wg_ports(desired),
+        ros_config.rendered_address_list_names(desired),
+        ros_config.rendered_interface_list_names(desired),
     )
     cmds: List[str] = []
 

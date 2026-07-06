@@ -7,11 +7,11 @@ item is barf's *unless* an ``excluded`` predicate protects it. This is
 exclusion-based like VyOS: ownership is the default and the excluded
 set is the shrinking knob. The exclusions seed what barf does not
 control today — sea420's linuxgemini transit link (wg port 63666, AS
-4280806675), its bridges and LAN addresses, the hand-written ``export``
-filter chain, the bogons/rfc1918 address-lists — and each one dropped
-(as network.yml models more of the box) widens ownership toward 100%.
-``excluded_items`` surfaces exactly what is still kept, powering
-``config diff --show-device-only``.
+4280806675) — and each one dropped (as network.yml models more of the
+box) widens ownership toward 100%; its bridges/LAN addresses, the
+``export`` filter chain, and the firewall address/interface groups have
+already been folded in. ``excluded_items`` surfaces exactly what is
+still kept, powering ``config diff --show-device-only``.
 
 Item identity is a natural key per collection (listen-port, public
 key, address, ...), never RouterOS ``.id``s (unstable) and never names
@@ -118,8 +118,7 @@ def _foreign_connection(item: dict, owned_names: frozenset) -> bool:
 
 def _not_genprog(key: str) -> Callable[[dict, frozenset], bool]:
     """Items whose ``key`` lacks the genprog prefix are hand-written
-    (the default BGP template, the ``export`` filter chain, the
-    bogons/rfc1918 address-lists)."""
+    (e.g. the default BGP template ``name``)."""
     return lambda item, owned_names: not item.get(key, "").startswith(OWNED_NAME_PREFIX)
 
 
@@ -142,6 +141,34 @@ def _ros_default(item: dict, owned_names: frozenset) -> bool:
     (e.g. the disabled ``ipv6/nd interface=all`` and the built-in
     ``routing/bgp/template default``)."""
     return item.get("default") == "true"
+
+
+def _ros_builtin(item: dict, owned_names: frozenset) -> bool:
+    """A RouterOS built-in entry (``builtin=true``): the stock
+    ``all``/``none``/``dynamic``/``static`` interface lists, not
+    removable and not intent -- ignored like ``_ros_default``."""
+    return item.get("builtin") == "true"
+
+
+def _foreign_address_list(item: dict, owned_names: frozenset) -> bool:
+    """An address-list entry whose ``list`` barf does not render
+    (``owned_names`` here are the rendered list names: genprog-networks
+    plus every declared firewall address group). A hand list stays kept
+    until modelled as a ``firewall.groups.address`` entry."""
+    return item.get("list") not in owned_names
+
+
+def _foreign_interface_list(item: dict, owned_names: frozenset) -> bool:
+    """An interface list barf does not render (``owned_names`` here are
+    the rendered interface-group names)."""
+    return item.get("name") not in owned_names
+
+
+def _foreign_interface_list_member(item: dict, owned_names: frozenset) -> bool:
+    """A member of an interface list barf does not render (``owned_names``
+    here are the rendered interface-group names), so barf must model
+    every member of a group it owns."""
+    return item.get("list") not in owned_names
 
 
 def rendered_bridge_names(parsed: Dict[str, List[dict]]) -> frozenset:
@@ -184,20 +211,47 @@ def rendered_wg_ports(parsed: Dict[str, List[dict]]) -> frozenset:
     )
 
 
+def rendered_address_list_names(parsed: Dict[str, List[dict]]) -> frozenset:
+    """The address-list names in a parsed/rendered config: the derived
+    ``genprog-networks`` plus every declared firewall address group,
+    across both the v4 and v6 address-list trees. Scopes address-list
+    ownership on both sides.
+    """
+    return frozenset(
+        item["list"]
+        for path in ("ip/firewall/address-list", "ipv6/firewall/address-list")
+        for item in parsed.get(path, [])
+        if item.get("list")
+    )
+
+
+def rendered_interface_list_names(parsed: Dict[str, List[dict]]) -> frozenset:
+    """The interface-list names in a parsed/rendered config (barf's
+    firewall interface groups). Scopes interface-list and member
+    ownership on both sides.
+    """
+    return frozenset(
+        item["name"] for item in parsed.get("interface/list", []) if item.get("name")
+    )
+
+
 def _owned_names(
     path: str,
     wg_names: frozenset,
     bridge_names: frozenset,
     conn_ids: frozenset = frozenset(),
     wg_ports: frozenset = frozenset(),
+    addrlist_names: frozenset = frozenset(),
+    iflist_names: frozenset = frozenset(),
 ) -> frozenset:
     """The barf-owned identities an item in ``path`` is scoped by.
 
     Addresses may sit on a fabric WireGuard link *or* a barf-rendered
     bridge; the bridge collection is scoped by bridge name; BGP
     connections by rendered identity; the wg interface by rendered port;
-    everything else (peers, ND) is owned-wg-interface only, so LAN peers
-    stay hand-managed until modeled.
+    firewall address-lists by rendered list name and interface lists by
+    rendered group name; everything else (peers, ND) is owned-wg-interface
+    only, so LAN peers stay hand-managed until modeled.
     """
     if path == "interface/wireguard":
         return wg_ports
@@ -211,6 +265,10 @@ def _owned_names(
         return wg_names | bridge_names
     if path == "routing/bgp/connection":
         return conn_ids
+    if path in ("ip/firewall/address-list", "ipv6/firewall/address-list"):
+        return addrlist_names
+    if path in ("interface/list", "interface/list/member"):
+        return iflist_names
     return wg_names
 
 
@@ -287,7 +345,28 @@ COLLECTIONS: Dict[str, _Collection] = {
         _Collection(
             "ip/firewall/address-list",
             identity=lambda i: f"{i.get('list')}:{i.get('address')}",
-            excluded=_not_genprog("list"),
+            excluded=_foreign_address_list,
+        ),
+        _Collection(
+            "ipv6/firewall/address-list",
+            identity=lambda i: f"{i.get('list')}:{i.get('address')}",
+            excluded=_foreign_address_list,
+        ),
+        _Collection(
+            # Firewall interface groups. Barf owns the groups it renders;
+            # the built-in all/none/dynamic/static lists are ignored.
+            "interface/list",
+            identity=lambda i: i.get("name"),
+            excluded=_foreign_interface_list,
+            ignored=_ros_builtin,
+        ),
+        _Collection(
+            # Interface-group memberships, keyed by (list, interface).
+            # Owned when the group is barf-rendered, so barf must model
+            # every member of a group it owns.
+            "interface/list/member",
+            identity=lambda i: f"{i.get('list')}:{i.get('interface')}",
+            excluded=_foreign_interface_list_member,
         ),
     )
 }
@@ -376,23 +455,33 @@ def owned_index(
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
     wg_ports: frozenset = frozenset(),
+    addrlist_names: frozenset = frozenset(),
+    iflist_names: frozenset = frozenset(),
 ) -> Dict[str, Dict[str, dict]]:
     """Barf-owned device items keyed by identity, per collection.
 
     The raw device item (``.id`` and all) for each owned key, so the
     deploy path can resolve a natural key back to the live item it must
     change, remove, or restore. Positional collections
-    (routing/filter/rule) are indexed the same way barf diffs them.
-    ``bridge_names``/``conn_ids``/``wg_ports`` (the rendered bridges,
-    connection identities, and wg ports) scope their ownership; omitted,
-    none is claimed.
+    (routing/filter/rule) are indexed the same way barf diffs them. The
+    rendered-name sets (bridges, connection identities, wg ports,
+    address-list names, interface-group names) scope their ownership;
+    omitted, none is claimed.
     """
     wg_names = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
     return {
         path: _index(
             collection,
             device.get(path, []),
-            _owned_names(path, wg_names, bridge_names, conn_ids, wg_ports),
+            _owned_names(
+                path,
+                wg_names,
+                bridge_names,
+                conn_ids,
+                wg_ports,
+                addrlist_names,
+                iflist_names,
+            ),
         )
         for path, collection in COLLECTIONS.items()
     }
@@ -409,6 +498,8 @@ def diff_items(
     bridge_names = rendered_bridge_names(desired)
     conn_ids = rendered_connection_ids(desired)
     wg_ports = rendered_wg_ports(desired)
+    addrlist_names = rendered_address_list_names(desired)
+    iflist_names = rendered_interface_list_names(desired)
     desired_wg = _owned_wg_names(desired.get("interface/wireguard", []), wg_ports)
     device_wg = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
 
@@ -417,12 +508,28 @@ def diff_items(
         want = _index(
             collection,
             desired.get(path, []),
-            _owned_names(path, desired_wg, bridge_names, conn_ids, wg_ports),
+            _owned_names(
+                path,
+                desired_wg,
+                bridge_names,
+                conn_ids,
+                wg_ports,
+                addrlist_names,
+                iflist_names,
+            ),
         )
         have = _index(
             collection,
             device.get(path, []),
-            _owned_names(path, device_wg, bridge_names, conn_ids, wg_ports),
+            _owned_names(
+                path,
+                device_wg,
+                bridge_names,
+                conn_ids,
+                wg_ports,
+                addrlist_names,
+                iflist_names,
+            ),
         )
 
         for key, props in want.items():
@@ -450,6 +557,8 @@ def excluded_items(
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
     wg_ports: frozenset = frozenset(),
+    addrlist_names: frozenset = frozenset(),
+    iflist_names: frozenset = frozenset(),
 ) -> List[Tuple[str, str, dict]]:
     """The hand-managed device items barf deliberately keeps.
 
@@ -458,9 +567,9 @@ def excluded_items(
     the collections it looks at. ``ignored`` items (recorded RouterOS
     defaults) are omitted entirely. Backs ``config diff
     --show-device-only`` so the excluded set is visible and can be
-    shrunk deliberately. Pass ``bridge_names``/``conn_ids``/``wg_ports``
-    (the rendered bridges, connection identities, and wg ports) so items
-    barf now owns drop off the kept list.
+    shrunk deliberately. Pass the rendered-name sets (bridges,
+    connection identities, wg ports, address-list names,
+    interface-group names) so items barf now owns drop off the kept list.
 
     Returns:
         ``(collection, identity label, raw item)`` triples.
@@ -468,7 +577,15 @@ def excluded_items(
     wg_names = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
     kept: List[Tuple[str, str, dict]] = []
     for path, collection in COLLECTIONS.items():
-        names = _owned_names(path, wg_names, bridge_names, conn_ids, wg_ports)
+        names = _owned_names(
+            path,
+            wg_names,
+            bridge_names,
+            conn_ids,
+            wg_ports,
+            addrlist_names,
+            iflist_names,
+        )
         for item in device.get(path, []):
             if item.get("dynamic") == "true":
                 continue
@@ -489,12 +606,19 @@ def format_excluded(
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
     wg_ports: frozenset = frozenset(),
+    addrlist_names: frozenset = frozenset(),
+    iflist_names: frozenset = frozenset(),
 ) -> str:
     """A human-readable listing of the kept (hand-managed) items."""
     return "\n".join(
         f"= /{path} [{label}] (device-only: hand-managed, kept)"
         for path, label, _item in excluded_items(
-            device, bridge_names, conn_ids, wg_ports
+            device,
+            bridge_names,
+            conn_ids,
+            wg_ports,
+            addrlist_names,
+            iflist_names,
         )
     )
 

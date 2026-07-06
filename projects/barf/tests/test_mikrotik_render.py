@@ -482,3 +482,67 @@ class TestStaticWireguard:
             '/ip/address add address=172.22.255.3/31 interface=linuxgemini1 comment="barf: linuxgemini1 address"'
             in conf
         )
+
+
+class TestFirewallGroups:
+    FW = {
+        "groups": {
+            "address": {
+                "rfc1918": ["10.0.0.0/8"],
+                "trusted": [
+                    {"address": "10.3.6.0/27", "comment": "internal"},
+                    "2602:fa6d:10::/48",
+                ],
+            },
+            "interface": {
+                "wg-tunnels": ["wg51078"],
+                "internal": {
+                    "interfaces": ["bridge-internal"],
+                    "include": ["wg-tunnels"],
+                },
+            },
+        }
+    }
+
+    def _lines(self) -> list:
+        return render(make_mikrotik(firewall=self.FW)).splitlines()
+
+    def test_v4_member_in_ip_tree(self):
+        assert (
+            "/ip/firewall/address-list add list=rfc1918 address=10.0.0.0/8"
+            in self._lines()
+        )
+
+    def test_v6_member_in_ipv6_tree(self):
+        assert (
+            "/ipv6/firewall/address-list add list=trusted address=2602:fa6d:10::/48"
+            in self._lines()
+        )
+
+    def test_comment_rendered_when_present(self):
+        assert (
+            '/ip/firewall/address-list add list=trusted address=10.3.6.0/27 comment="internal"'
+            in self._lines()
+        )
+
+    def test_interface_list_include_and_members(self):
+        lines = self._lines()
+        assert "/interface/list add name=wg-tunnels" in lines
+        assert "/interface/list add name=internal include=wg-tunnels" in lines
+        assert "/interface/list/member add list=wg-tunnels interface=wg51078" in lines
+        assert (
+            "/interface/list/member add list=internal interface=bridge-internal"
+            in lines
+        )
+
+    def test_each_command_on_its_own_line(self):
+        # Regression: trim_blocks once let a comment= line swallow its
+        # newline and concatenate the next command onto it.
+        for line in self._lines():
+            assert line.count(" add ") <= 1, line
+
+    def test_no_groups_renders_nothing(self):
+        conf = render(make_mikrotik())
+        assert "/interface/list add" not in conf
+        # Only the derived genprog-networks list, no group lists.
+        assert "list=rfc1918" not in conf
