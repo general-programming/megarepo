@@ -310,6 +310,28 @@ hosts:
         members:
           - 1-MAIN
           - ether-pcie1
+      # Static WireGuard tunnel to the linuxgemini transit (external
+      # peering; the BGP session + policy live under bgp.transit). Peer
+      # key/endpoint are static; our private key is in Vault
+      # (host-<hostname> / linuxgemini-tunnel-privkey), captured off the
+      # device so the interface adopts byte-identical, no rekey. Renders
+      # on RouterOS and VyOS from this one model.
+      - name: linuxgemini1
+        type: wireguard
+        address: 172.22.255.3/31
+        mtu: 1420
+        wireguard:
+          port: 63666
+          private_key_secret: linuxgemini-tunnel-privkey
+          peers:
+            - name: linuxgemini
+              public_key: HzMVb726GHR5U7Toev0VS8sePk7ZPMJb6hx6SdiLJ1I=
+              endpoint: 91.107.210.194
+              port: 63666
+              keepalive: 10s
+              allowed_ips:
+                - 0.0.0.0/0
+                - ::/0
     bgp:
       instance: bgp-instance-1
       transit:

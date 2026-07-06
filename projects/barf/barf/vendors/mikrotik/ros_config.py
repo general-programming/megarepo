@@ -86,10 +86,12 @@ def _wg_fabric_port(item: dict) -> bool:
 
 
 def _foreign_wg(item: dict, owned_names: frozenset) -> bool:
-    """Hand-managed WireGuard: listens outside the fabric port band
-    (e.g. linuxgemini1 transit on 63666). Drop this exclusion once
-    every WireGuard interface on the box is barf-rendered."""
-    return not _wg_fabric_port(item)
+    """Hand-managed WireGuard: neither a fabric-band link nor a port
+    barf explicitly renders (``owned_names`` here are the rendered wg
+    ports). A fabric-band port stays owned even when unrendered so stale
+    links are still removed; a modeled static tunnel (e.g. linuxgemini1
+    on 63666) is owned by being rendered."""
+    return not _wg_fabric_port(item) and item.get("listen-port") not in owned_names
 
 
 def _off_fabric_interface(item: dict, owned_names: frozenset) -> bool:
@@ -168,20 +170,37 @@ def rendered_connection_ids(parsed: Dict[str, List[dict]]) -> frozenset:
     )
 
 
+def rendered_wg_ports(parsed: Dict[str, List[dict]]) -> frozenset:
+    """The WireGuard listen-ports in a parsed/rendered config.
+
+    Scopes wg-interface ownership for a modeled static tunnel (fabric
+    links are owned by their port band regardless); identical on both
+    sides, like the bridge/connection sets.
+    """
+    return frozenset(
+        item["listen-port"]
+        for item in parsed.get("interface/wireguard", [])
+        if item.get("listen-port")
+    )
+
+
 def _owned_names(
     path: str,
     wg_names: frozenset,
     bridge_names: frozenset,
     conn_ids: frozenset = frozenset(),
+    wg_ports: frozenset = frozenset(),
 ) -> frozenset:
     """The barf-owned identities an item in ``path`` is scoped by.
 
     Addresses may sit on a fabric WireGuard link *or* a barf-rendered
     bridge; the bridge collection is scoped by bridge name; BGP
-    connections by rendered identity; everything else (peers, ND) is
-    fabric-WireGuard only, so bridge ND and LAN peers stay hand-managed
-    until modeled.
+    connections by rendered identity; the wg interface by rendered port;
+    everything else (peers, ND) is owned-wg-interface only, so LAN peers
+    stay hand-managed until modeled.
     """
+    if path == "interface/wireguard":
+        return wg_ports
     if path == "ip/address":
         return wg_names | bridge_names
     if path in ("interface/bridge", "interface/bridge/port"):
@@ -302,9 +321,14 @@ def parse_ros_commands(rendered: str) -> Dict[str, List[dict]]:
     return items
 
 
-def _owned_wg_names(items: List[dict]) -> frozenset:
+def _owned_wg_names(items: List[dict], wg_ports: frozenset = frozenset()) -> frozenset:
+    """Names of owned wg interfaces: fabric-band links plus any rendered
+    static tunnel (``wg_ports``)."""
     return frozenset(
-        item["name"] for item in items if "name" in item and _wg_fabric_port(item)
+        item["name"]
+        for item in items
+        if "name" in item
+        and (_wg_fabric_port(item) or item.get("listen-port") in wg_ports)
     )
 
 
@@ -351,6 +375,7 @@ def owned_index(
     device: Dict[str, List[dict]],
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
+    wg_ports: frozenset = frozenset(),
 ) -> Dict[str, Dict[str, dict]]:
     """Barf-owned device items keyed by identity, per collection.
 
@@ -358,16 +383,16 @@ def owned_index(
     deploy path can resolve a natural key back to the live item it must
     change, remove, or restore. Positional collections
     (routing/filter/rule) are indexed the same way barf diffs them.
-    ``bridge_names``/``conn_ids`` (the rendered bridges and connection
-    identities) scope bridge and connection ownership; omitted, none is
-    claimed.
+    ``bridge_names``/``conn_ids``/``wg_ports`` (the rendered bridges,
+    connection identities, and wg ports) scope their ownership; omitted,
+    none is claimed.
     """
-    wg_names = _owned_wg_names(device.get("interface/wireguard", []))
+    wg_names = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
     return {
         path: _index(
             collection,
             device.get(path, []),
-            _owned_names(path, wg_names, bridge_names, conn_ids),
+            _owned_names(path, wg_names, bridge_names, conn_ids, wg_ports),
         )
         for path, collection in COLLECTIONS.items()
     }
@@ -383,20 +408,21 @@ def diff_items(
     """
     bridge_names = rendered_bridge_names(desired)
     conn_ids = rendered_connection_ids(desired)
-    desired_wg = _owned_wg_names(desired.get("interface/wireguard", []))
-    device_wg = _owned_wg_names(device.get("interface/wireguard", []))
+    wg_ports = rendered_wg_ports(desired)
+    desired_wg = _owned_wg_names(desired.get("interface/wireguard", []), wg_ports)
+    device_wg = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
 
     diff = RosDiff()
     for path, collection in COLLECTIONS.items():
         want = _index(
             collection,
             desired.get(path, []),
-            _owned_names(path, desired_wg, bridge_names, conn_ids),
+            _owned_names(path, desired_wg, bridge_names, conn_ids, wg_ports),
         )
         have = _index(
             collection,
             device.get(path, []),
-            _owned_names(path, device_wg, bridge_names, conn_ids),
+            _owned_names(path, device_wg, bridge_names, conn_ids, wg_ports),
         )
 
         for key, props in want.items():
@@ -423,6 +449,7 @@ def excluded_items(
     device: Dict[str, List[dict]],
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
+    wg_ports: frozenset = frozenset(),
 ) -> List[Tuple[str, str, dict]]:
     """The hand-managed device items barf deliberately keeps.
 
@@ -431,17 +458,17 @@ def excluded_items(
     the collections it looks at. ``ignored`` items (recorded RouterOS
     defaults) are omitted entirely. Backs ``config diff
     --show-device-only`` so the excluded set is visible and can be
-    shrunk deliberately. Pass ``bridge_names``/``conn_ids`` (the
-    rendered bridges and connection identities) so items barf now owns
-    drop off the kept list.
+    shrunk deliberately. Pass ``bridge_names``/``conn_ids``/``wg_ports``
+    (the rendered bridges, connection identities, and wg ports) so items
+    barf now owns drop off the kept list.
 
     Returns:
         ``(collection, identity label, raw item)`` triples.
     """
-    wg_names = _owned_wg_names(device.get("interface/wireguard", []))
+    wg_names = _owned_wg_names(device.get("interface/wireguard", []), wg_ports)
     kept: List[Tuple[str, str, dict]] = []
     for path, collection in COLLECTIONS.items():
-        names = _owned_names(path, wg_names, bridge_names, conn_ids)
+        names = _owned_names(path, wg_names, bridge_names, conn_ids, wg_ports)
         for item in device.get(path, []):
             if item.get("dynamic") == "true":
                 continue
@@ -461,11 +488,14 @@ def format_excluded(
     device: Dict[str, List[dict]],
     bridge_names: frozenset = frozenset(),
     conn_ids: frozenset = frozenset(),
+    wg_ports: frozenset = frozenset(),
 ) -> str:
     """A human-readable listing of the kept (hand-managed) items."""
     return "\n".join(
         f"= /{path} [{label}] (device-only: hand-managed, kept)"
-        for path, label, _item in excluded_items(device, bridge_names, conn_ids)
+        for path, label, _item in excluded_items(
+            device, bridge_names, conn_ids, wg_ports
+        )
     )
 
 

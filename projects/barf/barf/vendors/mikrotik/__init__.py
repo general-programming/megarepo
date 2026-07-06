@@ -108,6 +108,7 @@ class MikroTikHost(BaseHost):
                 device,
                 ros_config.rendered_bridge_names(desired),
                 ros_config.rendered_connection_ids(desired),
+                ros_config.rendered_wg_ports(desired),
             )
             if kept:
                 text = f"{text}\n{kept}" if text else kept

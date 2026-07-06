@@ -52,6 +52,26 @@ set system conntrack modules {{ module }}
     {% for member in interface.members %}
 set interfaces bridge {{ interface.name }} member interface {{ member }}
     {% endfor %}
+    {# Static WireGuard tunnel (vendor-neutral `wireguard` block); the
+       fabric mesh links are rendered separately from vpn_links. #}
+    {% if interface.is_wireguard and interface.wireguard %}
+        {%- set wg = interface.wireguard -%}
+{{ device.interface_prefix(interface) }} private-key '{{ device.secret(wg.private_key_secret) }}'
+{{ device.interface_prefix(interface) }} port {{ wg.port }}
+        {% for peer in wg.get('peers', []) %}
+{{ device.interface_prefix(interface) }} peer {{ peer.name }} public-key '{{ peer.public_key }}'
+            {% for ip in peer.get('allowed_ips', ['0.0.0.0/0', '::/0']) %}
+{{ device.interface_prefix(interface) }} peer {{ peer.name }} allowed-ips '{{ ip }}'
+            {% endfor %}
+            {% if peer.get('endpoint') %}
+{{ device.interface_prefix(interface) }} peer {{ peer.name }} address '{{ peer.endpoint }}'
+{{ device.interface_prefix(interface) }} peer {{ peer.name }} port {{ peer.get('port', wg.port) }}
+            {% endif %}
+            {% if peer.get('keepalive') %}
+{{ device.interface_prefix(interface) }} peer {{ peer.name }} persistent-keepalive {{ peer.keepalive | replace('s', '') }}
+            {% endif %}
+        {% endfor %}
+    {% endif %}
 {% endfor %}
 
 set service ssh disable-password-authentication

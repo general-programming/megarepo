@@ -123,6 +123,7 @@ def build_apply_commands(
         device,
         ros_config.rendered_bridge_names(desired),
         ros_config.rendered_connection_ids(desired),
+        ros_config.rendered_wg_ports(desired),
     )
     cmds: List[str] = []
 

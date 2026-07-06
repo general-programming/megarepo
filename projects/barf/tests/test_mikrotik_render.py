@@ -437,3 +437,48 @@ class TestBridgeRA:
         )
         conf = render(device)
         assert "/ipv6/nd add interface=bridge1" not in conf
+
+
+class TestStaticWireguard:
+    def _device(self, monkeypatch):
+        d = make_mikrotik(
+            interfaces=[
+                HostInterface(
+                    name="linuxgemini1",
+                    type="wireguard",
+                    mtu=1420,
+                    address=ipaddress.IPv4Interface("172.22.255.3/31"),
+                    wireguard={
+                        "port": 63666,
+                        "private_key_secret": "k",
+                        "peers": [
+                            {
+                                "name": "linuxgemini",
+                                "public_key": "PUB",
+                                "endpoint": "91.107.210.194",
+                                "port": 63666,
+                                "keepalive": "10s",
+                                "allowed_ips": ["0.0.0.0/0", "::/0"],
+                            }
+                        ],
+                    },
+                )
+            ]
+        )
+        monkeypatch.setattr(d, "secret", lambda k, *a, **kw: "PRIV")
+        return d
+
+    def test_interface_peer_and_address(self, monkeypatch):
+        conf = render(self._device(monkeypatch))
+        assert (
+            '/interface/wireguard add name=linuxgemini1 listen-port=63666 mtu=1420 private-key="PRIV" comment="barf: linuxgemini1 tunnel"'
+            in conf
+        )
+        assert (
+            '/interface/wireguard/peers add interface=linuxgemini1 name=linuxgemini public-key="PUB" allowed-address=0.0.0.0/0,::/0 endpoint-address=91.107.210.194 endpoint-port=63666 persistent-keepalive=10s'
+            in conf
+        )
+        assert (
+            '/ip/address add address=172.22.255.3/31 interface=linuxgemini1 comment="barf: linuxgemini1 address"'
+            in conf
+        )

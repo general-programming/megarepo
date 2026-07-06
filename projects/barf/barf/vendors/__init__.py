@@ -144,6 +144,13 @@ class HostInterface:
     # small vendor-neutral dict (hop_limit, advertise_dns, ...) each
     # template maps to its own syntax (RouterOS ``/ipv6/nd``).
     ra: Optional[dict] = None
+    # Static WireGuard tunnel config for a type == "wireguard" interface
+    # (an external peering, unlike the fabric mesh links derived from
+    # WGNetworkLink). Vendor-neutral dict -- ``port``,
+    # ``private_key_secret`` (a Vault key on the host path), and
+    # ``peers`` [{name, public_key, endpoint, port, keepalive,
+    # allowed_ips}] -- each template maps to its own WireGuard syntax.
+    wireguard: Optional[dict] = None
 
     def __post_init__(self) -> None:
         merged = []
@@ -193,6 +200,11 @@ class HostInterface:
     def is_bridge(self) -> bool:
         """Whether the interface is an L2 bridge."""
         return self.type == "bridge"
+
+    @property
+    def is_wireguard(self) -> bool:
+        """Whether the interface is a static WireGuard tunnel."""
+        return self.type == "wireguard"
 
     @property
     def is_port_channel(self) -> bool:
@@ -888,6 +900,7 @@ class BaseHost:
                     management=interface.get("management", False),
                     members=interface.get("members", []),
                     ra=interface.get("ra", None),
+                    wireguard=interface.get("wireguard", None),
                 )
             )
 

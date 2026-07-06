@@ -210,3 +210,61 @@ class TestBridges:
         conf = render(self._router(), [])
         assert "set interfaces bridge br0 member interface eth1" in conf
         assert "set interfaces bridge br0 member interface eth2" in conf
+
+
+class TestStaticWireguard:
+    """A vendor-neutral static WG tunnel renders as `interfaces wireguard`."""
+
+    def _router(self, monkeypatch):
+        r = make_router("sea-edge-1", 4280805541, site="sea")
+        r.interfaces.append(
+            HostInterface(
+                name="wgtransit",
+                type="wireguard",
+                address=ipaddress.IPv4Interface("172.22.255.3/31"),
+                wireguard={
+                    "port": 63666,
+                    "private_key_secret": "transit-privkey",
+                    "peers": [
+                        {
+                            "name": "gemini",
+                            "public_key": "PUBKEY",
+                            "endpoint": "91.107.210.194",
+                            "port": 63666,
+                            "keepalive": "10s",
+                            "allowed_ips": ["0.0.0.0/0", "::/0"],
+                        }
+                    ],
+                },
+            )
+        )
+        monkeypatch.setattr(
+            r, "secret", lambda k, *a, **kw: "PRIVKEY" if k == "transit-privkey" else ""
+        )
+        return r
+
+    def test_interface_key_port_and_peer(self, monkeypatch):
+        conf = render(self._router(monkeypatch), [])
+        assert "set interfaces wireguard wgtransit address 172.22.255.3/31" in conf
+        assert "set interfaces wireguard wgtransit private-key 'PRIVKEY'" in conf
+        assert "set interfaces wireguard wgtransit port 63666" in conf
+        assert (
+            "set interfaces wireguard wgtransit peer gemini public-key 'PUBKEY'" in conf
+        )
+        assert (
+            "set interfaces wireguard wgtransit peer gemini allowed-ips '0.0.0.0/0'"
+            in conf
+        )
+        assert (
+            "set interfaces wireguard wgtransit peer gemini allowed-ips '::/0'" in conf
+        )
+        assert (
+            "set interfaces wireguard wgtransit peer gemini address '91.107.210.194'"
+            in conf
+        )
+        assert "set interfaces wireguard wgtransit peer gemini port 63666" in conf
+        # VyOS keepalive is a bare number of seconds.
+        assert (
+            "set interfaces wireguard wgtransit peer gemini persistent-keepalive 10"
+            in conf
+        )

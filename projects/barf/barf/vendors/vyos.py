@@ -78,6 +78,8 @@ class VyOSHost(BaseHost):
     def interface_prefix(self, interface):
         if interface.is_bridge:
             interface_type = "bridge"
+        elif interface.is_wireguard:
+            interface_type = "wireguard"
         elif interface.management:
             interface_type = "dummy"
         else:

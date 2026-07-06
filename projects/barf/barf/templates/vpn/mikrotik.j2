@@ -54,6 +54,24 @@
 {% endif %}
 {% endfor %}
 
+{# Static WireGuard tunnels (vendor-neutral `wireguard` block; the same
+   model renders as `interfaces wireguard` on VyOS). External peerings,
+   not the Vault-derived fabric mesh: the peer key/endpoint are static
+   and our private key is captured into Vault off the device, so the
+   interface adopts byte-identical without a rekey. Owned by rendered
+   listen-port (ros_config._foreign_wg). #}
+{% for iface in device.interfaces if iface.is_wireguard and iface.wireguard %}
+    {%- set wg = iface.wireguard -%}
+/interface/wireguard add name={{ iface.name }} listen-port={{ wg.port }} mtu={{ iface.mtu or 1420 }} private-key="{{ device.secret(wg.private_key_secret) }}" comment="barf: {{ iface.name }} tunnel"
+{% for peer in wg.get('peers', []) %}
+    {%- set endpoint = (" endpoint-address=" ~ peer.endpoint ~ " endpoint-port=" ~ peer.get('port', wg.port) ~ " persistent-keepalive=" ~ peer.get('keepalive', '10s')) if peer.get('endpoint') else "" -%}
+/interface/wireguard/peers add interface={{ iface.name }} name={{ peer.name }} public-key="{{ peer.public_key }}" allowed-address={{ peer.get('allowed_ips', ['0.0.0.0/0', '::/0']) | join(',') }}{{ endpoint }}
+{% endfor %}
+{% for addr in iface.addresses %}
+/ip/address add address={{ addr.with_prefixlen }} interface={{ iface.name }} comment="barf: {{ iface.name }} address"
+{% endfor %}
+{% endfor %}
+
 {# Transit ASes are reflected into the fabric; their connected link
    nets are announced (and tagged) like our own networks so every
    fabric session, adopted or new, advertises identically. The far
