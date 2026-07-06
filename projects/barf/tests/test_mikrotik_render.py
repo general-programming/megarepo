@@ -7,13 +7,15 @@ live-verified on the device before first deploy (VyOS lesson:
 `match large-community` needed a probe too).
 """
 
+import ipaddress
+
 import pytest
 from conftest import COMMUNITY_ASN, FMT2, SEA, SITES, make_link
 
 from barf.model.wireguard import WGNetworkLink
 from barf.util.render import render_host_config
 from barf.util.sites import BASE_LOCAL_PREF, haversine_km
-from barf.vendors import BaseHost
+from barf.vendors import BaseHost, HostInterface
 from barf.vendors.mikrotik import MikroTikHost
 
 pytestmark = pytest.mark.usefixtures("fake_keys", "fake_vault")
@@ -301,3 +303,137 @@ class TestUnsupportedLinks:
         )
         with pytest.raises(ValueError, match="ipsec link"):
             render(device, [link])
+
+
+class TestBridges:
+    def make_bridged(self):
+        return make_mikrotik(
+            interfaces=[
+                HostInterface(
+                    name="bridge-internal",
+                    type="bridge",
+                    _description="internal LAN",
+                    address=ipaddress.IPv4Interface("10.3.0.1/23"),
+                ),
+                HostInterface(
+                    name="bridge1",
+                    type="bridge",
+                    address=ipaddress.IPv4Interface("10.3.6.1/27"),
+                    members=["ether5"],
+                ),
+            ]
+        )
+
+    def test_bridge_interface_and_address_rendered(self):
+        conf = render(self.make_bridged())
+        assert "/interface/bridge add name=bridge-internal" in conf
+        assert "/ip/address add address=10.3.0.1/23 interface=bridge-internal" in conf
+        assert "/interface/bridge add name=bridge1" in conf
+        assert "/ip/address add address=10.3.6.1/27 interface=bridge1" in conf
+
+    def test_members_rendered_only_when_modeled(self):
+        conf = render(self.make_bridged())
+        # bridge1 has a modeled member port; bridge-internal has none.
+        assert "/interface/bridge/port add bridge=bridge1 interface=ether5" in conf
+        assert "port add bridge=bridge-internal" not in conf
+
+
+class TestTransitCutover:
+    def make_transit(self):
+        return make_mikrotik(
+            networks=["10.3.0.0/23", "10.3.6.0/27"],
+            bgp={
+                "instance": "bgp-instance-1",
+                "transit": [
+                    {
+                        "name": "linuxgemini",
+                        "remote_as": 4280806675,
+                        "link_network": "172.22.255.2/31",
+                        "remote_address": "172.22.255.2",
+                        "export_supernet": "172.22.255.0/24",
+                    }
+                ],
+            },
+        )
+
+    def test_genprog_out_transit_reproduces_export_rules(self):
+        conf = render(self.make_transit())
+        # The five hand `export` rules, generated verbatim from the model.
+        assert "chain=genprog-out-transit" in conf
+        assert (
+            "if (dst-len != 0 && bgp-output-remote-as == 4280806675 && bgp-input-remote-as != 4280806675) {accept}"
+            in conf
+        )
+        assert (
+            "if (dst-len != 0 && bgp-output-remote-as != 4280806675 && bgp-input-remote-as == 4280806675) {accept}"
+            in conf
+        )
+        assert (
+            "if (dst-len != 0 && protocol connected && dst in 172.22.255.0/24 && bgp-output-remote-as != 4280806675) {accept}"
+            in conf
+        )
+        assert (
+            "if (dst-len != 0 && protocol connected && dst in 172.31.255.0/24 && bgp-output-remote-as == 4280806675) {accept}"
+            in conf
+        )
+        assert (
+            "if (protocol connected && (dst in 10.3.0.0/23 or dst in 10.3.6.0/27)) {accept} else {reject}"
+            in conf
+        )
+
+    def test_transit_template_has_no_output_network(self):
+        conf = render(self.make_transit())
+        line = next(ln for ln in conf.splitlines() if "add name=genprog-transit" in ln)
+        assert "as=4280805533" in line
+        assert "routing-table=main" in line
+        assert "output.network" not in line  # unlike genprog-fabric
+
+    def test_transit_connection_owned_and_pointed_at_genprog(self):
+        conf = render(self.make_transit())
+        line = next(
+            ln
+            for ln in conf.splitlines()
+            if "/routing/bgp/connection add name=linuxgemini" in ln
+        )
+        assert "templates=genprog-transit" in line
+        assert "instance=bgp-instance-1" in line
+        assert "remote.address=172.22.255.2" in line
+        assert "remote.as=4280806675" in line
+        assert "output.filter-chain=genprog-out-transit" in line
+
+    def test_no_transit_no_transit_chain(self):
+        conf = render(make_mikrotik(networks=["10.36.0.0/24"]))
+        assert "genprog-out-transit" not in conf
+        assert "genprog-transit" not in conf
+
+
+class TestBridgeRA:
+    def test_bridge_ra_rendered_when_modeled(self):
+        device = make_mikrotik(
+            interfaces=[
+                HostInterface(
+                    name="bridge-internal",
+                    type="bridge",
+                    address=ipaddress.IPv4Interface("10.3.0.1/23"),
+                    ra={"hop_limit": 255, "advertise_dns": False},
+                ),
+            ]
+        )
+        conf = render(device)
+        assert (
+            "/ipv6/nd add interface=bridge-internal hop-limit=255 advertise-dns=no"
+            in conf
+        )
+
+    def test_no_ra_no_nd_for_bridge(self):
+        device = make_mikrotik(
+            interfaces=[
+                HostInterface(
+                    name="bridge1",
+                    type="bridge",
+                    address=ipaddress.IPv4Interface("10.3.6.1/27"),
+                ),
+            ]
+        )
+        conf = render(device)
+        assert "/ipv6/nd add interface=bridge1" not in conf

@@ -9,8 +9,12 @@ config (bridges, dynamic addresses, bogons lists) proving the scoping.
 
 from barf.vendors.mikrotik.ros_config import (
     diff_items,
+    excluded_items,
     format_diff,
+    format_excluded,
     parse_ros_commands,
+    rendered_bridge_names,
+    rendered_connection_ids,
     summarize_diff,
 )
 
@@ -172,12 +176,19 @@ class TestOwnership:
     def test_foreign_bgp_and_lan_config_kept(self):
         d = diff()
         removed = [key for _path, key in d.removed]
+        # This RENDERED models no transit, so the linuxgemini session
+        # (172.22.255.2) is not a rendered connection -> kept.
         assert "172.22.255.2" not in removed  # linuxgemini BGP session
         assert "10.3.0.1/23" not in removed  # LAN bridge address
-        assert "default" not in removed  # hand BGP template
-        # Hand `export` chain rules and bogons lists are invisible.
-        assert all("export" not in key for key in removed)
-        assert all("bogons" not in key for key in removed)
+        assert "default" not in removed  # hand BGP template (non-genprog)
+        assert all("bogons" not in key for key in removed)  # address-list kept
+
+    def test_unrendered_filter_chains_are_removed(self):
+        # routing/filter/rule is fully owned: a chain barf does not
+        # render (the hand `export` chain) is removed, not kept.
+        d = diff()
+        removed = [key for _path, key in d.removed]
+        assert any(key.startswith("export#") for key in removed)
 
     def test_dynamic_items_are_state_not_config(self):
         d = diff()
@@ -342,3 +353,208 @@ class TestUnnumbered:
         # The disabled default (interface=all) and LAN entries are kept.
         assert "all" not in removed
         assert "bridge-internal" not in removed
+
+
+class TestExcluded:
+    """The exclusion (kept) set surfaced for --show-device-only."""
+
+    def _kept(self):
+        parsed = parse_ros_commands(RENDERED)
+        return {
+            (path, label)
+            for path, label, _item in excluded_items(
+                DEVICE,
+                rendered_bridge_names(parsed),
+                rendered_connection_ids(parsed),
+            )
+        }
+
+    def test_hand_managed_items_are_reported_kept(self):
+        kept = self._kept()
+        # Foreign transit tunnel, its peer/address and (unrendered here)
+        # BGP session.
+        assert ("interface/wireguard", "63666") in kept
+        assert ("interface/wireguard/peers", "PUB-GEMINI") in kept
+        assert ("ip/address", "172.22.255.3/31") in kept
+        assert ("routing/bgp/connection", "172.22.255.2") in kept
+        # Hand LAN address, default BGP template, bogons. (The `export`
+        # chain is now fully owned -> removed, not kept.)
+        assert ("ip/address", "10.3.0.1/23") in kept
+        assert ("routing/bgp/template", "default") in kept
+        assert ("ip/firewall/address-list", "bogons:10.0.0.0/8") in kept
+        assert not any(path == "routing/filter/rule" for path, _label in kept)
+
+    def test_barf_owned_items_are_not_reported_kept(self):
+        kept = self._kept()
+        # Fabric-band WG, its fabric address, and the in-pool session
+        # are owned, never listed as device-only.
+        assert ("interface/wireguard", "51078") not in kept
+        assert ("ip/address", "172.31.255.45/31") not in kept
+        assert ("routing/bgp/connection", "172.31.255.44") not in kept
+
+    def test_dynamic_items_are_never_reported_kept(self):
+        # Dynamic device state is neither owned nor kept -- invisible.
+        labels = {label for _path, label, _item in excluded_items(DEVICE)}
+        assert "10.255.255.116/24" not in labels
+
+    def test_format_excluded_marks_device_only(self):
+        text = format_excluded(DEVICE)
+        assert "device-only: hand-managed, kept" in text
+        assert "/interface/wireguard [63666]" in text
+
+
+class TestBridges:
+    """A modeled bridge and its address become owned; others stay kept."""
+
+    RENDERED = """
+/interface/bridge add name=bridge-internal comment="barf: internal LAN"
+/ip/address add address=10.3.0.1/23 interface=bridge-internal comment="barf: bridge-internal address"
+"""
+    DEVICE = {
+        "interface/bridge": [
+            # Adopted post-deploy state: barf's comment already present.
+            {".id": "*b1", "name": "bridge-internal", "comment": "barf: internal LAN"},
+            # Hand-created bridge barf does not model -> kept.
+            {".id": "*b2", "name": "bridge-guest"},
+        ],
+        "ip/address": [
+            {
+                ".id": "*2",
+                "address": "10.3.0.1/23",
+                "interface": "bridge-internal",
+                "comment": "barf: bridge-internal address",
+                "dynamic": "false",
+            },
+            # Address on a bridge barf does not model -> kept.
+            {
+                ".id": "*3",
+                "address": "10.9.0.1/24",
+                "interface": "bridge-guest",
+                "dynamic": "false",
+            },
+        ],
+    }
+
+    def _diff(self):
+        return diff_items(parse_ros_commands(self.RENDERED), self.DEVICE)
+
+    def test_modeled_bridge_adopted_not_recreated(self):
+        d = self._diff()
+        assert not [p for p, _ in d.added if p == "interface/bridge"]
+        assert "bridge-internal" not in [k for _p, k in d.removed]
+
+    def test_bridge_address_becomes_owned_and_converges(self):
+        d = self._diff()
+        # 10.3.0.1/23 on the modeled bridge matches -> no add, no remove.
+        assert not d.has_changes
+
+    def test_foreign_bridge_and_its_address_kept(self):
+        d = self._diff()
+        removed = [k for _p, k in d.removed]
+        assert "bridge-guest" not in removed
+        assert "10.9.0.1/24" not in removed
+        bn = rendered_bridge_names(parse_ros_commands(self.RENDERED))
+        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, bn)}
+        assert ("interface/bridge", "bridge-guest") in kept
+        assert ("ip/address", "10.9.0.1/24") in kept
+        # The owned bridge + its address are NOT listed as device-only.
+        assert ("ip/address", "10.3.0.1/23") not in kept
+
+    def test_without_bridge_names_nothing_bridge_is_owned(self):
+        # Default (no rendered bridges) keeps every bridge address --
+        # the behavior-preserving baseline.
+        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE)}
+        assert ("ip/address", "10.3.0.1/23") in kept
+        assert ("interface/bridge", "bridge-internal") in kept
+
+
+class TestBridgePorts:
+    """Ports on a modeled bridge are owned; ports on others stay kept."""
+
+    RENDERED = """
+/interface/bridge add name=bridge-internal
+/interface/bridge/port add bridge=bridge-internal interface=ether-pcie2
+"""
+    DEVICE = {
+        "interface/bridge": [
+            {".id": "*b1", "name": "bridge-internal"},
+            {".id": "*b2", "name": "bridge-guest"},
+        ],
+        "interface/bridge/port": [
+            {".id": "*p1", "bridge": "bridge-internal", "interface": "ether-pcie2"},
+            # A member barf did not model on an owned bridge -> removed.
+            {".id": "*p2", "bridge": "bridge-internal", "interface": "ether-stray"},
+            # A port on a bridge barf does not model -> kept.
+            {".id": "*p3", "bridge": "bridge-guest", "interface": "ether-pcie9"},
+        ],
+    }
+
+    def _diff(self):
+        return diff_items(parse_ros_commands(self.RENDERED), self.DEVICE)
+
+    def test_modeled_port_adopted(self):
+        d = self._diff()
+        added = [
+            props.get("interface")
+            for p, props in d.added
+            if p == "interface/bridge/port"
+        ]
+        assert "ether-pcie2" not in added  # already present -> adopted
+
+    def test_unmodeled_port_on_owned_bridge_removed(self):
+        d = self._diff()
+        assert ("interface/bridge/port", "ether-stray") in d.removed
+
+    def test_port_on_foreign_bridge_kept(self):
+        d = self._diff()
+        assert ("interface/bridge/port", "ether-pcie9") not in d.removed
+        bn = rendered_bridge_names(parse_ros_commands(self.RENDERED))
+        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, bn)}
+        assert ("interface/bridge/port", "ether-pcie9") in kept
+
+
+class TestRosDefaultsIgnored:
+    """RouterOS built-in default=true entries are ignored, not kept."""
+
+    DEVICE = {
+        "routing/bgp/template": [
+            {
+                ".id": "*1",
+                "name": "default",
+                "default": "true",
+                "output.filter-chain": "export",
+            },
+            {".id": "*2", "name": "genprog-fabric"},
+        ],
+    }
+
+    def test_default_template_not_removed_and_not_listed(self):
+        # Not owned (so a rendered config that omits it never deletes
+        # it) and not surfaced as a shrink target.
+        d = diff_items(
+            {"routing/bgp/template": [{"name": "genprog-fabric"}]}, self.DEVICE
+        )
+        assert "default" not in [k for _p, k in d.removed]
+        kept = {label for _p, label, _i in excluded_items(self.DEVICE)}
+        assert "default" not in kept
+
+
+class TestIgnored:
+    """RouterOS defaults are dropped entirely, VyOS-IGNORED style."""
+
+    DEVICE = {
+        "ipv6/nd": [
+            {".id": "*1", "interface": "all", "default": "true", "disabled": "true"},
+            {".id": "*2", "interface": "bridge-internal"},
+        ],
+    }
+
+    def test_nd_all_default_is_neither_owned_nor_listed(self):
+        # Not removed (not owned) ...
+        d = diff_items({}, self.DEVICE)
+        assert "all" not in [k for _p, k in d.removed]
+        # ... and not shown as a device-only shrink target.
+        kept = {label for _p, label, _i in excluded_items(self.DEVICE)}
+        assert "all" not in kept
+        # A real hand ND entry is still surfaced as kept.
+        assert "bridge-internal" in kept

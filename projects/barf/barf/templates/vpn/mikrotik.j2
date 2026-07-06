@@ -32,6 +32,28 @@
 {% endif %}
 {% endfor %}
 
+{# LAN/L2 bridges modeled in network.yml (vendor-neutral interface
+   type=bridge; the VyOS side renders the same model as `interfaces
+   bridge`). barf owns the bridge by name, its L3 addresses, and its
+   member ports (the /interface/bridge/port collection is owned for
+   rendered bridges), so every member of an owned bridge must be
+   modeled or it would be removed. #}
+{% for iface in device.interfaces if iface.is_bridge %}
+/interface/bridge add name={{ iface.name }}{% if iface.description %} comment="barf: {{ iface.description }}"{% endif %}
+
+{% for member in iface.members %}
+/interface/bridge/port add bridge={{ iface.name }} interface={{ member }}
+{% endfor %}
+{% for addr in iface.addresses %}
+/ip/address add address={{ addr.with_prefixlen }} interface={{ iface.name }} comment="barf: {{ iface.name }} address"
+{% endfor %}
+{# LAN router-advertisement (host networking). Distinct from the fabric
+   links' unnumbered RA: a real prefix RA for the attached hosts. #}
+{% if iface.ra %}
+/ipv6/nd add interface={{ iface.name }}{% if iface.ra.get('hop_limit') %} hop-limit={{ iface.ra.hop_limit }}{% endif %} advertise-dns={{ 'yes' if iface.ra.get('advertise_dns') else 'no' }}
+{% endif %}
+{% endfor %}
+
 {# Transit ASes are reflected into the fabric; their connected link
    nets are announced (and tagged) like our own networks so every
    fabric session, adopted or new, advertises identically. The far
@@ -91,5 +113,32 @@
 /routing/bgp/connection add name={{ other_peer.hostname }} templates=genprog-fabric{{ instance }} remote.address={{ link.get_ip(other_peer) }} remote.as={{ other_peer.asn }} local.address={{ link.get_ip(our_side) }} local.role=ebgp{{ policy }} comment="barf: {{ other_peer.hostname }}"
 {% endif %}
 {% endfor %}
+
+{# Transit BGP sessions barf now OWNS (was the hand `export` chain +
+   `default` template). genprog-out-transit reproduces that chain's
+   toward-transit rules verbatim from the model (the toward-fabric
+   direction is already handled by genprog-out above); the session
+   rides genprog-transit, a template shaped like the hand `default`
+   (an AS, no output.network -- origination stays connected-matched).
+   With the session pointed here, the hand `export` chain is no longer
+   referenced and barf (owning all filter chains) deletes it.
+   fabric_link_net is the fabric's numbered-link /31 pool. #}
+{% set transit = device.bgp.get("transit", []) %}
+{% if transit %}
+{% set fabric_link_net = "172.31.255.0/24" %}
+{% for t in transit %}
+/routing/filter/rule add chain=genprog-out-transit comment="barf: export fabric routes to {{ t.name }} (AS {{ t.remote_as }})" rule="if (dst-len != 0 && bgp-output-remote-as == {{ t.remote_as }} && bgp-input-remote-as != {{ t.remote_as }}) {accept}"
+/routing/filter/rule add chain=genprog-out-transit comment="barf: reflect {{ t.name }} routes to the fabric" rule="if (dst-len != 0 && bgp-output-remote-as != {{ t.remote_as }} && bgp-input-remote-as == {{ t.remote_as }}) {accept}"
+/routing/filter/rule add chain=genprog-out-transit comment="barf: export {{ t.name }} link prefix to the fabric" rule="if (dst-len != 0 && protocol connected && dst in {{ t.export_supernet }} && bgp-output-remote-as != {{ t.remote_as }}) {accept}"
+/routing/filter/rule add chain=genprog-out-transit comment="barf: export fabric link prefixes to {{ t.name }}" rule="if (dst-len != 0 && protocol connected && dst in {{ fabric_link_net }} && bgp-output-remote-as == {{ t.remote_as }}) {accept}"
+{% endfor %}
+/routing/filter/rule add chain=genprog-out-transit comment="barf: announce internal prefixes, drop other connected" rule="if (protocol connected && ({% for net in device.networks %}dst in {{ net }}{% if not loop.last %} or {% endif %}{% endfor %})) {accept} else {reject}"
+
+/routing/bgp/template add name=genprog-transit as={{ device.asn }} routing-table=main
+{% for t in transit %}
+    {%- set instance = " instance=" ~ device.bgp.instance if device.bgp.get("instance") else "" -%}
+/routing/bgp/connection add name={{ t.name }} templates=genprog-transit{{ instance }} remote.address={{ t.remote_address }} remote.as={{ t.remote_as }} local.role=ebgp output.filter-chain=genprog-out-transit comment="barf: {{ t.name }} transit"
+{% endfor %}
+{% endif %}
 
 {% include 'common/all_suffix.j2' %}

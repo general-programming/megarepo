@@ -76,7 +76,9 @@ class VyOSHost(BaseHost):
         return True
 
     def interface_prefix(self, interface):
-        if interface.management:
+        if interface.is_bridge:
+            interface_type = "bridge"
+        elif interface.management:
             interface_type = "dummy"
         else:
             interface_type = "ethernet"

@@ -181,3 +181,32 @@ class TestImportWeighting:
         conf = render(leaf, [link])
         assert "route-map import" not in conf
         assert "large-community-list" not in conf
+
+
+class TestBridges:
+    """The same vendor-neutral bridge interface renders as VyOS."""
+
+    def _router(self):
+        router = make_router("sea-lan-1", 4280805540, site="sea")
+        router.interfaces.append(
+            HostInterface(
+                name="br0",
+                type="bridge",
+                _description="internal LAN",
+                address=ipaddress.IPv4Interface("10.3.0.1/23"),
+                members=["eth1", "eth2"],
+            )
+        )
+        return router
+
+    def test_bridge_address_and_description(self):
+        conf = render(self._router(), [])
+        # Interface addresses render unquoted (as the fleet has them);
+        # descriptions are quoted.
+        assert "set interfaces bridge br0 address 10.3.0.1/23" in conf
+        assert "set interfaces bridge br0 description 'internal LAN'" in conf
+
+    def test_bridge_members(self):
+        conf = render(self._router(), [])
+        assert "set interfaces bridge br0 member interface eth1" in conf
+        assert "set interfaces bridge br0 member interface eth2" in conf

@@ -48,6 +48,10 @@ set system conntrack modules {{ module }}
     {% if interface.description %}
 {{ device.interface_prefix(interface) }} description '{{ interface.description }}'
     {% endif %}
+    {# Bridge member ports (vendor-neutral `members` list). #}
+    {% for member in interface.members %}
+set interfaces bridge {{ interface.name }} member interface {{ member }}
+    {% endfor %}
 {% endfor %}
 
 set service ssh disable-password-authentication

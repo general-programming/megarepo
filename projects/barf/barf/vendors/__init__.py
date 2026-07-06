@@ -135,6 +135,15 @@ class HostInterface:
     cable: Optional[Cable] = None
     vrf: Optional[str] = None
     management: Optional[bool] = False
+    # Member port names for a bridge interface (type == "bridge"); a
+    # vendor-neutral list each template renders in its own dialect
+    # (VyOS ``member interface``, RouterOS ``/interface/bridge/port``).
+    members: List[str] = field(default_factory=list)
+    # IPv6 router-advertisement knobs for an interface that serves a LAN
+    # (e.g. a host-networking bridge). None means barf renders no RA. A
+    # small vendor-neutral dict (hop_limit, advertise_dns, ...) each
+    # template maps to its own syntax (RouterOS ``/ipv6/nd``).
+    ra: Optional[dict] = None
 
     def __post_init__(self) -> None:
         merged = []
@@ -179,6 +188,11 @@ class HostInterface:
     def is_vlan(self) -> bool:
         """Whether the interface is a VLAN."""
         return self.type == "VIRTUAL"
+
+    @property
+    def is_bridge(self) -> bool:
+        """Whether the interface is an L2 bridge."""
+        return self.type == "bridge"
 
     @property
     def is_port_channel(self) -> bool:
@@ -856,7 +870,9 @@ class BaseHost:
             interfaces.append(
                 HostInterface(
                     name=interface["name"],
-                    type="VPNLink",
+                    # Plain fabric interfaces are VPNLinks; a bridge (or
+                    # any modeled L2/L3 interface) declares its own type.
+                    type=interface.get("type", "VPNLink"),
                     _description=interface.get("description"),
                     enabled=interface.get("enabled", True),
                     addresses=addresses,
@@ -870,6 +886,8 @@ class BaseHost:
                     ],
                     mtu=interface.get("mtu", None),
                     management=interface.get("management", False),
+                    members=interface.get("members", []),
+                    ra=interface.get("ra", None),
                 )
             )
 
