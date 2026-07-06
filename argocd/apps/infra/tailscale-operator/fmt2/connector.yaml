@@ -8,5 +8,5 @@ spec:
   hostnamePrefix: ts-pod-cidrs
   subnetRouter:
     advertiseRoutes:
-      - "10.65.67.100/24"
+      - "10.65.67.0/24"
       - "10.255.1.0/24"
