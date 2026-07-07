@@ -4,3 +4,4 @@ resources:
   - mastodon-coolmathgames.yaml
   - erin-matrix.yaml
   - ipfs.yaml
+  - openviking.yaml

@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openviking
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: openviking
+  template:
+    metadata:
+      labels:
+        app: openviking
+      annotations:
+        reloader.stakater.com/auto: "true"
+    spec:
+      containers:
+        - name: openviking
+          image: ghcr.io/volcengine/openviking:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 1933
+              name: http
+          env:
+            - name: OPENVIKING_ROOT_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openviking-secrets
+                  key: root-api-key
+            - name: OPENVIKING_OPENROUTER_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openviking-secrets
+                  key: openrouter-api-key
+          resources:
+            limits:
+              cpu: "2"
+              memory: 4Gi
+            requests:
+              cpu: 500m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /app/.openviking
+            - name: config
+              mountPath: /app/.openviking/ov.conf
+              subPath: ov.conf
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: openviking-data
+        - name: config
+          configMap:
+            name: openviking-config
