@@ -35,6 +35,22 @@ from barf.configs import vpn
 # RouterOS header) differ per list. Pairs appear here as their port
 # lands (mikrotik first).
 BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
+    ("vpn", "vyos"): [
+        vpn.VyosSystem,
+        vpn.VyosInterfaces,
+        vpn.VyosSshAccess,
+        vpn.VyosPlatform,
+        vpn.FirewallGroups,
+        vpn.VyosNtp,
+        vpn.Ospf,
+        vpn.StaticRoutes,
+        vpn.Nat,
+        vpn.IpsecDefaults,
+        vpn.SiteWeighting,
+        vpn.FabricWireGuard,
+        vpn.FabricBGP,
+        vpn.ExtraConfig,
+    ],
     ("vpn", "mikrotik"): [
         vpn.MikrotikHeader,
         vpn.FabricWireGuard,

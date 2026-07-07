@@ -8,7 +8,7 @@ sections (even when a section is empty), so blocks emit their own
 trailing separators exactly where the template put them.
 """
 
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, List, cast
 
 from barf.configs.base import ConfigBlock
 from barf.configs.lines import ros_kv, ros_line
@@ -17,9 +17,23 @@ from barf.util.sites import SITE_ORIGIN_FUNC
 if TYPE_CHECKING:
     from barf.model.wireguard import WGNetworkLink
     from barf.vendors import BaseHost
+    from barf.vendors.vyos import VyOSHost
 
 # The fabric's numbered-link /31 pool (transit export policy).
 FABRIC_LINK_NET = "172.31.255.0/24"
+
+
+def secret_value(secrets, key: str) -> str:
+    """A secret by attribute or item access, whichever the fetcher has.
+
+    Mirrors how the templates resolved ``secrets.x`` / ``secrets[x]``:
+    VaultSecrets serves everything via __getattr__, test fakes are
+    plain dicts.
+    """
+    try:
+        return getattr(secrets, key)
+    except AttributeError:
+        return secrets[key]
 
 
 def link_sides(link: "WGNetworkLink", device: "BaseHost"):
@@ -53,6 +67,253 @@ class MikrotikHeader(ConfigBlock):
             "# WireGuard links, link addresses, eBGP to every spine, announced",
             "# networks, and geographic path weighting (origin-site large",
             "# communities in, local-pref out) when the host has a `site`.",
+        ]
+
+
+class VyosSystem(ConfigBlock):
+    """VyOS system basics: identity, SNMP, DNS, syslog, conntrack."""
+
+    def vyos(self) -> List[str]:
+        gm = self.ctx.global_meta
+        lines = [
+            f"set system host-name '{self.host.hostname}'",
+            f"set system domain-name '{gm.get('search_domain', '')}'",
+            "set system login user supertech authentication"
+            f" plaintext-password '{self.host.admin_password}'",
+            f"set service snmp community '{gm.get('snmp_public', '')}'"
+            " authorization 'ro'",
+        ]
+        location = self.host.snmp_location or gm.get("snmp_location", "")
+        if location:
+            lines.append(f"set service snmp location '{location}'")
+        lines.append(f"set service snmp contact '{gm.get('snmp_contact', '')}'")
+        for dns_server in self.host.nameservers:
+            lines.append(f"set system name-server '{dns_server}'")
+        lines += [
+            "",
+            # The factory-default empty loopback node; rendering it
+            # keeps the owned diff clean instead of fighting the
+            # default on every image.
+            "set interfaces loopback lo",
+            "",
+            "set system syslog local facility all level info",
+            "set system syslog local facility local7 level debug",
+            "set system console device ttyS0 speed 115200",
+            "set system config-management commit-revisions 100",
+            "",
+        ]
+        # Conntrack helpers: the vyatta-era defaults, set explicitly.
+        for module in ["ftp", "h323", "nfs", "pptp", "sip", "sqlnet", "tftp"]:
+            lines.append(f"set system conntrack modules {module}")
+        return lines
+
+
+class VyosInterfaces(ConfigBlock):
+    """Modeled interfaces in VyOS dialect (the vyatta interface loop).
+
+    Bridges and static WireGuard tunnels render here through
+    ``interface_prefix`` (on RouterOS the same models are the Bridges /
+    StaticWireGuard blocks); each dynamic-addressing mechanism is an
+    independent flag.
+    """
+
+    def vyos(self) -> List[str]:
+        host = cast("VyOSHost", self.host)
+        lines = []
+        for iface in host.interfaces:
+            prefix = host.interface_prefix(iface)
+            if iface.dhcp:
+                lines.append(f"{prefix} address dhcp")
+            if iface.dhcpv6:
+                lines.append(f"{prefix} address dhcpv6")
+            if iface.ipv6_autoconf:
+                lines.append(f"{prefix} ipv6 address autoconf")
+            for addr in iface.addresses:
+                lines.append(f"{prefix} address {addr.with_prefixlen}")
+            if iface.mtu:
+                lines.append(f"{prefix} mtu {iface.mtu}")
+            if iface.description:
+                lines.append(f"{prefix} description '{iface.description}'")
+            for member in iface.members:
+                lines.append(
+                    f"set interfaces bridge {iface.name} member interface {member}"
+                )
+            if iface.is_wireguard and iface.wireguard:
+                wg = iface.wireguard
+                lines.append(
+                    f"{prefix} private-key"
+                    f" '{self.host.secret(wg['private_key_secret'])}'"
+                )
+                lines.append(f"{prefix} port {wg['port']}")
+                for peer in wg.get("peers", []):
+                    peer_prefix = f"{prefix} peer {peer['name']}"
+                    lines.append(f"{peer_prefix} public-key '{peer['public_key']}'")
+                    for ip in peer.get("allowed_ips", ["0.0.0.0/0", "::/0"]):
+                        lines.append(f"{peer_prefix} allowed-ips '{ip}'")
+                    if peer.get("endpoint"):
+                        lines.append(f"{peer_prefix} address '{peer['endpoint']}'")
+                        lines.append(
+                            f"{peer_prefix} port {peer.get('port', wg['port'])}"
+                        )
+                    if peer.get("keepalive"):
+                        # VyOS keepalive is a bare number of seconds.
+                        keepalive = str(peer["keepalive"]).replace("s", "")
+                        lines.append(f"{peer_prefix} persistent-keepalive {keepalive}")
+        return lines
+
+
+class VyosSshAccess(ConfigBlock):
+    """Key-only SSH for the supertech account."""
+
+    def vyos(self) -> List[str]:
+        lines = ["", "set service ssh disable-password-authentication"]
+        for ssh_key in self.ctx.global_meta.get("ssh_keys", []):
+            key_type, key, name = ssh_key.split(" ")[:3]
+            lines.append(
+                "set system login user supertech authentication"
+                f" public-keys {name} key {key}"
+            )
+            lines.append(
+                "set system login user supertech authentication"
+                f" public-keys {name} type {key_type}"
+            )
+        return [*lines, ""]
+
+
+class VyosPlatform(ConfigBlock):
+    """VyOS platform services: update-check, SSH, BFD, HTTPS API, ping."""
+
+    def vyos(self) -> List[str]:
+        return [
+            "set system update-check url https://raw.githubusercontent.com/vyos/"
+            "vyos-nightly-build/refs/heads/rolling/version.json",
+            "set service ssh port 22",
+            "set protocols bfd profile bgp echo-mode",
+            "set protocols bfd profile bgp interval echo-interval 50",
+            "set service https api rest",
+            "set service https api keys id vaultadmin key"
+            f" '{secret_value(self.ctx.secrets, 'vyos_api_password')}'",
+            "",
+            "set firewall global-options all-ping enable",
+            "set firewall global-options broadcast-ping enable",
+            "",
+        ]
+
+
+class VyosNtp(ConfigBlock):
+    """NTP servers + internal-only allow-client (chrony-era syntax)."""
+
+    ALLOW_CLIENTS = [
+        "10.0.0.0/8",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    ]
+
+    def vyos(self) -> List[str]:
+        return [
+            "set service ntp server time1.vyos.net",
+            "set service ntp server time2.vyos.net",
+            "set service ntp server time3.vyos.net",
+            *(
+                f"set service ntp allow-client address {net}"
+                for net in self.ALLOW_CLIENTS
+            ),
+            "",
+        ]
+
+
+class Ospf(ConfigBlock):
+    """The typed OSPF model (networks, mtu-ignore interfaces, redistribute)."""
+
+    def vyos(self) -> List[str]:
+        ospf = self.host.ospf
+        lines = [
+            f"set protocols ospf area {net.area} network {net.network}"
+            for net in ospf.networks
+        ]
+        for iface in ospf.interfaces:
+            if iface.mtu_ignore:
+                lines.append(f"set protocols ospf interface {iface.name} mtu-ignore")
+        for redist in ospf.redistribute:
+            line = f"set protocols ospf redistribute {redist.protocol}"
+            if redist.metric_type:
+                line += f" metric-type {redist.metric_type}"
+            lines.append(line)
+        return lines
+
+
+class StaticRoutes(ConfigBlock):
+    """Declarative static routes: [{network, interface | next-hop}]."""
+
+    def vyos(self) -> List[str]:
+        lines = []
+        for route in self.host.static_routes:
+            if route.get("interface"):
+                lines.append(
+                    f"set protocols static route {route['network']}"
+                    f" interface {route['interface']}"
+                )
+            if route.get("next-hop"):
+                lines.append(
+                    f"set protocols static route {route['network']}"
+                    f" next-hop {route['next-hop']}"
+                )
+        return [*lines, ""]
+
+
+class Nat(ConfigBlock):
+    """The declarative nat: block (masquerades + port forwards)."""
+
+    def vyos(self) -> List[str]:
+        lines = []
+        for rule in self.host.nat_masquerades:
+            src = f"set nat source rule {rule.rule}"
+            lines.append(f"{src} outbound-interface name {rule.interface}")
+            if rule.source:
+                lines.append(f"{src} source address {rule.source}")
+            if rule.destination:
+                lines.append(f"{src} destination address {rule.destination}")
+            lines.append(f"{src} translation address masquerade")
+        for fwd in self.host.nat_port_forwards:
+            dst = f"set nat destination rule {fwd.rule}"
+            lines += [
+                f"{dst} description '{fwd.description}'",
+                f"{dst} inbound-interface name {fwd.interface}",
+                f"{dst} protocol {fwd.protocol}",
+                f"{dst} destination port {fwd.port}",
+                f"{dst} translation address {fwd.to}",
+            ]
+            if fwd.translation_port:
+                lines.append(f"{dst} translation port {fwd.translation_port}")
+        return lines
+
+
+class IpsecDefaults(ConfigBlock):
+    """The fleet-standard IPsec ESP/IKE groups (vpn-role VyOS boilerplate)."""
+
+    def vyos(self) -> List[str]:
+        return [
+            "",
+            "set vpn ipsec esp-group ESP_DEFAULT lifetime '3600'",
+            "set vpn ipsec esp-group ESP_DEFAULT mode 'tunnel'",
+            "set vpn ipsec esp-group ESP_DEFAULT pfs enable",
+            "set vpn ipsec esp-group ESP_DEFAULT proposal 1 encryption 'aes256'",
+            "set vpn ipsec esp-group ESP_DEFAULT proposal 1 hash 'sha256'",
+            "",
+            "set vpn ipsec ike-group IKEv2_DEFAULT key-exchange 'ikev2'",
+            "set vpn ipsec ike-group IKEv2_DEFAULT lifetime 28800",
+            "set vpn ipsec ike-group IKEv2_DEFAULT disable-mobike",
+            "set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 dh-group 5",
+            "set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 encryption aes256",
+            "set vpn ipsec ike-group IKEv2_DEFAULT proposal 1 hash sha256",
+            "",
+            "set vpn ipsec interface eth0",
+            "",
         ]
 
 
@@ -119,6 +380,113 @@ class FabricWireGuard(ConfigBlock):
                     f' comment="barf: {other_peer.hostname} link"'
                 )
         return [*lines, ""]
+
+    def vyos(self) -> List[str]:
+        # VyOS interleaves each link's interface (WireGuard or
+        # IPsec/vti) with its BGP neighbor, so the whole per-link loop
+        # lives here; FabricBGP renders the shared tail (networks,
+        # system-as, peer-group, timers).
+        management = self.host.management_address
+        lines = []
+        for link in self.ctx.vpn_links:
+            if management is None:
+                # The template silently rendered a bare `update-source`
+                # here; a fabric host without a management interface is
+                # a modeling error.
+                raise ValueError(
+                    f"{self.host.hostname}: fabric BGP needs a management"
+                    " address for update-source"
+                )
+            our_side, other_peer = link_sides(link, self.host)
+
+            if link.ipsec:
+                if not link.secret:
+                    raise ValueError(
+                        f"{self.host.hostname}: ipsec link to"
+                        f" {other_peer.hostname} has no secret"
+                    )
+                interface_name = f"vti{link.link_id}"
+                peer_name = "peer_" + other_peer.address.replace(".", "-")
+                psk = f"set vpn ipsec authentication psk {peer_name}"
+                sts = f"set vpn ipsec site-to-site peer {peer_name}"
+                lines += [
+                    f"set interfaces vti {interface_name} address"
+                    f" '{link.get_ip(our_side)}/31'",
+                    "",
+                    f"{psk} id '{our_side.address}'",
+                    f"{psk} id '{other_peer.address}'",
+                    f"{psk} id any",
+                    f"{psk} secret '{secret_value(self.ctx.secrets, link.secret)}'",
+                    "",
+                    f"{sts} description"
+                    f" '{link.side_a.hostname} -> {link.side_b.hostname}'",
+                    f"{sts} authentication local-id '{our_side.address}'",
+                    f"{sts} authentication mode 'pre-shared-secret'",
+                    f"{sts} authentication remote-id '{other_peer.address}'",
+                    f"{sts} connection-type initiate",
+                    f"{sts} default-esp-group 'ESP_DEFAULT'",
+                    f"{sts} ike-group 'IKEv2_DEFAULT'",
+                    f"{sts} local-address any",
+                    f"{sts} remote-address '{other_peer.address}'",
+                    f"{sts} vti bind '{interface_name}'",
+                    f"{sts} vti esp-group 'ESP_DEFAULT'",
+                ]
+            else:
+                interface_name = f"wg{link.link_id}"
+                iw = f"set interfaces wireguard {interface_name}"
+                peer = f"{iw} peer {other_peer.hostname}"
+                lines.append(
+                    f"{iw} description"
+                    f" 'wg link ({link.side_a.hostname} -> {link.side_b.hostname})'"
+                )
+                if not link.unnumbered:
+                    lines.append(
+                        f"{iw} address {link.get_ip(our_side, with_netmask=True)}"
+                    )
+                lines += [
+                    f"{iw} private-key '{link.wg_privkey(our_side)}'",
+                    f"{iw} port {link.link_id}",
+                    f"{peer} public-key '{link.wg_pubkey(other_peer)}'",
+                    f"{peer} allowed-ips 0.0.0.0/0",
+                    f"{peer} allowed-ips ::/0",
+                ]
+                if other_peer.wg_endpoint:
+                    lines += [
+                        f"{peer} address {other_peer.wg_endpoint}",
+                        f"{peer} port {link.link_id}",
+                        f"{peer} persistent-keepalive 10",
+                    ]
+
+            bgp_neighbor = (
+                interface_name if link.unnumbered else link.get_ip(other_peer)
+            )
+            neigh = f"set protocols bgp neighbor {bgp_neighbor}"
+            if link.unnumbered:
+                lines += [
+                    f"{neigh} description '{other_peer.hostname}'",
+                    f"{neigh} update-source {management.ip}",
+                    f"{neigh} interface peer-group fabric",
+                    f"{neigh} interface v6only peer-group fabric",
+                    f"{neigh} interface v6only remote-as external",
+                ]
+            else:
+                lines += [
+                    f"{neigh} description '{other_peer.hostname}'",
+                    f"{neigh} remote-as external",
+                    f"{neigh} update-source {management.ip}",
+                    f"{neigh} peer-group fabric",
+                ]
+            if other_peer.can_bfd:
+                lines.append(f"{neigh} bfd")
+            if self.ctx.site_import_rules.get(other_peer.site):
+                import_map = f"IMPORT-{other_peer.site.upper()}"
+                lines += [
+                    f"{neigh} address-family ipv4-unicast route-map"
+                    f" import {import_map}",
+                    f"{neigh} address-family ipv6-unicast route-map"
+                    f" import {import_map}",
+                ]
+        return lines
 
 
 class Bridges(ConfigBlock):
@@ -267,6 +635,28 @@ class FirewallGroups(ConfigBlock):
                 )
         return [*lines, ""]
 
+    def vyos(self) -> List[str]:
+        # VyOS interface-groups are flat, so include= nesting is
+        # resolved here (RouterOS renders it natively).
+        lines = []
+        for group in self.host.firewall.address:
+            for member in group.members_v(4):
+                lines.append(
+                    f"set firewall group network-group {group.name}"
+                    f" network {member.address}"
+                )
+            for member in group.members_v(6):
+                lines.append(
+                    f"set firewall group ipv6-network-group {group.name}"
+                    f" network {member.address}"
+                )
+        for group in self.host.firewall.interface:
+            for iface in self.host.firewall.resolved_interfaces(group.name):
+                lines.append(
+                    f"set firewall group interface-group {group.name} interface {iface}"
+                )
+        return [*lines, ""]
+
 
 class SiteWeighting(ConfigBlock):
     """Geographic path weighting filters (origin-site tag out, pref in).
@@ -327,6 +717,42 @@ class SiteWeighting(ConfigBlock):
             )
         return [*lines, ""]
 
+    def vyos(self) -> List[str]:
+        # `add` keyword and the `match large-community
+        # large-community-list` node verified against a live VyOS 1.4
+        # API commit (2026-07-05); the shorter forms 400.
+        asn = self.ctx.community_asn
+        lines = []
+        if self.ctx.origin_site:
+            lines += [
+                "set policy route-map TAG-SITE-ORIGIN rule 10 action permit",
+                "set policy route-map TAG-SITE-ORIGIN rule 10 set large-community"
+                f" add '{asn}:{SITE_ORIGIN_FUNC}:{self.ctx.origin_site.id}'",
+            ]
+        if self.ctx.site_import_rules:
+            sites = self.ctx.global_meta.get("sites", {})
+            for site in sorted(sites.values(), key=lambda s: s.id):
+                origin_list = f"set policy large-community-list SITE-ORIGIN-{site.id}"
+                lines += [
+                    f"{origin_list} rule 10 action permit",
+                    f"{origin_list} rule 10 regex"
+                    f" '^{asn}:{SITE_ORIGIN_FUNC}:{site.id}$'",
+                ]
+            for site_name, rules in self.ctx.site_import_rules.items():
+                import_map = f"set policy route-map IMPORT-{site_name.upper()}"
+                for index, rule in enumerate(rules, start=1):
+                    lines += [
+                        f"{import_map} rule {index * 10} action permit",
+                        f"{import_map} rule {index * 10} match large-community"
+                        f" large-community-list SITE-ORIGIN-{rule.site_id}",
+                        f"{import_map} rule {index * 10} set local-preference"
+                        f" {rule.local_pref}",
+                    ]
+                # Trailing catch-all: untagged routes fall through
+                # unweighted.
+                lines.append(f"{import_map} rule {(len(rules) + 1) * 10} action permit")
+        return [*lines, ""]
+
 
 class FabricBGP(ConfigBlock):
     """The fabric BGP template and one connection per mesh link.
@@ -378,6 +804,44 @@ class FabricBGP(ConfigBlock):
                     f' comment="barf: {other_peer.hostname}"'
                 )
         return [*lines, ""]
+
+    def vyos(self) -> List[str]:
+        # One line per network: the route-map suffix rides the same
+        # config node, so a separate bare `network X` line would read
+        # as a forever-pending diff against the device.
+        tag_suffix = " route-map TAG-SITE-ORIGIN" if self.ctx.origin_site else ""
+        lines = [
+            f"set protocols bgp address-family ipv4-unicast network"
+            f" {network}{tag_suffix}"
+            for network in self.host.networks
+        ]
+        management = self.host.management_address
+        if management and ":" in management.with_prefixlen:
+            lines.append(
+                "set protocols bgp address-family ipv6-unicast network"
+                f" {management}{tag_suffix}"
+            )
+        elif management:
+            lines.append(
+                "set protocols bgp address-family ipv4-unicast network"
+                f" {management}{tag_suffix}"
+            )
+        return [
+            *lines,
+            "",
+            f"set protocols bgp system-as '{self.host.asn}'",
+            "set protocols bgp peer-group fabric address-family ipv4-unicast",
+            "set protocols bgp peer-group fabric address-family ipv6-unicast",
+            "set protocols bgp peer-group fabric capability extended-nexthop",
+            # Numbered fabric peers (mikrotik) drop routes from the
+            # v6-only sea1 spine without this: it lets FRR set a
+            # resolvable IPv4 next-hop instead of an unreachable one.
+            # Verified 2026-07-05 to fix sea420<->sea1 receiving 0
+            # prefixes.
+            "set protocols bgp peer-group fabric disable-connected-check",
+            "set protocols bgp timers keepalive 10",
+            "set protocols bgp timers holdtime 30",
+        ]
 
 
 class TransitBGP(ConfigBlock):
@@ -456,4 +920,7 @@ class ExtraConfig(ConfigBlock):
     """
 
     def mikrotik(self) -> List[str]:
+        return ["", *self.host.extra_config]
+
+    def vyos(self) -> List[str]:
         return ["", *self.host.extra_config]
