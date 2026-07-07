@@ -8,6 +8,7 @@ config (bridges, dynamic addresses, bogons lists) proving the scoping.
 """
 
 from barf.vendors.mikrotik.ros_config import (
+    OwnedScope,
     diff_items,
     excluded_items,
     format_diff,
@@ -366,8 +367,10 @@ class TestExcluded:
             (path, label)
             for path, label, _item in excluded_items(
                 DEVICE,
-                rendered_bridge_names(parsed),
-                rendered_connection_ids(parsed),
+                OwnedScope(
+                    bridge_names=rendered_bridge_names(parsed),
+                    conn_ids=rendered_connection_ids(parsed),
+                ),
             )
         }
 
@@ -455,8 +458,10 @@ class TestBridges:
         removed = [k for _p, k in d.removed]
         assert "bridge-guest" not in removed
         assert "10.9.0.1/24" not in removed
-        bn = rendered_bridge_names(parse_ros_commands(self.RENDERED))
-        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, bn)}
+        scope = OwnedScope(
+            bridge_names=rendered_bridge_names(parse_ros_commands(self.RENDERED))
+        )
+        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, scope)}
         assert ("interface/bridge", "bridge-guest") in kept
         assert ("ip/address", "10.9.0.1/24") in kept
         # The owned bridge + its address are NOT listed as device-only.
@@ -510,8 +515,10 @@ class TestBridgePorts:
     def test_port_on_foreign_bridge_kept(self):
         d = self._diff()
         assert ("interface/bridge/port", "ether-pcie9") not in d.removed
-        bn = rendered_bridge_names(parse_ros_commands(self.RENDERED))
-        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, bn)}
+        scope = OwnedScope(
+            bridge_names=rendered_bridge_names(parse_ros_commands(self.RENDERED))
+        )
+        kept = {(p, label) for p, label, _i in excluded_items(self.DEVICE, scope)}
         assert ("interface/bridge/port", "ether-pcie9") in kept
 
 
@@ -630,8 +637,10 @@ class TestFirewallGroupOwnership:
             (p, label)
             for p, label, _i in excluded_items(
                 FW_DEVICE,
-                addrlist_names=rendered_address_list_names(desired),
-                iflist_names=rendered_interface_list_names(desired),
+                OwnedScope(
+                    addrlist_names=rendered_address_list_names(desired),
+                    iflist_names=rendered_interface_list_names(desired),
+                ),
             )
         }
 

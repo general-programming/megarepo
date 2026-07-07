@@ -119,14 +119,7 @@ def build_apply_commands(
     device: Dict[str, List[dict]],
 ) -> List[str]:
     """Forward console commands that apply ``diff`` to the device."""
-    owned = ros_config.owned_index(
-        device,
-        ros_config.rendered_bridge_names(desired),
-        ros_config.rendered_connection_ids(desired),
-        ros_config.rendered_wg_ports(desired),
-        ros_config.rendered_address_list_names(desired),
-        ros_config.rendered_interface_list_names(desired),
-    )
+    owned = ros_config.owned_index(device, ros_config.rendered_scope(desired))
     cmds: List[str] = []
 
     for path, props in diff.added:
