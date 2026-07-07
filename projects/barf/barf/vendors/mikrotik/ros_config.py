@@ -75,6 +75,12 @@ class _Collection:
     # IGNORED_PATHS equivalent. e.g. the disabled ``ipv6/nd
     # interface=all`` default present on every box.
     ignored: Callable[[dict, frozenset], bool] = _never
+    # Rendered properties the device never reads back (e.g. ssh key
+    # material): sent on add, skipped in change comparison -- rotating
+    # such a property alone is invisible to the diff, so pair it with
+    # an identity-bearing property (the key-owner name) when it must
+    # change.
+    write_only: frozenset = frozenset()
 
 
 def _wg_fabric_port(item: dict) -> bool:
@@ -164,6 +170,25 @@ def _foreign_interface_list(item: dict, owned_names: frozenset) -> bool:
     return item.get("name") not in owned_names
 
 
+def _ssh_key_identity(item: dict) -> Optional[str]:
+    """SSH keys key on (user, key-owner): RouterOS never reads the key
+    material back, and the owner name (the public key's trailing
+    comment) is the stable half of the identity."""
+    if item.get("user") is None and item.get("key-owner") is None:
+        return None
+    return f"{item.get('user')}:{item.get('key-owner')}"
+
+
+def _foreign_ssh_key(item: dict, owned_names: frozenset) -> bool:
+    """An SSH key on a user barf does not manage (``owned_names`` here
+    are the rendered ssh-key users). Barf owns the WHOLE key set of a
+    user it renders keys for -- authorized keys are declarative, so a
+    hand-loaded (or rotated-away) key on that user reads as a removal
+    instead of lingering as stale access. Keys on other users stay
+    hand-managed."""
+    return item.get("user") not in owned_names
+
+
 def _foreign_interface_list_member(item: dict, owned_names: frozenset) -> bool:
     """A member of an interface list barf does not render (``owned_names``
     here are the rendered interface-group names), so barf must model
@@ -235,6 +260,18 @@ def rendered_interface_list_names(parsed: Dict[str, List[dict]]) -> frozenset:
     )
 
 
+def rendered_ssh_key_users(parsed: Dict[str, List[dict]]) -> frozenset:
+    """The users a rendered config loads SSH keys onto.
+
+    Scopes ssh-key ownership on both sides: barf owns the whole key
+    set of every user it renders keys for; other users' keys stay
+    hand-managed.
+    """
+    return frozenset(
+        item["user"] for item in parsed.get("user/ssh-keys", []) if item.get("user")
+    )
+
+
 @dataclass(frozen=True)
 class OwnedScope:
     """The rendered-name sets scoping barf's ownership per collection.
@@ -251,6 +288,7 @@ class OwnedScope:
     wg_ports: frozenset = frozenset()
     addrlist_names: frozenset = frozenset()
     iflist_names: frozenset = frozenset()
+    ssh_users: frozenset = frozenset()
 
 
 def rendered_scope(parsed: Dict[str, List[dict]]) -> OwnedScope:
@@ -263,6 +301,7 @@ def rendered_scope(parsed: Dict[str, List[dict]]) -> OwnedScope:
         wg_ports=wg_ports,
         addrlist_names=rendered_address_list_names(parsed),
         iflist_names=rendered_interface_list_names(parsed),
+        ssh_users=rendered_ssh_key_users(parsed),
     )
 
 
@@ -300,6 +339,8 @@ def _owned_names(path: str, scope: OwnedScope) -> frozenset:
         return scope.addrlist_names
     if path in ("interface/list", "interface/list/member"):
         return scope.iflist_names
+    if path == "user/ssh-keys":
+        return scope.ssh_users
     return scope.wg_names
 
 
@@ -399,17 +440,34 @@ COLLECTIONS: Dict[str, _Collection] = {
             identity=lambda i: f"{i.get('list')}:{i.get('interface')}",
             excluded=_foreign_interface_list_member,
         ),
+        _Collection(
+            # SSH public keys, keyed by (user, key-owner). The key
+            # material is write-only (RouterOS never returns it), so
+            # rotating a key must also change its owner-comment name to
+            # be visible to the diff.
+            "user/ssh-keys",
+            identity=_ssh_key_identity,
+            excluded=_foreign_ssh_key,
+            write_only=frozenset({"key"}),
+        ),
     )
 }
+
+# Singleton settings paths barf may own (``/path set k=v``, no items,
+# no identity). Only the rendered properties are compared -- barf
+# rendering nothing for a path leaves the device's singleton entirely
+# alone, and a singleton is never added or removed.
+SETTINGS: frozenset = frozenset({"system/ntp/client"})
 
 
 def parse_ros_commands(rendered: str) -> Dict[str, List[dict]]:
     """Parse rendered RouterOS CLI into ``collection -> [props]``.
 
-    Only ``/collection/path add k=v ...`` lines are modeled; comments,
-    blank lines, and anything else (e.g. free-form ``extra_config``)
-    are ignored — unmodeled commands are deploy passthrough, not diff
-    input.
+    ``/collection/path add k=v ...`` lines are modeled for the known
+    COLLECTIONS, ``/path set k=v ...`` for the known SETTINGS
+    singletons; comments, blank lines, and anything else (e.g.
+    free-form ``extra_config``) are ignored — unmodeled commands are
+    deploy passthrough, not diff input.
     """
     items: Dict[str, List[dict]] = {}
     for line in rendered.splitlines():
@@ -417,10 +475,14 @@ def parse_ros_commands(rendered: str) -> Dict[str, List[dict]]:
         if not line.startswith("/"):
             continue
         tokens = shlex.split(line)
-        if len(tokens) < 2 or tokens[1] != "add":
+        if len(tokens) < 2:
             continue
         collection = tokens[0].lstrip("/")
-        if collection not in COLLECTIONS:
+        verb = tokens[1]
+        if not (
+            (verb == "add" and collection in COLLECTIONS)
+            or (verb == "set" and collection in SETTINGS)
+        ):
             continue
         props = {}
         for token in tokens[2:]:
@@ -525,7 +587,7 @@ def diff_items(
             deltas = [
                 (prop, current.get(prop), value)
                 for prop, value in props.items()
-                if current.get(prop) != value
+                if prop not in collection.write_only and current.get(prop) != value
             ]
             if deltas:
                 diff.changed.append((path, key, deltas))
@@ -533,6 +595,22 @@ def diff_items(
         for key in have:
             if key not in want:
                 diff.removed.append((path, key))
+
+    for path in SETTINGS:
+        if path not in desired:
+            # Barf renders nothing here: the singleton stays entirely
+            # hand-managed (a singleton is never removed).
+            continue
+        want_props = desired[path][0]
+        have_list = device.get(path) or [{}]
+        current = have_list[0]
+        deltas = [
+            (prop, current.get(prop), value)
+            for prop, value in want_props.items()
+            if current.get(prop) != value
+        ]
+        if deltas:
+            diff.changed.append((path, "settings", deltas))
 
     return diff
 

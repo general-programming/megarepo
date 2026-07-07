@@ -10,6 +10,7 @@ separators exactly where the template put them.
 from typing import List
 
 from barf.configs.base import ConfigBlock, secret_value
+from barf.configs.lines import ros_kv, ros_line
 
 
 class Header(ConfigBlock):
@@ -83,7 +84,31 @@ class SystemConfig(ConfigBlock):
 
 
 class SshConfig(ConfigBlock):
-    """Key-only SSH for the supertech account."""
+    """The fleet ssh_keys, loaded onto each vendor's admin account.
+
+    VyOS/linux attach them to the fleet-standard supertech user;
+    RouterOS has no supertech, so keys land on ``admin``
+    (MIKROTIK_SSH_USER). RouterOS never reads key material back
+    (write-only in the diff), so rotating a key must also change its
+    trailing comment (the key-owner identity).
+    """
+
+    MIKROTIK_SSH_USER = "admin"
+
+    def mikrotik(self) -> List[str]:
+        lines = []
+        for ssh_key in self.ctx.global_meta.get("ssh_keys", []):
+            name = ssh_key.split(" ")[2]
+            lines.append(
+                ros_line(
+                    "/user/ssh-keys",
+                    "add",
+                    ros_kv("user", self.MIKROTIK_SSH_USER),
+                    ros_kv("key-owner", name, quote=True),
+                    ros_kv("key", ssh_key, quote=True),
+                )
+            )
+        return [*lines, ""]
 
     def vyos(self) -> List[str]:
         lines = ["", "set service ssh disable-password-authentication"]
@@ -121,8 +146,14 @@ class VyosPlatform(ConfigBlock):
 
 
 class NtpConfig(ConfigBlock):
-    """NTP servers + internal-only allow-client."""
+    """Fleet NTP sync (plus internal-only allow-client where serving).
 
+    RouterOS owns only the client sync (the ``/system/ntp/client``
+    singleton); serving LAN clients (``/system/ntp/server``) stays
+    unmodeled.
+    """
+
+    SERVERS = ["time1.vyos.net", "time2.vyos.net", "time3.vyos.net"]
     ALLOW_CLIENTS = [
         "10.0.0.0/8",
         "127.0.0.0/8",
@@ -134,13 +165,18 @@ class NtpConfig(ConfigBlock):
         "fe80::/10",
     ]
 
+    def mikrotik(self) -> List[str]:
+        return [
+            "/system/ntp/client set enabled=yes mode=unicast"
+            f" servers={','.join(self.SERVERS)}",
+            "",
+        ]
+
     def vyos(self) -> List[str]:
         # The allow-client syntax is chrony-era VyOS, not shared
         # vyatta lineage.
         return [
-            "set service ntp server time1.vyos.net",
-            "set service ntp server time2.vyos.net",
-            "set service ntp server time3.vyos.net",
+            *(f"set service ntp server {server}" for server in self.SERVERS),
             *(
                 f"set service ntp allow-client address {net}"
                 for net in self.ALLOW_CLIENTS

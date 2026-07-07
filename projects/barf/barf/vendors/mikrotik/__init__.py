@@ -87,8 +87,16 @@ class MikroTikHost(BaseHost):
                 self._api_delete(collection, item[".id"])
 
     def device_items(self) -> dict:
-        """Every owned collection's items, straight off the REST API."""
-        return {path: self._api_get(path) for path in ros_config.COLLECTIONS}
+        """Every owned collection's items, straight off the REST API.
+
+        SETTINGS singletons come back as a bare object; they are
+        wrapped in a one-item list so every path holds a list.
+        """
+        items = {path: self._api_get(path) for path in ros_config.COLLECTIONS}
+        for path in ros_config.SETTINGS:
+            value = self._api_get(path)
+            items[path] = [value] if isinstance(value, dict) else value
+        return items
 
     def diff_config(
         self, rendered: str, *, redact: bool = True, show_device_only: bool = False

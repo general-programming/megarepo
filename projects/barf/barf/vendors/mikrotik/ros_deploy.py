@@ -130,8 +130,12 @@ def build_apply_commands(
     for path, key, deltas in diff.changed:
         if path == _RULES:
             continue
-        item = owned[path][key]
         setprops = {prop: new for prop, _old, new in deltas}
+        if path in ros_config.SETTINGS:
+            # A singleton has no items to find; set it directly.
+            cmds.append(f"/{path} set {_props_str(setprops)}")
+            continue
+        item = owned[path][key]
         cmds.append(f"/{path} set {_find_expr(path, item)} {_props_str(setprops)}")
 
     for path, key in diff.removed:

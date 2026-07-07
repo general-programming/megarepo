@@ -66,6 +66,8 @@ BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
         interfaces.StaticWireGuard,
         fabric.AnnouncedNetworks,
         firewall.FirewallGroups,
+        system.NtpConfig,
+        system.SshConfig,
         fabric.SiteWeighting,
         fabric.FabricBGP,
         fabric.TransitBGP,
