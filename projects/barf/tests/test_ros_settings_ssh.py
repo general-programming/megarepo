@@ -90,6 +90,21 @@ class TestNtpSettings:
         )
         assert not diff.has_changes
 
+    def test_rest_boolean_readback_is_not_drift(self):
+        # REST reads booleans back as "true"/"false" while the CLI
+        # renders yes/no; live-learned on sea420's ntp client.
+        device = {"system/ntp/client": [{**NTP_SYNCED, "enabled": "true"}]}
+        diff = diff_items(parse_ros_commands(NTP_RENDERED), device)
+        assert not diff.has_changes
+
+    def test_real_boolean_flip_still_diffs(self):
+        device = {"system/ntp/client": [{**NTP_SYNCED, "enabled": "false"}]}
+        diff = diff_items(parse_ros_commands(NTP_RENDERED), device)
+        (_path, _key, deltas) = next(
+            c for c in diff.changed if c[0] == "system/ntp/client"
+        )
+        assert ("enabled", "false", "yes") in deltas
+
     def test_status_noise_is_not_compared(self):
         # vrf/status exist only on the device; barf does not render
         # them, so they never show as drift.

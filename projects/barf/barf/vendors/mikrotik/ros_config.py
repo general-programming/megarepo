@@ -460,6 +460,28 @@ COLLECTIONS: Dict[str, _Collection] = {
 SETTINGS: frozenset = frozenset({"system/ntp/client"})
 
 
+# RouterOS console convention is yes/no but the REST API reads booleans
+# back as "true"/"false"; comparing across that split is not drift.
+_BOOL_SYNONYMS = {"yes": "true", "no": "false", "true": "true", "false": "false"}
+
+
+def _values_equal(device_value: Optional[str], rendered_value: str) -> bool:
+    """Whether a device property matches its rendered value.
+
+    Live-learned on /system/ntp/client: rendered ``enabled=yes`` reads
+    back as ``"true"``, which would otherwise diff forever-pending.
+    """
+    if device_value == rendered_value:
+        return True
+    if device_value is None:
+        return False
+    return (
+        _BOOL_SYNONYMS.get(str(rendered_value).lower())
+        == _BOOL_SYNONYMS.get(str(device_value).lower())
+        and str(rendered_value).lower() in _BOOL_SYNONYMS
+    )
+
+
 def parse_ros_commands(rendered: str) -> Dict[str, List[dict]]:
     """Parse rendered RouterOS CLI into ``collection -> [props]``.
 
@@ -587,7 +609,8 @@ def diff_items(
             deltas = [
                 (prop, current.get(prop), value)
                 for prop, value in props.items()
-                if prop not in collection.write_only and current.get(prop) != value
+                if prop not in collection.write_only
+                and not _values_equal(current.get(prop), value)
             ]
             if deltas:
                 diff.changed.append((path, key, deltas))
@@ -607,7 +630,7 @@ def diff_items(
         deltas = [
             (prop, current.get(prop), value)
             for prop, value in want_props.items()
-            if current.get(prop) != value
+            if not _values_equal(current.get(prop), value)
         ]
         if deltas:
             diff.changed.append((path, "settings", deltas))
