@@ -9,8 +9,9 @@ from typing import List
 import yaml
 
 from barf.common import render_template
+from barf.configs import BLOCK_VENDORS, build_context, render_blocks
 from barf.model.wireguard import WGNetworkLink, prefetch_keypairs
-from barf.util.sites import SITE_ORIGIN_FUNC, site_import_rules
+from barf.util.sites import SITE_ORIGIN_FUNC
 from barf.vendors import BaseHost
 
 
@@ -48,46 +49,20 @@ def render_host_config(
         global_meta: The network.yml ``global_meta`` block.
         secrets: The Vault secret fetcher passed through to templates.
     """
+    ctx = build_context(host, links, global_meta, secrets)
+
+    if host.devicetype in BLOCK_VENDORS:
+        return render_blocks(ctx)
+
     role_meta = {}
     if host.role == "vpn":
-        vpn_links = [
-            link for link in links if host == link.side_a or host == link.side_b
-        ]
-        role_meta["vpn_links"] = vpn_links
-        # Geographic weighting context: templates only format these
-        # ready-made values into vendor syntax (barf/util/sites.py owns
-        # the semantics). site_import_rules is empty when the host has
-        # no site of its own.
-        sites = global_meta.get("sites") or {}
-        rules = site_import_rules(host, vpn_links, sites)
-        role_meta["site_import_rules"] = rules
-        role_meta["origin_site"] = sites.get(host.site) if host.site else None
-        role_meta["community_asn"] = global_meta.get("community_asn")
-        role_meta["SITE_ORIGIN_FUNC"] = SITE_ORIGIN_FUNC
-
-        # bird cannot compose a standalone import_filter with the
-        # generated site-weighted filters (filters cannot call
-        # filters), so the combination would silently drop the
-        # host's own filter on every weighted peer. Fail fast.
-        if rules and (getattr(host, "bird", None) or {}).get("import_filter"):
-            raise ValueError(
-                f"{host.hostname}: bird.import_filter cannot be combined"
-                " with site weighting; expose the check as a function and"
-                " set bird.import_check_function instead"
-            )
-
-        # The mikrotik template has no IPsec branch: such a link would
-        # render as WireGuard (generating spurious keypairs into
-        # Vault) and then vanish from the diff via ownership scoping.
-        # Fail fast instead of emitting broken config.
-        if host.devicetype == "mikrotik":
-            for link in vpn_links:
-                if link.ipsec:
-                    raise ValueError(
-                        f"{host.hostname}: ipsec link to"
-                        f" {link.side_a.hostname if link.side_a != host else link.side_b.hostname}"
-                        " is not supported on mikrotik hosts"
-                    )
+        role_meta = {
+            "vpn_links": ctx.vpn_links,
+            "site_import_rules": ctx.site_import_rules,
+            "origin_site": ctx.origin_site,
+            "community_asn": ctx.community_asn,
+            "SITE_ORIGIN_FUNC": SITE_ORIGIN_FUNC,
+        }
 
     return render_template(
         f"{host.role}/{host.devicetype}.j2",
