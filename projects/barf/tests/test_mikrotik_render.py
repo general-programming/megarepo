@@ -1,4 +1,4 @@
-"""RouterOS v7 CLI rendering for mikrotik hosts (vpn/mikrotik.j2).
+"""RouterOS v7 CLI rendering for mikrotik hosts (barf.configs blocks).
 
 Modeled on sea420-acc-v-hv2: numbered /31 WireGuard links to every
 spine, eBGP per link, and geographic weighting filters. RouterOS

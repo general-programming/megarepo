@@ -1,7 +1,8 @@
 """Linux hosts running bird2 (Debian + ifupdown + WireGuard).
 
 The rendered config is a shell script of quoted ``BARF_FILE`` heredocs
-(see ``templates/vpn/linux.j2``); each block is one barf-owned file.
+(see the linux config blocks in ``barf/configs/``); each block is one
+barf-owned file.
 ``diff_config``/``push_rendered_config`` parse those blocks back into a
 path -> content map and manage the files over SSH as root, so the
 script and the deploy always agree on the file contents.
