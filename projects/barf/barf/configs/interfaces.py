@@ -1,9 +1,10 @@
 """Interface blocks: the vendor-neutral interface models per dialect.
 
 Byte-identical to the template stanzas they replace (tests/golden/).
-On VyOS every modeled interface renders through one loop
-(VyosInterfaces); on RouterOS bridges and static WireGuard tunnels are
-their own sections (Bridges, StaticWireGuard).
+On VyOS every modeled interface renders through one loop; on linux
+only the dum* identity anchors are modeled (fabric wg interfaces come
+from the fabric blocks); on RouterOS bridges and static WireGuard
+tunnels are their own sections (Bridges, StaticWireGuard).
 """
 
 from typing import TYPE_CHECKING, List, cast
@@ -15,11 +16,16 @@ if TYPE_CHECKING:
     from barf.vendors.vyos import VyOSHost
 
 
-class LinuxDummies(ConfigBlock):
-    """dum* interfaces as owned interfaces.d files (the VyOS dum0 pattern).
+class InterfacesConfig(ConfigBlock):
+    """The host's modeled interfaces, in each vendor's dialect.
 
-    Anchor addresses on a dummy interface: the host's stable fabric
-    identity, independent of any physical link.
+    VyOS renders every interface through ``interface_prefix`` (the
+    vyatta loop; bridges and static WireGuard tunnels included -- on
+    RouterOS those same models are the Bridges / StaticWireGuard
+    blocks). Linux renders the dum* interfaces as owned interfaces.d
+    files (the VyOS dum0 pattern): addresses anchored on a dummy are
+    the host's stable fabric identity, independent of any physical
+    link.
     """
 
     def linux(self) -> List[str]:
@@ -46,16 +52,6 @@ class LinuxDummies(ConfigBlock):
             lines += barf_file(f"/etc/network/interfaces.d/{iface.name}.conf", content)
             lines.append("")
         return lines
-
-
-class VyosInterfaces(ConfigBlock):
-    """Modeled interfaces in VyOS dialect (the vyatta interface loop).
-
-    Bridges and static WireGuard tunnels render here through
-    ``interface_prefix`` (on RouterOS the same models are the Bridges /
-    StaticWireGuard blocks); each dynamic-addressing mechanism is an
-    independent flag.
-    """
 
     def vyos(self) -> List[str]:
         host = cast("VyOSHost", self.host)

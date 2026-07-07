@@ -36,12 +36,12 @@ from barf.configs import fabric, firewall, interfaces, routing, system
 # lands (mikrotik first).
 BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
     ("vpn", "vyos"): [
-        system.VyosSystem,
-        interfaces.VyosInterfaces,
-        system.VyosSshAccess,
+        system.SystemConfig,
+        interfaces.InterfacesConfig,
+        system.SshConfig,
         system.VyosPlatform,
         firewall.FirewallGroups,
-        system.VyosNtp,
+        system.NtpConfig,
         routing.Ospf,
         routing.StaticRoutes,
         firewall.Nat,
@@ -52,15 +52,15 @@ BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
         system.ExtraConfig,
     ],
     ("vpn", "linux"): [
-        system.LinuxHeader,
+        system.Header,
         fabric.FabricWireGuard,
-        interfaces.LinuxDummies,
+        interfaces.InterfacesConfig,
         routing.BirdBase,
         fabric.BirdFabric,
         system.ExtraConfig,
     ],
     ("vpn", "mikrotik"): [
-        system.MikrotikHeader,
+        system.Header,
         fabric.FabricWireGuard,
         interfaces.Bridges,
         interfaces.StaticWireGuard,

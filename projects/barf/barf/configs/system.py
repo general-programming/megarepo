@@ -12,8 +12,13 @@ from typing import List
 from barf.configs.base import ConfigBlock, secret_value
 
 
-class MikrotikHeader(ConfigBlock):
-    """The RouterOS file header comment (mikrotik-only boilerplate)."""
+class Header(ConfigBlock):
+    """The rendered file's preamble, where the format needs one.
+
+    VyOS set-commands need no header; RouterOS gets an explanatory
+    comment block and linux the shell-script plumbing its heredoc
+    encoding rides on.
+    """
 
     def mikrotik(self) -> List[str]:
         return [
@@ -23,10 +28,6 @@ class MikrotikHeader(ConfigBlock):
             "# networks, and geographic path weighting (origin-site large",
             "# communities in, local-pref out) when the host has a `site`.",
         ]
-
-
-class LinuxHeader(ConfigBlock):
-    """The shell-script preamble of the linux file-map render."""
 
     def linux(self) -> List[str]:
         return [
@@ -43,8 +44,8 @@ class LinuxHeader(ConfigBlock):
         ]
 
 
-class VyosSystem(ConfigBlock):
-    """VyOS system basics: identity, SNMP, DNS, syslog, conntrack."""
+class SystemConfig(ConfigBlock):
+    """System basics: identity, SNMP, DNS, syslog, conntrack."""
 
     def vyos(self) -> List[str]:
         gm = self.ctx.global_meta
@@ -81,7 +82,7 @@ class VyosSystem(ConfigBlock):
         return lines
 
 
-class VyosSshAccess(ConfigBlock):
+class SshConfig(ConfigBlock):
     """Key-only SSH for the supertech account."""
 
     def vyos(self) -> List[str]:
@@ -119,8 +120,8 @@ class VyosPlatform(ConfigBlock):
         ]
 
 
-class VyosNtp(ConfigBlock):
-    """NTP servers + internal-only allow-client (chrony-era syntax)."""
+class NtpConfig(ConfigBlock):
+    """NTP servers + internal-only allow-client."""
 
     ALLOW_CLIENTS = [
         "10.0.0.0/8",
@@ -134,6 +135,8 @@ class VyosNtp(ConfigBlock):
     ]
 
     def vyos(self) -> List[str]:
+        # The allow-client syntax is chrony-era VyOS, not shared
+        # vyatta lineage.
         return [
             "set service ntp server time1.vyos.net",
             "set service ntp server time2.vyos.net",
