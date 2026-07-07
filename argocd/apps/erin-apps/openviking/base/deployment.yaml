@@ -59,17 +59,23 @@ spec:
             timeoutSeconds: 10
             failureThreshold: 5
           readinessProbe:
+            # NOTE: /ready couples to the embedder, which is chronically slow
+            # (OpenRouter qwen3-embedding-8b ~10s/call) and returns 503 ~half
+            # the time even though the app serves real traffic fine (ov ls /
+            # find / import all succeed). With workers:1 (local vectordb/agfs
+            # rules out multi-worker) a burst of consecutive /ready failures
+            # drops the pod from the Service and surfaces 502s through the
+            # Tailscale ingress. Gate readiness on /health instead — a
+            # process-can-serve signal that stays green whenever the pod can
+            # actually answer — so Service membership no longer tracks the
+            # slow embedder. (Underlying fix is a faster embedding backend.)
             httpGet:
-              path: /ready
+              path: /health
               port: http
-            initialDelaySeconds: 15
-            periodSeconds: 15
-            # OpenRouter embedding calls (qwen3-embedding-8b) routinely take
-            # ~10s; with workers:1 that pushes /ready past a tight deadline
-            # and flaps the pod out of the Service. Tolerate it: 10s timeout
-            # and 6 failures (~90s) before marking NotReady.
+            initialDelaySeconds: 20
+            periodSeconds: 10
             timeoutSeconds: 10
-            failureThreshold: 6
+            failureThreshold: 5
       volumes:
         - name: data
           persistentVolumeClaim:
