@@ -6,7 +6,7 @@ unquoted RouterOS values silently matching nothing, and optional
 suffixes fighting Jinja's trim_blocks newline swallowing.
 """
 
-from typing import Optional
+from typing import List, Optional
 
 
 def ros_kv(key: str, value: object, quote: bool = False) -> str:
@@ -32,6 +32,16 @@ def ros_line(path: str, verb: str = "add", *pairs: Optional[str]) -> str:
     """
     tokens = [path, verb, *[pair for pair in pairs if pair]]
     return " ".join(tokens)
+
+
+def barf_file(path: str, content: List[str]) -> List[str]:
+    """The BARF_FILE heredoc stanza writing ``content`` lines to ``path``.
+
+    The linux deploy path parses these blocks back into a path ->
+    content map; the quoted delimiter means nothing expands when the
+    script is run by hand.
+    """
+    return [f"cat << 'BARF_FILE' > {path}", *content, "BARF_FILE"]
 
 
 def squote(value: object) -> str:

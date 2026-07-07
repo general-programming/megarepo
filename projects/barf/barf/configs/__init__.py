@@ -51,6 +51,14 @@ BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
         fabric.FabricBGP,
         system.ExtraConfig,
     ],
+    ("vpn", "linux"): [
+        system.LinuxHeader,
+        fabric.FabricWireGuard,
+        interfaces.LinuxDummies,
+        routing.BirdBase,
+        fabric.BirdFabric,
+        system.ExtraConfig,
+    ],
     ("vpn", "mikrotik"): [
         system.MikrotikHeader,
         fabric.FabricWireGuard,

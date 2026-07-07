@@ -9,10 +9,43 @@ their own sections (Bridges, StaticWireGuard).
 from typing import TYPE_CHECKING, List, cast
 
 from barf.configs.base import ConfigBlock
-from barf.configs.lines import ros_kv, ros_line
+from barf.configs.lines import barf_file, ros_kv, ros_line
 
 if TYPE_CHECKING:
     from barf.vendors.vyos import VyOSHost
+
+
+class LinuxDummies(ConfigBlock):
+    """dum* interfaces as owned interfaces.d files (the VyOS dum0 pattern).
+
+    Anchor addresses on a dummy interface: the host's stable fabric
+    identity, independent of any physical link.
+    """
+
+    def linux(self) -> List[str]:
+        lines = []
+        for iface in self.host.interfaces:
+            if not iface.name.startswith("dum"):
+                continue
+            content = [
+                f"# {iface.name} - {iface.description or 'loopback'}"
+                " (barf-managed; deploy overwrites)",
+                "# Anchor addresses on a dummy interface (the VyOS dum0 pattern): the",
+                "# host's stable fabric identity, independent of any physical link.",
+                "# `inet manual` + explicit address adds handles any v4/v6 mix.",
+                f"auto {iface.name}",
+                f"iface {iface.name} inet manual",
+                "        pre-up ip link add $IFACE type dummy",
+                "        post-up ip link set $IFACE up",
+                *(
+                    f"        post-up ip addr add {address} dev $IFACE"
+                    for address in iface.addresses
+                ),
+                "        post-down ip link del $IFACE",
+            ]
+            lines += barf_file(f"/etc/network/interfaces.d/{iface.name}.conf", content)
+            lines.append("")
+        return lines
 
 
 class VyosInterfaces(ConfigBlock):

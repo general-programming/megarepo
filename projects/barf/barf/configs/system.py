@@ -25,6 +25,24 @@ class MikrotikHeader(ConfigBlock):
         ]
 
 
+class LinuxHeader(ConfigBlock):
+    """The shell-script preamble of the linux file-map render."""
+
+    def linux(self) -> List[str]:
+        return [
+            "#!/bin/sh",
+            f"# Rendered by barf for {self.host.hostname}.",
+            "#",
+            "# One quoted heredoc per barf-owned file. `barf config diff|deploy`",
+            "# parses these BARF_FILE blocks into a path -> content map and manages",
+            "# the files over SSH; running this script by hand writes the exact",
+            "# same contents (the delimiter is quoted, so nothing expands).",
+            "set -e",
+            "mkdir -p /etc/wireguard /etc/network/interfaces.d /etc/bird/conf.d",
+            "",
+        ]
+
+
 class VyosSystem(ConfigBlock):
     """VyOS system basics: identity, SNMP, DNS, syslog, conntrack."""
 
@@ -139,4 +157,7 @@ class ExtraConfig(ConfigBlock):
         return ["", *self.host.extra_config]
 
     def vyos(self) -> List[str]:
+        return ["", *self.host.extra_config]
+
+    def linux(self) -> List[str]:
         return ["", *self.host.extra_config]
