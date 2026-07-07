@@ -41,6 +41,19 @@ class RenderContext:
     community_asn: Optional[int] = None
 
 
+def secret_value(secrets, key: str) -> str:
+    """A secret by attribute or item access, whichever the fetcher has.
+
+    Mirrors how the templates resolved ``secrets.x`` / ``secrets[x]``:
+    VaultSecrets serves everything via __getattr__, test fakes are
+    plain dicts.
+    """
+    try:
+        return getattr(secrets, key)
+    except AttributeError:
+        return secrets[key]
+
+
 class UnsupportedFeature(NotImplementedError):
     """A host activates a feature its vendor cannot express.
 

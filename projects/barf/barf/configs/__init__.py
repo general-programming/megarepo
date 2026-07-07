@@ -25,7 +25,7 @@ __all__ = [
     "renders_with_blocks",
 ]
 
-from barf.configs import vpn
+from barf.configs import fabric, firewall, interfaces, routing, system
 
 # Ordered block lists keyed by (role, devicetype): list order IS output
 # order, part of the byte-parity contract, and it is per-vendor because
@@ -36,32 +36,32 @@ from barf.configs import vpn
 # lands (mikrotik first).
 BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
     ("vpn", "vyos"): [
-        vpn.VyosSystem,
-        vpn.VyosInterfaces,
-        vpn.VyosSshAccess,
-        vpn.VyosPlatform,
-        vpn.FirewallGroups,
-        vpn.VyosNtp,
-        vpn.Ospf,
-        vpn.StaticRoutes,
-        vpn.Nat,
-        vpn.IpsecDefaults,
-        vpn.SiteWeighting,
-        vpn.FabricWireGuard,
-        vpn.FabricBGP,
-        vpn.ExtraConfig,
+        system.VyosSystem,
+        interfaces.VyosInterfaces,
+        system.VyosSshAccess,
+        system.VyosPlatform,
+        firewall.FirewallGroups,
+        system.VyosNtp,
+        routing.Ospf,
+        routing.StaticRoutes,
+        firewall.Nat,
+        fabric.IpsecDefaults,
+        fabric.SiteWeighting,
+        fabric.FabricWireGuard,
+        fabric.FabricBGP,
+        system.ExtraConfig,
     ],
     ("vpn", "mikrotik"): [
-        vpn.MikrotikHeader,
-        vpn.FabricWireGuard,
-        vpn.Bridges,
-        vpn.StaticWireGuard,
-        vpn.AnnouncedNetworks,
-        vpn.FirewallGroups,
-        vpn.SiteWeighting,
-        vpn.FabricBGP,
-        vpn.TransitBGP,
-        vpn.ExtraConfig,
+        system.MikrotikHeader,
+        fabric.FabricWireGuard,
+        interfaces.Bridges,
+        interfaces.StaticWireGuard,
+        fabric.AnnouncedNetworks,
+        firewall.FirewallGroups,
+        fabric.SiteWeighting,
+        fabric.FabricBGP,
+        fabric.TransitBGP,
+        system.ExtraConfig,
     ],
 }
 
