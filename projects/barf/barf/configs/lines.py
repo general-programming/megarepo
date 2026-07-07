@@ -6,32 +6,36 @@ unquoted RouterOS values silently matching nothing, and optional
 suffixes fighting Jinja's trim_blocks newline swallowing.
 """
 
-from typing import List, Optional
+from typing import List
 
 
-def ros_kv(key: str, value: object, quote: bool = False) -> str:
-    """A RouterOS ``key=value`` token; empty when value is None.
+def ros_value(value: object) -> str:
+    """A RouterOS property value, quoted exactly when it needs to be.
 
-    None (not just falsy) drops the token so optional arguments vanish
-    from the line, while real values like ``0`` still render. ``quote``
-    double-quotes the value -- required for anything that can contain
-    spaces (comments, keys) and for find-where values.
+    Unquoted values with spaces silently break (the find-where gotcha),
+    so anything containing whitespace, quotes, or backslashes -- or the
+    empty string -- is double-quoted with RouterOS escaping; everything
+    else renders bare, matching the adopted device style.
     """
-    if value is None:
-        return ""
-    if quote:
-        return f'{key}="{value}"'
-    return f"{key}={value}"
+    text = str(value)
+    if text == "" or any(ch in text for ch in ' \t"\\'):
+        escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    return text
 
 
-def ros_line(path: str, verb: str = "add", *pairs: Optional[str]) -> str:
-    """One RouterOS command from preformatted ``key=value`` tokens.
+def ros_line(path: str, verb: str, props: dict) -> str:
+    """One RouterOS command from a props dict (the pipeline's shape:
+    parse output, diff items, and REST payloads are all props dicts).
 
-    Empty/None tokens (e.g. a skipped ros_kv) vanish, so optional
-    arguments never leave double spaces behind.
+    Dict order is emission order; None-valued props vanish, so
+    optional arguments drop out of the line; values quote themselves
+    via ros_value.
     """
-    tokens = [path, verb, *[pair for pair in pairs if pair]]
-    return " ".join(tokens)
+    pairs = [
+        f"{key}={ros_value(value)}" for key, value in props.items() if value is not None
+    ]
+    return " ".join([path, verb, *pairs])
 
 
 def barf_file(path: str, content: List[str]) -> List[str]:

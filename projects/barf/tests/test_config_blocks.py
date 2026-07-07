@@ -13,7 +13,7 @@ from barf.configs import (
     build_context,
     render_blocks,
 )
-from barf.configs.lines import ros_kv, ros_line, squote, vyos_set
+from barf.configs.lines import ros_line, ros_value, squote, vyos_set
 from barf.model.wireguard import WGNetworkLink
 from barf.vendors import HostInterface
 from barf.vendors.linux import LinuxBirdHost
@@ -172,25 +172,29 @@ class TestBuildContext:
 
 
 class TestRosLines:
-    def test_kv_plain_and_quoted(self):
-        assert ros_kv("name", "wg51078") == "name=wg51078"
-        assert ros_kv("comment", "barf: a -> b", quote=True) == (
-            'comment="barf: a -> b"'
-        )
+    def test_values_quote_only_when_needed(self):
+        assert ros_value("wg51078") == "wg51078"
+        assert ros_value("barf: a -> b") == '"barf: a -> b"'
+        assert ros_value("") == '""'
+        assert ros_value('say "hi"') == '"say \\"hi\\""'
 
-    def test_kv_none_vanishes_but_zero_renders(self):
-        assert ros_kv("port", None) == ""
-        assert ros_kv("port", 0) == "port=0"
-
-    def test_line_drops_empty_pairs(self):
+    def test_line_from_props_dict(self):
         line = ros_line(
             "/interface/wireguard",
             "add",
-            ros_kv("name", "wg51078"),
-            ros_kv("comment", None, quote=True),
-            ros_kv("mtu", 1420),
+            {
+                "name": "wg51078",
+                "mtu": 1420,
+                "comment": "barf: a -> b",
+            },
         )
-        assert line == "/interface/wireguard add name=wg51078 mtu=1420"
+        assert line == (
+            '/interface/wireguard add name=wg51078 mtu=1420 comment="barf: a -> b"'
+        )
+
+    def test_none_props_vanish_but_zero_renders(self):
+        line = ros_line("/x", "add", {"a": None, "port": 0})
+        assert line == "/x add port=0"
 
 
 class TestVyosLines:

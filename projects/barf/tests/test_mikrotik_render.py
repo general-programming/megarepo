@@ -77,7 +77,7 @@ class TestWireGuard:
             "/interface/wireguard add name=wg51078 listen-port=51078 mtu=1420" in conf
         )
         assert "/interface/wireguard add name=wg51911 listen-port=51911" in conf
-        assert 'private-key="PRIV-' in conf
+        assert "private-key=PRIV-" in conf
 
     def test_peer_with_endpoint_when_peer_is_globally_addressed(self):
         conf = render()
@@ -476,12 +476,14 @@ class TestStaticWireguard:
     def test_interface_peer_and_address(self, monkeypatch):
         conf = render(self._device(monkeypatch))
         assert (
-            '/interface/wireguard add name=linuxgemini1 listen-port=63666 mtu=1420 private-key="PRIV" comment="barf: linuxgemini1 tunnel"'
-            in conf
+            "/interface/wireguard add name=linuxgemini1 listen-port=63666 mtu=1420"
+            ' private-key=PRIV comment="barf: linuxgemini1 tunnel"' in conf
         )
         assert (
-            '/interface/wireguard/peers add interface=linuxgemini1 name=linuxgemini public-key="PUB" allowed-address=0.0.0.0/0,::/0 endpoint-address=91.107.210.194 endpoint-port=63666 persistent-keepalive=10s'
-            in conf
+            "/interface/wireguard/peers add interface=linuxgemini1 name=linuxgemini"
+            " public-key=PUB allowed-address=0.0.0.0/0,::/0"
+            " endpoint-address=91.107.210.194 endpoint-port=63666"
+            " persistent-keepalive=10s" in conf
         )
         assert (
             '/ip/address add address=172.22.255.3/31 interface=linuxgemini1 comment="barf: linuxgemini1 address"'

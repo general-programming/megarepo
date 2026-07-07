@@ -10,7 +10,7 @@ tunnels are their own sections (Bridges, StaticWireGuard).
 from typing import TYPE_CHECKING, List, cast
 
 from barf.configs.base import ConfigBlock
-from barf.configs.lines import barf_file, ros_kv, ros_line
+from barf.configs.lines import barf_file, ros_line
 
 if TYPE_CHECKING:
     from barf.vendors.vyos import VyOSHost
@@ -156,36 +156,41 @@ class StaticWireGuard(ConfigBlock):
                 ros_line(
                     "/interface/wireguard",
                     "add",
-                    ros_kv("name", iface.name),
-                    ros_kv("listen-port", wg["port"]),
-                    ros_kv("mtu", iface.mtu or 1420),
-                    ros_kv(
-                        "private-key",
-                        self.host.secret(wg["private_key_secret"]),
-                        quote=True,
-                    ),
-                    ros_kv("comment", f"barf: {iface.name} tunnel", quote=True),
+                    {
+                        "name": iface.name,
+                        "listen-port": wg["port"],
+                        "mtu": iface.mtu or 1420,
+                        "private-key": self.host.secret(wg["private_key_secret"]),
+                        "comment": f"barf: {iface.name} tunnel",
+                    },
                 )
             )
             for peer in wg.get("peers", []):
-                line = ros_line(
-                    "/interface/wireguard/peers",
-                    "add",
-                    ros_kv("interface", iface.name),
-                    ros_kv("name", peer["name"]),
-                    ros_kv("public-key", peer["public_key"], quote=True),
-                    ros_kv(
-                        "allowed-address",
-                        ",".join(peer.get("allowed_ips", ["0.0.0.0/0", "::/0"])),
-                    ),
-                )
-                if peer.get("endpoint"):
-                    line += (
-                        f" endpoint-address={peer['endpoint']}"
-                        f" endpoint-port={peer.get('port', wg['port'])}"
-                        f" persistent-keepalive={peer.get('keepalive', '10s')}"
+                lines.append(
+                    ros_line(
+                        "/interface/wireguard/peers",
+                        "add",
+                        {
+                            "interface": iface.name,
+                            "name": peer["name"],
+                            "public-key": peer["public_key"],
+                            "allowed-address": ",".join(
+                                peer.get("allowed_ips", ["0.0.0.0/0", "::/0"])
+                            ),
+                            **(
+                                {
+                                    "endpoint-address": peer["endpoint"],
+                                    "endpoint-port": peer.get("port", wg["port"]),
+                                    "persistent-keepalive": peer.get(
+                                        "keepalive", "10s"
+                                    ),
+                                }
+                                if peer.get("endpoint")
+                                else {}
+                            ),
+                        },
                     )
-                lines.append(line)
+                )
             for addr in iface.addresses:
                 lines.append(
                     f"/ip/address add address={addr.with_prefixlen}"

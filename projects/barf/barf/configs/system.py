@@ -10,7 +10,7 @@ separators exactly where the template put them.
 from typing import List
 
 from barf.configs.base import ConfigBlock, secret_value
-from barf.configs.lines import ros_kv, ros_line
+from barf.configs.lines import ros_line
 
 
 class Header(ConfigBlock):
@@ -98,14 +98,15 @@ class SshConfig(ConfigBlock):
     def mikrotik(self) -> List[str]:
         lines = []
         for ssh_key in self.ctx.global_meta.get("ssh_keys", []):
-            name = ssh_key.split(" ")[2]
             lines.append(
                 ros_line(
                     "/user/ssh-keys",
                     "add",
-                    ros_kv("user", self.MIKROTIK_SSH_USER),
-                    ros_kv("key-owner", name, quote=True),
-                    ros_kv("key", ssh_key, quote=True),
+                    {
+                        "user": self.MIKROTIK_SSH_USER,
+                        "key-owner": ssh_key.split(" ")[2],
+                        "key": ssh_key,
+                    },
                 )
             )
         return [*lines, ""]
@@ -167,8 +168,15 @@ class NtpConfig(ConfigBlock):
 
     def mikrotik(self) -> List[str]:
         return [
-            "/system/ntp/client set enabled=yes mode=unicast"
-            f" servers={','.join(self.SERVERS)}",
+            ros_line(
+                "/system/ntp/client",
+                "set",
+                {
+                    "enabled": "yes",
+                    "mode": "unicast",
+                    "servers": ",".join(self.SERVERS),
+                },
+            ),
             "",
         ]
 

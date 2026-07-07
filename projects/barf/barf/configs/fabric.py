@@ -10,7 +10,7 @@ host has a `site`. Byte-identical to the template stanzas replaced
 from typing import TYPE_CHECKING, List
 
 from barf.configs.base import ConfigBlock, secret_value
-from barf.configs.lines import barf_file, ros_kv, ros_line
+from barf.configs.lines import barf_file, ros_line
 from barf.util.sites import SITE_ORIGIN_FUNC
 
 if TYPE_CHECKING:
@@ -87,31 +87,37 @@ class FabricWireGuard(ConfigBlock):
                 ros_line(
                     "/interface/wireguard",
                     "add",
-                    ros_kv("name", interface_name),
-                    ros_kv("listen-port", link.link_id),
-                    ros_kv("mtu", 1420),
-                    ros_kv("private-key", link.wg_privkey(our_side), quote=True),
-                    ros_kv(
-                        "comment",
-                        f"barf: {link.side_a.hostname} -> {link.side_b.hostname}",
-                        quote=True,
-                    ),
+                    {
+                        "name": interface_name,
+                        "listen-port": link.link_id,
+                        "mtu": 1420,
+                        "private-key": link.wg_privkey(our_side),
+                        "comment": f"barf: {link.side_a.hostname}"
+                        f" -> {link.side_b.hostname}",
+                    },
                 )
             )
-            peer = ros_line(
-                "/interface/wireguard/peers",
-                "add",
-                ros_kv("interface", interface_name),
-                ros_kv("name", other_peer.hostname),
-                ros_kv("public-key", link.wg_pubkey(other_peer), quote=True),
-                ros_kv("allowed-address", "0.0.0.0/0,::/0"),
-            )
-            if other_peer.wg_endpoint:
-                peer += (
-                    f" endpoint-address={other_peer.wg_endpoint}"
-                    f" endpoint-port={link.link_id} persistent-keepalive=10s"
+            lines.append(
+                ros_line(
+                    "/interface/wireguard/peers",
+                    "add",
+                    {
+                        "interface": interface_name,
+                        "name": other_peer.hostname,
+                        "public-key": link.wg_pubkey(other_peer),
+                        "allowed-address": "0.0.0.0/0,::/0",
+                        **(
+                            {
+                                "endpoint-address": other_peer.wg_endpoint,
+                                "endpoint-port": link.link_id,
+                                "persistent-keepalive": "10s",
+                            }
+                            if other_peer.wg_endpoint
+                            else {}
+                        ),
+                    },
                 )
-            lines.append(peer)
+            )
 
             if link.unnumbered:
                 lines.append(
