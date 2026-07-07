@@ -91,7 +91,9 @@ class TestConfigBlock:
 
 class TestRenderBlocks:
     def test_registry_order_is_output_order(self, monkeypatch):
-        monkeypatch.setitem(configs.BLOCKS_BY_ROLE, "vpn", [Greeting, VyosOnly])
+        monkeypatch.setitem(
+            configs.BLOCK_REGISTRY, ("vpn", "vyos"), [Greeting, VyosOnly]
+        )
         host = make_router(VyOSHost, "leaf-1", 300)
         assert render_blocks(make_ctx(host)) == (
             "set greeting 'leaf-1'\nset vyos-only\n"
@@ -100,12 +102,14 @@ class TestRenderBlocks:
     def test_inactive_block_is_skipped_silently(self, monkeypatch):
         # Optional has no mikrotik() emitter, but applies() is False for
         # a host without networks: skipped, never UnsupportedFeature.
-        monkeypatch.setitem(configs.BLOCKS_BY_ROLE, "vpn", [Greeting, Optional])
+        monkeypatch.setitem(
+            configs.BLOCK_REGISTRY, ("vpn", "mikrotik"), [Greeting, Optional]
+        )
         host = make_router(MikroTikHost, "sea420", 4280805525)
         assert render_blocks(make_ctx(host)) == "/greeting add name=sea420\n"
 
     def test_active_block_without_vendor_method_raises(self, monkeypatch):
-        monkeypatch.setitem(configs.BLOCKS_BY_ROLE, "vpn", [Optional])
+        monkeypatch.setitem(configs.BLOCK_REGISTRY, ("vpn", "mikrotik"), [Optional])
         host = make_router(MikroTikHost, "sea420", 4280805525, networks=["10.0.0.0/24"])
         with pytest.raises(UnsupportedFeature):
             render_blocks(make_ctx(host))

@@ -9,7 +9,7 @@ from typing import List
 import yaml
 
 from barf.common import render_template
-from barf.configs import BLOCK_VENDORS, build_context, render_blocks
+from barf.configs import build_context, render_blocks, renders_with_blocks
 from barf.model.wireguard import WGNetworkLink, prefetch_keypairs
 from barf.util.sites import SITE_ORIGIN_FUNC
 from barf.vendors import BaseHost
@@ -51,7 +51,7 @@ def render_host_config(
     """
     ctx = build_context(host, links, global_meta, secrets)
 
-    if host.devicetype in BLOCK_VENDORS:
+    if renders_with_blocks(host):
         return render_blocks(ctx)
 
     role_meta = {}

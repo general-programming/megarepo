@@ -1,12 +1,12 @@
 """Per-feature config blocks replacing the vpn Jinja templates.
 
-Vendors cut over whole: a devicetype listed in BLOCK_VENDORS renders
-via the ordered block registry, everything else keeps the legacy
-template path. Output is byte-identical to the templates it replaces
-(tests/golden/).
+Vendors cut over whole: a (role, devicetype) pair present in
+BLOCK_REGISTRY renders via its ordered block list, everything else
+keeps the legacy template path. Output is byte-identical to the
+templates it replaces (tests/golden/).
 """
 
-from typing import TYPE_CHECKING, Dict, FrozenSet, List, Type
+from typing import TYPE_CHECKING, Dict, List, Tuple, Type
 
 from barf.configs.base import ConfigBlock, RenderContext, UnsupportedFeature
 from barf.util.sites import site_import_rules
@@ -16,24 +16,43 @@ if TYPE_CHECKING:
     from barf.vendors import BaseHost
 
 __all__ = [
-    "BLOCK_VENDORS",
-    "BLOCKS_BY_ROLE",
+    "BLOCK_REGISTRY",
     "ConfigBlock",
     "RenderContext",
     "UnsupportedFeature",
     "build_context",
     "render_blocks",
+    "renders_with_blocks",
 ]
 
-# Ordered per-role block registries: registry order IS output order,
-# part of the byte-parity contract. Filled in as features are ported.
-BLOCKS_BY_ROLE: Dict[str, List[Type[ConfigBlock]]] = {
-    "vpn": [],
+from barf.configs import vpn
+
+# Ordered block lists keyed by (role, devicetype): list order IS output
+# order, part of the byte-parity contract, and it is per-vendor because
+# the templates each grew their own section order. The block CLASSES
+# are shared across vendors (one class per feature, one method per
+# vendor); only the ordering and vendor-specific boilerplate (e.g. the
+# RouterOS header) differ per list. Pairs appear here as their port
+# lands (mikrotik first).
+BLOCK_REGISTRY: Dict[Tuple[str, str], List[Type[ConfigBlock]]] = {
+    ("vpn", "mikrotik"): [
+        vpn.MikrotikHeader,
+        vpn.FabricWireGuard,
+        vpn.Bridges,
+        vpn.StaticWireGuard,
+        vpn.AnnouncedNetworks,
+        vpn.FirewallGroups,
+        vpn.SiteWeighting,
+        vpn.FabricBGP,
+        vpn.TransitBGP,
+        vpn.ExtraConfig,
+    ],
 }
 
-# Devicetypes rendered via blocks instead of the legacy templates.
-# Vendors flip here one at a time as their port lands (mikrotik first).
-BLOCK_VENDORS: FrozenSet[str] = frozenset()
+
+def renders_with_blocks(host: "BaseHost") -> bool:
+    """Whether this host's config renders via blocks (vs. a template)."""
+    return (host.role, host.devicetype) in BLOCK_REGISTRY
 
 
 def build_context(
@@ -97,7 +116,7 @@ def render_blocks(ctx: RenderContext) -> str:
     ends in one newline.
     """
     lines: List[str] = []
-    for block_cls in BLOCKS_BY_ROLE.get(ctx.host.role, []):
+    for block_cls in BLOCK_REGISTRY[(ctx.host.role, ctx.host.devicetype)]:
         block = block_cls(ctx)
         if not block.applies():
             continue

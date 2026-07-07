@@ -175,12 +175,17 @@ class TestGeographicWeighting:
         assert "bgp-large-communities" not in conf
 
 
+# All fields modeled, like network.yml: the blocks fail loudly
+# (KeyError) on an incomplete transit entry where the template used to
+# render empty strings into the policy.
 TRANSIT = {
     "transit": [
         {
             "name": "linuxgemini",
             "remote_as": 4280806675,
             "link_network": "172.22.255.2/31",
+            "remote_address": "172.22.255.2",
+            "export_supernet": "172.22.255.0/24",
         },
     ]
 }
