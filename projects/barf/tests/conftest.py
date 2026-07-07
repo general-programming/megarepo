@@ -23,6 +23,15 @@ SITES = {"sea": SEA, "fmt2": FMT2}
 COMMUNITY_ASN = 4280805525
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--update-goldens",
+        action="store_true",
+        default=False,
+        help="Rewrite tests/golden/ from the current renderer instead of comparing.",
+    )
+
+
 def make_link(link_id: int, side_a, side_b, network: str = None) -> WGNetworkLink:
     return WGNetworkLink(
         link_id=link_id, side_a=side_a, side_b=side_b, network=network, pinned=False
