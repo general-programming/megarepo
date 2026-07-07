@@ -53,16 +53,23 @@ spec:
               port: http
             initialDelaySeconds: 30
             periodSeconds: 30
-            timeoutSeconds: 5
-            failureThreshold: 3
+            # /health can stall behind a slow (~10s) embedder call on the
+            # single worker; keep liveness lenient so transient slowness
+            # never triggers a restart loop.
+            timeoutSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /ready
               port: http
             initialDelaySeconds: 15
-            periodSeconds: 10
-            timeoutSeconds: 5
-            failureThreshold: 3
+            periodSeconds: 15
+            # OpenRouter embedding calls (qwen3-embedding-8b) routinely take
+            # ~10s; with workers:1 that pushes /ready past a tight deadline
+            # and flaps the pod out of the Service. Tolerate it: 10s timeout
+            # and 6 failures (~90s) before marking NotReady.
+            timeoutSeconds: 10
+            failureThreshold: 6
       volumes:
         - name: data
           persistentVolumeClaim:
