@@ -35,14 +35,16 @@ USER root
 # Disabling the sandbox here is the workspace-local alternative to a
 # cluster-wide sysctl change.
 # Substituters: cachix caches for nix-community (home-manager etc.) and
-# claude-code (sadjow/claude-code-nix) sit alongside the default cache —
-# keys fetched from https://app.cachix.org/api/v1/cache/<name>.
+# claude-code (sadjow/claude-code-nix), plus the lix cache, sit alongside
+# the default cache. Cachix keys fetched from
+# https://app.cachix.org/api/v1/cache/<name>; the lix key from
+# lix-installer's place_nix_configuration.rs.
 RUN mkdir -p /etc/nix \
     && printf '%s\n' \
         'sandbox = false' \
         'experimental-features = nix-command flakes' \
-        'substituters = https://cache.nixos.org https://nix-community.cachix.org https://claude-code.cachix.org' \
-        'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=' \
+        'substituters = https://cache.nixos.org https://nix-community.cachix.org https://claude-code.cachix.org https://cache.lix.systems' \
+        'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk= cache.lix.systems:aBnZUw8zA7H35Cz2RyKFVs3H4PlGTLawyY5KRbvJR8o=' \
         > /etc/nix/nix.conf
 
 # /home/coder is replaced by an empty persistent volume at runtime, so the
