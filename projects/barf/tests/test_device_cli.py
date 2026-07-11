@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from barf.vendors import DeployDiff
 
-from barf.cli.device import wait_for_device_alive
+from barf.cli.device import _human_duration, wait_for_device_alive
 
 # "from barf.cli import device" would give the click group of the same
 # name, not the module.
@@ -25,6 +25,28 @@ def test_wait_for_device_alive_waits_then_polls(monkeypatch):
     assert wait_for_device_alive(host) == "1.5-rolling"
     # 15s head start, then 5s between the two failed polls.
     assert sleeps == [15, 5, 5]
+
+
+def test_wait_for_device_alive_reports_estimate_and_elapsed(monkeypatch, capsys):
+    monkeypatch.setattr(device_cli.time, "sleep", lambda s: None)
+    clock = iter([0.0, 15.0, 95.0, 95.0])
+    monkeypatch.setattr(device_cli.time, "monotonic", lambda: float(next(clock)))
+
+    host = SimpleNamespace(hostname="testbox", version=lambda: "1.5-rolling")
+    assert wait_for_device_alive(host) == "1.5-rolling"
+
+    out = capsys.readouterr().out
+    # An up-front expectation, and the measured truth afterwards.
+    assert "typically takes ~2 minutes" in out
+    assert "[testbox] device came back after 1m35s" in out
+
+
+@pytest.mark.parametrize(
+    ("seconds", "rendered"),
+    [(45, "45s"), (95, "1m35s"), (120, "2m00s"), (0.4, "0s")],
+)
+def test_human_duration(seconds, rendered):
+    assert _human_duration(seconds) == rendered
 
 
 def test_wait_for_device_alive_times_out(monkeypatch):

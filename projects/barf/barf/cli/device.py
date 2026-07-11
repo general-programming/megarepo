@@ -160,6 +160,12 @@ def device_ssh(target: str, filename: str) -> None:
         raise SystemExit(status)
 
 
+def _human_duration(seconds: float) -> str:
+    """A duration like ``95`` rendered as ``1m35s`` (or ``45s``)."""
+    minutes, secs = divmod(round(seconds), 60)
+    return f"{minutes}m{secs:02d}s" if minutes else f"{secs}s"
+
+
 def wait_for_device_alive(
     host: BaseHost,
     changed_from: Optional[str] = None,
@@ -174,14 +180,25 @@ def wait_for_device_alive(
     while, so pass its pre-reboot version as ``changed_from``: polls
     reporting that version keep waiting instead of being taken as alive.
     """
-    click.echo(f"[{host.hostname}] waiting for the device to come alive", nl=False)
+    # ~2 minutes is what a VyOS leaf reboot measures in practice; the
+    # actual elapsed time is printed once the device answers.
+    click.echo(
+        f"[{host.hostname}] waiting for the device to come alive"
+        " (a reboot typically takes ~2 minutes)",
+        nl=False,
+    )
+    started = time.monotonic()
     time.sleep(initial_wait)
 
-    deadline = time.monotonic() + timeout
+    deadline = started + timeout
     while time.monotonic() < deadline:
         version = host.version()
         if version is not None and version != changed_from:
             click.echo("")
+            click.echo(
+                f"[{host.hostname}] device came back after"
+                f" {_human_duration(time.monotonic() - started)}"
+            )
             return version
         click.echo(".", nl=False)
         time.sleep(interval)
