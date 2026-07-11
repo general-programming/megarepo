@@ -45,30 +45,27 @@ Workspaces can bootstrap themselves from a Nix flake with Home Manager:
 
 | Parameter | Example | What it does |
 |---|---|---|
-| `repo_url` | `https://github.com/nepeat/nepeat` | Cloned into `$HOME/<repo>` on first boot |
+| `repo_url` | `https://github.com/nepeat/nepeat` | Cloned to `$HOME/.home_repo`, force-synced to the remote every boot |
 | `flake_dir` | `nix` | Repo-relative dir containing `flake.nix` (blank = repo root) |
-| `hm_config` | `erin` | `homeConfigurations.<name>` activated on first boot |
-| `home_user` | `erin` | Username + `/home/<name>` (blank = Coder username; immutable) |
+| `hm_config` | `coder` | `homeConfigurations.<name>` activated on first boot |
 
 How it hangs together:
 
-- **`home_user`**: the home PVC is mounted at `/home/<home_user>` and the
-  container gets explicit `HOME`/`USER` env (Kubernetes would otherwise
-  derive `HOME` from the image's passwd entry, `/home/coder`). On every boot
-  the startup script rewrites `/etc/passwd`, `/etc/group`, and sudoers so
-  uid 1000 is *named* `home_user` too — `/etc` is ephemeral image overlay,
-  which is also why it must re-run each boot. `sed` instead of `usermod`
-  because usermod refuses to rename a user with running processes (the
-  agent). The uid stays 1000, so PVC file ownership is unaffected. This
-  matters because Home Manager activation asserts `home.username == $USER`
-  and `home.homeDirectory == $HOME`.
-- **`repo_url` + `flake_dir` + `hm_config`**: first boot clones the repo
-  into the persisted home, then runs
-  `nix run home-manager -- switch -b hm-bak --flake $HOME/<repo>/<flake_dir>#<hm_config>`
+- Workspaces always run as the image's `coder` user (uid 1000) in
+  `/home/coder`. Home Manager activation asserts `home.username == $USER`
+  and `home.homeDirectory == $HOME`, so the flake output named by
+  `hm_config` must declare `home.username = "coder"` and
+  `home.homeDirectory = "/home/coder"`. (A previous iteration renamed uid
+  1000 at boot to a user-chosen name; it required rewriting
+  passwd/group/shadow on every boot and was abandoned as too fragile.)
+- **`repo_url` + `flake_dir` + `hm_config`**: the repo is cloned to
+  `$HOME/.home_repo`, a checkout *owned by the startup script* — it is
+  force-reset (`fetch` + `reset --hard @{upstream}`) to the remote on every
+  boot, so git is the source of truth and local edits there don't survive.
+  First boot then runs
+  `nix run home-manager -- switch -b hm-bak --flake $HOME/.home_repo/<flake_dir>#<hm_config>`
   (gated on a `~/.hm-activated` marker; `-b hm-bak` backs up conflicting
-  dotfiles instead of aborting). Activating from the local checkout — not a
-  `github:` flake ref — means config edits made inside the workspace apply
-  with a plain `home-manager switch`. The flake ref is the *directory*
+  dotfiles instead of aborting). The flake ref is the *directory*
   containing `flake.nix`, which is why `flake_dir` is a repo-relative path
   rather than a URL to the file.
 

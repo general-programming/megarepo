@@ -54,8 +54,8 @@ RUN mkdir -p /etc/profile.d \
         '#!/bin/sh' \
         "export PATH=\"$NIX_BIN_DIR:\$PATH\"" \
         'export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt' \
-        '[ -d "$HOME/.local/state/nix/profiles/profile/bin" ] && PATH="$HOME/.local/state/nix/profiles/profile/bin:$PATH"' \
-        '[ -d "$HOME/.nix-profile/bin" ] && PATH="$HOME/.nix-profile/bin:$PATH"' \
+        'if [ -d "$HOME/.local/state/nix/profiles/profile/bin" ]; then PATH="$HOME/.local/state/nix/profiles/profile/bin:$PATH"; fi' \
+        'if [ -d "$HOME/.nix-profile/bin" ]; then PATH="$HOME/.nix-profile/bin:$PATH"; fi' \
         > /etc/profile.d/nix.sh \
     && chmod 0644 /etc/profile.d/nix.sh \
     && head -2 /etc/profile.d/nix.sh | grep -q '/nix/store/'

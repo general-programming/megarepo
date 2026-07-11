@@ -139,30 +139,11 @@ data "coder_parameter" "flake_dir" {
 data "coder_parameter" "hm_config" {
   name         = "hm_config"
   display_name = "Home Manager configuration"
-  description  = "Name of the homeConfigurations flake output to activate on first boot (e.g. erin). Leave blank to skip Home Manager."
+  description  = "Name of the homeConfigurations flake output to activate on first boot. The config must declare home.username = \"coder\" and home.homeDirectory = \"/home/coder\". Leave blank to skip Home Manager."
   default      = ""
   type         = "string"
   icon         = "/icon/nix.svg"
   mutable      = true
-}
-
-data "coder_parameter" "home_user" {
-  name         = "home_user"
-  display_name = "Home directory user"
-  description  = "Username and /home/<name> for the workspace (uid stays 1000). Leave blank to use your Coder username. Must match home.username / home.homeDirectory in the Home Manager config."
-  default      = ""
-  type         = "string"
-  icon         = "/emojis/1f3e0.png"
-  mutable      = false
-  validation {
-    regex = "^[a-z0-9_-]*$"
-    error = "Must be a valid unix username (lowercase letters, digits, _ and -), or blank."
-  }
-}
-
-locals {
-  workspace_user = data.coder_parameter.home_user.value != "" ? data.coder_parameter.home_user.value : lower(data.coder_workspace_owner.me.name)
-  home_dir       = "/home/${local.workspace_user}"
 }
 
 provider "kubernetes" {
@@ -185,39 +166,33 @@ resource "coder_agent" "main" {
   startup_script = <<-EOT
     set -e
 
-    # /etc/passwd comes from the ephemeral image layer, which names uid 1000
-    # "coder" with home /home/coder — so when the workspace uses a different
-    # home_user this rename has to re-run on every boot, not just the first.
-    # All three renames happen in ONE sudo invocation: the instant passwd
-    # maps uid 1000 to the new name, any further sudo would authenticate as
-    # that name, which must by then exist in shadow (and sudoers) or sudo
-    # locks us out. usermod can't be used because it refuses to rename a
-    # user with running processes (the agent itself).
-    if [ "$USER" != "coder" ] && ! grep -q "^$USER:" /etc/passwd; then
-      echo "$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/$USER" >/dev/null
-      sudo sh -c "
-        sed -i \"s#^coder:#$USER:#; s#:/home/coder:#:$HOME:#\" /etc/passwd
-        sed -i \"s/^coder:/$USER:/\" /etc/group /etc/shadow
-      "
-    fi
-
     # Agent startup scripts run in a non-login shell, so profile.d isn't
-    # sourced automatically — pull nix onto PATH by hand.
-    [ -f /etc/profile.d/nix.sh ] && . /etc/profile.d/nix.sh
+    # sourced automatically — pull nix onto PATH by hand. The if-form
+    # matters under set -e: a bare `[ -f ] && .` propagates the sourced
+    # file's (or the failed test's) nonzero status and kills the script.
+    if [ -f /etc/profile.d/nix.sh ]; then
+      . /etc/profile.d/nix.sh
+    fi
 
     # Optional, one-time dotfiles bootstrap.
     if [ -n "$DOTFILES_URI" ] && [ ! -f "$HOME/.dotfiles-applied" ]; then
       coder dotfiles -y "$DOTFILES_URI" && touch "$HOME/.dotfiles-applied"
     fi
 
-    # Clone the config repo into the persisted home, then activate the Home
-    # Manager configuration from the local checkout (so later edits in the
-    # workspace apply with a plain `home-manager switch`). First boot only,
-    # gated on a marker in $HOME; -b hm-bak backs up conflicting dotfiles
-    # instead of aborting.
+    # Clone the config repo to a fixed, fully-managed path and activate the
+    # Home Manager configuration from it. The checkout is disposable state
+    # owned by this script — git is the source of truth — so existing clones
+    # are force-reset to the remote on every boot rather than merged; only a
+    # fetch failure (best-effort) leaves a stale copy behind. HM activation
+    # runs on first boot only, gated on a marker in $HOME; -b hm-bak backs
+    # up conflicting dotfiles instead of aborting.
     if [ -n "$REPO_URL" ]; then
-      REPO_DIR="$HOME/$(basename "$REPO_URL" .git)"
-      [ -d "$REPO_DIR" ] || git clone "$REPO_URL" "$REPO_DIR"
+      REPO_DIR="$HOME/.home_repo"
+      if [ -d "$REPO_DIR/.git" ]; then
+        git -C "$REPO_DIR" fetch origin && git -C "$REPO_DIR" reset --hard '@{upstream}' || true
+      else
+        git clone "$REPO_URL" "$REPO_DIR"
+      fi
       if [ -n "$HM_CONFIG" ] && [ ! -f "$HOME/.hm-activated" ]; then
         nix run home-manager -- switch -b hm-bak --flake "$REPO_DIR$${FLAKE_DIR:+/$FLAKE_DIR}#$HM_CONFIG"
         touch "$HOME/.hm-activated"
@@ -426,20 +401,6 @@ resource "kubernetes_deployment_v1" "main" {
             name  = "CODER_AGENT_TOKEN"
             value = coder_agent.main.token
           }
-          # Kubernetes derives HOME from the image's passwd entry
-          # (/home/coder); when home_user differs, the agent and everything
-          # it spawns must see the real mount point instead. USER keeps
-          # whoami-adjacent tooling and Home Manager's activation sanity
-          # check (home.username == $USER) in agreement after the passwd
-          # rename in the startup script.
-          env {
-            name  = "HOME"
-            value = local.home_dir
-          }
-          env {
-            name  = "USER"
-            value = local.workspace_user
-          }
           resources {
             requests = {
               "cpu"    = "250m"
@@ -451,7 +412,7 @@ resource "kubernetes_deployment_v1" "main" {
             }
           }
           volume_mount {
-            mount_path = local.home_dir
+            mount_path = "/home/coder"
             name       = "home"
             read_only  = false
           }
