@@ -171,12 +171,21 @@ def _foreign_interface_list(item: dict, owned_names: frozenset) -> bool:
 
 
 def _ssh_key_identity(item: dict) -> Optional[str]:
-    """SSH keys key on (user, key-owner): RouterOS never reads the key
+    """SSH keys key on (user, owner): RouterOS never reads the key
     material back, and the owner name (the public key's trailing
-    comment) is the stable half of the identity."""
-    if item.get("user") is None and item.get("key-owner") is None:
+    comment) is the stable half of the identity. ``key-owner`` is not a
+    real RouterOS property: the device reports the derived owner as
+    ``info``, so a desired (rendered) item -- which has no ``info`` --
+    falls back to splitting it off the rendered ``key`` string, the
+    same way the device derives it."""
+    owner = item.get("info")
+    if owner is None:
+        key = item.get("key")
+        parts = key.split(" ") if key else []
+        owner = parts[2] if len(parts) > 2 else None
+    if item.get("user") is None and owner is None:
         return None
-    return f"{item.get('user')}:{item.get('key-owner')}"
+    return f"{item.get('user')}:{owner}"
 
 
 def _foreign_ssh_key(item: dict, owned_names: frozenset) -> bool:

@@ -90,7 +90,10 @@ class SshConfig(ConfigBlock):
     RouterOS has no supertech, so keys land on ``admin``
     (MIKROTIK_SSH_USER). RouterOS never reads key material back
     (write-only in the diff), so rotating a key must also change its
-    trailing comment (the key-owner identity).
+    trailing comment (the owner identity RouterOS derives and reports
+    back as ``info``). ``key-owner`` is not itself a valid ``add``
+    parameter -- RouterOS rejects it -- so only ``user``/``key`` are
+    sent.
     """
 
     MIKROTIK_SSH_USER = "admin"
@@ -104,7 +107,6 @@ class SshConfig(ConfigBlock):
                     "add",
                     {
                         "user": self.MIKROTIK_SSH_USER,
-                        "key-owner": ssh_key.split(" ")[2],
                         "key": ssh_key,
                     },
                 )

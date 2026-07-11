@@ -16,11 +16,14 @@ NTP_RENDERED = """
 """
 
 SSH_RENDERED = f"""
-/user/ssh-keys add user=admin key-owner="erin" key="{ERIN_KEY}"
+/user/ssh-keys add user=admin key="{ERIN_KEY}"
 """
 
 # Device readback: the singleton carries status noise barf never
-# renders; the ssh key comes back WITHOUT its key material.
+# renders; the ssh key comes back WITHOUT its key material, and its
+# owner under `info` (RouterOS-derived from the key's trailing
+# comment) rather than a settable `key-owner` -- RouterOS rejects
+# `key-owner` as an add parameter.
 NTP_SYNCED = {
     "enabled": "yes",
     "mode": "unicast",
@@ -31,14 +34,14 @@ NTP_SYNCED = {
 ERIN_DEVICE_KEY = {
     ".id": "*1",
     "user": "admin",
-    "key-owner": "erin",
+    "info": "erin",
     "bits": "256",
     "key-type": "ed25519",
 }
 HAND_KEY = {
     ".id": "*2",
     "user": "nep",
-    "key-owner": "nep@laptop",
+    "info": "nep@laptop",
     "bits": "256",
     "key-type": "ed25519",
 }
@@ -118,7 +121,7 @@ class TestSshKeys:
     def test_rendered_key_missing_on_device_is_added(self):
         diff = diff_items(parse_ros_commands(SSH_RENDERED), {"user/ssh-keys": []})
         added = [props for path, props in diff.added if path == "user/ssh-keys"]
-        assert added == [{"user": "admin", "key-owner": "erin", "key": ERIN_KEY}]
+        assert added == [{"user": "admin", "key": ERIN_KEY}]
 
     def test_key_material_is_write_only(self):
         # Device readback has no `key` property; identity matches, so
@@ -143,7 +146,7 @@ class TestSshKeys:
         # Barf owns the WHOLE key set of a user it loads keys onto:
         # a hand-added (or rotated-away) key on that user is stale
         # access, surfaced as a removal.
-        stale = {**HAND_KEY, "user": "admin", "key-owner": "old-laptop"}
+        stale = {**HAND_KEY, "user": "admin", "info": "old-laptop"}
         diff = diff_items(
             parse_ros_commands(SSH_RENDERED),
             {"user/ssh-keys": [ERIN_DEVICE_KEY, stale]},
@@ -151,15 +154,17 @@ class TestSshKeys:
         assert ("user/ssh-keys", "admin:old-laptop") in diff.removed
 
     def test_renamed_owner_rotates_the_key(self):
-        # Rotation recipe: a new key-owner name changes the identity,
-        # so the old key is removed and the new one added.
-        rendered = SSH_RENDERED.replace('key-owner="erin"', 'key-owner="erin-2026"')
+        # Rotation recipe: a new trailing comment on the key (the
+        # derived owner) changes the identity, so the old key is
+        # removed and the new one added.
+        new_key = ERIN_KEY.replace("erin", "erin-2026")
+        rendered = SSH_RENDERED.replace(ERIN_KEY, new_key)
         diff = diff_items(
             parse_ros_commands(rendered), {"user/ssh-keys": [ERIN_DEVICE_KEY]}
         )
         assert ("user/ssh-keys", "admin:erin") in diff.removed
         assert any(
-            props.get("key-owner") == "erin-2026"
+            props.get("key") == new_key
             for path, props in diff.added
             if path == "user/ssh-keys"
         )
