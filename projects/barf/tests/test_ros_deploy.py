@@ -201,3 +201,36 @@ class TestOrchestration:
         )
         host.push_rendered_config(RENDERED)
         assert calls == []
+
+
+class TestDeviceItems:
+    """device_items() fans its REST reads out across threads."""
+
+    def test_fetches_every_path_exactly_once(self, monkeypatch, fake_vault):
+        host = MikroTikHost(hostname="sea420-acc-v-hv2", role="vpn")
+        seen = []
+
+        def fake_api_get(path):
+            seen.append(path)
+            return {"system/ntp/client": {"enabled": "yes"}}.get(path, [])
+
+        monkeypatch.setattr(host, "_api_get", fake_api_get)
+
+        host.device_items()
+
+        expected_paths = set(ros_config.COLLECTIONS) | set(ros_config.SETTINGS)
+        assert set(seen) == expected_paths
+        # Each path fetched once, even though the fetches ran concurrently.
+        assert len(seen) == len(expected_paths)
+
+    def test_wraps_settings_singleton_dicts_in_a_list(self, monkeypatch, fake_vault):
+        host = MikroTikHost(hostname="sea420-acc-v-hv2", role="vpn")
+        monkeypatch.setattr(
+            host,
+            "_api_get",
+            lambda path: {"enabled": "yes"} if path == "system/ntp/client" else [],
+        )
+
+        items = host.device_items()
+
+        assert items["system/ntp/client"] == [{"enabled": "yes"}]

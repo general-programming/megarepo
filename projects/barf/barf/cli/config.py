@@ -1,6 +1,7 @@
 """``barf config``: generate, diff, and deploy device configs."""
 
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import List, Tuple
 
 import click
@@ -67,6 +68,31 @@ def config_generate(targets: Tuple[str, ...], filename: str) -> None:
         click.echo(f"[{host.hostname}] wrote {path}")
 
 
+def _render_and_diff(
+    host: BaseHost,
+    links: list,
+    global_meta: dict,
+    secrets,
+    show_device_only: bool,
+    show_secrets: bool,
+):
+    """Render + diff one host; exceptions are returned, not raised.
+
+    Runs on a worker thread (see ``config_diff``), so errors are
+    handed back to the main thread to report instead of blowing up
+    ``future.result()`` mid-loop.
+    """
+    rendered = render_host_config(host, links, global_meta, secrets)
+    try:
+        return host.diff_config(
+            rendered,
+            redact=not show_secrets,
+            show_device_only=show_device_only,
+        )
+    except Exception as e:  # noqa: BLE001 - handed back to the main thread
+        return e
+
+
 @config.command("diff")
 @click.argument("targets", nargs=-1, required=True)
 @_FILENAME_OPTION
@@ -87,24 +113,31 @@ def config_diff(
     targets_hosts, links, global_meta = _load_targets(filename, targets)
     secrets = _secrets()
 
+    # Each diff is dominated by a network round trip to an independent
+    # device; running the fleet serially means paying that latency
+    # once per host instead of once, total.
+    with ThreadPoolExecutor(max_workers=min(16, len(targets_hosts))) as pool:
+        outcomes = list(
+            pool.map(
+                lambda host: _render_and_diff(
+                    host, links, global_meta, secrets, show_device_only, show_secrets
+                ),
+                targets_hosts,
+            )
+        )
+
     results = []
     failed = False
-    for host in targets_hosts:
-        rendered = render_host_config(host, links, global_meta, secrets)
-        try:
-            diff = host.diff_config(
-                rendered,
-                redact=not show_secrets,
-                show_device_only=show_device_only,
-            )
-        except NotImplementedError:
+    for host, outcome in zip(targets_hosts, outcomes):
+        if isinstance(outcome, NotImplementedError):
             results.append([host.hostname, "skipped: no diff support"])
             continue
-        except Exception as e:  # noqa: BLE001 - report per-device failures
-            results.append([host.hostname, f"failed: {e}"])
+        if isinstance(outcome, Exception):
+            results.append([host.hostname, f"failed: {outcome}"])
             failed = True
             continue
 
+        diff = outcome
         if diff.text.strip():
             click.echo(f"--- {host.hostname} ---")
             click.echo(diff.text)

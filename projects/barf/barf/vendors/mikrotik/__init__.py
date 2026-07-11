@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, List, Optional
 
 from barf.util.secrets import VaultSecrets
@@ -91,10 +92,18 @@ class MikroTikHost(BaseHost):
 
         SETTINGS singletons come back as a bare object; they are
         wrapped in a one-item list so every path holds a list.
+
+        One REST round trip per path, each opening its own HTTPS
+        connection (``ros_api`` doesn't keep-alive) -- fetched
+        concurrently so ~20 paths cost one round trip, not twenty.
         """
-        items = {path: self._api_get(path) for path in ros_config.COLLECTIONS}
+        paths = list(ros_config.COLLECTIONS) + list(ros_config.SETTINGS)
+        with ThreadPoolExecutor(max_workers=min(16, len(paths))) as pool:
+            fetched = dict(zip(paths, pool.map(self._api_get, paths)))
+
+        items = {path: fetched[path] for path in ros_config.COLLECTIONS}
         for path in ros_config.SETTINGS:
-            value = self._api_get(path)
+            value = fetched[path]
             items[path] = [value] if isinstance(value, dict) else value
         return items
 

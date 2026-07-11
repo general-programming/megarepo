@@ -1,4 +1,5 @@
 import importlib
+import threading
 
 from click.testing import CliRunner
 
@@ -223,3 +224,31 @@ def test_no_targets_is_a_usage_error(monkeypatch, tmp_path):
     filename = wire(monkeypatch, tmp_path, [FakeHost("box1")])
     result = CliRunner().invoke(config, ["diff", "--filename", filename])
     assert result.exit_code != 0
+
+
+def test_diff_runs_hosts_concurrently(monkeypatch, tmp_path):
+    """Each host's diff blocks on a barrier every other host must reach too.
+
+    A serial loop would deadlock (each host waits alone and times out);
+    only genuinely concurrent execution lets all three rendezvous.
+    """
+    n = 3
+    barrier = threading.Barrier(n, timeout=5)
+
+    class BlockingHost(FakeHost):
+        def diff_config(self, rendered: str, *, redact=True, show_device_only=False):
+            barrier.wait()
+            return self._diff
+
+    hosts = [
+        BlockingHost(
+            f"box{i}",
+            diff=DeployDiff(text="", has_changes=False, summary="no changes"),
+        )
+        for i in range(n)
+    ]
+    filename = wire(monkeypatch, tmp_path, hosts)
+
+    result = CliRunner().invoke(config, ["diff", "all", "--filename", filename])
+    assert result.exit_code == 0, result.output
+    assert result.output.count("no changes") == n
