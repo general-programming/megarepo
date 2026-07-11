@@ -42,20 +42,22 @@ RUN mkdir -p /etc/nix \
 
 # /home/coder is replaced by an empty persistent volume at runtime, so the
 # ~/.nix-profile shell integration the installer just wrote there won't
-# survive a real workspace boot. A system-wide profile.d script sourced from
-# a fixed path under /nix (which does persist) fixes this for every shell.
-# The template can rename uid 1000 away from "coder" (home_user parameter),
-# so try the current $USER's per-user profile first and fall back to the
-# "coder" profile the seed image ships with.
+# survive a real workspace boot — and modern Nix keeps single-user profiles
+# under ~/.local/state/nix, not /nix, so there is no stable profile path in
+# the persisted store to source from. Instead, resolve the nix package's
+# /nix/store path right now at build time and bake it into a system-wide
+# profile.d script; user profiles (once home-manager or nix profile create
+# them in the persisted home) are prepended so they take precedence.
 RUN mkdir -p /etc/profile.d \
+    && NIX_BIN_DIR="$(dirname "$(readlink -f /home/coder/.nix-profile/bin/nix)")" \
     && printf '%s\n' \
         '#!/bin/sh' \
-        'for _nix_user in "$USER" coder; do' \
-        '  _nix_sh="/nix/var/nix/profiles/per-user/$_nix_user/profile/etc/profile.d/nix.sh"' \
-        '  if [ -e "$_nix_sh" ]; then . "$_nix_sh"; break; fi' \
-        'done' \
-        'unset _nix_user _nix_sh' \
+        "export PATH=\"$NIX_BIN_DIR:\$PATH\"" \
+        'export NIX_SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt' \
+        '[ -d "$HOME/.local/state/nix/profiles/profile/bin" ] && PATH="$HOME/.local/state/nix/profiles/profile/bin:$PATH"' \
+        '[ -d "$HOME/.nix-profile/bin" ] && PATH="$HOME/.nix-profile/bin:$PATH"' \
         > /etc/profile.d/nix.sh \
-    && chmod 0644 /etc/profile.d/nix.sh
+    && chmod 0644 /etc/profile.d/nix.sh \
+    && head -2 /etc/profile.d/nix.sh | grep -q '/nix/store/'
 
 USER coder

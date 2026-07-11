@@ -188,13 +188,17 @@ resource "coder_agent" "main" {
     # /etc/passwd comes from the ephemeral image layer, which names uid 1000
     # "coder" with home /home/coder — so when the workspace uses a different
     # home_user this rename has to re-run on every boot, not just the first.
-    # The new sudoers entry is written *before* the passwd rename, while sudo
-    # still recognizes the "coder" name; usermod can't be used because it
-    # refuses to rename a user with running processes (the agent itself).
+    # All three renames happen in ONE sudo invocation: the instant passwd
+    # maps uid 1000 to the new name, any further sudo would authenticate as
+    # that name, which must by then exist in shadow (and sudoers) or sudo
+    # locks us out. usermod can't be used because it refuses to rename a
+    # user with running processes (the agent itself).
     if [ "$USER" != "coder" ] && ! grep -q "^$USER:" /etc/passwd; then
       echo "$USER ALL=(ALL) NOPASSWD:ALL" | sudo tee "/etc/sudoers.d/$USER" >/dev/null
-      sudo sed -i "s#^coder:#$USER:#; s#:/home/coder:#:$HOME:#" /etc/passwd
-      sudo sed -i "s/^coder:/$USER:/" /etc/group
+      sudo sh -c "
+        sed -i \"s#^coder:#$USER:#; s#:/home/coder:#:$HOME:#\" /etc/passwd
+        sed -i \"s/^coder:/$USER:/\" /etc/group /etc/shadow
+      "
     fi
 
     # Agent startup scripts run in a non-login shell, so profile.d isn't
@@ -372,19 +376,28 @@ resource "kubernetes_deployment_v1" "main" {
         # Seeds the persisted /nix (mounted below at "/mnt/nix-seed" via the
         # "_nix" subPath of the home PVC) from this same image's own
         # baked-in /nix, but only on first boot. Gated on a marker file
-        # written only after cp -a finishes, so a crash mid-copy just
-        # retries the whole (idempotent) copy on the next start instead of
-        # permanently leaving a half-seeded store.
+        # written only after the copy finishes. Two hard-won subtleties:
+        #  - kubelet creates the subPath dir root-owned, so `cp -a /nix/.`
+        #    fatally fails preserving times on the destination root as uid
+        #    1000 — copy the top-level entries instead, never "." itself.
+        #  - a partial seed leaves read-only (555) store dirs that block
+        #    any re-copy, so a missing marker wipes the partial copy first
+        #    (chmod u+w before rm; store contents are read-only).
         init_container {
           name              = "seed-nix"
           image             = var.workspace_image
-          image_pull_policy = "IfNotPresent"
+          image_pull_policy = "Always"
           command = ["sh", "-c", <<-EOT
             set -e
             MARKER=/mnt/nix-seed/.seed-complete
             if [ ! -f "$MARKER" ]; then
+              if [ -e /mnt/nix-seed/store ] || [ -e /mnt/nix-seed/var ]; then
+                echo "Removing partial seed from a previous failed attempt..."
+                find /mnt/nix-seed -mindepth 1 -maxdepth 1 ! -name 'lost+found' -exec chmod -R u+w {} +
+                find /mnt/nix-seed -mindepth 1 -maxdepth 1 ! -name 'lost+found' -exec rm -rf {} +
+              fi
               echo "Seeding persistent /nix from image..."
-              cp -a /nix/. /mnt/nix-seed/
+              cp -a /nix/store /nix/var /mnt/nix-seed/
               touch "$MARKER"
             else
               echo "/nix already seeded, skipping."
@@ -404,7 +417,7 @@ resource "kubernetes_deployment_v1" "main" {
         container {
           name              = "dev"
           image             = var.workspace_image
-          image_pull_policy = "IfNotPresent"
+          image_pull_policy = "Always"
           command           = ["sh", "-c", coder_agent.main.init_script]
           security_context {
             run_as_user = 1000
