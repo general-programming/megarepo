@@ -10,6 +10,7 @@ from barf.util.images import PROVIDERS
 from barf.util.network import load_network
 from barf.util.render import prefetch_link_keys, render_host_config
 from barf.util.secrets import VaultSecrets
+from barf.util.ssh import DeviceSSH
 from barf.vendors import BaseHost
 
 log = logging.getLogger(__name__)
@@ -120,6 +121,42 @@ def device_status(filename: str) -> None:
         ],
         rows,
     )
+
+
+@device.command("ssh")
+@click.argument("target")
+@click.option(
+    "--filename",
+    default="network.yml",
+    show_default=True,
+    type=click.Path(exists=True),
+)
+def device_ssh(target: str, filename: str) -> None:
+    """Open an interactive shell on TARGET (a hostname).
+
+    Authenticates the same way deploys do: agent/local keys first as
+    the vendor's SSH user, falling back to the shared supertech
+    password from Vault. Exits with the remote shell's exit status.
+    """
+    if target == "all":
+        raise click.ClickException("device ssh takes a single hostname")
+
+    hosts, _links, _global_meta = load_network(filename)
+    host = resolve_targets(hosts, target)[0]
+
+    address = host.ssh_ip
+    if not address:
+        raise click.ClickException(f"{host.hostname}: no reachable SSH address")
+
+    try:
+        with DeviceSSH(host, address, username=host.SSH_USERNAME) as conn:
+            click.echo(f"[{host.hostname}] connected as {conn.username}@{address}")
+            status = conn.interactive_shell()
+    except RuntimeError as e:
+        raise click.ClickException(str(e)) from e
+
+    if status:
+        raise SystemExit(status)
 
 
 def wait_for_device_alive(

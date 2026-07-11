@@ -138,3 +138,91 @@ def test_status_unreachable_host_row(monkeypatch, tmp_path):
     assert result.exit_code == 0, result.output
     row = next(line for line in result.output.splitlines() if "box1" in line)
     assert "error: timed out" in row
+
+
+class FakeShellSSH:
+    """Records DeviceSSH construction and fakes the interactive shell."""
+
+    calls = []
+    status = 0
+    fail_with = None
+
+    def __init__(self, host, address, username=None):
+        if type(self).fail_with:
+            raise RuntimeError(type(self).fail_with)
+        type(self).calls.append((host.hostname, address, username))
+        self.username = username or "supertech"
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        pass
+
+    def interactive_shell(self):
+        return type(self).status
+
+
+def make_ssh_host(hostname="box1", ssh_ip="10.0.0.9", ssh_username=None):
+    return SimpleNamespace(hostname=hostname, ssh_ip=ssh_ip, SSH_USERNAME=ssh_username)
+
+
+def run_ssh(monkeypatch, tmp_path, hosts, target, status=0, fail_with=None):
+    network = tmp_path / "network.yml"
+    network.write_text("hosts: {}\n")
+
+    monkeypatch.setattr(device_cli, "load_network", lambda f: (hosts, [], {}))
+    monkeypatch.setattr(device_cli, "DeviceSSH", FakeShellSSH)
+    FakeShellSSH.calls = []
+    FakeShellSSH.status = status
+    FakeShellSSH.fail_with = fail_with
+
+    return CliRunner().invoke(
+        device_cli.device,
+        ["ssh", target, "--filename", str(network)],
+        catch_exceptions=False,
+    )
+
+
+def test_ssh_connects_with_vendor_user(monkeypatch, tmp_path):
+    result = run_ssh(monkeypatch, tmp_path, [make_ssh_host()], "box1")
+    assert result.exit_code == 0, result.output
+    assert FakeShellSSH.calls == [("box1", "10.0.0.9", None)]
+    assert "connected as supertech@10.0.0.9" in result.output
+
+
+def test_ssh_passes_vendor_ssh_username(monkeypatch, tmp_path):
+    host = make_ssh_host(ssh_username="root")
+    result = run_ssh(monkeypatch, tmp_path, [host], "box1")
+    assert result.exit_code == 0, result.output
+    assert FakeShellSSH.calls == [("box1", "10.0.0.9", "root")]
+
+
+def test_ssh_propagates_remote_exit_status(monkeypatch, tmp_path):
+    result = run_ssh(monkeypatch, tmp_path, [make_ssh_host()], "box1", status=3)
+    assert result.exit_code == 3
+
+
+def test_ssh_rejects_all(monkeypatch, tmp_path):
+    result = run_ssh(monkeypatch, tmp_path, [make_ssh_host()], "all")
+    assert result.exit_code == 1
+    assert "single hostname" in result.output
+
+
+def test_ssh_unreachable_host(monkeypatch, tmp_path):
+    host = make_ssh_host(ssh_ip=None)
+    result = run_ssh(monkeypatch, tmp_path, [host], "box1")
+    assert result.exit_code == 1
+    assert "no reachable SSH address" in result.output
+
+
+def test_ssh_auth_failure_is_a_clean_error(monkeypatch, tmp_path):
+    result = run_ssh(
+        monkeypatch,
+        tmp_path,
+        [make_ssh_host()],
+        "box1",
+        fail_with="all SSH auth methods failed",
+    )
+    assert result.exit_code == 1
+    assert "all SSH auth methods failed" in result.output

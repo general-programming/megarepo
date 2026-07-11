@@ -1,6 +1,14 @@
 import hashlib
 import logging
+import os
+import select
 import shlex
+import shutil
+import signal
+import socket
+import sys
+import termios
+import tty
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -102,6 +110,57 @@ class DeviceSSH:
 
     def close(self) -> None:
         self.client.close()
+
+    def interactive_shell(self) -> int:
+        """Attach the local terminal to a shell on the device.
+
+        Puts the local tty into raw mode and pumps bytes both ways
+        until the remote shell exits, forwarding window resizes as
+        SIGWINCH arrives. Returns the remote exit status (0 when the
+        device does not report one).
+        """
+        if not sys.stdin.isatty():
+            raise RuntimeError("an interactive terminal is required")
+
+        size = shutil.get_terminal_size()
+        channel = self.client.invoke_shell(
+            term=os.environ.get("TERM", "xterm"),
+            width=size.columns,
+            height=size.lines,
+        )
+
+        def forward_resize(signum, frame):
+            new_size = shutil.get_terminal_size()
+            channel.resize_pty(width=new_size.columns, height=new_size.lines)
+
+        stdin_fd = sys.stdin.fileno()
+        saved_attrs = termios.tcgetattr(stdin_fd)
+        saved_winch = signal.signal(signal.SIGWINCH, forward_resize)
+        try:
+            tty.setraw(stdin_fd)
+            channel.settimeout(0.0)
+            while True:
+                readable, _, _ = select.select([channel, stdin_fd], [], [])
+                if channel in readable:
+                    try:
+                        data = channel.recv(65536)
+                    except socket.timeout:
+                        continue
+                    if not data:
+                        break
+                    os.write(sys.stdout.fileno(), data)
+                if stdin_fd in readable:
+                    data = os.read(stdin_fd, 65536)
+                    if not data:
+                        break
+                    channel.sendall(data)
+        finally:
+            termios.tcsetattr(stdin_fd, termios.TCSADRAIN, saved_attrs)
+            signal.signal(signal.SIGWINCH, saved_winch)
+
+        status = channel.recv_exit_status() if channel.exit_status_ready() else 0
+        channel.close()
+        return status
 
     def run(self, command: str, timeout: int = 60) -> tuple[int, str]:
         """Run a single command, returning (exit_status, output)."""

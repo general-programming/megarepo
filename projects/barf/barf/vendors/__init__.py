@@ -385,6 +385,9 @@ class BaseHost:
     # NAPALM driver name for vendors that support config diff/deploy
     # over the generic NAPALM path; None disables both.
     NAPALM_DRIVER: Optional[str] = None
+    # User for direct SSH logins (keys only); None means the shared
+    # supertech user, with its Vault password as the fallback.
+    SSH_USERNAME: Optional[str] = None
 
     def __init__(
         self,
