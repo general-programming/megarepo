@@ -164,9 +164,7 @@ resource "coder_agent" "main" {
     HM_CONFIG    = data.coder_parameter.hm_config.value
   }
   startup_script = <<-EOT
-    # -x traces every command into the startup log (visible in the Coder
-    # dashboard / `coder ssh` MOTD), which is most of the visibility into
-    # long first-boot bootstraps.
+    # -x traces each bootstrap step into the startup log.
     set -ex
 
     # Agent startup scripts run in a non-login shell, so profile.d isn't
@@ -197,9 +195,7 @@ resource "coder_agent" "main" {
         git clone "$REPO_URL" "$REPO_DIR"
       fi
       if [ -n "$HM_CONFIG" ] && [ ! -f "$HOME/.hm-activated" ]; then
-        # -L streams every derivation's build log instead of silence during
-        # long builds (on both the outer nix run fetching home-manager and
-        # the switch itself); --show-trace gives usable eval errors.
+        # -L streams per-derivation build logs; --show-trace for eval errors.
         nix run -L home-manager -- switch -b hm-bak -L -v --show-trace \
           --flake "$REPO_DIR$${FLAKE_DIR:+/$FLAKE_DIR}#$HM_CONFIG"
         touch "$HOME/.hm-activated"
