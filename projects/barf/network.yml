@@ -8,6 +8,14 @@ global_meta:
   snmp_location: General Programming Virtual Infrastructure
   ssh_keys:
     - "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMVk9i7FG7dc9r4ixwAJT7uPLH3UuqbwIgeZ7Ytmnpvv erin"
+  # Firmware mirror (barf/util/firmware.py): device update publishes
+  # images (and their .minisig) here, then devices install straight
+  # from the public URL. API tokens live in Vault at secret/r2-firmware.
+  firmware:
+    s3_endpoint: https://6bf403c1bd9a90269d9b160ed2f1f3c8.r2.cloudflarestorage.com
+    bucket: public
+    prefix: firmware
+    public_base: https://files.owo.me
   # Global Administrator field for the fabric's site-origin large
   # communities (RFC 8195): one stable fabric-wide value so importers
   # match the exact <community_asn>:<func>:<site_id> triplet. bird's

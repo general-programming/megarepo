@@ -12,8 +12,6 @@ only sourced where config-mode commands are needed, and every real
 script exit after that point uses ``builtin exit``.
 """
 
-import posixpath
-
 # Op-mode commands via the wrapper work regardless of shell context.
 _HEADER = """#!/bin/vbash
 OP=/opt/vyatta/bin/vyatta-op-cmd-wrapper
@@ -23,28 +21,23 @@ set -o pipefail
 _CONFIG_TEMPLATE = "source /opt/vyatta/etc/functions/script-template"
 
 
-def precheck(image_path: str, required_mb: int) -> str:
+def precheck(required_mb: int, scratch_dir: str = "/tmp") -> str:
     """Refuse to touch a device with a full disk or unsaved config.
 
-    An already-staged copy at ``image_path`` is overwritten by the
-    transfer, so its size counts toward the free space.
+    The installer downloads the image into ``scratch_dir`` and unpacks
+    it from there, so that directory needs the headroom.
 
     Note: this catches committed-but-unsaved changes. Uncommitted edits
     live only inside another user's config session and are not visible
     from here.
     """
-    image_dir = posixpath.dirname(image_path) or "/tmp"
     return (
         _HEADER
         + f"""
 # Disk check first, in plain bash, where `exit` still works normally.
-free_kb="$(df --output=avail {image_dir} | tail -1 | tr -d ' ')"
-existing_kb=0
-if [ -f "{image_path}" ]; then
-    existing_kb="$(du -k "{image_path}" | cut -f1)"
-fi
-if [ "$((free_kb + existing_kb))" -lt {required_mb * 1024} ]; then
-    echo "PRECHECK-FAIL: less than {required_mb}MB free in {image_dir} (counting the $((existing_kb / 1024))MB reusable image)"
+free_kb="$(df --output=avail {scratch_dir} | tail -1 | tr -d ' ')"
+if [ "$free_kb" -lt {required_mb * 1024} ]; then
+    echo "PRECHECK-FAIL: less than {required_mb}MB free in {scratch_dir}"
     exit 1
 fi
 
@@ -65,8 +58,15 @@ builtin exit 0
     )
 
 
-def install(image_path: str, version: str) -> str:
-    """Install the copied image and make it the default boot image.
+def install(image_url: str, version: str) -> str:
+    """Install the image from its mirror URL and make it default boot.
+
+    The device downloads ``image_url`` itself and fetches
+    ``<image_url>.minisig`` alongside it, verifying the signature
+    against its bundled release key before installing. When the mirror
+    has no signature, the installer's continue-without-verification
+    prompt gets a bare newline like every other prompt, taking whatever
+    the installer's default is rather than blindly answering yes.
 
     Idempotence lives in the caller: a directory in /boot alone does not
     prove the image is the default boot image, so the caller checks
@@ -90,10 +90,9 @@ fi
 # Accept the installer's defaults: image name, default boot, copy config,
 # copy SSH host keys. The NAME prompt comes first, so every answer must be
 # a plain newline -- a literal "y" there names the image "y".
-printf '\\n\\n\\n\\n\\n' | $OP add system image "{image_path}"
+printf '\\n\\n\\n\\n\\n' | $OP add system image "{image_url}"
 
 if [ -d "/lib/live/mount/persistence/boot/{version}" ] || [ -d "/boot/{version}" ]; then
-    rm -f "{image_path}"
     echo "INSTALL-OK: image {version} installed and set for next boot"
 else
     echo "INSTALL-FAIL: {version} not present after add system image"

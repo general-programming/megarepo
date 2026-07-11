@@ -3,6 +3,7 @@ import json
 import logging
 import urllib.request
 from pathlib import Path
+from typing import Optional
 
 from barf.util.progress import PvProgress
 
@@ -30,6 +31,10 @@ class ImageProvider:
     def download(self) -> Path:
         """Download the latest image into the local cache, once."""
         raise NotImplementedError
+
+    def download_signature(self) -> Optional[Path]:
+        """Download the image's detached signature, if upstream ships one."""
+        return None
 
 
 class VyOSImageProvider(ImageProvider):
@@ -63,11 +68,21 @@ class VyOSImageProvider(ImageProvider):
     def is_current(self, version: str) -> bool:
         return self.latest_version in version
 
-    def download(self) -> Path:
-        target = CACHE_DIR / self.asset["name"]
-        size = self.asset["size"]
+    @functools.cached_property
+    def signature_asset(self) -> Optional[dict]:
+        """The image's ``.minisig`` asset, or None when upstream has none."""
+        wanted = self.asset["name"] + ".minisig"
+        for asset in self.release["assets"]:
+            if asset["name"] == wanted:
+                return asset
+        return None
+
+    def _fetch(self, asset: dict) -> Path:
+        """Download one release asset into the local cache, once."""
+        target = CACHE_DIR / asset["name"]
+        size = asset["size"]
         if target.exists() and target.stat().st_size == size:
-            log.debug("Image already cached: %s", target)
+            log.debug("Asset already cached: %s", target)
             return target
 
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -77,7 +92,7 @@ class VyOSImageProvider(ImageProvider):
         try:
             with (
                 urllib.request.urlopen(
-                    self.asset["browser_download_url"], timeout=30
+                    asset["browser_download_url"], timeout=30
                 ) as resp,
                 open(partial, "wb") as f,
             ):
@@ -94,6 +109,18 @@ class VyOSImageProvider(ImageProvider):
 
         partial.rename(target)
         return target
+
+    def download(self) -> Path:
+        return self._fetch(self.asset)
+
+    def download_signature(self) -> Optional[Path]:
+        if not self.signature_asset:
+            log.warning(
+                "release %s ships no .minisig; the image will be mirrored unsigned",
+                self.latest_version,
+            )
+            return None
+        return self._fetch(self.signature_asset)
 
 
 PROVIDERS: dict[str, ImageProvider] = {

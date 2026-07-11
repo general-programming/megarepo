@@ -1,23 +1,45 @@
 import importlib
-from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 from barf.cli.device import device as device_group
+from barf.util.firmware import FirmwareMirror
 
 device_cli = importlib.import_module("barf.cli.device")
+
+IMAGE_NAME = "vyos-2.0-generic-amd64.iso"
 
 
 class FakeProvider:
     latest_version = "2.0"
+    has_signature = False
 
     def is_current(self, version: str) -> bool:
         return version == "2.0"
 
-    def download(self) -> Path:
-        return Path("/tmp/fake.iso")
+    def download(self):
+        return SimpleNamespace(
+            name=IMAGE_NAME, stat=lambda: SimpleNamespace(st_size=123)
+        )
+
+    def download_signature(self):
+        if not self.has_signature:
+            return None
+        return SimpleNamespace(name=IMAGE_NAME + ".minisig")
+
+
+class FakeMirror:
+    published = []
+
+    @classmethod
+    def from_meta(cls, global_meta):
+        return cls()
+
+    def publish(self, image, signature=None):
+        type(self).published.append((image.name, signature))
+        return f"https://files.owo.me/firmware/{image.name}"
 
 
 class FakeHost:
@@ -51,10 +73,8 @@ class FakeHost:
     def verify_routing(self):
         return None
 
-    def update_host(self, filename, stage, drain_wait=5, version=None):
-        self.update_calls.append({"stage": stage, "version": version})
-        if stage:
-            return f"staged {version}"
+    def update_host(self, url, size, drain_wait=5, version=None):
+        self.update_calls.append({"url": url, "size": size, "version": version})
         self._running = version
         return f"rebooting into {version}"
 
@@ -85,6 +105,8 @@ def cli_env(monkeypatch, tmp_path):
         "wait_for_device_alive",
         lambda host, changed_from=None, **kwargs: host.version(),
     )
+    monkeypatch.setattr(device_cli, "FirmwareMirror", FakeMirror)
+    FakeMirror.published = []
     return env
 
 
@@ -117,21 +139,15 @@ def test_update_already_current_short_circuits(cli_env):
     assert host.update_calls == []
 
 
-def test_update_stage_calls_update_host_with_stage(cli_env):
-    host = FakeHost("a", provider=FakeProvider())
-    cli_env.hosts = [host]
-    result = invoke(cli_env, "update", "all", "--stage")
-    assert result.exit_code == 0
-    assert host.update_calls == [{"stage": True, "version": "2.0"}]
-
-
-def test_update_declined_confirmation_stages_instead(cli_env):
+def test_update_declined_confirmation_skips_device(cli_env):
     host = FakeHost("a", provider=FakeProvider())
     cli_env.hosts = [host]
     result = invoke(cli_env, "update", "all", input="n\n")
     assert result.exit_code == 0
     assert "(reboot declined)" in result.output
-    assert host.update_calls == [{"stage": True, "version": "2.0"}]
+    # The image is still mirrored, but the device is never touched.
+    assert FakeMirror.published == [(IMAGE_NAME, None)]
+    assert host.update_calls == []
 
 
 def test_update_full_run_updates_and_verifies(cli_env):
@@ -140,7 +156,36 @@ def test_update_full_run_updates_and_verifies(cli_env):
     result = invoke(cli_env, "update", "all", "--yes")
     assert result.exit_code == 0
     assert "updated to 2.0" in result.output
-    assert host.update_calls == [{"stage": False, "version": "2.0"}]
+    assert host.update_calls == [
+        {
+            "url": f"https://files.owo.me/firmware/{IMAGE_NAME}",
+            "size": 123,
+            "version": "2.0",
+        }
+    ]
+
+
+def test_update_mirrors_the_signature_alongside(cli_env):
+    provider = FakeProvider()
+    provider.has_signature = True
+    cli_env.hosts = [FakeHost("a", provider=provider)]
+
+    result = invoke(cli_env, "update", "all", "--yes")
+
+    assert result.exit_code == 0
+    (published,) = FakeMirror.published
+    assert published[0] == IMAGE_NAME
+    assert published[1].name == IMAGE_NAME + ".minisig"
+
+
+def test_update_requires_mirror_config(cli_env, monkeypatch):
+    monkeypatch.setattr(device_cli, "FirmwareMirror", FirmwareMirror)
+    cli_env.hosts = [FakeHost("a", provider=FakeProvider())]
+
+    result = invoke(cli_env, "update", "all", "--yes")
+
+    assert result.exit_code != 0
+    assert "no firmware mirror configured" in result.output
 
 
 def test_update_failure_aborts_remaining_devices(cli_env):

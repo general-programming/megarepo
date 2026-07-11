@@ -6,11 +6,12 @@ import pytest
 from barf.util import vyos_scripts
 
 VERSION = "2026.06.30-0048-rolling"
+IMAGE_URL = f"https://files.owo.me/firmware/vyos-{VERSION}-generic-amd64.iso"
 TEMPLATE = "source /opt/vyatta/etc/functions/script-template"
 
 
 def test_precheck_contents():
-    script = vyos_scripts.precheck("/tmp/x.iso", required_mb=1024)
+    script = vyos_scripts.precheck(required_mb=1024)
     assert script.startswith("#!/bin/vbash")
     assert "df --output=avail /tmp" in script
     assert str(1024 * 1024) in script
@@ -19,35 +20,31 @@ def test_precheck_contents():
     assert "PRECHECK-FAIL" in script
 
 
-def test_precheck_counts_existing_image_as_free_space():
-    # An already-staged copy gets overwritten, so its size is reusable.
-    script = vyos_scripts.precheck("/tmp/x.iso", required_mb=1024)
-    assert 'du -k "/tmp/x.iso"' in script
-    assert "free_kb + existing_kb" in script
-
-
 def test_precheck_disk_check_runs_before_script_template():
     # script-template hijacks `exit`, so the disk check (and its exit 1)
     # must happen before the template is sourced, and every later exit
     # must use `builtin exit`.
-    script = vyos_scripts.precheck("/tmp/x.iso", required_mb=1024)
+    script = vyos_scripts.precheck(required_mb=1024)
     assert script.index("df --output=avail") < script.index(TEMPLATE)
     assert "builtin exit 1" in script
     assert "builtin exit 0" in script
 
 
 def test_install_contents():
-    script = vyos_scripts.install(f"/tmp/vyos-{VERSION}.iso", VERSION)
-    assert f'add system image "/tmp/vyos-{VERSION}.iso"' in script
+    script = vyos_scripts.install(IMAGE_URL, VERSION)
+    # The device downloads (and signature-verifies) the mirrored image
+    # itself; nothing is pushed over SFTP anymore.
+    assert f'add system image "{IMAGE_URL}"' in script
     # No early-exit on a mere /boot directory: idempotence is decided by
     # the caller via `show system image`, so the installer always runs.
     assert "already installed" not in script
     # Presence is verified on the filesystem, not via the op wrapper.
     assert f"/lib/live/mount/persistence/boot/{VERSION}" in script
-    # The copied image is cleaned up after a successful install.
-    assert "rm -f" in script
     assert "INSTALL-OK" in script
     assert "INSTALL-FAIL" in script
+    # The installer cleans up its own download; there is no staged copy
+    # for the script to remove.
+    assert "rm -f" not in script
     # No config-mode commands here, so the exit-hijacking template must
     # not be sourced at all.
     assert TEMPLATE not in script
@@ -56,7 +53,7 @@ def test_install_contents():
 def test_install_sweeps_stale_installer_leftovers():
     # An interrupted install leaves /mnt/installation behind and the next
     # run dies with "[Errno 17] File exists" unless it is cleared first.
-    script = vyos_scripts.install("/tmp/x.iso", VERSION)
+    script = vyos_scripts.install(IMAGE_URL, VERSION)
     sweep = script.index("rm -rf /mnt/installation")
     assert "umount" in script
     assert "awk '$3 ~ \"^/mnt/installation\" {print $3}'" in script
@@ -68,7 +65,7 @@ def test_install_sweeps_stale_installer_leftovers():
 def test_install_answers_prompts_with_defaults_only():
     # The installer's FIRST prompt is the image name: answering "y" would
     # name the image "y", so every scripted answer must be a bare newline.
-    script = vyos_scripts.install("/tmp/x.iso", VERSION)
+    script = vyos_scripts.install(IMAGE_URL, VERSION)
     assert "printf '\\n\\n\\n\\n\\n'" in script
     assert "printf 'y" not in script
 
@@ -106,8 +103,8 @@ def test_drain_and_reboot_without_bgp():
 @pytest.mark.parametrize(
     "script",
     [
-        vyos_scripts.precheck("/tmp/x.iso", 1024),
-        vyos_scripts.install("/tmp/x.iso", VERSION),
+        vyos_scripts.precheck(1024),
+        vyos_scripts.install(IMAGE_URL, VERSION),
         vyos_scripts.drain_and_reboot(VERSION, 30, True),
         vyos_scripts.drain_and_reboot(VERSION, 30, False),
     ],

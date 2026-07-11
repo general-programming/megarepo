@@ -1,6 +1,7 @@
 import math
+import posixpath
 import time
-from pathlib import Path
+import urllib.parse
 from typing import TYPE_CHECKING, List, Optional
 
 import click
@@ -188,33 +189,32 @@ class VyOSHost(BaseHost):
 
     def update_host(
         self,
-        filename: str,
-        stage: bool,
+        url: str,
+        size: int,
         drain_wait: int = 5,
         version: Optional[str] = None,
     ) -> str:
-        """Stage a new system image onto the device, optionally rebooting.
+        """Install a new system image from its mirror URL, then reboot.
 
-        Staging only copies the image to /tmp on the device; the actual
-        ``add system image`` install happens on the reboot path, right
-        before the BGP drain. An image that ``show system image`` already
-        lists as default boot skips straight to the reboot; one that is
-        listed but not default (an interrupted install) is deleted and
-        reinstalled cleanly.
+        The device downloads the image itself (``add system image
+        <url>``), verifying the mirrored ``<url>.minisig`` before
+        installing; the drain+reboot follows right after. An image that
+        ``show system image`` already lists as default boot skips
+        straight to the reboot; one that is listed but not default (an
+        interrupted install) is deleted and reinstalled cleanly.
 
         Args:
-            filename: Local path of the image to push.
-            stage: Only copy the image; do not install or reboot.
+            url: Public URL the device downloads the image from.
+            size: Image size in bytes, for the free-space precheck.
             drain_wait: Seconds to wait after the BGP shutdown.
-            version: Image version; derived from the filename when not
-                given.
+            version: Image version; derived from the URL when not given.
 
         Returns:
             A short human-readable result.
         """
-        image = Path(filename)
+        image_name = posixpath.basename(urllib.parse.urlsplit(url).path)
         if version is None:
-            version = image.name.removeprefix("vyos-").removesuffix(
+            version = image_name.removeprefix("vyos-").removesuffix(
                 "-generic-amd64.iso"
             )
 
@@ -223,48 +223,37 @@ class VyOSHost(BaseHost):
         if not ssh_address:
             raise RuntimeError(f"{self.hostname}: no reachable SSH address")
 
-        # Short-term staging area; cleared by the install or a reboot.
-        remote_path = f"/tmp/{image.name}"
-        # The installer unpacks next to the copied image, so demand room
-        # for at least 1.5x the image.
-        required_mb = max(1, math.ceil(image.stat().st_size * 1.5 / 2**20))
+        # The installer downloads into /tmp and unpacks from there, so
+        # demand room for at least 1.5x the image.
+        required_mb = max(1, math.ceil(size * 1.5 / 2**20))
 
         install_needed = True
-        if not stage:
-            existing = next(
-                (i for i in self.system_images() if i.name == version), None
-            )
-            if existing and existing.default_boot:
-                click.echo(f"{prefix} image already installed and default boot")
-                install_needed = False
-            elif existing:
-                # A directory in /boot alone (interrupted install, or an
-                # image that lost default boot) must not skip the installer,
-                # or the reboot would land on the old default image.
-                click.echo(f"{prefix} deleting stale image {version}")
-                self._api_image_delete(version)
+        existing = next((i for i in self.system_images() if i.name == version), None)
+        if existing and existing.default_boot:
+            click.echo(f"{prefix} image already installed and default boot")
+            install_needed = False
+        elif existing:
+            # A directory in /boot alone (interrupted install, or an
+            # image that lost default boot) must not skip the installer,
+            # or the reboot would land on the old default image.
+            click.echo(f"{prefix} deleting stale image {version}")
+            self._api_image_delete(version)
 
         with ssh.DeviceSSH(self, ssh_address) as conn:
             if install_needed:
                 click.echo(f"{prefix} running pre-checks")
                 rc, out = conn.run_script(
                     "barf-precheck.sh",
-                    vyos_scripts.precheck(remote_path, required_mb=required_mb),
+                    vyos_scripts.precheck(required_mb=required_mb),
                     echo_prefix=f"{prefix}   ",
                 )
                 if not _script_ok(rc, out, "PRECHECK"):
                     raise RuntimeError(f"{self.hostname}: pre-checks failed")
 
-                click.echo(f"{prefix} copying image")
-                conn.put(image, remote_path, label=f"{prefix} {image.name}")
-
-                if stage:
-                    return f"staged {version} at {remote_path}"
-
-                click.echo(f"{prefix} installing image")
+                click.echo(f"{prefix} installing image from {url}")
                 rc, out = conn.run_script(
                     "barf-install.sh",
-                    vyos_scripts.install(remote_path, version),
+                    vyos_scripts.install(url, version),
                     echo_prefix=f"{prefix}   ",
                 )
                 if not _script_ok(rc, out, "INSTALL"):

@@ -6,6 +6,7 @@ from typing import Optional
 import click
 
 from barf.cli.common import print_table, resolve_targets
+from barf.util.firmware import FirmwareMirror
 from barf.util.images import PROVIDERS
 from barf.util.network import load_network
 from barf.util.render import prefetch_link_keys, render_host_config
@@ -192,11 +193,6 @@ def wait_for_device_alive(
 @device.command("update")
 @click.argument("target")
 @click.option(
-    "--stage",
-    is_flag=True,
-    help="Only preload the image onto devices; do not drain or reboot.",
-)
-@click.option(
     "--drain-wait",
     default=5,
     show_default=True,
@@ -211,11 +207,19 @@ def wait_for_device_alive(
     show_default=True,
     type=click.Path(exists=True),
 )
-def device_update(
-    target: str, stage: bool, drain_wait: int, yes: bool, filename: str
-) -> None:
-    """Update TARGET (a hostname, or "all") to the latest image."""
-    hosts, _links, _global_meta = load_network(filename)
+def device_update(target: str, drain_wait: int, yes: bool, filename: str) -> None:
+    """Update TARGET (a hostname, or "all") to the latest image.
+
+    The image (and its .minisig, when upstream ships one) is mirrored
+    into the firmware bucket once; each device then downloads and
+    verifies it from the public URL itself.
+    """
+    hosts, _links, global_meta = load_network(filename)
+
+    try:
+        mirror = FirmwareMirror.from_meta(global_meta)
+    except KeyError as e:
+        raise click.ClickException(str(e).strip("'\"")) from e
 
     # Fail fast on Vault problems in the main thread, and prime the shared
     # secret cache so probes and vendor calls never touch Vault themselves.
@@ -258,10 +262,10 @@ def device_update(
             return "already current"
 
         image = provider.download()
+        signature = provider.download_signature()
         latest = provider.latest_version
-
-        if stage:
-            return host.update_host(str(image), stage=True, version=latest)
+        url = mirror.publish(image, signature)
+        click.echo(f"{prefix} image mirrored at {url}")
 
         click.echo(f"{prefix} running fleet safety checks")
         host.safe_to_reboot(all_vyos)
@@ -269,10 +273,11 @@ def device_update(
         if not yes and not click.confirm(
             f"{prefix} install, drain BGP, and reboot now?"
         ):
-            result = host.update_host(str(image), stage=True, version=latest)
-            return f"{result} (reboot declined)"
+            return "skipped (reboot declined)"
 
-        host.update_host(str(image), stage=False, drain_wait=drain_wait, version=latest)
+        host.update_host(
+            url, image.stat().st_size, drain_wait=drain_wait, version=latest
+        )
 
         click.echo(f"{prefix} device rebooting")
         new_version = wait_for_device_alive(host, changed_from=version)
@@ -296,13 +301,12 @@ def device_update(
             message = e.message if isinstance(e, click.ClickException) else str(e)
             results.append([host.hostname, f"failed: {message}"])
             failed = True
-            if not stage:
-                click.echo(
-                    "aborting remaining devices: a failed update reduces"
-                    " redundancy for the rest of the fleet",
-                    err=True,
-                )
-                break
+            click.echo(
+                "aborting remaining devices: a failed update reduces"
+                " redundancy for the rest of the fleet",
+                err=True,
+            )
+            break
 
     click.echo("")
     print_table(["DEVICE", "RESULT"], results)

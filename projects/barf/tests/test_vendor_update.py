@@ -7,10 +7,17 @@ from barf.vendors import BaseHost
 from barf.vendors.vyos import VyOSHost
 
 IMAGE_BYTES = 3 * 2**20  # 3 MiB -> requires ceil(4.5) = 5 MB free
+IMAGE_URL = (
+    "https://files.owo.me/firmware/vyos-2026.06.30-0048-rolling-generic-amd64.iso"
+)
 
 
 class FakeDeviceSSH:
-    """Records scripts and file pushes; returns happy-path markers."""
+    """Records scripts run on the device; returns happy-path markers.
+
+    Deliberately has no ``put``: images are never pushed over SFTP
+    anymore, so any regression that tries blows up with AttributeError.
+    """
 
     instances = []
     script_results = {}
@@ -20,7 +27,6 @@ class FakeDeviceSSH:
         self.address = address
         self.scripts = []
         self.detached = []
-        self.puts = []
         type(self).instances.append(self)
 
     def __enter__(self):
@@ -38,9 +44,6 @@ class FakeDeviceSSH:
     def run_detached(self, name, content):
         self.detached.append((name, content))
         return f"/tmp/{name}.log"
-
-    def put(self, local, remote, label=None):
-        self.puts.append(remote)
 
 
 @pytest.fixture
@@ -64,13 +67,6 @@ def fake_ssh(monkeypatch):
     return FakeDeviceSSH
 
 
-@pytest.fixture
-def image(tmp_path):
-    path = tmp_path / "vyos-2026.06.30-0048-rolling-generic-amd64.iso"
-    path.write_bytes(b"\0" * IMAGE_BYTES)
-    return path
-
-
 def make_host():
     return VyOSHost(hostname="testbox", role="vpn", asn=64512)
 
@@ -78,20 +74,11 @@ def make_host():
 def test_base_host_does_not_support_updates():
     host = BaseHost(hostname="testbox", role="vpn")
     with pytest.raises(NotImplementedError):
-        host.update_host("/x/image.iso", stage=True)
+        host.update_host(IMAGE_URL, IMAGE_BYTES)
 
 
-def test_stage_only_copies_without_installing(fake_ssh, image):
-    result = make_host().update_host(str(image), stage=True, version="1.5-rolling")
-
-    ssh = fake_ssh.instances[0]
-    assert result == f"staged 1.5-rolling at /tmp/{image.name}"
-    assert ssh.puts == [f"/tmp/{image.name}"]
-    assert [name for name, _ in ssh.scripts] == ["barf-precheck.sh"]
-
-
-def test_full_update_installs_and_reboots(fake_ssh, image):
-    result = make_host().update_host(str(image), stage=False, version="1.5-rolling")
+def test_full_update_installs_and_reboots(fake_ssh):
+    result = make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="1.5-rolling")
 
     ssh = fake_ssh.instances[0]
     assert result == "rebooting into 1.5-rolling"
@@ -104,49 +91,57 @@ def test_full_update_installs_and_reboots(fake_ssh, image):
     assert [name for name, _ in ssh.detached] == ["barf-reboot.sh"]
 
 
-def test_version_derived_from_filename(fake_ssh, image):
-    make_host().update_host(str(image), stage=False)
+def test_install_uses_the_mirror_url(fake_ssh):
+    make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="1.5-rolling")
+
+    install_script = dict(fake_ssh.instances[0].scripts)["barf-install.sh"]
+    assert f'add system image "{IMAGE_URL}"' in install_script
+
+
+def test_version_derived_from_url(fake_ssh):
+    make_host().update_host(IMAGE_URL, IMAGE_BYTES)
 
     ssh = fake_ssh.instances[0]
     install_script = dict(ssh.scripts)["barf-install.sh"]
     assert "2026.06.30-0048-rolling" in install_script
 
 
-def test_precheck_requires_1_5x_image_size(fake_ssh, image):
-    make_host().update_host(str(image), stage=True, version="x")
+def test_precheck_requires_1_5x_image_size(fake_ssh):
+    make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="x")
 
     precheck_script = dict(fake_ssh.instances[0].scripts)["barf-precheck.sh"]
     required_mb = math.ceil(IMAGE_BYTES * 1.5 / 2**20)
     assert f"less than {required_mb}MB free in /tmp" in precheck_script
 
 
-def test_precheck_failure_stops_the_update(fake_ssh, image):
+def test_precheck_failure_stops_the_update(fake_ssh):
     fake_ssh.script_results["barf-precheck.sh"] = (1, "PRECHECK-FAIL: dirty")
 
     with pytest.raises(RuntimeError, match="pre-checks failed"):
-        make_host().update_host(str(image), stage=True, version="x")
+        make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="x")
 
-    assert fake_ssh.instances[0].puts == []
+    ssh = fake_ssh.instances[0]
+    assert [name for name, _ in ssh.scripts] == ["barf-precheck.sh"]
+    assert ssh.detached == []
 
 
-def test_already_default_boot_skips_straight_to_reboot(fake_ssh, image, monkeypatch):
+def test_already_default_boot_skips_straight_to_reboot(fake_ssh, monkeypatch):
     monkeypatch.setattr(
         VyOSHost,
         "system_images",
         lambda self: [SystemImage("1.5-rolling", default_boot=True)],
     )
 
-    result = make_host().update_host(str(image), stage=False, version="1.5-rolling")
+    result = make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="1.5-rolling")
 
     ssh = fake_ssh.instances[0]
     assert result == "rebooting into 1.5-rolling"
-    # No precheck/copy/install; only the detached drain+reboot runs.
+    # No precheck/install; only the detached drain+reboot runs.
     assert ssh.scripts == []
     assert [name for name, _ in ssh.detached] == ["barf-reboot.sh"]
-    assert ssh.puts == []
 
 
-def test_stale_image_is_deleted_and_reinstalled(fake_ssh, image, monkeypatch):
+def test_stale_image_is_deleted_and_reinstalled(fake_ssh, monkeypatch):
     # Present but NOT default boot: an interrupted install must not be
     # trusted, or the reboot lands on the old default image.
     monkeypatch.setattr(
@@ -155,7 +150,7 @@ def test_stale_image_is_deleted_and_reinstalled(fake_ssh, image, monkeypatch):
         lambda self: [SystemImage("1.5-rolling", default_boot=False)],
     )
 
-    make_host().update_host(str(image), stage=False, version="1.5-rolling")
+    make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="1.5-rolling")
 
     assert VyOSHost._deleted_images == ["1.5-rolling"]
     ssh = fake_ssh.instances[0]
@@ -166,7 +161,7 @@ def test_stale_image_is_deleted_and_reinstalled(fake_ssh, image, monkeypatch):
     assert [name for name, _ in ssh.detached] == ["barf-reboot.sh"]
 
 
-def test_drain_failure_surfaced_from_detached_log(fake_ssh, image, monkeypatch):
+def test_drain_failure_surfaced_from_detached_log(fake_ssh, monkeypatch):
     # The device stayed reachable after the drain window and its log has
     # a FAIL marker: the script bailed, no reboot is coming.
     monkeypatch.setattr(
@@ -176,7 +171,7 @@ def test_drain_failure_surfaced_from_detached_log(fake_ssh, image, monkeypatch):
     )
 
     with pytest.raises(RuntimeError, match="DRAIN-FAIL: commit failed"):
-        make_host().update_host(str(image), stage=False, version="x")
+        make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="x")
 
 
 class FakeLogSSH:
@@ -226,16 +221,18 @@ def test_detached_failure_clean_log_is_success(monkeypatch):
     assert host._detached_reboot_failure("10.0.0.9", "/tmp/x.log") is None
 
 
-def test_precheck_fail_marker_kills_transfer_even_with_rc_zero(fake_ssh, image):
+def test_precheck_fail_marker_kills_update_even_with_rc_zero(fake_ssh):
     # Regression: script-template hijacks `exit`, so a failed precheck can
     # still end with rc 0 and a PRECHECK-OK printed after the failure. The
-    # FAIL marker alone must stop the update before any copy happens.
+    # FAIL marker alone must stop the update before any install happens.
     fake_ssh.script_results["barf-precheck.sh"] = (
         0,
         "PRECHECK-FAIL: less than 990MB free in /tmp\nPRECHECK-OK",
     )
 
     with pytest.raises(RuntimeError, match="pre-checks failed"):
-        make_host().update_host(str(image), stage=True, version="x")
+        make_host().update_host(IMAGE_URL, IMAGE_BYTES, version="x")
 
-    assert fake_ssh.instances[0].puts == []
+    ssh = fake_ssh.instances[0]
+    assert [name for name, _ in ssh.scripts] == ["barf-precheck.sh"]
+    assert ssh.detached == []

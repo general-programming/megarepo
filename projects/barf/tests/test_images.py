@@ -92,3 +92,39 @@ def test_download_short_read_raises(tmp_path, monkeypatch):
     with pytest.raises(RuntimeError):
         provider.download()
     assert not list(tmp_path.glob("*.iso"))
+
+
+def test_signature_asset_matches_the_iso():
+    signature = make_provider().signature_asset
+    assert signature is not None
+    assert signature["name"].endswith("-generic-amd64.iso.minisig")
+
+
+def test_download_signature_fetches(tmp_path, monkeypatch):
+    monkeypatch.setattr(images, "CACHE_DIR", tmp_path)
+    monkeypatch.setattr(
+        images.urllib.request,
+        "urlopen",
+        lambda url, timeout=30: io.BytesIO(b"s" * 341),
+    )
+
+    target = make_provider().download_signature()
+
+    assert target == tmp_path / (RELEASE["assets"][1]["name"] + ".minisig")
+    assert target.read_bytes() == b"s" * 341
+
+
+def test_download_signature_none_when_upstream_has_none():
+    provider = make_provider(
+        {
+            "tag_name": "x",
+            "assets": [
+                {
+                    "name": "vyos-x-generic-amd64.iso",
+                    "size": 3,
+                    "browser_download_url": "https://example.invalid/iso",
+                }
+            ],
+        }
+    )
+    assert provider.download_signature() is None

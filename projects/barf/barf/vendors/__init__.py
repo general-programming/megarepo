@@ -726,20 +726,20 @@ class BaseHost:
 
     def update_host(
         self,
-        filename: str,
-        stage: bool,
+        url: str,
+        size: int,
         drain_wait: int = 5,
         version: Optional[str] = None,
     ) -> str:
-        """Stage a new system image onto the device, optionally rebooting.
+        """Install a new system image from its mirror URL, then reboot.
 
         Args:
-            filename: Local path of the image to push.
-            stage: Only preload the image; do not drain or reboot.
+            url: Public URL the device downloads the image from.
+            size: Image size in bytes, for free-space prechecks.
             drain_wait: Seconds to wait for traffic to drain before the
                 reboot, where the vendor supports draining.
-            version: Image version; vendors derive it from the filename
-                when not given.
+            version: Image version; vendors derive it from the URL when
+                not given.
 
         Returns:
             A short human-readable result.
