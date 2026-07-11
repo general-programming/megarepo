@@ -34,10 +34,15 @@ USER root
 # blocks at the kernel level cluster-wide (user.max_user_namespaces = 0).
 # Disabling the sandbox here is the workspace-local alternative to a
 # cluster-wide sysctl change.
+# Substituters: cachix caches for nix-community (home-manager etc.) and
+# claude-code (sadjow/claude-code-nix) sit alongside the default cache —
+# keys fetched from https://app.cachix.org/api/v1/cache/<name>.
 RUN mkdir -p /etc/nix \
     && printf '%s\n' \
         'sandbox = false' \
         'experimental-features = nix-command flakes' \
+        'substituters = https://cache.nixos.org https://nix-community.cachix.org https://claude-code.cachix.org' \
+        'trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs= claude-code.cachix.org-1:YeXf2aNu7UTX8Vwrze0za1WEDS+4DuI2kVeWEE4fsRk=' \
         > /etc/nix/nix.conf
 
 # /home/coder is replaced by an empty persistent volume at runtime, so the
