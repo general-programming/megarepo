@@ -21,11 +21,16 @@ set -o pipefail
 _CONFIG_TEMPLATE = "source /opt/vyatta/etc/functions/script-template"
 
 
-def precheck(required_mb: int, scratch_dir: str = "/tmp") -> str:
+def precheck(required_mb: int, check_dir: str = "/") -> str:
     """Refuse to touch a device with a full disk or unsaved config.
 
-    The installer downloads the image into ``scratch_dir`` and unpacks
-    it from there, so that directory needs the headroom.
+    The installer downloads the ISO into the invoking user's home
+    directory and copies the squashfs to /boot -- both on the root
+    filesystem, so that is where the headroom must be (NOT /tmp, which
+    is a small tmpfs the installer never touches). ``add system image``
+    has its own 2GiB floor on ``/``, but failing here leaves the device
+    untouched instead of dying mid-install while prompts are being
+    blind-fed newlines.
 
     Note: this catches committed-but-unsaved changes. Uncommitted edits
     live only inside another user's config session and are not visible
@@ -35,9 +40,9 @@ def precheck(required_mb: int, scratch_dir: str = "/tmp") -> str:
         _HEADER
         + f"""
 # Disk check first, in plain bash, where `exit` still works normally.
-free_kb="$(df --output=avail {scratch_dir} | tail -1 | tr -d ' ')"
+free_kb="$(df --output=avail {check_dir} | tail -1 | tr -d ' ')"
 if [ "$free_kb" -lt {required_mb * 1024} ]; then
-    echo "PRECHECK-FAIL: less than {required_mb}MB free in {scratch_dir}"
+    echo "PRECHECK-FAIL: less than {required_mb}MB free in {check_dir}"
     exit 1
 fi
 

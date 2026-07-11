@@ -223,21 +223,18 @@ class VyOSHost(BaseHost):
         if not ssh_address:
             raise RuntimeError(f"{self.hostname}: no reachable SSH address")
 
-        # The installer downloads into /tmp and unpacks from there, so
-        # demand room for at least 1.5x the image.
-        required_mb = max(1, math.ceil(size * 1.5 / 2**20))
+        # The installer downloads the ISO into the invoking user's home
+        # directory and copies the squashfs to /boot -- both on the root
+        # filesystem. It refuses to run below 2GiB free on / itself, so
+        # demand that floor (or 2x the image for oversized ones) so we
+        # fail cleanly at precheck instead of mid-install.
+        required_mb = max(2048, math.ceil(size * 2 / 2**20))
 
         install_needed = True
         existing = next((i for i in self.system_images() if i.name == version), None)
         if existing and existing.default_boot:
             click.echo(f"{prefix} image already installed and default boot")
             install_needed = False
-        elif existing:
-            # A directory in /boot alone (interrupted install, or an
-            # image that lost default boot) must not skip the installer,
-            # or the reboot would land on the old default image.
-            click.echo(f"{prefix} deleting stale image {version}")
-            self._api_image_delete(version)
 
         with ssh.DeviceSSH(self, ssh_address) as conn:
             if install_needed:
@@ -249,6 +246,15 @@ class VyOSHost(BaseHost):
                 )
                 if not _script_ok(rc, out, "PRECHECK"):
                     raise RuntimeError(f"{self.hostname}: pre-checks failed")
+
+                if existing:
+                    # A directory in /boot alone (interrupted install, or
+                    # an image that lost default boot) must not skip the
+                    # installer, or the reboot would land on the old
+                    # default image. Deleted only after the precheck so a
+                    # failed precheck leaves the device untouched.
+                    click.echo(f"{prefix} deleting stale image {version}")
+                    self._api_image_delete(version)
 
                 click.echo(f"{prefix} installing image from {url}")
                 rc, out = conn.run_script(

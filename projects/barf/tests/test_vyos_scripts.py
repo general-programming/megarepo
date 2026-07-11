@@ -11,10 +11,14 @@ TEMPLATE = "source /opt/vyatta/etc/functions/script-template"
 
 
 def test_precheck_contents():
-    script = vyos_scripts.precheck(required_mb=1024)
+    script = vyos_scripts.precheck(required_mb=2048)
     assert script.startswith("#!/bin/vbash")
-    assert "df --output=avail /tmp" in script
-    assert str(1024 * 1024) in script
+    # The installer works on the root filesystem (ISO in $HOME, squashfs
+    # to /boot); /tmp is a small tmpfs it never touches, so checking it
+    # false-fails low-RAM devices.
+    assert "df --output=avail / |" in script
+    assert "/tmp" not in script
+    assert str(2048 * 1024) in script
     assert "compare saved" in script
     assert "PRECHECK-OK" in script
     assert "PRECHECK-FAIL" in script
