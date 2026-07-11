@@ -9,7 +9,10 @@ RUN apt-get update \
         xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
-RUN groupadd --gid 1000 coder \
+# Ubuntu 24.04+ base images ship a default "ubuntu" user on uid/gid 1000,
+# which must go before coder can claim those ids.
+RUN userdel --remove ubuntu \
+    && groupadd --gid 1000 coder \
     && useradd --uid 1000 --gid coder --shell /bin/bash --create-home coder \
     && echo "coder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/coder
 
