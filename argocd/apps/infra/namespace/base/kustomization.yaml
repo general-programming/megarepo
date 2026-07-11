@@ -29,6 +29,7 @@ resources:
   - bsky-pds.yaml
   - cerebro.yaml
   - coder.yaml
+  - coder-workspaces.yaml
   - deluge.yaml
   - netbox.yaml
   - sentry.yaml
