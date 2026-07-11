@@ -17,6 +17,10 @@ from barf.vendors import BaseHost
 log = logging.getLogger(__name__)
 
 
+class DeviceUnreachable(click.ClickException):
+    """The device never answered pre-flight; nothing on it was changed."""
+
+
 @click.group()
 def device():
     """Interact with live devices."""
@@ -267,14 +271,12 @@ def device_update(target: str, drain_wait: int, yes: bool, filename: str) -> Non
 
         address = host.management_ip
         if not address:
-            raise click.ClickException(f"{host.hostname}: no reachable address")
+            raise DeviceUnreachable(f"{host.hostname}: no reachable address")
 
         click.echo(f"{prefix} checking running version via {address}")
         version = host.version()
         if version is None:
-            raise click.ClickException(
-                f"{host.hostname}: API unreachable via {address}"
-            )
+            raise DeviceUnreachable(f"{host.hostname}: API unreachable via {address}")
         if provider.is_current(version):
             return "already current"
 
@@ -314,6 +316,16 @@ def device_update(target: str, drain_wait: int, yes: bool, filename: str) -> Non
     for host in targets:
         try:
             results.append([host.hostname, run_update(host)])
+        except DeviceUnreachable as e:
+            # Nothing was changed on the device, so the fleet lost no
+            # redundancy: skip it and keep updating the rest. A single
+            # named target still fails loudly below.
+            if target == "all":
+                results.append([host.hostname, f"skipped: {e.message}"])
+                click.echo(f"skipping {host.hostname}: {e.message}", err=True)
+                continue
+            results.append([host.hostname, f"failed: {e.message}"])
+            failed = True
         except Exception as e:  # noqa: BLE001 - report per-device failures
             message = e.message if isinstance(e, click.ClickException) else str(e)
             results.append([host.hostname, f"failed: {message}"])

@@ -203,6 +203,32 @@ def test_update_failure_aborts_remaining_devices(cli_env):
     assert second.update_calls == []
 
 
+def test_update_all_skips_unreachable_devices(cli_env):
+    # Nothing was changed on a device that never answered, so the fleet
+    # lost no redundancy and the rest must still be updated.
+    unreachable = FakeHost("a-leaf-1", running=None, provider=FakeProvider())
+    healthy = FakeHost("b-leaf-2", provider=FakeProvider())
+    cli_env.hosts = [unreachable, healthy]
+
+    result = invoke(cli_env, "update", "all", "--yes")
+
+    assert result.exit_code == 0
+    assert "skipped: a-leaf-1: API unreachable" in result.output
+    assert "aborting remaining devices" not in result.output
+    assert unreachable.update_calls == []
+    assert healthy.update_calls  # the rest of the fleet still updated
+
+
+def test_update_single_unreachable_target_fails(cli_env):
+    host = FakeHost("a-leaf-1", running=None, provider=FakeProvider())
+    cli_env.hosts = [host]
+
+    result = invoke(cli_env, "update", "a-leaf-1", "--yes")
+
+    assert result.exit_code == 1
+    assert "failed: a-leaf-1: API unreachable" in result.output
+
+
 def test_cleanup_reports_actions(cli_env):
     host = FakeHost("a", provider=FakeProvider())
     cli_env.hosts = [host]
