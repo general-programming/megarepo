@@ -17,6 +17,12 @@ coder:
     - secretRef:
         name: coder-secrets
 
+  # Grant the coder SA workspace-management RBAC in the dedicated workspace
+  # namespace (Roles/RoleBindings created there by the chart).
+  serviceAccount:
+    workspaceNamespaces:
+      - name: coder-workspaces
+
   # TLS is handled by Cloudflare tunnel
   tls:
     devurlsHostSecretName: ""

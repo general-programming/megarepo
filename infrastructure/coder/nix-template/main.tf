@@ -67,24 +67,24 @@ data "coder_parameter" "memory" {
   name         = "memory"
   display_name = "Memory"
   description  = "The amount of memory in GB"
-  default      = "2"
+  default      = "8"
   icon         = "/icon/memory.svg"
   mutable      = true
   option {
-    name  = "2 GB"
-    value = "2"
-  }
-  option {
-    name  = "4 GB"
-    value = "4"
-  }
-  option {
-    name  = "6 GB"
-    value = "6"
-  }
-  option {
     name  = "8 GB"
     value = "8"
+  }
+  option {
+    name  = "16 GB"
+    value = "16"
+  }
+  option {
+    name  = "24 GB"
+    value = "24"
+  }
+  option {
+    name  = "32 GB"
+    value = "32"
   }
 }
 
