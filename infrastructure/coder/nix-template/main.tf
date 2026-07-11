@@ -275,8 +275,12 @@ resource "kubernetes_persistent_volume_claim_v1" "home" {
   }
   wait_until_bound = false
   spec {
-    access_modes       = ["ReadWriteOnce"]
-    storage_class_name = "local-path"
+    access_modes = ["ReadWriteOnce"]
+    # ceph-rbd-xfs (rook) rather than local-path so workspaces are not
+    # pinned to the node that first scheduled them and can migrate across
+    # the cluster. Changing storage class forces PVC replacement — home and
+    # /nix are wiped and re-bootstrapped from the image seed + .home_repo.
+    storage_class_name = "ceph-rbd-xfs"
     resources {
       requests = {
         storage = "${data.coder_parameter.home_disk_size.value}Gi"
