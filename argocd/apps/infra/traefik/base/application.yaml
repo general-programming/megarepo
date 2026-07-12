@@ -18,6 +18,15 @@ spec:
           kind: DaemonSet
           updateStrategy:
             type: RollingUpdate
+        ports:
+          websecure:
+            transport:
+              respondingTimeouts:
+                readTimeout: "5m"
+          web:
+            transport:
+              respondingTimeouts:
+                readTimeout: "5m"
         ingressRoute:
           dashboard:
             enabled: false
