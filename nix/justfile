@@ -61,3 +61,18 @@ rekey machine target="" role="nixos-core":
         | ssh "root@$host" 'umask 077; cat > /var/lib/vault-agent/approle_secret; systemctl try-restart vault-agent-node.service'
 
     echo "rekeyed $host"
+
+# Validate the NetBox API key in Vault by generating and testing a dnsmasq config.
+netbox-check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    command -v vault >/dev/null && VAULT_CMD=vault || VAULT_CMD=bao
+
+    out=$(mktemp)
+    trap 'rm -f "$out"' EXIT
+
+    NETBOX_API_KEY=$("$VAULT_CMD" kv get -field=api_key secret/infra/netbox) \
+        python3 modules/dns/refresh_dns.py --output "$out"
+    nix run nixpkgs#dnsmasq -- --test --conf-file="$out"
+
+    echo "generated $(grep -c '^address=' "$out") address, $(grep -c '^ptr-record=' "$out") ptr-record, $(grep -c '^dhcp-host=' "$out") dhcp-host entries"

@@ -158,7 +158,8 @@ def query_netbox(url: str, token: str, gql_query: str) -> dict:
         url,
         data=json.dumps({"query": gql_query}).encode(),
         headers={
-            "Authorization": f"Token {token}",
+            # NetBox >= 4.5 v2 tokens (nbt_<key>.<secret>) require Bearer.
+            "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         },
     )
