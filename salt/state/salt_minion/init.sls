@@ -69,18 +69,36 @@ salt_minion_pkg:
       - file: salt_minion_pin
 {% endif %}
 
+# salt onedir package upgrades wipe salt-pip installed site-packages, which
+# breaks vault_ssh/gitfs integrations until these are reinstalled
+salt_minion_pip_deps:
+  cmd.run:
+    - name: salt-pip install saltext-vault gql aiohttp
+    - unless: salt-pip show saltext-vault gql aiohttp
+    - require:
+      - pkg: salt_minion_pkg
+
 salt_minion_service:
   service.running:
     - name: salt-minion
     - enable: True
     - watch:
       - pkg: salt_minion_pkg
+      - cmd: salt_minion_pip_deps
 
 {% if is_master %}
+salt_master_pip_deps:
+  cmd.run:
+    - name: salt-pip install pygit2 saltext-vault
+    - unless: salt-pip show pygit2 saltext-vault
+    - require:
+      - pkg: salt_minion_pkg
+
 salt_master_service:
   service.running:
     - name: salt-master
     - enable: True
     - watch:
       - pkg: salt_minion_pkg
+      - cmd: salt_master_pip_deps
 {% endif %}
