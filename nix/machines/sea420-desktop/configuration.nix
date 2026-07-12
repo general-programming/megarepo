@@ -92,7 +92,8 @@ in
     ubootTools
     screen
     # useful dev tools
-    direnv
+    # (direnv itself comes from programs.direnv below)
+    devenv
     python315
     tcpdump
     # human interactions with podman
