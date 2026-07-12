@@ -23,12 +23,28 @@ in
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
     (self.lib.nixosModule "impermanence")
+    (self.lib.nixosModule "vault-agent")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
     # (self.lib.nixosModule "secureboot")
 
     ./consul.nix
   ];
+
+  vaultAgent = {
+    enable = true;
+
+    # Example secret rendered to tmpfs; consume with EnvironmentFile= or
+    # LoadCredential= from a systemd service.
+    # templates.example = {
+    #   contents = ''
+    #     {{- with secret "kv/data/fmt2-core/example" }}
+    #     EXAMPLE_TOKEN={{ .Data.data.token }}
+    #     {{- end }}
+    #   '';
+    #   destination = "/run/secrets/example.env";
+    # };
+  };
 
   gitops = {
     enable = false;

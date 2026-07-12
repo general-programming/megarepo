@@ -1,0 +1,63 @@
+# Machine lifecycle for the NixOS flake in this directory.
+#
+#   just provision fmt2-core 79.110.170.3   # fresh install + seed Vault AppRole creds
+#   just update fmt2-core                   # rebuild an existing machine in place
+#   just rekey fmt2-core                    # mint + push a fresh AppRole secret_id
+#
+# provision/rekey need a Vault token with permission to read the role_id
+# and mint secret_ids for the AppRole (VAULT_TOKEN or ~/.vault-token).
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+export VAULT_ADDR := env_var_or_default("VAULT_ADDR", "http://10.65.67.27:8201")
+
+default:
+    @just --list
+
+# Fresh-install a machine with nixos-anywhere, seeding Vault AppRole credentials.
+provision machine target role="nixos-core":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp=$(mktemp -d)
+    trap 'rm -rf "$tmp"' EXIT
+
+    # Impermanent machines bind-mount /var/lib from /persist, so the
+    # credentials have to be planted there for them to survive the rollback.
+    creds="$tmp/var/lib/vault-agent"
+    if [ "$(nix eval .#nixosConfigurations.{{machine}}.config.impermanence.enable 2>/dev/null)" = "true" ]; then
+        creds="$tmp/persist/var/lib/vault-agent"
+    fi
+
+    install -d -m 0700 "$creds"
+    umask 077
+    vault read -field=role_id "auth/approle/role/{{role}}/role-id" > "$creds/approle_id"
+    vault write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" > "$creds/approle_secret"
+
+    nix run github:nix-community/nixos-anywhere -- \
+        --flake .#{{machine}} \
+        --extra-files "$tmp" \
+        root@{{target}}
+
+# Rebuild an existing machine with the latest config from this checkout.
+update machine target="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    host="{{target}}"
+    [ -n "$host" ] || host="{{machine}}.generalprogramming.org"
+    nix run nixpkgs#nixos-rebuild -- switch \
+        --flake .#{{machine}} \
+        --target-host "root@$host"
+
+# Mint a fresh AppRole secret_id and push it to a running machine.
+rekey machine target="" role="nixos-core":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    host="{{target}}"
+    [ -n "$host" ] || host="{{machine}}.generalprogramming.org"
+
+    vault read -field=role_id "auth/approle/role/{{role}}/role-id" \
+        | ssh "root@$host" 'umask 077; install -d -m 0700 /var/lib/vault-agent; cat > /var/lib/vault-agent/approle_id'
+    vault write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" \
+        | ssh "root@$host" 'umask 077; cat > /var/lib/vault-agent/approle_secret; systemctl try-restart vault-agent-node.service'
+
+    echo "rekeyed $host"

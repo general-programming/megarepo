@@ -9,6 +9,9 @@
     coder
     git
     talosctl
+    # machine provisioning (nix/justfile)
+    just
+    vault
   ];
 
   # https://devenv.sh/languages/python/
