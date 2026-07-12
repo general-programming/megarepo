@@ -38,31 +38,6 @@ variable "workspace_image" {
   default     = "ghcr.io/general-programming/megarepo/coder-nix-workspace:latest"
 }
 
-data "coder_parameter" "cpu" {
-  name         = "cpu"
-  display_name = "CPU"
-  description  = "The number of CPU cores"
-  default      = "2"
-  icon         = "/icon/memory.svg"
-  mutable      = true
-  option {
-    name  = "2 Cores"
-    value = "2"
-  }
-  option {
-    name  = "4 Cores"
-    value = "4"
-  }
-  option {
-    name  = "6 Cores"
-    value = "6"
-  }
-  option {
-    name  = "8 Cores"
-    value = "8"
-  }
-}
-
 data "coder_parameter" "memory" {
   name         = "memory"
   display_name = "Memory"
@@ -414,7 +389,6 @@ resource "kubernetes_deployment_v1" "main" {
               "memory" = "512Mi"
             }
             limits = {
-              "cpu"    = "${data.coder_parameter.cpu.value}"
               "memory" = "${data.coder_parameter.memory.value}Gi"
             }
           }
