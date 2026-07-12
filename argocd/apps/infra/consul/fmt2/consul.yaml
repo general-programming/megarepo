@@ -10,5 +10,13 @@ spec:
         global:
           name: fmt2
           datacenter: fmt2
-        client:
+        server:
           enabled: false
+        client:
+          enabled: true
+          exposeGossipPorts: true
+          join:
+            # consul servers on the fmt2 ceph hypervisors
+            - "10.65.67.100"
+            - "10.65.67.101"
+            - "10.65.67.102"
