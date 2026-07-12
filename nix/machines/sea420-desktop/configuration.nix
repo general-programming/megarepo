@@ -45,10 +45,21 @@ in
     hostId = "30b7aad6";
   };
 
-  # Use the latest kernel for better hardware support, also pin zfs to unstable
+  # Latest kernel for hardware support; build the zfs_unstable kernel module
+  # against it even when newer than ZFS officially supports. The `broken` gate
+  # is on the module (not userland), so we override modulePackage. Note: the
+  # intended `.override { enableUnsupportedExperimentalKernel = true; }` is
+  # silently dropped here (unstable.nix swallows it via `...`@args), so patch
+  # the derivation directly: add the configure flag and clear `broken`.
   boot = {
-    kernelPackages = pkgs.linuxPackages_7_0;
+    kernelPackages = pkgs.linuxPackages_latest;
     zfs.package = pkgs.zfs_unstable;
+    zfs.modulePackage = config.boot.kernelPackages.zfs_unstable.overrideAttrs (old: {
+      configureFlags = (old.configureFlags or [ ]) ++ [ "--enable-linux-experimental" ];
+      meta = old.meta // {
+        broken = false;
+      };
+    });
   };
 
   # Networking

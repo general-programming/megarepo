@@ -20,7 +20,7 @@
       comin.url = "github:nlewo/comin";
       comin.inputs.nixpkgs.follows = "nixpkgs";
 
-      lanzaboote.url = "github:rv32ima/lanzaboote";
+      lanzaboote.url = "github:nix-community/lanzaboote";
       lanzaboote.inputs.nixpkgs.follows = "nixpkgs";
 
       nixos-hardware.url = "github:nixos/nixos-hardware";

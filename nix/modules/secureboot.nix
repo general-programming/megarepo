@@ -18,7 +18,7 @@ in
   services.fwupd.enable = true;
 
   boot = {
-    bootspec.enable = true;
+    # bootspec is always generated now; the enable option was removed.
     loader.systemd-boot.enable = lib.mkForce false;
     initrd = {
       systemd = {
@@ -30,11 +30,8 @@ in
       enable = true;
       configurationLimit = 15;
 
-      profileGlob =
-        if config.services.comin.enable then
-          "/nix/var/nix/profiles/system-profiles/comin-*-link"
-        else
-          "/nix/var/nix/profiles/system-*-link";
+      # TODO: upstream lanzaboote can't sign comin's profile namespace
+      # (the old fork's profileGlob). Revisit before enabling gitops here.
 
       # Fix bug with sbctl. See:
       # https://github.com/nix-community/lanzaboote/issues/413
