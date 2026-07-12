@@ -74,6 +74,10 @@ build_cache cache="gp:gp":
         --apply 'cfgs: builtins.concatStringsSep " " (builtins.attrNames cfgs)')
     for machine in $machines; do
         echo "==> building $machine"
+        nix build -vL --always-allow-substitutes --log-format internal-json --no-link \
+            ".#nixosConfigurations.$machine.config.system.build.toplevel" \
+            |& nix run 'nixpkgs#nix-output-monitor' -- --json
+        # everything is built at this point; this just resolves the out path
         out=$(nix build --no-link --print-out-paths ".#nixosConfigurations.$machine.config.system.build.toplevel")
         echo "==> pushing $machine ($out)"
         nix run nixpkgs#attic-client -- push {{cache}} "$out"
