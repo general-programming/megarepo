@@ -9,7 +9,7 @@ ExecStartPre=-/usr/bin/docker rm -f smartctl-exporter
 ExecStart=/usr/bin/docker run --rm --name smartctl-exporter \
     --privileged \
     --network host \
-    -v /dev:/dev:ro \
+    -v /dev:/dev \
     {{ image }} \
     --web.listen-address=:9633 \
     --smartctl.interval=120s
