@@ -1,7 +1,9 @@
 {# containerized: needs root + raw device access either way, and docker is
    already the daemon runtime on these hosts (cephadm); gated to proxmox
    hypervisors for now #}
-{% set image = 'ghcr.io/prometheus-community/smartctl-exporter:v0.16.0' %}
+{# newest version-pinned container tag; ghcr only publishes :master and no
+   registry has tags past v0.14.0 despite newer git releases #}
+{% set image = 'quay.io/prometheuscommunity/smartctl-exporter:v0.14.0' %}
 
 {% if grains.get('proxmox', False) %}
 smartctl_exporter_image:
