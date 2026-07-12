@@ -16,6 +16,7 @@ resources:
 # alertmanager
 - vmalertmanager.yaml
 - vmalertmanagerconfig_irm.yaml
+- vmalertmanagerconfig_discord.yaml
 - vault_alertmanager_irm.yaml
 patches:
   - path: patch_nodeexporter_sa.yaml

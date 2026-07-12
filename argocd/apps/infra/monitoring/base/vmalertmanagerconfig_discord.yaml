@@ -1,0 +1,28 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMAlertmanagerConfig
+metadata:
+  name: discord
+  namespace: monitoring
+spec:
+  # Sub-routes merge alphabetically ("discord" sorts before "grafana-irm"),
+  # so this route must set continue: true or it would swallow every alert
+  # before the IRM route gets a look.
+  route:
+    receiver: discord
+    continue: true
+    group_by: ['alertname', 'cluster', 'namespace']
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 12h
+  receivers:
+    - name: discord
+      discord_configs:
+        # Native alertmanager Discord integration. Webhook URL comes from the
+        # same Vault-synced secret as IRM (VaultStaticSecret copies the whole
+        # apps/alertmanager KV path). To provision:
+        #   vault kv patch secret/apps/alertmanager discord_webhook=https://discord.com/api/webhooks/<id>/<token>
+        - webhook_url_secret:
+            name: alertmanager-irm-secret
+            key: discord_webhook
+          send_resolved: true
