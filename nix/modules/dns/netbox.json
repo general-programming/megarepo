@@ -1,0 +1,814 @@
+{
+    "addresses": [
+        {
+            "fqdn": "comms-icx.generalprogramming.org",
+            "ip": "10.213.0.252"
+        },
+        {
+            "fqdn": "devhack-serverroom-r1-ru41.generalprogramming.org",
+            "ip": "10.213.0.4"
+        },
+        {
+            "fqdn": "devhack-serverroom-r2-ru39.generalprogramming.org",
+            "ip": "10.213.0.6"
+        },
+        {
+            "fqdn": "dorkhouse-wlc-ng-01.generalprogramming.org",
+            "ip": "10.36.75.18"
+        },
+        {
+            "fqdn": "fmt2-acc-v-140752-1.generalprogramming.org",
+            "ip": "79.110.170.1"
+        },
+        {
+            "fqdn": "fmt2-con-sw-140752-1.generalprogramming.org",
+            "ip": "10.255.1.5"
+        },
+        {
+            "fqdn": "fmt2-cor-r-140752-1.generalprogramming.org",
+            "ip": "10.65.67.1"
+        },
+        {
+            "fqdn": "fmt2-core-0.generalprogramming.org",
+            "ip": "79.110.170.4"
+        },
+        {
+            "fqdn": "fmt2-hv-14-07-52-100.generalprogramming.org",
+            "ip": "10.65.67.100"
+        },
+        {
+            "fqdn": "ipmi.fmt2-hv-14-07-52-100.generalprogramming.org",
+            "ip": "10.255.1.100"
+        },
+        {
+            "fqdn": "fmt2-hv-14-07-52-101.generalprogramming.org",
+            "ip": "10.65.67.101"
+        },
+        {
+            "fqdn": "ipmi.fmt2-hv-14-07-52-101.generalprogramming.org",
+            "ip": "10.255.1.101"
+        },
+        {
+            "fqdn": "fmt2-hv-14-07-52-102.generalprogramming.org",
+            "ip": "10.65.67.102"
+        },
+        {
+            "fqdn": "ipmi.fmt2-hv-14-07-52-102.generalprogramming.org",
+            "ip": "10.255.1.102"
+        },
+        {
+            "fqdn": "fmt2-hv-14-07-52-103.generalprogramming.org",
+            "ip": "10.65.67.103"
+        },
+        {
+            "fqdn": "ipmi.fmt2-hv-14-07-52-103.generalprogramming.org",
+            "ip": "10.255.1.103"
+        },
+        {
+            "fqdn": "fmt2-hv-14-07-52-104.generalprogramming.org",
+            "ip": "10.65.67.104"
+        },
+        {
+            "fqdn": "ipmi.fmt2-hv-14-07-52-104.generalprogramming.org",
+            "ip": "10.255.1.104"
+        },
+        {
+            "fqdn": "fmt2-pdu-140752-1.generalprogramming.org",
+            "ip": "10.255.1.12"
+        },
+        {
+            "fqdn": "fmt2-pdu-140752-2.generalprogramming.org",
+            "ip": "10.255.1.13"
+        },
+        {
+            "fqdn": "laserjet.generalprogramming.org",
+            "ip": "79.110.170.16"
+        },
+        {
+            "fqdn": "ipmi.laserjet.generalprogramming.org",
+            "ip": "10.255.1.7"
+        },
+        {
+            "fqdn": "linuxgemini-home-router.generalprogramming.org",
+            "ip": "172.16.1.3"
+        },
+        {
+            "fqdn": "oob-fmt2-shitpissfuckcuntcocksuckermotherfuckertits.generalprogramming.org",
+            "ip": "10.255.1.2"
+        },
+        {
+            "fqdn": "sea1-hv-0.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::101"
+        },
+        {
+            "fqdn": "sea1-hv-1.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::102"
+        },
+        {
+            "fqdn": "sea1-hv-2.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::103"
+        },
+        {
+            "fqdn": "sea69-acc-v-a-1.generalprogramming.org",
+            "ip": "10.36.75.2"
+        },
+        {
+            "fqdn": "sea69-cor-r-a-1.generalprogramming.org",
+            "ip": "10.36.75.1"
+        },
+        {
+            "fqdn": "sea69-hv-puppy.generalprogramming.org",
+            "ip": "10.36.75.5"
+        },
+        {
+            "fqdn": "ipmi.sea69-hv-puppy.generalprogramming.org",
+            "ip": "10.36.75.8"
+        },
+        {
+            "fqdn": "sea69-wireless-a-1.generalprogramming.org",
+            "ip": "10.36.75.3"
+        },
+        {
+            "fqdn": "sea420-acc-v-hv2.generalprogramming.org",
+            "ip": "10.3.0.1"
+        },
+        {
+            "fqdn": "sea420-hv-2.generalprogramming.org",
+            "ip": "10.3.0.2"
+        },
+        {
+            "fqdn": "ipmi.sea420-hv-2.generalprogramming.org",
+            "ip": "10.255.255.115"
+        },
+        {
+            "fqdn": "sea420-hv-egg-irl.generalprogramming.org",
+            "ip": "209.251.245.111"
+        },
+        {
+            "fqdn": "ipmi.sea420-hv-egg-irl.generalprogramming.org",
+            "ip": "10.255.255.109"
+        },
+        {
+            "fqdn": "10gbe.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::f07"
+        },
+        {
+            "fqdn": "10gbe.generalprogramming.org",
+            "ip": "199.255.18.164"
+        },
+        {
+            "fqdn": "20w14s.generalprogramming.org",
+            "ip": "192.168.3.142"
+        },
+        {
+            "fqdn": "boom-vm-1.generalprogramming.org",
+            "ip": "79.110.170.52"
+        },
+        {
+            "fqdn": "chichester.generalprogramming.org",
+            "ip": "2a0d:1a43:8008:beef::2"
+        },
+        {
+            "fqdn": "chichester.generalprogramming.org",
+            "ip": "79.110.170.53"
+        },
+        {
+            "fqdn": "fmt2-k8s-cp-0.generalprogramming.org",
+            "ip": "10.65.67.44"
+        },
+        {
+            "fqdn": "fmt2-k8s-cp-1.generalprogramming.org",
+            "ip": "10.65.67.45"
+        },
+        {
+            "fqdn": "fmt2-k8s-cp-2.generalprogramming.org",
+            "ip": "10.65.67.46"
+        },
+        {
+            "fqdn": "fmt2-k8s-node-0.generalprogramming.org",
+            "ip": "10.65.67.47"
+        },
+        {
+            "fqdn": "fmt2-k8s-node-1.generalprogramming.org",
+            "ip": "10.65.67.48"
+        },
+        {
+            "fqdn": "fmt2-k8s-node-2.generalprogramming.org",
+            "ip": "10.65.67.49"
+        },
+        {
+            "fqdn": "fmt2-k8s-node-3.generalprogramming.org",
+            "ip": "10.65.67.50"
+        },
+        {
+            "fqdn": "fmt2-k8s-node-4.generalprogramming.org",
+            "ip": "10.65.67.51"
+        },
+        {
+            "fqdn": "fmt2-netboot.generalprogramming.org",
+            "ip": "10.65.67.2"
+        },
+        {
+            "fqdn": "fmt2-vault-00.generalprogramming.org",
+            "ip": "10.65.67.24"
+        },
+        {
+            "fqdn": "fmt2-vault-01.generalprogramming.org",
+            "ip": "10.65.67.25"
+        },
+        {
+            "fqdn": "fmt2-vault-02.generalprogramming.org",
+            "ip": "10.65.67.26"
+        },
+        {
+            "fqdn": "fmt2-vault-proxy.generalprogramming.org",
+            "ip": "10.65.67.27"
+        },
+        {
+            "fqdn": "fmt2-vpn-client-1.generalprogramming.org",
+            "ip": "79.110.170.48"
+        },
+        {
+            "fqdn": "fmt2-vpn-leaf-1.generalprogramming.org",
+            "ip": "10.255.1.23"
+        },
+        {
+            "fqdn": "fmt2-vpn-leaf-2.generalprogramming.org",
+            "ip": "10.255.1.24"
+        },
+        {
+            "fqdn": "fmt2-vpn-spine-1.generalprogramming.org",
+            "ip": "10.255.1.21"
+        },
+        {
+            "fqdn": "fmt2-vpn-spine-2.generalprogramming.org",
+            "ip": "10.255.1.22"
+        },
+        {
+            "fqdn": "fmt2.moderateinfra.net.generalprogramming.org",
+            "ip": "2a0d:1a43:8008:301::"
+        },
+        {
+            "fqdn": "fmt2.moderateinfra.net.generalprogramming.org",
+            "ip": "79.110.170.66"
+        },
+        {
+            "fqdn": "freepbx.generalprogramming.org",
+            "ip": "10.3.2.19"
+        },
+        {
+            "fqdn": "gameservers.generalprogramming.org",
+            "ip": "2620:fc:c000:0:608d:ccff:feec:c2a2"
+        },
+        {
+            "fqdn": "gameservers.generalprogramming.org",
+            "ip": "10.3.0.11"
+        },
+        {
+            "fqdn": "garden.generalprogramming.org",
+            "ip": "2a0d:1a43:8008:beef::1"
+        },
+        {
+            "fqdn": "garden.generalprogramming.org",
+            "ip": "79.110.170.50"
+        },
+        {
+            "fqdn": "genny-cascadia.generalprogramming.org",
+            "ip": "79.110.170.63"
+        },
+        {
+            "fqdn": "ghast.generalprogramming.org",
+            "ip": "10.3.0.15"
+        },
+        {
+            "fqdn": "ipa-fremont-donut.generalprogramming.org",
+            "ip": "10.65.67.14"
+        },
+        {
+            "fqdn": "james-shreds.generalprogramming.org",
+            "ip": "10.3.0.5"
+        },
+        {
+            "fqdn": "linear-pens.linuxgemini.space.generalprogramming.org",
+            "ip": "2a0d:1a43:8008:300::"
+        },
+        {
+            "fqdn": "linear-pens.linuxgemini.space.generalprogramming.org",
+            "ip": "79.110.170.64"
+        },
+        {
+            "fqdn": "minecraft-silver.generalprogramming.org",
+            "ip": "10.3.0.14"
+        },
+        {
+            "fqdn": "not-furry-shit.generalprogramming.org",
+            "ip": "192.168.3.126"
+        },
+        {
+            "fqdn": "opl-dump.generalprogramming.org",
+            "ip": "192.168.3.141"
+        },
+        {
+            "fqdn": "opl-vods.generalprogramming.org",
+            "ip": "10.65.67.15"
+        },
+        {
+            "fqdn": "poppy.generalprogramming.org",
+            "ip": "10.3.0.16"
+        },
+        {
+            "fqdn": "recursiveness.generalprogramming.org",
+            "ip": "10.65.67.9"
+        },
+        {
+            "fqdn": "reddit-video-proxy.generalprogramming.org",
+            "ip": "10.3.0.7"
+        },
+        {
+            "fqdn": "robust-wizard.generalprogramming.org",
+            "ip": "79.110.170.49"
+        },
+        {
+            "fqdn": "router-portland.generalprogramming.org",
+            "ip": "10.65.67.13"
+        },
+        {
+            "fqdn": "saffron.generalprogramming.org",
+            "ip": "2620:fc:c000:0:5ca8:27ff:fe90:5ffb"
+        },
+        {
+            "fqdn": "saffron.generalprogramming.org",
+            "ip": "10.3.0.12"
+        },
+        {
+            "fqdn": "sea1-core.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::f00"
+        },
+        {
+            "fqdn": "sea1-gameservers.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::f11"
+        },
+        {
+            "fqdn": "sea1-gameservers.generalprogramming.org",
+            "ip": "10.3.2.20"
+        },
+        {
+            "fqdn": "sea1-ipa.generalprogramming.org",
+            "ip": "10.3.2.15"
+        },
+        {
+            "fqdn": "sea1-k8s-0.generalprogramming.org",
+            "ip": "10.3.2.10"
+        },
+        {
+            "fqdn": "sea1-k8s-1.generalprogramming.org",
+            "ip": "10.3.2.11"
+        },
+        {
+            "fqdn": "sea1-k8s-2.generalprogramming.org",
+            "ip": "10.3.2.12"
+        },
+        {
+            "fqdn": "sea1-k8s-cp-0.generalprogramming.org",
+            "ip": "10.3.2.16"
+        },
+        {
+            "fqdn": "sea1-k8s-cp-1.generalprogramming.org",
+            "ip": "10.3.2.17"
+        },
+        {
+            "fqdn": "sea1-k8s-cp-2.generalprogramming.org",
+            "ip": "10.3.2.18"
+        },
+        {
+            "fqdn": "sea1-vbastion.generalprogramming.org",
+            "ip": "2602:fa6d:10:ffff::f09"
+        },
+        {
+            "fqdn": "sea1-vbastion.generalprogramming.org",
+            "ip": "10.3.2.14"
+        },
+        {
+            "fqdn": "sea1-vpn-leaf-1.generalprogramming.org",
+            "ip": "10.3.2.4"
+        },
+        {
+            "fqdn": "sea1-vpn-leaf-2.generalprogramming.org",
+            "ip": "10.3.2.2"
+        },
+        {
+            "fqdn": "sea1-vpn-spine-1.generalprogramming.org",
+            "ip": "10.3.2.5"
+        },
+        {
+            "fqdn": "sea69-bootbox.generalprogramming.org",
+            "ip": "10.36.75.7"
+        },
+        {
+            "fqdn": "sea69-haas.generalprogramming.org",
+            "ip": "10.36.75.6"
+        },
+        {
+            "fqdn": "sea420-core.generalprogramming.org",
+            "ip": "10.3.0.3"
+        },
+        {
+            "fqdn": "sea420-ipa-1.generalprogramming.org",
+            "ip": "10.3.0.4"
+        },
+        {
+            "fqdn": "snakeroom-temp.generalprogramming.org",
+            "ip": "79.110.170.51"
+        },
+        {
+            "fqdn": "vrouter-nepwork.generalprogramming.org",
+            "ip": "79.110.170.3"
+        },
+        {
+            "fqdn": "wob-app-cream.generalprogramming.org",
+            "ip": "2620:fc:c000:0:c398:1e4c:ea15:4d97"
+        },
+        {
+            "fqdn": "wob-app-cream.generalprogramming.org",
+            "ip": "209.251.245.110"
+        }
+    ],
+    "ptr_records": [
+        {
+            "reverse_arpa": "252.0.213.10.in-addr.arpa",
+            "fqdn": "comms-icx.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "4.0.213.10.in-addr.arpa",
+            "fqdn": "devhack-serverroom-r1-ru41.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "6.0.213.10.in-addr.arpa",
+            "fqdn": "devhack-serverroom-r2-ru39.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "18.75.36.10.in-addr.arpa",
+            "fqdn": "dorkhouse-wlc-ng-01.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "1.170.110.79.in-addr.arpa",
+            "fqdn": "fmt2-acc-v-140752-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "5.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-con-sw-140752-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "1.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-cor-r-140752-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "4.170.110.79.in-addr.arpa",
+            "fqdn": "fmt2-core-0.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "100.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-100.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "100.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-100.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "101.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-101.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "101.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-101.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "102.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-102.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "102.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-102.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "103.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-103.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "103.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-103.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "104.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-104.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "104.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-hv-14-07-52-104.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "12.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-pdu-140752-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "13.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-pdu-140752-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "16.170.110.79.in-addr.arpa",
+            "fqdn": "laserjet.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "7.1.255.10.in-addr.arpa",
+            "fqdn": "laserjet.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "3.1.16.172.in-addr.arpa",
+            "fqdn": "linuxgemini-home-router.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "2.1.255.10.in-addr.arpa",
+            "fqdn": "oob-fmt2-shitpissfuckcuntcocksuckermotherfuckertits.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "2.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-acc-v-a-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "1.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-cor-r-a-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "5.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-hv-puppy.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "8.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-hv-puppy.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "3.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-wireless-a-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "1.0.3.10.in-addr.arpa",
+            "fqdn": "sea420-acc-v-hv2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "2.0.3.10.in-addr.arpa",
+            "fqdn": "sea420-hv-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "115.255.255.10.in-addr.arpa",
+            "fqdn": "sea420-hv-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "111.245.251.209.in-addr.arpa",
+            "fqdn": "sea420-hv-egg-irl.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "109.255.255.10.in-addr.arpa",
+            "fqdn": "sea420-hv-egg-irl.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "164.18.255.199.in-addr.arpa",
+            "fqdn": "10gbe.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "142.3.168.192.in-addr.arpa",
+            "fqdn": "20w14s.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "52.170.110.79.in-addr.arpa",
+            "fqdn": "boom-vm-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "53.170.110.79.in-addr.arpa",
+            "fqdn": "chichester.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "44.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-cp-0.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "45.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-cp-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "46.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-cp-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "47.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-node-0.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "48.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-node-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "49.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-node-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "50.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-node-3.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "51.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-k8s-node-4.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "2.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-netboot.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "24.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-vault-00.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "25.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-vault-01.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "26.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-vault-02.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "27.67.65.10.in-addr.arpa",
+            "fqdn": "fmt2-vault-proxy.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "48.170.110.79.in-addr.arpa",
+            "fqdn": "fmt2-vpn-client-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "23.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-vpn-leaf-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "24.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-vpn-leaf-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "21.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-vpn-spine-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "22.1.255.10.in-addr.arpa",
+            "fqdn": "fmt2-vpn-spine-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "66.170.110.79.in-addr.arpa",
+            "fqdn": "fmt2.moderateinfra.net.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "19.2.3.10.in-addr.arpa",
+            "fqdn": "freepbx.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "11.0.3.10.in-addr.arpa",
+            "fqdn": "gameservers.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "50.170.110.79.in-addr.arpa",
+            "fqdn": "garden.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "63.170.110.79.in-addr.arpa",
+            "fqdn": "genny-cascadia.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "15.0.3.10.in-addr.arpa",
+            "fqdn": "ghast.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "14.67.65.10.in-addr.arpa",
+            "fqdn": "ipa-fremont-donut.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "5.0.3.10.in-addr.arpa",
+            "fqdn": "james-shreds.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "64.170.110.79.in-addr.arpa",
+            "fqdn": "linear-pens.linuxgemini.space.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "14.0.3.10.in-addr.arpa",
+            "fqdn": "minecraft-silver.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "126.3.168.192.in-addr.arpa",
+            "fqdn": "not-furry-shit.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "141.3.168.192.in-addr.arpa",
+            "fqdn": "opl-dump.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "15.67.65.10.in-addr.arpa",
+            "fqdn": "opl-vods.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "16.0.3.10.in-addr.arpa",
+            "fqdn": "poppy.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "9.67.65.10.in-addr.arpa",
+            "fqdn": "recursiveness.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "7.0.3.10.in-addr.arpa",
+            "fqdn": "reddit-video-proxy.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "49.170.110.79.in-addr.arpa",
+            "fqdn": "robust-wizard.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "13.67.65.10.in-addr.arpa",
+            "fqdn": "router-portland.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "12.0.3.10.in-addr.arpa",
+            "fqdn": "saffron.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "20.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-gameservers.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "15.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-ipa.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "10.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-0.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "11.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "12.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "16.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-cp-0.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "17.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-cp-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "18.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-k8s-cp-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "14.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-vbastion.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "4.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-vpn-leaf-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "2.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-vpn-leaf-2.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "5.2.3.10.in-addr.arpa",
+            "fqdn": "sea1-vpn-spine-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "7.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-bootbox.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "6.75.36.10.in-addr.arpa",
+            "fqdn": "sea69-haas.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "3.0.3.10.in-addr.arpa",
+            "fqdn": "sea420-core.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "4.0.3.10.in-addr.arpa",
+            "fqdn": "sea420-ipa-1.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "51.170.110.79.in-addr.arpa",
+            "fqdn": "snakeroom-temp.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "3.170.110.79.in-addr.arpa",
+            "fqdn": "vrouter-nepwork.generalprogramming.org"
+        },
+        {
+            "reverse_arpa": "110.245.251.209.in-addr.arpa",
+            "fqdn": "wob-app-cream.generalprogramming.org"
+        }
+    ]
+}
