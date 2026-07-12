@@ -130,6 +130,7 @@ in
                     EnvironmentFile = "/run/vault-agent/netbox.env";
                 };
                 path = [
+                    pkgs.diffutils
                     pkgs.dnsmasq
                     pkgs.systemd
                 ];
