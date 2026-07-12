@@ -21,7 +21,8 @@ spec:
             description: "up{job=\"ceph\"} is absent: the cephadm prometheus on the fmt2 hypervisors (10.65.67.102:9095) is not remote-writing. Ceph monitoring is completely blind."
 
         - alert: HypervisorNodeMetricsAbsent
-          expr: absent(node_uname_info{instance=~"10\\.65\\.67\\.10[0-4]:9100"})
+          # the cephadm prometheus relabels node instances to bare hostnames
+          expr: absent(node_uname_info{job="node", instance=~"fmt2-hv-14-07-52-10[0-4]"})
           for: 15m
           labels:
             severity: critical
