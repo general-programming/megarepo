@@ -1,0 +1,17 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMScrapeConfig
+metadata:
+  name: smartctl-exporter
+  namespace: victoriametrics
+spec:
+  staticConfigs:
+    - targets:
+        - 10.65.67.100:9633
+        - 10.65.67.101:9633
+        - 10.65.67.102:9633
+        - 10.65.67.103:9633
+        - 10.65.67.104:9633
+  relabelConfigs:
+    - action: replace
+      targetLabel: job
+      replacement: smartctl-exporter

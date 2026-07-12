@@ -4,6 +4,7 @@ namespace: victoriametrics
 resources:
   - ../base
   - alerts-ceph-deadman.yaml
+  - scrape-smartctl.yaml
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml

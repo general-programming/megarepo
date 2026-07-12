@@ -8,30 +8,39 @@ spec:
     - name: smart-disks
       rules:
         - alert: SmartDeviceUnhealthy
-          expr: smartmon_device_smart_healthy == 0
+          expr: smartctl_device_smart_status == 0
           for: 5m
           labels:
             severity: critical
           annotations:
-            summary: "SMART reports unhealthy disk {{ $labels.disk }} on {{ $labels.instance }}"
-            description: "Disk {{ $labels.disk }} (type {{ $labels.type }}) on {{ $labels.instance }} fails its SMART overall-health self-assessment. Replace it."
+            summary: "SMART reports unhealthy disk {{ $labels.device }} on {{ $labels.instance }}"
+            description: "Disk {{ $labels.device }} on {{ $labels.instance }} fails its SMART overall-health self-assessment. Replace it."
 
         - alert: SmartReallocatedSectorsGrowing
-          expr: increase(smartmon_reallocated_sector_ct_raw_value[24h]) > 0
+          expr: increase(smartctl_device_attribute{attribute_name="Reallocated_Sector_Ct", attribute_value_type="raw"}[24h]) > 0
           labels:
             severity: warning
           annotations:
-            summary: "Reallocated sectors growing on {{ $labels.disk }} ({{ $labels.instance }})"
-            description: "Disk {{ $labels.disk }} on {{ $labels.instance }} gained {{ $value }} reallocated sectors in the last 24h. The drive is remapping bad sectors and may be failing."
+            summary: "Reallocated sectors growing on {{ $labels.device }} ({{ $labels.instance }})"
+            description: "Disk {{ $labels.device }} on {{ $labels.instance }} gained {{ $value }} reallocated sectors in the last 24h. The drive is remapping bad sectors and may be failing."
 
         - alert: SmartPendingSectors
-          expr: smartmon_current_pending_sector_raw_value > 0
+          expr: smartctl_device_attribute{attribute_name="Current_Pending_Sector", attribute_value_type="raw"} > 0
           for: 1h
           labels:
             severity: warning
           annotations:
-            summary: "Pending sectors on {{ $labels.disk }} ({{ $labels.instance }})"
-            description: "Disk {{ $labels.disk }} on {{ $labels.instance }} has {{ $value }} current pending sectors (unreadable, awaiting remap)."
+            summary: "Pending sectors on {{ $labels.device }} ({{ $labels.instance }})"
+            description: "Disk {{ $labels.device }} on {{ $labels.instance }} has {{ $value }} current pending sectors (unreadable, awaiting remap)."
+
+        - alert: SmartctlExporterDown
+          expr: up{job="smartctl-exporter"} == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "smartctl-exporter down on {{ $labels.instance }}"
+            description: "The smartctl-exporter on {{ $labels.instance }} is not scrapeable; SMART monitoring is blind on this host."
 
         - alert: NodeTextfileCollectorError
           expr: node_textfile_scrape_error == 1
@@ -40,12 +49,4 @@ spec:
             severity: warning
           annotations:
             summary: "node-exporter textfile collector error on {{ $labels.instance }}"
-            description: "The textfile collector on {{ $labels.instance }} is failing to parse one of its .prom files; custom metrics (SMART, IPMI) may be missing or stale."
-
-        - alert: SmartMetricsStale
-          expr: time() - node_textfile_mtime_seconds{file=~".*smartmon.prom"} > 1800
-          labels:
-            severity: warning
-          annotations:
-            summary: "SMART metrics stale on {{ $labels.instance }}"
-            description: "smartmon.prom on {{ $labels.instance }} has not been updated for over 30 minutes; the prom_smartmon cron job is probably broken. SMART monitoring is blind on this host."
+            description: "The textfile collector on {{ $labels.instance }} is failing to parse one of its .prom files; custom metrics (IPMI) may be missing or stale."
