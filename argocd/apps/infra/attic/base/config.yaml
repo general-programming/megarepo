@@ -16,7 +16,7 @@ data:
     type = "s3"
     region = "us-east-1"
     bucket = "attic"
-    endpoint = "http://radosgw.service.consul"
+    endpoint = "http://radosgw.attic.svc.cluster.local"
 
     [chunking]
     nar-size-threshold = 65536

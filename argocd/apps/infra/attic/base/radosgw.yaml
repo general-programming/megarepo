@@ -1,0 +1,29 @@
+# In-cluster name for the fmt2 ceph radosgw daemons (they run on the ceph
+# hv nodes, outside k8s). The consul name radosgw.service.consul is not
+# resolvable from this cluster, so we point a selectorless Service at the
+# rgw IPs directly.
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: radosgw
+spec:
+  clusterIP: None
+  ports:
+    - name: http
+      port: 80
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: radosgw-1
+  labels:
+    kubernetes.io/service-name: radosgw
+addressType: IPv4
+ports:
+  - name: http
+    port: 80
+endpoints:
+  - addresses: ["10.65.67.100"]
+  - addresses: ["10.65.67.101"]
+  - addresses: ["10.65.67.102"]

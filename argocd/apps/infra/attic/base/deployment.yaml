@@ -14,6 +14,28 @@ spec:
       labels:
         app: attic
     spec:
+      # api-server mode does not run migrations itself.
+      initContainers:
+      - name: db-migrations
+        image: ghcr.io/zhaofengli/attic:latest
+        args:
+          - -f
+          - /config/server.toml
+          - --mode
+          - db-migrations
+        env:
+          - name: ATTIC_SERVER_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: attic-db-app
+                key: uri
+        envFrom:
+          - secretRef:
+              name: attic-secrets
+        volumeMounts:
+          - name: attic-config
+            subPath: server.toml
+            mountPath: /config/server.toml
       containers:
       - name: attic
         image: ghcr.io/zhaofengli/attic:latest

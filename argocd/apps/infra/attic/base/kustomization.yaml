@@ -4,6 +4,7 @@ namespace: attic
 resources:
   - secrets.yaml
   - database.yaml
+  - radosgw.yaml
   - config.yaml
   - deployment.yaml
   - service.yaml
