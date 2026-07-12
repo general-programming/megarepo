@@ -21,7 +21,8 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    storageClass: local-path
+    # fmt2 has no working local-path nodes; RBD is the cluster default.
+    storageClass: ceph-rbd-xfs
     size: 5Gi
   bootstrap:
     initdb:
