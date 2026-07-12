@@ -1,0 +1,26 @@
+# DNS vehicle: publishes rgw-fmt2.generalprogramming.org -> the ceph rgw
+# node IPs via external-dns. Attic serves single-chunk NARs as presigned
+# S3 redirects, so cache clients must be able to resolve the storage
+# endpoint themselves. The backend below is never meaningfully routed;
+# clients hit the rgw nodes directly on port 80.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rgw-dns
+  namespace: attic
+  annotations:
+    external-dns.alpha.kubernetes.io/target: "10.65.67.100,10.65.67.101,10.65.67.102"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+spec:
+  rules:
+    - host: rgw-fmt2.generalprogramming.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: attic
+                port:
+                  name: http

@@ -16,7 +16,9 @@ spec:
           enabled: true
           exposeGossipPorts: true
           join:
-            # consul servers on the fmt2 ceph hypervisors
+            # consul servers on the fmt2 hypervisors
             - "10.65.67.100"
             - "10.65.67.101"
             - "10.65.67.102"
+            - "10.65.67.103"
+            - "10.65.67.104"

@@ -16,12 +16,12 @@ data:
     type = "s3"
     region = "us-east-1"
     bucket = "attic"
-    endpoint = "http://radosgw.service.consul"
+    # Must be resolvable by cache clients too: single-chunk NARs are served
+    # as 307 redirects to pre-signed URLs on this endpoint.
+    endpoint = "http://rgw-fmt2.generalprogramming.org"
 
     [chunking]
-    # chunk everything: unchunked NARs are served as 307 redirects to
-    # pre-signed S3 URLs, which clients cannot resolve (rgw is internal).
-    nar-size-threshold = 1
+    nar-size-threshold = 65536
     min-size = 16384
     avg-size = 65536
     max-size = 262144
