@@ -1,3 +1,4 @@
+{% if not grains.get('proxmox', False) %}
 include:
   - service_node_exporter.install
 
@@ -9,3 +10,4 @@ node_exporter_consul_service:
     - group: root
     - mode: '0644'
     - makedirs: True
+{% endif %}

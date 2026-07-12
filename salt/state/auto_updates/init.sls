@@ -1,6 +1,4 @@
-{% set is_proxmox = salt['file.directory_exists']('/etc/pve') or salt['pkg.version']('pve-manager') %}
-
-{% if not is_proxmox %}
+{% if not grains.get('proxmox', False) %}
 {% if grains['os_family'] == 'RedHat' %}
 auto_updates_pkg:
   pkg.installed:
