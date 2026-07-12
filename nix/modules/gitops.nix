@@ -12,7 +12,7 @@
   ];
 
   options.gitops = {
-    enable = lib.mkEnableOption "GitOps from general-programming/nixos";
+    enable = lib.mkEnableOption "GitOps from general-programming/megarepo";
 
     ref = lib.mkOption {
       type = lib.types.str;
@@ -48,8 +48,9 @@
     # ];
 
     gitops = {
-      repo = "https://github.com/general-programming/nixos.git";
+      repo = "https://github.com/general-programming/megarepo.git";
       ref = "main";
+      subdir = "nix";
     };
 
     services.comin = {

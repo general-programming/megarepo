@@ -39,6 +39,9 @@ terraform.tfstate*
 
 *autogen.yml
 
+# Nix build outputs
+nix/result
+
 # Devenv
 .devenv*
 devenv.local.nix
