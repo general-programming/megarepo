@@ -63,6 +63,15 @@ machines substitute instead of building.
 Ad-hoc paths can be pushed too: `attic push gp:gp ./result`. Pushes skip
 chunks the server already has, so repeats are cheap.
 
+Pushes also skip any path signed by an upstream cache key — the cache is
+configured with `cache.nixos.org-1` and `cache.nixos-cuda.org` as upstream
+keys (`attic cache info gp:gp`), so NVIDIA/CUDA closures substituted from
+[cache.nixos-cuda.org](https://cache.nixos-cuda.org) are never re-uploaded.
+This only works for paths that carry the upstream signature, i.e. ones the
+pushing host substituted rather than built locally — so the host running
+`just build_cache` should have the CUDA cache in its substituters
+(`nix/modules/nvidia.nix`).
+
 ## Tokens
 
 Tokens are stateless JWTs signed with the RS256 secret — there is no

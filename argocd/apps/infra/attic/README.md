@@ -60,6 +60,11 @@ in `nix/` builds every machine's closure and pushes it.
    attic cache create gp:gp
    # public so hosts can substitute without auth; pushing still needs a token
    attic cache configure gp:gp --public
+   # skip paths already served by upstream caches (pushes drop anything
+   # signed by these keys — keeps NVIDIA/CUDA closures out of our S3)
+   attic cache configure gp:gp \
+     --upstream-cache-key-name cache.nixos.org-1 \
+     --upstream-cache-key-name cache.nixos-cuda.org
    attic cache info gp:gp   # -> "Public Key: gp:..."
    ```
 
