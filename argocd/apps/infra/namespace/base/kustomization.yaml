@@ -22,6 +22,7 @@ resources:
   - shared-db.yaml
 
   # apps
+  - attic.yaml
   - authentik.yaml
   - grafana.yaml
   - librenms.yaml
