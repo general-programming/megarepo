@@ -8,6 +8,7 @@ Requires=docker.service
 ExecStartPre=-/usr/bin/docker rm -f smartctl-exporter
 ExecStart=/usr/bin/docker run --rm --name smartctl-exporter \
     --privileged \
+    --user root \
     --network host \
     -v /dev:/dev \
     {{ image }} \
