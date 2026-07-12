@@ -19,7 +19,9 @@ data:
     endpoint = "http://radosgw.service.consul"
 
     [chunking]
-    nar-size-threshold = 65536
+    # chunk everything: unchunked NARs are served as 307 redirects to
+    # pre-signed S3 URLs, which clients cannot resolve (rgw is internal).
+    nar-size-threshold = 1
     min-size = 16384
     avg-size = 65536
     max-size = 262144
