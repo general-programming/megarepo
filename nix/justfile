@@ -18,6 +18,7 @@ default:
 provision machine target role="nixos-core":
     #!/usr/bin/env bash
     set -euo pipefail
+    command -v vault >/dev/null && VAULT_CMD=vault || VAULT_CMD=bao
     tmp=$(mktemp -d)
     trap 'rm -rf "$tmp"' EXIT
 
@@ -30,8 +31,8 @@ provision machine target role="nixos-core":
 
     install -d -m 0700 "$creds"
     umask 077
-    vault read -field=role_id "auth/approle/role/{{role}}/role-id" > "$creds/approle_id"
-    vault write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" > "$creds/approle_secret"
+    "$VAULT_CMD" read -field=role_id "auth/approle/role/{{role}}/role-id" > "$creds/approle_id"
+    "$VAULT_CMD" write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" > "$creds/approle_secret"
 
     nix run github:nix-community/nixos-anywhere -- \
         --flake .#{{machine}} \
@@ -52,12 +53,13 @@ update machine target="":
 rekey machine target="" role="nixos-core":
     #!/usr/bin/env bash
     set -euo pipefail
+    command -v vault >/dev/null && VAULT_CMD=vault || VAULT_CMD=bao
     host="{{target}}"
     [ -n "$host" ] || host="{{machine}}.generalprogramming.org"
 
-    vault read -field=role_id "auth/approle/role/{{role}}/role-id" \
+    "$VAULT_CMD" read -field=role_id "auth/approle/role/{{role}}/role-id" \
         | ssh "root@$host" 'umask 077; install -d -m 0700 /var/lib/vault-agent; cat > /var/lib/vault-agent/approle_id'
-    vault write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" \
+    "$VAULT_CMD" write -f -field=secret_id "auth/approle/role/{{role}}/secret-id" \
         | ssh "root@$host" 'umask 077; cat > /var/lib/vault-agent/approle_secret; systemctl try-restart vault-agent-node.service'
 
     echo "rekeyed $host"
