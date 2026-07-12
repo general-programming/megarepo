@@ -1,0 +1,30 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: ceph-deadman
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: ceph-deadman
+      rules:
+        # fmt2-only: the cephadm cluster on the fmt2 hypervisors remote-writes
+        # into this VM cluster. If its metrics vanish entirely (prometheus on
+        # the hypervisors dead, remote_write broken), no metric-gated alert can
+        # fire, so this absent() rule is the backstop.
+        - alert: CephMetricsAbsent
+          expr: absent(up{job="ceph"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Ceph metrics arriving from the fmt2 cephadm cluster"
+            description: "up{job=\"ceph\"} is absent: the cephadm prometheus on the fmt2 hypervisors (10.65.67.102:9095) is not remote-writing. Ceph monitoring is completely blind."
+
+        - alert: HypervisorNodeMetricsAbsent
+          expr: absent(node_uname_info{instance=~"10\\.65\\.67\\.10[0-4]:9100"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No node-exporter metrics arriving from the fmt2 hypervisors"
+            description: "Node metrics from the fmt2-hv-14-07-52-* hypervisors are absent; the cephadm prometheus remote_write pipeline or the node-exporters are down. SMART and host alerting is blind."

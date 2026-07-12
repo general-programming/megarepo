@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: victoriametrics
 resources:
   - ../base
+  - alerts-ceph-deadman.yaml
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml

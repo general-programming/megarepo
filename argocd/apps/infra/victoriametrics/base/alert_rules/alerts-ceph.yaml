@@ -1,0 +1,53 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: ceph
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: ceph
+      rules:
+        - alert: CephMgrScrapeDown
+          expr: up{job="ceph"} == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph mgr metrics endpoint down ({{ $labels.instance }})"
+            description: "Prometheus cannot scrape the ceph-mgr prometheus module at {{ $labels.instance }}. Either the active mgr is down/crashlooping or the module is disabled. While this fires, all ceph_* metrics and alerts are blind."
+
+        - alert: CephHealthError
+          expr: ceph_health_status == 2
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Ceph cluster is in HEALTH_ERR"
+            description: "The Ceph cluster has been in HEALTH_ERR for 5 minutes. Check `ceph health detail`."
+
+        - alert: CephHealthWarn
+          expr: ceph_health_status == 1
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Ceph cluster is in HEALTH_WARN"
+            description: "The Ceph cluster has been in HEALTH_WARN for 30 minutes. Check `ceph health detail`."
+
+        - alert: CephOSDDown
+          expr: ceph_osd_up == 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Ceph OSD {{ $labels.ceph_daemon }} is down"
+            description: "{{ $labels.ceph_daemon }} has been down for 15 minutes. If noout is set, data on it is not being re-replicated while it stays down."
+
+        - alert: CephPGsDegraded
+          expr: ceph_pg_degraded > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "Ceph has degraded PGs for over an hour"
+            description: "{{ $value }} PGs in pool id {{ $labels.pool_id }} have been degraded for over an hour. Recovery may be stuck (check noout/backfill)."

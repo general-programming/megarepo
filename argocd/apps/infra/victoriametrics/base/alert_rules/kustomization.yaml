@@ -10,5 +10,7 @@ resources:
   - alerts-vmalert.yaml
   # Our rules
   - alerts-argocd.yaml
+  - alerts-ceph.yaml
+  - alerts-smart.yaml
   - node-disk.yaml
   - resources-memory.yaml
