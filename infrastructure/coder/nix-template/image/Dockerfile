@@ -7,13 +7,14 @@ RUN apt-get update \
         git \
         sudo \
         xz-utils \
+        zsh \
     && rm -rf /var/lib/apt/lists/*
 
 # Ubuntu 24.04+ base images ship a default "ubuntu" user on uid/gid 1000,
 # which must go before coder can claim those ids.
 RUN userdel --remove ubuntu \
     && groupadd --gid 1000 coder \
-    && useradd --uid 1000 --gid coder --shell /bin/bash --create-home coder \
+    && useradd --uid 1000 --gid coder --shell /usr/bin/zsh --create-home coder \
     && echo "coder ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/coder
 
 # /nix is pre-created and owned by uid 1000 so the single-user install below
