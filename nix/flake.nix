@@ -78,11 +78,13 @@
           };
 
         nixosModule =
+          # Return the path (not `import`) so the module system can
+          # deduplicate a module that is imported from several places.
           name:
           if builtins.pathExists ./modules/${name}/default.nix then
-            import ./modules/${name}/default.nix
+            ./modules/${name}/default.nix
           else if builtins.pathExists ./modules/${name}.nix then
-            import ./modules/${name}.nix
+            ./modules/${name}.nix
           else
             throw "NixOS module '${name}' not found in modules directory";
 

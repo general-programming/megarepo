@@ -31,6 +31,9 @@ in
     ./consul.nix
   ];
 
+  # Hourly DNS/DHCP regeneration from NetBox, keyed via vault-agent.
+  dns.refresh.enable = true;
+
   vaultAgent = {
     enable = true;
 
