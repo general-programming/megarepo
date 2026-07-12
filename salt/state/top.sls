@@ -12,6 +12,7 @@
 
     # services
     - service_node_exporter
+    - service_smartctl_exporter
 
   'G@tags:docker':
     - install_docker

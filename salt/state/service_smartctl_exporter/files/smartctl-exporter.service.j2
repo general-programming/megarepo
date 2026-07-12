@@ -1,0 +1,21 @@
+# {{ pillar['common']['salt_managed'] }}
+[Unit]
+Description=smartctl exporter (docker)
+After=docker.service
+Requires=docker.service
+
+[Service]
+ExecStartPre=-/usr/bin/docker rm -f smartctl-exporter
+ExecStart=/usr/bin/docker run --rm --name smartctl-exporter \
+    --privileged \
+    --network host \
+    -v /dev:/dev:ro \
+    {{ image }} \
+    --web.listen-address=:9633 \
+    --smartctl.interval=120s
+ExecStop=/usr/bin/docker stop smartctl-exporter
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
