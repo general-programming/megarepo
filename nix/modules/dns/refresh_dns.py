@@ -161,6 +161,8 @@ def query_netbox(url: str, token: str, gql_query: str) -> dict:
             # NetBox >= 4.5 v2 tokens (nbt_<key>.<secret>) require Bearer.
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
+            # Cloudflare bans urllib's default UA with error 1010.
+            "User-Agent": "netbox-dnsmasq (megarepo nix/modules/dns)",
         },
     )
 
