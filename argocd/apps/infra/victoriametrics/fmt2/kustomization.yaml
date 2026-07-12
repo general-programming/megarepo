@@ -8,4 +8,5 @@ resources:
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml
+  - ingress-vmalert.yaml
   - vmselect-sea1-egress.yaml

@@ -15,12 +15,6 @@ spec:
   selectAllByDefault: true
   evaluationInterval: 1m
   # Alert "Source" links (Discord/IRM) use this instead of the pod hostname.
+  # Served by the tailscale Ingress in ingress-vmalert.yaml.
   extraArgs:
-    external.url: "http://svc-vmalert-fmt2.tail285d8f.ts.net:8080"
-  serviceSpec:
-    spec:
-      type: ClusterIP
-    metadata:
-      annotations:
-        tailscale.com/expose: "true"
-        tailscale.com/hostname: "svc-vmalert-fmt2"
+    external.url: "https://svc-vmalert-fmt2.tail285d8f.ts.net"

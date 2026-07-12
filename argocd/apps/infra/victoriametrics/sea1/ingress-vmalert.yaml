@@ -1,0 +1,18 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: vmalert
+  namespace: victoriametrics
+  annotations:
+    tailscale.com/hostname: "svc-vmalert-sea1"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      # Operator-generated service for the VMAlert CR named "vmalert".
+      name: vmalert-vmalert
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - svc-vmalert-sea1

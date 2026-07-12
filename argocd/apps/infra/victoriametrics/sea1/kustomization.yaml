@@ -6,4 +6,5 @@ resources:
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml
+  - ingress-vmalert.yaml
   - sea1_scrape.yaml
