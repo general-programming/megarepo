@@ -31,8 +31,11 @@ For hands-on iteration from your checkout:
 just update <machine> [target-host]
 ```
 
-which is `nixos-rebuild switch --flake .#<machine> --target-host root@...`
-(defaults to `<machine>.generalprogramming.org`).
+which is `nixos-rebuild switch --flake .#<machine> --build-host root@...
+--target-host root@...` (defaults to `<machine>.generalprogramming.org`).
+The machine builds its own closure — substituting from the
+[binary cache](cache.md) — rather than receiving it over the WAN from
+your workstation.
 
 ## Vault credentials
 

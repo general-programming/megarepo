@@ -40,6 +40,8 @@ provision machine target role="nixos-core":
         root@{{target}}
 
 # Rebuild an existing machine with the latest config from this checkout.
+# Builds on the machine itself (it substitutes from attic/cache.nixos.org)
+# instead of building here and copying the closure over the WAN.
 update machine target="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -47,6 +49,7 @@ update machine target="":
     [ -n "$host" ] || host="{{machine}}.generalprogramming.org"
     nix run nixpkgs#nixos-rebuild -- switch \
         --flake .#{{machine}} \
+        --build-host "root@$host" \
         --target-host "root@$host"
 
 # Mint a fresh AppRole secret_id and push it to a running machine.
