@@ -64,6 +64,21 @@ rekey machine target="" role="nixos-core":
 
     echo "rekeyed $host"
 
+# Needs a one-time `attic login gp https://attic.generalprogramming.org/ <token>`;
+# see argocd/apps/infra/attic/README.md for the bootstrap runbook.
+# Build every machine's system closure and push it to the Attic binary cache.
+build_cache cache="gp:gp":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    machines=$(nix eval --raw .#nixosConfigurations \
+        --apply 'cfgs: builtins.concatStringsSep " " (builtins.attrNames cfgs)')
+    for machine in $machines; do
+        echo "==> building $machine"
+        out=$(nix build --no-link --print-out-paths ".#nixosConfigurations.$machine.config.system.build.toplevel")
+        echo "==> pushing $machine ($out)"
+        nix run nixpkgs#attic-client -- push {{cache}} "$out"
+    done
+
 # Validate the NetBox API key in Vault by generating and testing a dnsmasq config.
 netbox-check:
     #!/usr/bin/env bash

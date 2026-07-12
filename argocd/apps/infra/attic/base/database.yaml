@@ -1,0 +1,29 @@
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: attic-db
+spec:
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: postgresql-standard-trixie
+    major: 18
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: generalprogramming.org/no-database
+                operator: DoesNotExist
+  storage:
+    storageClass: local-path
+    size: 5Gi
+  bootstrap:
+    initdb:
+      database: attic
+      owner: attic

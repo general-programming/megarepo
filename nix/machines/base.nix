@@ -13,7 +13,15 @@
 {
   imports = [
     (self.lib.nixosModule "nixos-tags")
+    (self.lib.nixosModule "nix-cache")
   ];
+
+  # Self-hosted Attic binary cache (fmt2 k8s). Flip on once the cache is
+  # bootstrapped; runbook in argocd/apps/infra/attic/README.md.
+  # gpNixCache = {
+  #   enable = true;
+  #   publicKey = "gp:REPLACE_WITH_ATTIC_CACHE_INFO_OUTPUT";
+  # };
 
   # nix configs
   nix.settings.substituters = [

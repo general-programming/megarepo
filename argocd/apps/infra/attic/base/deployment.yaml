@@ -1,0 +1,93 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attic
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: attic
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: attic
+    spec:
+      containers:
+      - name: attic
+        image: ghcr.io/zhaofengli/attic:latest
+        args:
+          - -f
+          - /config/server.toml
+          - --mode
+          - api-server
+        resources: {}
+        ports:
+          - name: http
+            containerPort: 8080
+        env:
+          - name: ATTIC_SERVER_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: attic-db-app
+                key: uri
+        envFrom:
+          - secretRef:
+              name: attic-secrets
+        readinessProbe:
+          tcpSocket:
+            port: http
+        volumeMounts:
+          - name: attic-config
+            subPath: server.toml
+            mountPath: /config/server.toml
+      volumes:
+        - name: attic-config
+          configMap:
+            name: attic-config
+---
+# Garbage collector; same config, separate long-running process that prunes
+# per [garbage-collection] in server.toml.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: attic-gc
+  annotations:
+    reloader.stakater.com/auto: "true"
+spec:
+  selector:
+    matchLabels:
+      app: attic-gc
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: attic-gc
+    spec:
+      containers:
+      - name: attic-gc
+        image: ghcr.io/zhaofengli/attic:latest
+        args:
+          - -f
+          - /config/server.toml
+          - --mode
+          - garbage-collector
+        resources: {}
+        env:
+          - name: ATTIC_SERVER_DATABASE_URL
+            valueFrom:
+              secretKeyRef:
+                name: attic-db-app
+                key: uri
+        envFrom:
+          - secretRef:
+              name: attic-secrets
+        volumeMounts:
+          - name: attic-config
+            subPath: server.toml
+            mountPath: /config/server.toml
+      volumes:
+        - name: attic-config
+          configMap:
+            name: attic-config
