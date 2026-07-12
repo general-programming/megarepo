@@ -7,8 +7,10 @@ data:
     listen = "[::]:8080"
     api-endpoint = "https://attic.generalprogramming.org/"
 
-    # database.url comes from ATTIC_SERVER_DATABASE_URL (CNPG app secret).
-    # The RS256 token secret comes from ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64.
+    # url comes from ATTIC_SERVER_DATABASE_URL (CNPG app secret); the section
+    # itself must exist for the config to parse. The RS256 token secret comes
+    # from ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64.
+    [database]
 
     [storage]
     type = "s3"
