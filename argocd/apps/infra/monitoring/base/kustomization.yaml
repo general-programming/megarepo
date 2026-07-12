@@ -19,6 +19,7 @@ resources:
 - vault_alertmanager_irm.yaml
 patches:
   - path: patch_nodeexporter_sa.yaml
+  - path: patch_nodeexporter_resources.yaml
 helmCharts:
   - name: prometheus-smartctl-exporter
     releaseName: prometheus-smartctl-exporter
