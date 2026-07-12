@@ -7,6 +7,7 @@ Mega repo for General Programming business operations.
 * automation/ - Ansible playbooks for automating deployments and managements to core systems and disposable fleet.
 * common/ - Files shared between automation playbooks and other scripts.
 * infrastructure/ - Dockerfiles and Ansible playbooks to setup "important" services
+* nix/ - NixOS flake configs for physical/VM machines.
 * serverless/ - Various webhooks that handle events fired by other services.
 
 ## Points of Presence

@@ -7,6 +7,9 @@
   "argocd": {
     "managerFilePatterns": ["/argocd/.+\\.yaml$/"]
   },
+  "nix": {
+    "enabled": true
+  },
   "prHourlyLimit": 10,
   "customManagers": [
     {
