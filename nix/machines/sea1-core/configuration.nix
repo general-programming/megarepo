@@ -57,18 +57,14 @@ in
   gpCloudflared.enable = true;
   holepunch.enable = true;
 
+  # Plain tailnet client: the k8s tailscale connectors own exit-node and
+  # subnet-router duties for sea1. Explicit =false/empty flags so
+  # `tailscale set` clears anything advertised previously.
   gpTailscale.enable = true;
-  services.tailscale = {
-    # Exit node + advertised routes are host policy, kept out of the module.
-    useRoutingFeatures = "server";
-    extraSetFlags = [
-      "--advertise-exit-node"
-      # No subnet routes: the k8s tailscale connectors already cover the
-      # sea1 nets. Keep the empty flag so `tailscale set` explicitly
-      # clears any previously advertised routes.
-      "--advertise-routes="
-    ];
-  };
+  services.tailscale.extraSetFlags = [
+    "--advertise-exit-node=false"
+    "--advertise-routes="
+  ];
 
   # DHCP for the sea1 subnet, mirroring the legacy isc-dhcpd setup
   # (pool .3.128-.3.254, router .2.1, MTU 9000, 2h leases; v6 ::200-::fff).

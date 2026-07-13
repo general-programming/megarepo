@@ -6,6 +6,7 @@ metadata:
 spec:
   replicas: 2
   hostnamePrefix: connector-sea1
+  exitNode: true
   subnetRouter:
     advertiseRoutes:
       - "10.3.2.0/23"
