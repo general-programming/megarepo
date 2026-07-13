@@ -11,7 +11,7 @@ metadata:
     external-dns.alpha.kubernetes.io/target: "fmt2-traefik-k8s.generalprogramming.org"
 spec:
   rules:
-    - host: attic.generalprogramming.org
+    - host: attic.owo.me
       http:
         paths:
           - path: /

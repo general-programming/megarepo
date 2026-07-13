@@ -8,9 +8,9 @@ NixOS machine trusts it via the `gpNixCache` block in
 
 | What                | Where                                                  |
 | ------------------- | ------------------------------------------------------ |
-| Substituter         | `https://attic.generalprogramming.org/gp`              |
-| Public key          | `gp:958sm0tH6uTbnSxcxhBHQ8RQ5MVXNlCoTN28cE6STvg=`      |
-| API endpoint        | `https://attic.generalprogramming.org/`                |
+| Substituter         | `https://attic.owo.me/general-programming`              |
+| Public key          | TBD — regenerated on the `general-programming` cache; see bootstrap runbook |
+| API endpoint        | `https://attic.owo.me/`                |
 | Deployment          | `argocd/apps/infra/attic` (fmt2 k8s only)              |
 | Admin token         | Vault `secret/app/attic-admin`                         |
 | S3 creds + JWT key  | Vault `secret/app/attic-secrets`                       |
@@ -21,7 +21,7 @@ Pushing requires a token.
 ## Architecture
 
 - `attic` Deployment — API server, behind traefik at
-  `attic.generalprogramming.org`. NAR uploads/downloads stream through it.
+  `attic.owo.me`. NAR uploads/downloads stream through it.
 - `attic-gc` Deployment — garbage collector. Prunes objects not accessed
   within the retention period (3 months, `[garbage-collection]` in
   `server.toml`), every 12 hours.
@@ -45,7 +45,7 @@ Two behaviors worth knowing:
 Builds are pushed manually (no CI/timer yet). One-time setup:
 
 ```sh
-attic login gp https://attic.generalprogramming.org/ \
+attic login general-programming https://attic.owo.me/ \
   "$(vault kv get -field=token secret/app/attic-admin)"
 ```
 
@@ -60,12 +60,12 @@ nix-output-monitor) and pushes each closure. Run it after merging nix
 changes to main — comin polls every 10 minutes, so pushing promptly means
 machines substitute instead of building.
 
-Ad-hoc paths can be pushed too: `attic push gp:gp ./result`. Pushes skip
+Ad-hoc paths can be pushed too: `attic push general-programming:general-programming ./result`. Pushes skip
 chunks the server already has, so repeats are cheap.
 
 Pushes also skip any path signed by an upstream cache key — the cache is
 configured with `cache.nixos.org-1` and `cache.nixos-cuda.org` as upstream
-keys (`attic cache info gp:gp`), so NVIDIA/CUDA closures substituted from
+keys (`attic cache info general-programming:general-programming`), so NVIDIA/CUDA closures substituted from
 [cache.nixos-cuda.org](https://cache.nixos-cuda.org) are never re-uploaded.
 This only works for paths that carry the upstream signature, i.e. ones the
 pushing host substituted rather than built locally — so the host running
@@ -81,7 +81,7 @@ tokens from inside the pod:
 ```sh
 kubectl -n attic exec deploy/attic -- \
   atticadm make-token -f /config/server.toml \
-  --sub builder --validity 1y --pull gp --push gp
+  --sub builder --validity 1y --pull general-programming --push general-programming
 ```
 
 Rotating `ATTIC_SERVER_TOKEN_RS256_SECRET_BASE64` in

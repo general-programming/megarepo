@@ -19,14 +19,14 @@ in
 
     url = lib.mkOption {
       type = lib.types.str;
-      default = "https://attic.generalprogramming.org/gp";
+      default = "https://attic.owo.me/general-programming";
       description = "Substituter URL (Attic endpoint + cache name).";
     };
 
     publicKey = lib.mkOption {
       type = lib.types.nullOr lib.types.str;
       default = null;
-      description = "Cache signing public key, from `attic cache info gp`.";
+      description = "Cache signing public key, from `attic cache info general-programming`.";
     };
   };
 

@@ -67,10 +67,10 @@ rekey machine target="" role="nixos-core":
 
     echo "rekeyed $host"
 
-# Needs a one-time `attic login gp https://attic.generalprogramming.org/ <token>`;
+# Needs a one-time `attic login general-programming https://attic.owo.me/ <token>`;
 # see argocd/apps/infra/attic/README.md for the bootstrap runbook.
 # Build every machine's system closure and push it to the Attic binary cache.
-build_cache cache="gp:gp":
+build_cache cache="general-programming:general-programming":
     #!/usr/bin/env bash
     set -euo pipefail
     machines=$(nix eval --raw .#nixosConfigurations \

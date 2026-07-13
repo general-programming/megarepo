@@ -18,9 +18,12 @@
 
   # Self-hosted Attic binary cache (fmt2 k8s); populate with
   # `just build_cache`. Runbook in argocd/apps/infra/attic/README.md.
+  #
+  # Disabled during the gp -> general-programming cache rename; re-enable
+  # with the new cache's public key once it's been bootstrapped.
   gpNixCache = {
-    enable = true;
-    publicKey = "gp:958sm0tH6uTbnSxcxhBHQ8RQ5MVXNlCoTN28cE6STvg=";
+    enable = false;
+    publicKey = null;
   };
 
   # nix configs

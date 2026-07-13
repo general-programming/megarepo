@@ -5,7 +5,7 @@ metadata:
 data:
   server.toml: |
     listen = "[::]:8080"
-    api-endpoint = "https://attic.generalprogramming.org/"
+    api-endpoint = "https://attic.owo.me/"
 
     # url comes from ATTIC_SERVER_DATABASE_URL (CNPG app secret); the section
     # itself must exist for the config to parse. The RS256 token secret comes

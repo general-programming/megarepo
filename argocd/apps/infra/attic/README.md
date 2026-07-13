@@ -3,7 +3,7 @@
 Self-hosted Nix binary cache ([Attic](https://github.com/zhaofengli/attic)),
 deployed to **fmt2 only** (next to its radosgw). All NixOS hosts — sea1
 included — pull from it over the WAN via
-`https://attic.generalprogramming.org`.
+`https://attic.owo.me`.
 
 Components:
 
@@ -56,24 +56,24 @@ in `nix/` builds every machine's closure and pushes it.
      --pull '*' --push '*' --create-cache '*' --configure-cache '*' \
      --configure-cache-retention '*' --destroy-cache '*'
 
-   attic login gp https://attic.generalprogramming.org/ <admin-token>
-   attic cache create gp:gp
+   attic login general-programming https://attic.owo.me/ <admin-token>
+   attic cache create general-programming:general-programming
    # public so hosts can substitute without auth; pushing still needs a token
-   attic cache configure gp:gp --public
+   attic cache configure general-programming:general-programming --public
    # skip paths already served by upstream caches (pushes drop anything
    # signed by these keys — keeps NVIDIA/CUDA closures out of our S3)
-   attic cache configure gp:gp \
+   attic cache configure general-programming:general-programming \
      --upstream-cache-key-name cache.nixos.org-1 \
      --upstream-cache-key-name cache.nixos-cuda.org
-   attic cache info gp:gp   # -> "Public Key: gp:..."
+   attic cache info general-programming:general-programming   # -> "Public Key: general-programming:..."
    ```
 
-5. **Enable the client on all machines**: uncomment `gpNixCache` in
+5. **Enable the client on all machines**: set `gpNixCache.enable = true` in
    `nix/machines/base.nix` and paste the public key from step 4.
 
 6. **Populate the cache** whenever you want fresh closures pushed (run from
    `nix/`, needs the login from step 4 — or mint a narrower push-only token
-   with `atticadm make-token --sub builder --validity 1y --pull gp --push gp`):
+   with `atticadm make-token --sub builder --validity 1y --pull general-programming --push general-programming`):
 
    ```sh
    just build_cache
