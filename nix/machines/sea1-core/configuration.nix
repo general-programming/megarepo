@@ -17,7 +17,7 @@ in
   imports = [
     disko.nixosModules.disko
 
-    (self.lib.nixosModule "disk/zfs-mirror")
+    (self.lib.nixosModule "disk/zfs-single")
     (self.lib.nixosModule "hardware/proxmox-vm")
     (self.lib.nixosModule "dns")
     (self.lib.nixosModule "gitops")
@@ -31,13 +31,15 @@ in
     (self.lib.nixosModule "vault-agent")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
-    (self.lib.nixosModule "secureboot")
+    # secureboot/lanzaboote dropped: it can't sign comin's profile
+    # namespace (see modules/secureboot.nix TODO), and gitops parity with
+    # fmt2-core matters more on a salt master. Plain systemd-boot instead.
 
     ./consul.nix
   ];
 
   gitops = {
-    enable = false;
+    enable = true;
     ref = "main";
   };
 
