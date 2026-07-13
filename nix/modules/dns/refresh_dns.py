@@ -147,8 +147,14 @@ def render(dns_data: dict, dhcp_data: dict, domain: str) -> str:
     hosts = dns_data["device_list"] + dns_data["virtual_machine_list"]
     interfaces = dhcp_data["interface_list"] + dhcp_data["vm_interface_list"]
 
+    dns = list(dns_lines(hosts, domain))
+    if not dns:
+        # An empty NetBox response renders a valid-but-empty config that
+        # would wipe internal DNS; fail instead and keep the last-good file.
+        raise RuntimeError("NetBox returned no usable DNS records; refusing to render.")
+
     lines = ["# Generated from NetBox by netbox-dnsmasq. Do not edit."]
-    lines += dns_lines(hosts, domain)
+    lines += dns
     lines += dhcp_lines(interfaces)
     return "\n".join(lines) + "\n"
 

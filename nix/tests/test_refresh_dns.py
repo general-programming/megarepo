@@ -8,6 +8,8 @@ import importlib.util
 from pathlib import Path
 from types import ModuleType
 
+import pytest
+
 
 def _load_module() -> ModuleType:
     path = Path(__file__).parent.parent / "modules" / "dns" / "refresh_dns.py"
@@ -125,6 +127,25 @@ def test_dhcp_hostname_sanitized() -> None:
         )
     )
     assert lines == ["dhcp-host=AA:BB:CC:DD:EE:11,10.0.0.4,host-one-gi1-0-1"]
+
+
+def test_render_refuses_empty_dns() -> None:
+    dns_data = {"device_list": [], "virtual_machine_list": []}
+    dhcp_data = {"interface_list": [], "vm_interface_list": []}
+
+    with pytest.raises(RuntimeError, match="no usable DNS records"):
+        refresh_dns.render(dns_data, dhcp_data, "example.org")
+
+
+def test_render_refuses_all_skipped_hosts() -> None:
+    dns_data = {
+        "device_list": [_device("no-ip-host"), _device("site1-ap-closet", ipv4="10.0.0.2/24")],
+        "virtual_machine_list": [],
+    }
+    dhcp_data = {"interface_list": [], "vm_interface_list": []}
+
+    with pytest.raises(RuntimeError, match="no usable DNS records"):
+        refresh_dns.render(dns_data, dhcp_data, "example.org")
 
 
 def test_render_full_config() -> None:
