@@ -57,6 +57,7 @@ in
     git
     talosctl
     # machine provisioning (nix/justfile)
+    attic-client
     just
     vault-bin
     pulumi-latest
