@@ -23,6 +23,8 @@ in
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
     (self.lib.nixosModule "impermanence")
+    (self.lib.nixosModule "salt-master")
+    (self.lib.nixosModule "vault-agent")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
     (self.lib.nixosModule "secureboot")
@@ -34,6 +36,12 @@ in
     enable = false;
     ref = "main";
   };
+
+  vaultAgent.enable = true;
+
+  # Takes over from the legacy Ubuntu salt master on this IP once the box
+  # is reprovisioned as NixOS; dormant (no creds) until `just provision`.
+  saltMaster.enable = true;
 
   networking = {
     hostName = "sea1-core";
@@ -66,9 +74,11 @@ in
         ];
 
         routes = [
-          { Gateway = "2602:fa6d:10:ffff::1"; }
           { Gateway = "10.3.2.1"; }
         ];
+
+        # Static v6 address, but the default route comes from SLAAC/RA.
+        networkConfig.IPv6AcceptRA = true;
 
         linkConfig.RequiredForOnline = "routable";
       };

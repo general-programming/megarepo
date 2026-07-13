@@ -73,6 +73,25 @@ resource "vault_approle_auth_backend_role" "salt_master_approle_role" {
 }
 
 
+# Non-expiring secret_id for the salt masters (the role sets no
+# secret_id_ttl/num_uses), delivered to the NixOS masters via KV where the
+# nixos-core policy can read it (rendered by vault-agent, which restarts
+# salt-master on rotation). Rotate with:
+#   terraform apply -replace=vault_approle_auth_backend_role_secret_id.salt_master
+resource "vault_approle_auth_backend_role_secret_id" "salt_master" {
+  backend   = vault_auth_backend.salt_master.path
+  role_name = vault_approle_auth_backend_role.salt_master_approle_role.role_name
+}
+
+resource "vault_kv_secret_v2" "salt_master_approle" {
+  mount = "secret"
+  name  = "infra/salt-master/approle"
+  data_json = jsonencode({
+    role_id   = vault_approle_auth_backend_role.salt_master_approle_role.role_id
+    secret_id = vault_approle_auth_backend_role_secret_id.salt_master.secret_id
+  })
+}
+
 resource "vault_policy" "salt_minions" {
   name = "saltstack/minions"
     policy = <<EOT

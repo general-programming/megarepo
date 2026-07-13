@@ -78,6 +78,17 @@ salt_minion_pip_deps:
     - require:
       - pkg: salt_minion_pkg
 
+# Multi-master list; overrides the single-master list ansible seeds in
+# /etc/salt/minion. Note the resulting minion self-restart can lose the
+# job return - confirm rollouts with a follow-up test.ping.
+salt_minion_masters:
+  file.managed:
+    - name: /etc/salt/minion.d/masters.conf
+    - source: salt://salt_minion/files/masters.conf
+    - user: root
+    - group: root
+    - mode: '0644'
+
 salt_minion_service:
   service.running:
     - name: salt-minion
@@ -85,6 +96,7 @@ salt_minion_service:
     - watch:
       - pkg: salt_minion_pkg
       - cmd: salt_minion_pip_deps
+      - file: salt_minion_masters
 
 {% if is_master %}
 salt_master_pip_deps:

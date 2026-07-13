@@ -23,6 +23,7 @@ in
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
     (self.lib.nixosModule "impermanence")
+    (self.lib.nixosModule "salt-master")
     (self.lib.nixosModule "vault-agent")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
@@ -33,6 +34,10 @@ in
 
   # Hourly DNS/DHCP regeneration from NetBox, keyed via vault-agent.
   dns.refresh.enable = true;
+
+  # Second salt master (multi-master with the sea1 box); states via gitfs,
+  # secrets via vault-agent. See docs/salt/secrets.md.
+  saltMaster.enable = true;
 
   vaultAgent = {
     enable = true;
