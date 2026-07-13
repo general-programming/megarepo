@@ -67,12 +67,13 @@
   nix.settings.trusted-users = [ "builder" ];
 
   # Lix isolates fixed-output derivations in a pasta-managed network
-  # namespace, but pasta needs /dev/net/tun, which this unprivileged LXC
-  # doesn't have — every FOD then fails with "Could not resolve host".
-  # Empty pasta-path falls back to sharing the host network (classic Nix
-  # behavior). Drop this once the CT passes through /dev/net/tun:
-  #   echo -e 'lxc.cgroup2.devices.allow: c 10:200 rwm\nlxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' >> /etc/pve/lxc/9000.conf
-  nix.settings.pasta-path = "";
+  # namespace; pasta needs /dev/net/tun, which unprivileged LXCs lack by
+  # default — every FOD then fails with "Could not resolve host". The CT
+  # config passes the device through (in /etc/pve/lxc/9000.conf):
+  #   lxc.cgroup2.devices.allow: c 10:200 rwm
+  #   lxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file
+  # If FOD fetches ever break again, check that first;
+  # nix.settings.pasta-path = "" is the escape hatch.
 
   # It can't remote-build to itself.
   nixBuilder.enable = lib.mkForce false;
