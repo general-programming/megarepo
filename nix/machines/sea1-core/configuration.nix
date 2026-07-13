@@ -63,7 +63,8 @@ in
     useRoutingFeatures = "server";
     extraSetFlags = [
       "--advertise-exit-node"
-      "--advertise-routes=10.255.2.0/24"
+      # sea1 OOB/IPMI net (via 10.3.2.1) + the site LAN itself.
+      "--advertise-routes=10.255.2.0/24,10.3.2.0/23"
     ];
   };
 
