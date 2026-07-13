@@ -6,6 +6,7 @@ metadata:
 spec:
   replicas: 2
   hostnamePrefix: connector-fmt2
+  exitNode: true
   subnetRouter:
     advertiseRoutes:
       - "10.65.67.0/24"
