@@ -56,13 +56,23 @@
     isNormalUser = true;
     description = "Nix remote build user";
     openssh.authorizedKeys.keys = [
-      # Private half in Vault: secret/app/nix-builder-ssh (see
+      # Private half in Vault: secret/infra/nix-builder-ssh — under
+      # infra/ because that's the subtree the nixos-core Vault policy
+      # grants nodes read on (see terraform/auth/approle_nixos.tf and
       # nix-builder-client.nix for how dispatching hosts consume it).
       "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIHd0ik2Dotavt0lpycowB+IPE5hhx/8sk4BGTvFHEN5v nix-builder"
     ];
   };
 
   nix.settings.trusted-users = [ "builder" ];
+
+  # Lix isolates fixed-output derivations in a pasta-managed network
+  # namespace, but pasta needs /dev/net/tun, which this unprivileged LXC
+  # doesn't have — every FOD then fails with "Could not resolve host".
+  # Empty pasta-path falls back to sharing the host network (classic Nix
+  # behavior). Drop this once the CT passes through /dev/net/tun:
+  #   echo -e 'lxc.cgroup2.devices.allow: c 10:200 rwm\nlxc.mount.entry: /dev/net/tun dev/net/tun none bind,create=file' >> /etc/pve/lxc/9000.conf
+  nix.settings.pasta-path = "";
 
   # It can't remote-build to itself.
   nixBuilder.enable = lib.mkForce false;

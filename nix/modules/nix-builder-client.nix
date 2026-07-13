@@ -56,7 +56,7 @@ in
 
     vaultAgent.templates.nixBuilderKey = {
       contents = ''
-        {{- with secret "secret/app/nix-builder-ssh" }}
+        {{- with secret "secret/infra/nix-builder-ssh" }}
         {{ .Data.data.private_key }}
         {{- end }}
       '';
