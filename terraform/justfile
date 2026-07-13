@@ -1,7 +1,9 @@
 # OpenTofu state lives in the `terraform-state` R2 bucket, one object per
 # folder, keyed at `<folder>/terraform.tfstate`. Credentials are the static
 # R2 access key/secret in Vault (secret/infra/cloudflare-r2), fetched by
-# ../scripts/r2-creds.sh.
+# ../scripts/r2-creds.sh. The authentik provider token is likewise a static
+# credential in Vault (secret/infra/authentik), fetched by
+# ../scripts/authentik-creds.sh.
 #
 #   just plan auth
 #   just apply auth
@@ -9,11 +11,12 @@
 
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
-# Fetch R2 creds and (re)pair the S3 backend for <folder>.
+# Fetch R2 + authentik creds and (re)pair the S3 backend for <folder>.
 login folder:
     #!/usr/bin/env bash
     set -euo pipefail
     source <(../scripts/r2-creds.sh)
+    source <(../scripts/authentik-creds.sh)
     cd "{{folder}}"
     tofu init -reconfigure \
         -backend-config="bucket=terraform-state" \
@@ -29,6 +32,7 @@ plan folder: (login folder)
     #!/usr/bin/env bash
     set -euo pipefail
     source <(../scripts/r2-creds.sh)
+    source <(../scripts/authentik-creds.sh)
     cd "{{folder}}"
     tofu plan
 
@@ -36,5 +40,6 @@ apply folder: (login folder)
     #!/usr/bin/env bash
     set -euo pipefail
     source <(../scripts/r2-creds.sh)
+    source <(../scripts/authentik-creds.sh)
     cd "{{folder}}"
     tofu apply
