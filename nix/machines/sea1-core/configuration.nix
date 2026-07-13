@@ -43,6 +43,9 @@ in
     ref = "main";
   };
 
+  # Hourly DNS/DHCP regeneration from NetBox, keyed via vault-agent.
+  dns.refresh.enable = true;
+
   vaultAgent.enable = true;
 
   # Takes over from the legacy Ubuntu salt master on this IP once the box
