@@ -9,7 +9,7 @@ NixOS machine trusts it via the `gpNixCache` block in
 | What                | Where                                                  |
 | ------------------- | ------------------------------------------------------ |
 | Substituter         | `https://attic.owo.me/general-programming`              |
-| Public key          | TBD — regenerated on the `general-programming` cache; see bootstrap runbook |
+| Public key          | `general-programming:wrpHyA9Gfx0BSA3vlxeESq+VSP+wvr5zSAgC3rXLN+8=`      |
 | API endpoint        | `https://attic.owo.me/`                |
 | Deployment          | `argocd/apps/infra/attic` (fmt2 k8s only)              |
 | Admin token         | Vault `secret/app/attic-admin`                         |
