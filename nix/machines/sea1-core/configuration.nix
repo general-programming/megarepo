@@ -90,11 +90,13 @@ in
     hostId = "f7074b51";
   };
 
-  # dnsmasq listens on the box's single internal-facing NIC (the vlan
-  # names before this were a copy-paste from fmt2 and never existed here).
+  # dnsmasq listens on the box's single internal-facing NIC. Must be the
+  # PRIMARY kernel name: dnsmasq does not match altnames (enp6s18 is an
+  # altname of ens18 on this VM), and a non-matching filter silently
+  # serves loopback only.
   services.dnsmasq = {
     settings.interface = [
-      "enp6s18"
+      "ens18"
     ];
   };
 
