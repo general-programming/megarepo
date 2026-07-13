@@ -70,6 +70,7 @@ in
                         "/ipa.generalprogramming.org/10.65.67.14"
                         "/devhack.net/10.213.0.50"
                         "/consul/127.0.0.1#8600"
+                        "/consul.generalprogramming.org/127.0.0.1#8600"
                         "1.1.1.1"
                         "1.0.0.1"
                     ];

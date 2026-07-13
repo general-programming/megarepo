@@ -22,8 +22,12 @@ in
     (self.lib.nixosModule "dns")
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
+    (self.lib.nixosModule "cloudflared")
+    (self.lib.nixosModule "dhcp")
+    (self.lib.nixosModule "holepunch")
     (self.lib.nixosModule "impermanence")
     (self.lib.nixosModule "salt-master")
+    (self.lib.nixosModule "tailscale")
     (self.lib.nixosModule "vault-agent")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
@@ -43,17 +47,49 @@ in
   # is reprovisioned as NixOS; dormant (no creds) until `just provision`.
   saltMaster.enable = true;
 
+  # Remaining legacy sea1-core services (see docs/nix/secrets.md for the
+  # Vault paths each of these consumes).
+  gpCloudflared.enable = true;
+  holepunch.enable = true;
+
+  gpTailscale.enable = true;
+  services.tailscale = {
+    # Exit node + advertised routes are host policy, kept out of the module.
+    useRoutingFeatures = "server";
+    extraSetFlags = [
+      "--advertise-exit-node"
+      "--advertise-routes=10.255.2.0/24"
+    ];
+  };
+
+  # DHCP for the sea1 subnet, mirroring the legacy isc-dhcpd setup
+  # (pool .3.128-.3.254, router .2.1, MTU 9000, 2h leases; v6 ::200-::fff).
+  # Static reservations come from the dns module's NetBox refresh.
+  dhcp = {
+    enable = true;
+    ranges = [
+      "10.3.3.128,10.3.3.254,255.255.254.0,2h"
+      "2602:fa6d:10:ffff::200,2602:fa6d:10:ffff::fff,116,2h"
+    ];
+    extraOptions = [
+      "option:router,10.3.2.1"
+      "option:dns-server,10.3.2.6"
+      "option:mtu,9000"
+      "option6:dns-server,[2602:fa6d:10:ffff::f00]"
+    ];
+  };
+
   networking = {
     hostName = "sea1-core";
     domain = "generalprogramming.org";
     hostId = "f7074b51";
   };
 
-  # dnsmasq
+  # dnsmasq listens on the box's single internal-facing NIC (the vlan
+  # names before this were a copy-paste from fmt2 and never existed here).
   services.dnsmasq = {
     settings.interface = [
-      "vlan5"
-      "vlan1000"
+      "enp6s18"
     ];
   };
 

@@ -1,5 +1,8 @@
 # Salt stack: Vault secrets inventory
 
+> NixOS-machine secrets (`secret/infra/*` consumed via vault-agent) are
+> inventoried in [../nix/secrets.md](../nix/secrets.md).
+
 Every Vault path the Salt estate (masters, minions, provisioning) depends
 on. Vault server: `http://10.65.67.27:8201` (`VAULT_ADDR` in `nix/justfile`
 and the ansible roles).
