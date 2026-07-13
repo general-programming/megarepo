@@ -64,6 +64,9 @@ in
         salt = prev.salt.override {
           extraInputs = [
             final.python3Packages.gitpython
+            # The onedir bundle ships xxhash; without it the master logs
+            # "Failed to open resource registry" per minion auth.
+            final.python3Packages.xxhash
             (final.callPackage ./saltext-vault.nix { })
           ];
         };
