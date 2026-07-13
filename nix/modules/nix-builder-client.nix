@@ -1,5 +1,5 @@
-# Client-side configuration for using `builder` (a Proxmox LXC, see
-# nix/machines/builder/configuration.nix) as a remote Nix builder.
+# Client-side configuration for using `sea1-nix-builder` (a Proxmox LXC, see
+# nix/machines/sea1-nix-builder/configuration.nix) as a remote Nix builder.
 #
 # Disabled until the container is actually provisioned (see
 # scripts/provision-builder-lxc.py) and its address/host key are known.

@@ -45,7 +45,7 @@
         "sea1-core" = self.lib.nixosSystem "sea1-core";
         "fmt2-core" = self.lib.nixosSystem "fmt2-core";
         "sea420-desktop" = self.lib.nixosSystem "sea420-desktop";
-        "builder" = self.lib.nixosSystem "builder";
+        "sea1-nix-builder" = self.lib.nixosSystem "sea1-nix-builder";
       };
 
       nixosModules = {

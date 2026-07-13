@@ -19,4 +19,7 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   sea420-desktop = {
     machineID = "30b7aad6952aeda770f149286983149d";
   };
+  sea1-nix-builder = {
+    machineID = "85e731458ce145deb2ccd3288703af90";
+  };
 }

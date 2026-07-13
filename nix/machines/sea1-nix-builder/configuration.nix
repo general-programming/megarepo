@@ -1,6 +1,7 @@
 {
   modulesPath,
   lib,
+  self,
   ...
 }:
 
@@ -9,11 +10,34 @@
 
   imports = [
     (modulesPath + "/virtualisation/proxmox-lxc.nix")
+    (self.lib.nixosModule "gitops")
   ];
 
+  gitops = {
+    enable = true;
+    ref = "main";
+  };
+
   proxmoxLXC = {
+    # manageNetwork = false enables systemd-networkd but ships no matching
+    # .network file for eth0 (Proxmox's own net-injection only covers
+    # distros it recognizes, and "nixos" isn't one), so the interface never
+    # got configured. Static v6 (fleet convention here has no v6 DHCP) +
+    # DHCP for v4.
     manageNetwork = false;
-    manageHostName = false;
+    # Same story as manageNetwork: Proxmox's hostname injection doesn't
+    # cover NixOS, and manageHostName = false force-blanks
+    # networking.hostName. Let Nix set it (the flake wires it to the
+    # machine name, sea1-nix-builder).
+    manageHostName = true;
+  };
+
+  systemd.network.networks."10-eth0" = {
+    matchConfig.Name = "eth0";
+    address = [ "2602:fa6d:10:ffff::f14/116" ];
+    networkConfig.DHCP = "ipv4";
+    routes = [ { Gateway = "2602:fa6d:10:ffff::1"; } ];
+    linkConfig.RequiredForOnline = "routable";
   };
 
   # Container: no real bootloader/firmware/kernel to manage, and no raw
