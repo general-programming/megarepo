@@ -58,7 +58,7 @@ in
     talosctl
     # machine provisioning (nix/justfile)
     just
-    vault
+    vault-bin
     pulumi-latest
   ];
 
