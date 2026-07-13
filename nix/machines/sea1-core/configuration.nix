@@ -63,8 +63,10 @@ in
     useRoutingFeatures = "server";
     extraSetFlags = [
       "--advertise-exit-node"
-      # sea1 OOB/IPMI net (via 10.3.2.1) + the site LAN itself.
-      "--advertise-routes=10.255.2.0/24,10.3.2.0/23"
+      # No subnet routes: the k8s tailscale connectors already cover the
+      # sea1 nets. Keep the empty flag so `tailscale set` explicitly
+      # clears any previously advertised routes.
+      "--advertise-routes="
     ];
   };
 
