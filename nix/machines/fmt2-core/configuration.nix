@@ -50,7 +50,7 @@ in
   };
 
   gitops = {
-    enable = false;
+    enable = true;
     ref = "main";
   };
 
