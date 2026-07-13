@@ -41,7 +41,9 @@ in
 
     vaultAgent.templates.tailscale-authkey = {
       destination = keyFile;
-      command = "systemctl try-restart tailscaled-autoconnect.service";
+      # Plain restart (not try-restart): the first render must also start
+      # a unit that was condition-skipped at boot.
+      command = "systemctl restart tailscaled-autoconnect.service";
       contents = ''
         {{- with secret "${cfg.vaultKvPath}" }}{{ .Data.data.authkey }}{{ end }}
       '';
