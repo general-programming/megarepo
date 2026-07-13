@@ -1,0 +1,40 @@
+# OpenTofu state lives in the `terraform-state` R2 bucket, one object per
+# folder, keyed at `<folder>/terraform.tfstate`. Credentials are the static
+# R2 access key/secret in Vault (secret/infra/cloudflare-r2), fetched by
+# ../scripts/r2-creds.sh.
+#
+#   just plan auth
+#   just apply auth
+#   just login auth   # just re-pairs the backend via `tofu init`, no plan/apply
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+# Fetch R2 creds and (re)pair the S3 backend for <folder>.
+login folder:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(../scripts/r2-creds.sh)
+    cd "{{folder}}"
+    tofu init -reconfigure \
+        -backend-config="bucket=terraform-state" \
+        -backend-config="key={{folder}}/terraform.tfstate" \
+        -backend-config="endpoint=https://${CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+        -backend-config="region=auto" \
+        -backend-config="use_path_style=true" \
+        -backend-config="skip_credentials_validation=true" \
+        -backend-config="skip_region_validation=true" \
+        -backend-config="skip_requesting_account_id=true"
+
+plan folder: (login folder)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(../scripts/r2-creds.sh)
+    cd "{{folder}}"
+    tofu plan
+
+apply folder: (login folder)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    source <(../scripts/r2-creds.sh)
+    cd "{{folder}}"
+    tofu apply

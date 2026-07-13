@@ -5,6 +5,8 @@ provider "authentik" {
 }
 
 terraform {
+  backend "s3" {}
+
   required_providers {
     authentik = {
       source = "goauthentik/authentik"

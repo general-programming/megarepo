@@ -4,7 +4,20 @@
 provider "registry.opentofu.org/goauthentik/authentik" {
   version = "2025.12.1"
   hashes = [
+    "h1:+R2MRgaXvmR1l+nYxYJqMSuvA4VBzfBoh2Er6TnDRPE=",
+    "h1:1y5I173i8qvxp8GQHBBI/bxkr6YOqY4IqOiJWIUSeeM=",
+    "h1:XHaltkhuTgyFCCZgpay2orOgc0TyZf0KqrFHNfUgY20=",
+    "h1:XvFByv5e6fKSlayYaXpFD/JbTYZN1ybujVJJjny1Q18=",
+    "h1:ZU9d05CLVYBbmdB0IGiG9MueY4/fVo4D6FeyQtbeujA=",
+    "h1:doHtDOiEIgIUWlUUc9jC7Uqdhj1hsy3etvdYmegcUZM=",
+    "h1:hUgMx2B40ByfaMA4Al0h7xotp/pZxJJxZZa/HJb6NDc=",
+    "h1:kG5J46qkCdUWJp/1p8CLifqc7Fy54IDZEjYhpmWcars=",
+    "h1:lNx+bJr11tPJxpkL5aTdOkGwB41O2Kv8fvKuiMl/LLs=",
+    "h1:mSOL+FqSLNkWeXopegyK/MoCkMD/VmW9V3PHLaIePjU=",
+    "h1:oCKzPBsyaD1ENda7qbREG3DYV3Opu09ub+msk3vRCkw=",
     "h1:p9AGeRqK50wTHEIp7z7O4MUP83cs+lt7wPajZ9m9TB8=",
+    "h1:tBoVWDOhByI7cg9TYAAw6LDdMmWLpa2LYwJzzcukdiA=",
+    "h1:zHQHXKmlGNYBaWLJ9SuXsJ7dbpsvhDJl5pJi+PFU+2w=",
     "zh:0e856d3b13614bc32346a236a8e84ba55ecd17238c2008d4b3e71aa8cb49f515",
     "zh:2dcc44cd499c18ebbc4f763eff97a7b725763c8ac8fbb5d69c935413ccdc4962",
     "zh:434100fc75ec7cd6b64cc9497e8273e79325fa8d285e9fd9d341c1a67421643b",
@@ -62,7 +75,15 @@ provider "registry.opentofu.org/hashicorp/random" {
 provider "registry.opentofu.org/hashicorp/vault" {
   version = "5.7.0"
   hashes = [
+    "h1:1kZ1YItEcVwEZhIP9Ri/gUTx9MOzhNWDD/4dksTJOAE=",
+    "h1:2QeZNnet/mjLbegGoC2ykfiHzBydo7fu47QE4hqKvT0=",
+    "h1:6Qii1AXqCo71QHRPIuc0hYR7HiGOz4SLfB7wM5hJj4k=",
+    "h1:BCdaPQORbvu4SYCtUAWoHn/c87NyxosNGp/3mPUzZgI=",
+    "h1:CdAjyc0ZtfHWNFApYQGmDbaSpbDvV3zkQyelrDSuDVU=",
+    "h1:Vo3wdD7W1LEAuJB2JqLzSmECMuL42G91HOJKvN/k68I=",
     "h1:iLMzDsHFFlk13OMq+hx4IvabQqAJCP++fAnRHGDOu+w=",
+    "h1:xJ5LT0xjQbSJR3WGb4IXpv93+UlS9sb4cFi/yZznKt0=",
+    "h1:xsj3Tm0P0SC99eIrnMkKofLtwpv8kVJ+SpgU0EOsHgA=",
     "zh:29e77f756f33f56ef9641a23d020525380957e1faa104cea67e8872f842da17c",
     "zh:709a950dd289a68da12ca7dfae03abe71e928af09562e8efaceea3079681ed3b",
     "zh:74c2f266380d027fde6ad54969ddd3d1ab4d7cffcaecfa8d875f60ff04d11d7a",
