@@ -55,11 +55,12 @@ in
     ];
 
     vaultAgent.templates.nixBuilderKey = {
-      contents = ''
-        {{- with secret "secret/infra/nix-builder-ssh" }}
-        {{ .Data.data.private_key }}
-        {{- end }}
-      '';
+      # Rendered inline: template-level newlines/indentation would end up
+      # inside the key file, and OpenSSH refuses a key with a leading blank
+      # line ("error in libcrypto"). The literal newline before {{ end }}
+      # guarantees the trailing newline OpenSSH also requires.
+      contents = ''{{ with secret "secret/infra/nix-builder-ssh" }}{{ .Data.data.private_key }}
+      {{ end }}'';
       destination = "/run/vault-agent/nix-builder-key";
       perms = "0400";
     };
