@@ -1,5 +1,6 @@
 {
   lib,
+  pkgs,
   vars',
   config,
   inputs,
@@ -77,6 +78,20 @@
         else
           { };
     };
+
+    # comin's bare mirror clone never gets a valid HEAD (its refspec only
+    # updates refs/remotes/origin/*, leaving HEAD on an unborn master), so
+    # lix's fetchGit resolves the wrong ref and poisons its git fetcher
+    # cache. Point HEAD at the tracked branch and drop the poisoned cache
+    # when it was wrong. TODO: fix upstream in comin.
+    systemd.services.comin.preStart = lib.mkIf config.gitops.enable ''
+      repo=/var/lib/comin/repository
+      want=refs/remotes/origin/${config.gitops.ref}
+      if [ -d "$repo" ] && [ "$(${pkgs.git}/bin/git -C "$repo" symbolic-ref HEAD)" != "$want" ]; then
+        ${pkgs.git}/bin/git -C "$repo" symbolic-ref HEAD "$want"
+        rm -rf /root/.cache/nix/gitv3
+      fi
+    '';
 
     # Allow probing exporter via Tailscale.
     networking.firewall.interfaces.tailscale0.allowedTCPPorts =
