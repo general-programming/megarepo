@@ -14,6 +14,7 @@
   imports = [
     (self.lib.nixosModule "nixos-tags")
     (self.lib.nixosModule "nix-cache")
+    (self.lib.nixosModule "nix-builder-client")
   ];
 
   # Self-hosted Attic binary cache (fmt2 k8s); populate with
@@ -21,6 +22,14 @@
   gpNixCache = {
     enable = true;
     publicKey = "general-programming:wrpHyA9Gfx0BSA3vlxeESq+VSP+wvr5zSAgC3rXLN+8=";
+  };
+
+  # Remote Nix builder (Proxmox LXC, nix/machines/builder). Disabled fleet-wide
+  # until the container is provisioned (scripts/provision-builder-lxc.py) and
+  # nixBuilder.publicHostKey below is filled in from its real host key.
+  nixBuilder = {
+    enable = false;
+    # publicHostKey = "...";
   };
 
   # nix configs
