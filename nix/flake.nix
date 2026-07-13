@@ -52,6 +52,13 @@
         base = import ./machines/base.nix;
       };
 
+      # Per-host installer ISOs carrying the host's network config and SSH
+      # keys, so the live environment comes up reachable at the host's
+      # address for nixos-anywhere. Build/upload via `just make-installer`.
+      installerImages = builtins.mapAttrs (
+        machineName: _: self.lib.installerSystem machineName
+      ) self.nixosConfigurations;
+
       lib = {
         vars = {
           machines = import ./vars/machines.nix inputs;
@@ -96,6 +103,36 @@
           };
 
         sdImageFromSystem = system: system.config.system.build.sdImage;
+
+        # Minimal installer ISO for a machine: copies the evaluated
+        # systemd-networkd config and root authorized keys out of the
+        # host's nixosConfiguration so the live system boots with the
+        # host's addressing and accepts the same SSH keys.
+        installerSystem =
+          machineName:
+          let
+            hostConfig = self.nixosConfigurations.${machineName}.config;
+          in
+          (nixpkgs.lib.nixosSystem {
+            system = self.nixosConfigurations.${machineName}.pkgs.stdenv.hostPlatform.system;
+            modules = [
+              "${nixpkgs}/nixos/modules/installer/cd-dvd/installation-cd-minimal.nix"
+              {
+                networking.hostName = "${machineName}-installer";
+                image.baseName = nixpkgs.lib.mkForce "${machineName}-installer";
+
+                # The host's network identity.
+                networking.useDHCP = nixpkgs.lib.mkForce hostConfig.networking.useDHCP;
+                systemd.network = {
+                  inherit (hostConfig.systemd.network) enable netdevs networks;
+                };
+
+                services.openssh.enable = true;
+                users.users.root.openssh.authorizedKeys.keys =
+                  hostConfig.users.users.root.openssh.authorizedKeys.keys;
+              }
+            ];
+          }).config.system.build.isoImage;
 
         # machineNixpkgsSystem fetches the architecture (pkgs.system) for a
         # given machine.

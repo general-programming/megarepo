@@ -39,6 +39,17 @@ provision machine target role="nixos-core":
         --extra-files "$tmp" \
         root@{{target}}
 
+# Build a per-host installer ISO (host network config + SSH keys baked in)
+# and upload it to the cluster-shared cephfs ISO storage, replacing any
+# previous installer for that host.
+make-installer machine hv="root@sea1-hv-0.generalprogramming.org":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    out=$(nix build --no-link --print-out-paths ".#installerImages.{{machine}}")
+    iso=$(echo "$out"/iso/*.iso)
+    echo "==> uploading $iso"
+    scp "$iso" "{{hv}}:/mnt/pve/cephfs/template/iso/{{machine}}-installer.iso"
+
 # Rebuild an existing machine with the latest config from this checkout.
 # Builds on the machine itself (it substitutes from attic/cache.nixos.org)
 # instead of building here and copying the closure over the WAN.
