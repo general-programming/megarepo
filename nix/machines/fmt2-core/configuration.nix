@@ -25,6 +25,7 @@ in
     (self.lib.nixosModule "impermanence")
     (self.lib.nixosModule "salt-master")
     (self.lib.nixosModule "vault-agent")
+    (self.lib.nixosModule "site_fmt2_hacks")
     # (self.lib.nixosModule "network")
     # (self.lib.nixosModule "ssh")
     # (self.lib.nixosModule "secureboot")
