@@ -28,7 +28,7 @@ jobs:
     timeout-minutes: 10
     env:
       # renovate: datasource=pypi depName=ruff
-      RUFF_VERSION: 0.15.21
+      RUFF_VERSION: 0.15.22
       # renovate: datasource=pypi depName=ty
       TY_VERSION: 0.0.58
     steps:
