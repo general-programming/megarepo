@@ -37,13 +37,13 @@ query {
   interface_list {
     primary_mac_address { mac_address }
     name
-    device { name }
+    device { name primary_ip4 { address } }
     ip_addresses { address }
   }
   vm_interface_list {
     primary_mac_address { mac_address }
     name
-    virtual_machine { name }
+    virtual_machine { name primary_ip4 { address } }
     ip_addresses { address }
   }
 }
@@ -84,8 +84,18 @@ def ipmi_ip(host: dict) -> str:
     return ""
 
 
-def dhcp_hostname(device: str, interface: str) -> str:
-    name = f"{clean_hostname(device)}-{clean_hostname(interface)}".lower()
+def dhcp_hostname(device: str, interface: str, is_primary: bool) -> str:
+    """Hostname sent to the DHCP client for one reservation.
+
+    The primary interface gets the bare device name: clients that take their
+    hostname from DHCP (e.g. Talos) must not be renamed to device-interface,
+    which re-registers kubelets as brand-new nodes. Secondary interfaces keep
+    the interface suffix so hostnames stay unique per device.
+    """
+    if is_primary:
+        name = clean_hostname(device).lower()
+    else:
+        name = f"{clean_hostname(device)}-{clean_hostname(interface)}".lower()
     return "".join(c if c.isalnum() or c == "-" else "-" for c in name)
 
 
@@ -128,6 +138,8 @@ def dhcp_lines(interfaces: Iterable[dict]) -> Iterator[str]:
         if not owner.get("name"):
             continue
 
+        primary_ip = strip_prefix(owner.get("primary_ip4"))
+
         for address in interface.get("ip_addresses") or []:
             ip_address = strip_prefix(address)
             # dnsmasq matches DHCPv6 reservations on DUID, not MAC; v4 only.
@@ -139,7 +151,8 @@ def dhcp_lines(interfaces: Iterable[dict]) -> Iterator[str]:
                 continue
             seen_macs.add(mac.lower())
 
-            hostname = dhcp_hostname(owner["name"], interface["name"])
+            is_primary = bool(primary_ip) and ip_address == primary_ip
+            hostname = dhcp_hostname(owner["name"], interface["name"], is_primary)
             yield f"dhcp-host={mac},{ip_address},{hostname}"
 
 

@@ -86,12 +86,19 @@ def test_dns_lines_ipmi() -> None:
 
 
 def _interface(
-    mac: str | None, device: str, name: str = "eth0", addresses: list[str] | None = None
+    mac: str | None,
+    device: str,
+    name: str = "eth0",
+    addresses: list[str] | None = None,
+    primary_ip4: str = "",
 ) -> dict:
     return {
         "primary_mac_address": {"mac_address": mac} if mac else None,
         "name": name,
-        "device": {"name": device},
+        "device": {
+            "name": device,
+            "primary_ip4": {"address": primary_ip4} if primary_ip4 else None,
+        },
         "ip_addresses": [{"address": address} for address in (addresses or [])],
     }
 
@@ -103,6 +110,50 @@ def test_dhcp_lines_basic() -> None:
         )
     )
     assert lines == ["dhcp-host=AA:BB:CC:DD:EE:FF,10.0.0.9,host1-eth0"]
+
+
+def test_dhcp_primary_interface_gets_bare_device_name() -> None:
+    lines = list(
+        refresh_dns.dhcp_lines(
+            [
+                _interface(
+                    "AA:BB:CC:DD:EE:FF",
+                    "sea1-k8s-0",
+                    "internal",
+                    ["10.3.2.10/24"],
+                    primary_ip4="10.3.2.10/24",
+                )
+            ]
+        )
+    )
+    assert lines == ["dhcp-host=AA:BB:CC:DD:EE:FF,10.3.2.10,sea1-k8s-0"]
+
+
+def test_dhcp_secondary_interface_keeps_suffix() -> None:
+    lines = list(
+        refresh_dns.dhcp_lines(
+            [
+                _interface(
+                    "AA:BB:CC:DD:EE:FF",
+                    "sea1-k8s-0",
+                    "internal",
+                    ["10.3.2.10/24"],
+                    primary_ip4="10.3.2.10/24",
+                ),
+                _interface(
+                    "AA:BB:CC:DD:EE:00",
+                    "sea1-k8s-0",
+                    "storage",
+                    ["10.3.7.10/24"],
+                    primary_ip4="10.3.2.10/24",
+                ),
+            ]
+        )
+    )
+    assert lines == [
+        "dhcp-host=AA:BB:CC:DD:EE:FF,10.3.2.10,sea1-k8s-0",
+        "dhcp-host=AA:BB:CC:DD:EE:00,10.3.7.10,sea1-k8s-0-storage",
+    ]
 
 
 def test_dhcp_lines_one_reservation_per_mac() -> None:
@@ -139,7 +190,10 @@ def test_render_refuses_empty_dns() -> None:
 
 def test_render_refuses_all_skipped_hosts() -> None:
     dns_data = {
-        "device_list": [_device("no-ip-host"), _device("site1-ap-closet", ipv4="10.0.0.2/24")],
+        "device_list": [
+            _device("no-ip-host"),
+            _device("site1-ap-closet", ipv4="10.0.0.2/24"),
+        ],
         "virtual_machine_list": [],
     }
     dhcp_data = {"interface_list": [], "vm_interface_list": []}
@@ -155,7 +209,13 @@ def test_render_full_config() -> None:
     }
     dhcp_data = {
         "interface_list": [
-            _interface("AA:BB:CC:DD:EE:FF", "fmt2-core", "eno1", ["10.65.67.5/24"])
+            _interface(
+                "AA:BB:CC:DD:EE:FF",
+                "fmt2-core",
+                "eno1",
+                ["10.65.67.5/24"],
+                primary_ip4="10.65.67.5/24",
+            )
         ],
         "vm_interface_list": [],
     }
@@ -166,4 +226,4 @@ def test_render_full_config() -> None:
     assert output.endswith("\n")
     assert "address=/fmt2-core.example.org/10.65.67.5" in output
     assert "address=/vm1.example.org/10.0.0.7" in output
-    assert "dhcp-host=AA:BB:CC:DD:EE:FF,10.65.67.5,fmt2-core-eno1" in output
+    assert "dhcp-host=AA:BB:CC:DD:EE:FF,10.65.67.5,fmt2-core" in output
