@@ -1,0 +1,17 @@
+---
+apiVersion: tailscale.com/v1alpha1
+kind: ProxyClass
+metadata:
+  name: connector-spread
+spec:
+  statefulSet:
+    pod:
+      # Prefer spreading the connector replicas across nodes for exit-node /
+      # subnet-router HA, but never block scheduling connectivity.
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              tailscale.com/parent-resource: connector-sea1

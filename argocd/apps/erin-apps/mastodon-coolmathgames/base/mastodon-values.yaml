@@ -16,6 +16,14 @@ mastodon:
       tag: nightly.2026-07-17  # renovate: datasource=docker depName=ghcr.io/theessem/mastodon-streaming
 
     replicas: 3
+    # Stateless — prefer spreading the 3 replicas across nodes, never block.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: streaming
 
   # very IMPORTANT
   local_domain: coolmathgam.es
@@ -73,7 +81,14 @@ mastodon:
         replicas: 3
         resources: {}
         affinity: {}
-        topologySpreadConstraints: {}
+        # Stateless — prefer spreading the 3 replicas across nodes, never block.
+        topologySpreadConstraints:
+          - maxSkew: 1
+            topologyKey: kubernetes.io/hostname
+            whenUnsatisfiable: ScheduleAnyway
+            labelSelector:
+              matchLabels:
+                app.kubernetes.io/component: sidekiq-all-queues
         queues:
           - default,8
           - push,6
@@ -100,6 +115,14 @@ mastodon:
 
   web:
     replicas: 3
+    # Stateless — prefer spreading the 3 replicas across nodes, never block.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/component: web
 
   metrics:
     statsd:

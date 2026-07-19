@@ -5,6 +5,7 @@ metadata:
   name: connector-sea1
 spec:
   replicas: 2
+  proxyClass: connector-spread
   hostnamePrefix: connector-sea1
   exitNode: true
   subnetRouter:

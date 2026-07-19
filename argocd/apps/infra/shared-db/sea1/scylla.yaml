@@ -42,6 +42,14 @@ spec:
           cpu: 2
           memory: 8Gi
       placement:
+        # Keep each of the 3 members on its own node so a single node loss
+        # never takes 2/3 of the cluster (was running 2 members on sea1-k8s-2).
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - topologyKey: kubernetes.io/hostname
+            labelSelector:
+              matchLabels:
+                scylla/cluster: scylladb
         tolerations:
         - key: scylla-operator.scylladb.com/dedicated
           operator: Equal

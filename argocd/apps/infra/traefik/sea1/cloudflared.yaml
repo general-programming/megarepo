@@ -18,6 +18,15 @@ spec:
         prometheus.io/port: '2000'
         reloader.stakater.com/auto: "true"
     spec:
+      # Prefer spreading the 2 tunnel replicas across nodes for ingress HA, but
+      # never block scheduling — a running tunnel matters more than perfect spread.
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app: cloudflared
       containers:
       - name: cloudflared
         image: cloudflare/cloudflared:latest

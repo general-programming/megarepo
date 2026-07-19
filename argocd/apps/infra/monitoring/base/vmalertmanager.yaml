@@ -6,6 +6,15 @@ metadata:
   namespace: monitoring
 spec:
   replicaCount: 2
+  # Keep the 2 alertmanager replicas on distinct nodes so one node loss can't
+  # take out alerting entirely.
+  topologySpreadConstraints:
+    - maxSkew: 1
+      topologyKey: kubernetes.io/hostname
+      whenUnsatisfiable: DoNotSchedule
+      labelSelector:
+        matchLabels:
+          app.kubernetes.io/name: vmalertmanager
   # Discover all VMAlertmanagerConfig resources in this namespace.
   # Empty selector matches all labels.
   # nil configNamespaceSelector = only look in this namespace (monitoring).
