@@ -1,7 +1,7 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.13.4
-kubernetesVersion: v1.36.1
+talosVersion: v1.13.6
+kubernetesVersion: v1.36.2
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
@@ -130,6 +130,12 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
+  - # Raise kubelet max pods per node from the Talos default of 110 to 135 (+25)
+    |-
+    machine:
+      kubelet:
+        extraConfig:
+          maxPods: 135
   - # Encrypt system disk with TPM
     |-
     machine:
