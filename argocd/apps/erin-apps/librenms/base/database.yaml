@@ -5,6 +5,11 @@ metadata:
   name: mariadb-librenms
 spec:
   replicas: 3
+  # Galera needs quorum; keep the 3 replicas on distinct nodes so one node
+  # loss never takes two members. antiAffinityEnabled expands to required
+  # pod anti-affinity keyed on kubernetes.io/hostname.
+  affinity:
+    antiAffinityEnabled: true
   galera:
     enabled: true
   username: librenms

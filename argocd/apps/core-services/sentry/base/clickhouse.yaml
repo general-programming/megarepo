@@ -5,6 +5,16 @@ metadata:
   name: sentry
 spec:
   replicas: 3
+  # Keep the 3 Raft members on distinct nodes so one node loss never takes
+  # quorum (was landing 2/3 on sea1-k8s-0).
+  podTemplate:
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: sentry-keeper
   dataVolumeClaimSpec:
     accessModes:
       - ReadWriteOnce
@@ -18,6 +28,16 @@ metadata:
   name: sentry
 spec:
   replicas: 2
+  # Spread the 2 server replicas across nodes so a single node loss can't take
+  # both copies of a shard.
+  podTemplate:
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: sentry-clickhouse
   dataVolumeClaimSpec:
     accessModes:
       - ReadWriteOnce

@@ -9,6 +9,15 @@ spec:
   replicationFactor: 2
   vmstorage:
     replicaCount: 3
+    # Storage holds the TSDB data (replicationFactor 2), so hard-spread the 3
+    # replicas across nodes — never let one node hold two copies.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: vmstorage
     storageDataPath: "/vm-data"
     storage:
       volumeClaimTemplate:
@@ -23,6 +32,15 @@ spec:
         memory: 1Gi
   vmselect:
     replicaCount: 3
+    # Stateless query tier — prefer spreading but stay available under
+    # disruption rather than blocking a pod from scheduling.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: vmselect
     cacheMountPath: "/select-cache"
     storage:
       volumeClaimTemplate:
@@ -44,6 +62,14 @@ spec:
           tailscale.com/hostname: "svc-vmselect-sea1"
   vminsert:
     replicaCount: 3
+    # Stateless ingest tier — prefer spreading but never block ingestion.
+    topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname
+        whenUnsatisfiable: ScheduleAnyway
+        labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: vminsert
     serviceSpec:
       spec:
         type: ClusterIP

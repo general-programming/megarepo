@@ -106,6 +106,9 @@ zookeeper:
 kafka:
   controller:
     resourcesPreset: large
+    # Force the 3 KRaft controllers onto distinct nodes (default preset is
+    # "soft"/preferred, which allowed all 3 to share a node).
+    podAntiAffinityPreset: hard
     readinessProbe:
       initialDelaySeconds: 10
       periodSeconds: 15

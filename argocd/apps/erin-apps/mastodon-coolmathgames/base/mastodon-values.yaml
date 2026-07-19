@@ -156,6 +156,9 @@ elasticsearch:
   master:
     replicaCount: 3
     heapSize: 1g
+    # Master nodes form the cluster quorum — hard-spread them across nodes so
+    # one node loss can't drop the master majority.
+    podAntiAffinityPreset: hard
     resources:
       requests:
         memory: 2Gi
@@ -165,6 +168,8 @@ elasticsearch:
   data:
     replicaCount: 3
     heapSize: 2g
+    # Hard-spread data nodes so a single node holds at most one shard replica.
+    podAntiAffinityPreset: hard
     resources:
       requests:
         memory: 4Gi
