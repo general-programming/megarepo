@@ -6,7 +6,7 @@ replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v
 
 require (
 	github.com/bytedance/sonic v1.15.2
-	github.com/klauspost/compress v1.19.0
+	github.com/klauspost/compress v1.19.1
 	github.com/redis/go-redis/v9 v9.21.0
 	go.uber.org/zap v1.28.0
 )
