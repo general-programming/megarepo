@@ -1,0 +1,97 @@
+---
+# MetalLB controller + speaker. Both carry app=metallb and expose the same
+# container port name, so one VMPodScrape covers them; `component` splits
+# them into metallb-controller / metallb-speaker jobs.
+#
+# Scheme is https despite there being no --tls-* flag on the containers:
+# v0.16 dropped kube-rbac-proxy and controller-runtime's metrics server
+# generates its own self-signed cert at pod start (CN=localhost@<epoch>).
+# There is no CA to pin and the CN never matches the pod IP, so
+# insecureSkipVerify is the only option. The endpoint also requires a bearer
+# token -- see metallb/base/metrics-rbac.yaml for the RBAC that makes the
+# server side of that work.
+#
+# These pods are annotated prometheus.io/scrape by upstream, but the
+# all-scrape catch-all is http-only and cannot reach them; the metallb
+# overlay flips that annotation to "false" so it stops emitting 400s.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: metallb
+  namespace: victoriametrics
+spec:
+  podMetricsEndpoints:
+    - port: metricshttps
+      scheme: https
+      path: /metrics
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+      relabelConfigs:
+        - sourceLabels:
+            - __meta_kubernetes_pod_label_component
+          targetLabel: job
+          regex: (.+)
+          replacement: metallb-$1
+          action: replace
+  namespaceSelector:
+    matchNames:
+      - metallb-system
+  selector:
+    matchLabels:
+      app: metallb
+---
+# frr-k8s, split out of the speaker in v0.16. This is where the BGP session
+# state lives (frrk8s_bgp_* on :9141), so it is the important one for FMT2.
+# Nothing scraped it before: the DaemonSet has no prometheus.io annotations,
+# and the port names are metricshttps/frrmetricshttps rather than the bare
+# "metrics" that the catch-all `services` VMServiceScrape keys on.
+#
+# Discovery is via endpoints (the VMServiceScrape default), which yields one
+# target per node rather than a single load-balanced one -- BGP state is
+# per-node and must not be collapsed.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: frr-k8s
+  namespace: victoriametrics
+spec:
+  endpoints:
+    # frr-k8s controller: reconciliation, cert watcher, controller-runtime.
+    - port: metricshttps
+      scheme: https
+      path: /metrics
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+      relabelConfigs:
+        - targetLabel: job
+          replacement: frr-k8s
+          action: replace
+        - sourceLabels:
+            - __meta_kubernetes_pod_node_name
+          targetLabel: instance
+          regex: (.+)
+          action: replace
+    # FRR itself: frrk8s_bgp_session_up, announced prefixes, neighbour state.
+    - port: frrmetricshttps
+      scheme: https
+      path: /metrics
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+      relabelConfigs:
+        - targetLabel: job
+          replacement: frr
+          action: replace
+        - sourceLabels:
+            - __meta_kubernetes_pod_node_name
+          targetLabel: instance
+          regex: (.+)
+          action: replace
+  namespaceSelector:
+    matchNames:
+      - metallb-system
+  selector:
+    matchLabels:
+      control-plane: frr-k8s
