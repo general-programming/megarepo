@@ -23,7 +23,7 @@ in
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
     (self.lib.nixosModule "cloudflared")
-    (self.lib.nixosModule "dhcp")
+    (self.lib.nixosModule "kea")
     (self.lib.nixosModule "holepunch")
     (self.lib.nixosModule "impermanence")
     (self.lib.nixosModule "salt-master")
@@ -66,21 +66,40 @@ in
     "--advertise-routes="
   ];
 
-  # DHCP for the sea1 subnet, mirroring the legacy isc-dhcpd setup
-  # (pool .3.128-.3.254, router .2.1, MTU 9000, 2h leases; v6 ::200-::fff).
-  # Static reservations come from the dns module's NetBox refresh.
-  dhcp = {
+  # DHCP for the sea1 subnet via Kea (Stage 2: dnsmasq keeps DNS only).
+  # Same shape as the old dnsmasq/isc-dhcpd setup: pool .3.128-.3.254,
+  # router .2.1, MTU 9000, 2h leases; v6 pool ::200-::fff. Reservations are
+  # MAC-keyed for both families and rendered hourly from NetBox.
+  kea = {
     enable = true;
-    ranges = [
-      "10.3.3.128,10.3.3.254,255.255.254.0,2h"
-      "2602:fa6d:10:ffff::200,2602:fa6d:10:ffff::fff,116,2h"
+    interfaces = [ "ens18" ];
+    dhcp4.subnets = [
+      {
+        id = 1;
+        subnet = "10.3.2.0/23";
+        pools = [ { pool = "10.3.3.128 - 10.3.3.254"; } ];
+        option-data = [
+          { name = "routers"; data = "10.3.2.1"; }
+          { name = "domain-name-servers"; data = "10.3.2.6"; }
+          { name = "interface-mtu"; data = "9000"; }
+        ];
+        valid-lifetime = 7200;
+      }
     ];
-    extraOptions = [
-      "option:router,10.3.2.1"
-      "option:dns-server,10.3.2.6"
-      "option:mtu,9000"
-      "option6:dns-server,[2602:fa6d:10:ffff::f00]"
-    ];
+    dhcp6 = {
+      enable = true;
+      subnets = [
+        {
+          id = 1;
+          subnet = "2602:fa6d:10:ffff::/64";
+          pools = [ { pool = "2602:fa6d:10:ffff::200 - 2602:fa6d:10:ffff::fff"; } ];
+          option-data = [
+            { name = "dns-servers"; data = "2602:fa6d:10:ffff::f00"; }
+          ];
+          valid-lifetime = 7200;
+        }
+      ];
+    };
   };
 
   networking = {
