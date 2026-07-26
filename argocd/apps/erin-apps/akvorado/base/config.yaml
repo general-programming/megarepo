@@ -1,0 +1,148 @@
+---
+# The orchestrator serves this to the other three services, so it is the only
+# place config lives. `!include` resolves relative to this file's directory,
+# which is why the deployment mounts this ConfigMap and the Vault-backed Secret
+# through one projected volume.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: akvorado-config
+data:
+  akvorado.yaml: |
+    kafka:
+      topic: flows
+      brokers:
+        - akvorado-kafka-0.akvorado-kafka:9092
+      topic-configuration:
+        num-partitions: 4
+        replication-factor: 1
+        config-entries:
+          segment.bytes: 268435456
+          # Just a buffer in front of ClickHouse; 2h covers an outlet restart.
+          retention.ms: 7200000
+          cleanup.policy: delete
+          compression.type: producer
+
+    clickhousedb:
+      servers:
+        - akvorado-clickhouse-headless:9000
+      username: default
+      password: ""
+      database: default
+
+    clickhouse:
+      orchestrator-url: http://akvorado-orchestrator:8080
+      resolutions:
+        # Raw is by far the biggest table; cut this first if the PVC fills.
+        - interval: 0
+          ttl: 168h   # 7 days
+        - interval: 1m
+          ttl: 336h   # 14 days
+        - interval: 5m
+          ttl: 2160h  # 3 months
+        - interval: 1h
+          ttl: 8760h  # 1 year
+      asns:
+        4280805525: gp-fabric
+        4280805526: gp-fmt2
+        4280805529: gp-sea1
+        4280805533: gp-sea420
+      networks:
+        10.3.0.0/23:
+          name: sea420-internal
+          role: internal
+          site: sea420
+        10.3.2.0/23:
+          name: sea1-lan
+          role: internal
+          site: sea1
+        10.3.6.0/27:
+          name: sea1-wobscale
+          role: internal
+          site: sea1
+        10.65.67.0/24:
+          name: fmt2-lan
+          role: internal
+          site: fmt2
+        10.255.1.0/24:
+          name: fabric-mgmt
+          role: management
+        10.255.2.0/24:
+          name: fabric-underlay
+          role: underlay
+        79.110.170.0/24:
+          name: fmt2-public
+          role: servers
+          site: fmt2
+        2a0d:1a43:8008:420::/64:
+          name: fmt2-public-v6
+          role: servers
+          site: fmt2
+        2602:fa6d:10::/48:
+          name: sea1-public-v6
+          role: servers
+          site: sea1
+
+    geoip:
+      # No MaxMind/IPinfo databases shipped; without this the orchestrator
+      # refuses to start on the missing files.
+      optional: true
+
+    inlet:
+      flow:
+        inputs:
+          - type: udp
+            decoder: netflow
+            listen: :2055
+            workers: 4
+            receive-buffer: 212992
+          - type: udp
+            decoder: netflow
+            listen: :4739
+            workers: 4
+            receive-buffer: 212992
+          - type: udp
+            decoder: sflow
+            listen: :6343
+            workers: 4
+            receive-buffer: 212992
+
+    outlet:
+      metadata:
+        # Flows with unresolved interfaces are dropped -- do not start cold.
+        cache-persist-file: /run/akvorado/metadata.cache
+        providers:
+          - type: snmp
+            credentials: !include "snmp-credentials.yaml"
+      routing:
+        provider:
+          type: bmp
+          listen: 0.0.0.0:10179
+          collect-asns: true
+          collect-aspaths: true
+          # Expensive column, and our large communities are site tags we
+          # already model elsewhere.
+          collect-communities: false
+      flow:
+        state-persist-file: /run/akvorado/flow.state
+      core:
+        exporter-classifiers:
+          # barf names devices <site>-<role>-<n>.
+          - ClassifySiteRegex(Exporter.Name, "^([^-]+)-", "$1")
+          - ClassifyTenant("generalprogramming")
+        interface-classifiers:
+          - |
+            ClassifyConnectivityRegex(Interface.Description, "^(?i)(transit|pni|ppni|ix):? ", "$1") &&
+            ClassifyProviderRegex(Interface.Description, "^\\S+?\\s(\\S+)", "$1") &&
+            ClassifyExternal()
+          - ClassifyInternal()
+
+    console:
+      http:
+        cache:
+          type: redis
+          server: akvorado-valkey:6379
+      database:
+        driver: sqlite
+        dsn: /run/akvorado/console.sqlite
+      homepage-top-widgets: [src-as, dst-as, exporter, protocol, etype]

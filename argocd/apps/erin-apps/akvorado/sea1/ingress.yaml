@@ -1,0 +1,25 @@
+---
+# Tailscale-only, deliberately not the cloudflared path the other apps use: the
+# console renders the whole traffic matrix and internal addressing, so tailnet
+# ACLs are the authorization boundary. Akvorado itself only authenticates via a
+# Remote-User header from an upstream proxy; with none, it runs as its default
+# user -- which is why it is not exposed any wider.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: akvorado-console
+spec:
+  ingressClassName: tailscale
+  tls:
+    - hosts:
+        - akvorado
+  rules:
+    - http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: akvorado-console
+                port:
+                  number: 8080

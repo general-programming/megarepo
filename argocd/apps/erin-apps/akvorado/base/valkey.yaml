@@ -1,0 +1,52 @@
+---
+# Console query cache. Ephemeral -- a cold cache just means slower first loads.
+apiVersion: v1
+kind: Service
+metadata:
+  name: akvorado-valkey
+spec:
+  selector:
+    app: akvorado-valkey
+  ports:
+    - name: valkey
+      port: 6379
+      targetPort: 6379
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akvorado-valkey
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: akvorado-valkey
+  template:
+    metadata:
+      labels:
+        app: akvorado-valkey
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:9.0
+          args:
+            - --save
+            - ""
+            - --maxmemory
+            - 256mb
+            - --maxmemory-policy
+            - allkeys-lru
+          ports:
+            - containerPort: 6379
+              name: valkey
+          readinessProbe:
+            exec:
+              command: ["valkey-cli", "ping"]
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 25m
+              memory: 64Mi
+            limits:
+              memory: 384Mi

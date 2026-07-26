@@ -23,6 +23,7 @@ resources:
   - shared-db.yaml
 
   # apps
+  - akvorado.yaml
   - attic.yaml
   - authentik.yaml
   - grafana.yaml

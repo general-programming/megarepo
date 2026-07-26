@@ -1,0 +1,61 @@
+---
+# HTTP/metrics only. Flow ingestion arrives on the MetalLB VIP in the sea1
+# overlay; keeping them separate lets that service use externalTrafficPolicy:
+# Local without breaking in-cluster scraping.
+apiVersion: v1
+kind: Service
+metadata:
+  name: akvorado-inlet
+spec:
+  selector:
+    app: akvorado-inlet
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+# DaemonSet because the flow Service is externalTrafficPolicy: Local -- MetalLB
+# only announces from nodes with a local endpoint, and no packet gets SNAT'd
+# across nodes. Akvorado keys every flow by the exporter's source IP.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: akvorado-inlet
+spec:
+  selector:
+    matchLabels:
+      app: akvorado-inlet
+  template:
+    metadata:
+      labels:
+        app: akvorado-inlet
+    spec:
+      containers:
+        - name: inlet
+          image: quay.io/akvorado/akvorado:2.4.1
+          args:
+            - inlet
+            - http://akvorado-orchestrator:8080
+          ports:
+            - containerPort: 2055
+              protocol: UDP
+              name: netflow
+            - containerPort: 4739
+              protocol: UDP
+              name: ipfix
+            - containerPort: 6343
+              protocol: UDP
+              name: sflow
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi

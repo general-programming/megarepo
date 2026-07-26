@@ -47,6 +47,10 @@ nodes:
     # CNPG Clusters carry a nodeAffinity that refuses nodes with this label.
     nodeLabels:
       generalprogramming.org/no-database: "true"
+      # This node is on 10.3.6.0/27, not the 10.3.2.0/23 site LAN, so it can
+      # never own a MetalLB L2 VIP from the sea1 pool. Workloads behind such a
+      # VIP refuse nodes carrying this label.
+      generalprogramming.org/no-lan-vip: "true"
     nameservers:
       - 10.3.0.3
       - 10.65.67.6

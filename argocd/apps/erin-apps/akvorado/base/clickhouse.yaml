@@ -1,0 +1,45 @@
+---
+# Single replica, non-cluster mode: clickhousedb.cluster is a one-way door in
+# akvorado (replicated + distributed tables, no migration either direction) and
+# flow history is TTL'd and rebuildable. Keeper exists only because
+# ClickHouseCluster requires keeperClusterRef.
+apiVersion: clickhouse.com/v1alpha1
+kind: KeeperCluster
+metadata:
+  name: akvorado
+spec:
+  replicas: 1
+  dataVolumeClaimSpec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ceph-rbd-xfs
+    resources:
+      requests:
+        storage: 8Gi
+---
+apiVersion: clickhouse.com/v1alpha1
+kind: ClickHouseCluster
+metadata:
+  name: akvorado
+spec:
+  replicas: 1
+  keeperClusterRef:
+    name: akvorado
+  dataVolumeClaimSpec:
+    accessModes:
+      - ReadWriteOnce
+    storageClassName: ceph-rbd-xfs
+    resources:
+      requests:
+        storage: 200Gi
+  containerTemplate:
+    image:
+      repository: clickhouse/clickhouse-server
+      tag: "25.3"
+    resources:
+      requests:
+        cpu: "1"
+        memory: "4Gi"
+      limits:
+        cpu: "4"
+        memory: "12Gi"
