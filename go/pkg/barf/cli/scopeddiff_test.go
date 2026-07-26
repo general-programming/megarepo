@@ -9,6 +9,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/scope"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // fakeScopedReader is a DeviceReader that also answers a scoped
@@ -129,7 +130,7 @@ func TestWrapScopedOnlyUpgradesScopedVendors(t *testing.T) {
 		{"vyos", false},
 	} {
 		host := &model.Host{Hostname: "h", DeviceType: tc.deviceType}
-		r, err := device.New(host, device.Options{
+		r, err := vendor.NewReader(host, device.Options{
 			Endpoint:      "127.0.0.1",
 			Secrets:       fakeSecrets{},
 			GlobalSecrets: fakeGlobalSecrets{},

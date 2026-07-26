@@ -447,27 +447,11 @@ func TestEOSCompareReaderErrorPropagates(t *testing.T) {
 	}
 }
 
-func TestRegistryDispatch(t *testing.T) {
-	if _, ok := For("eos"); !ok {
-		t.Error("eos has no scoped comparer")
-	}
-	if _, ok := For("EOS"); !ok {
-		t.Error("devicetype lookup must be case-insensitive")
-	}
-	// VyOS is owned whole; it must fall through to the generic diff.
-	for _, dt := range []string{"vyos", "linux", "mikrotik", ""} {
-		if _, ok := For(dt); ok {
-			t.Errorf("%q unexpectedly has a scoped comparer", dt)
-		}
-	}
-}
-
-func TestCompareRejectsUnknownDeviceType(t *testing.T) {
-	_, err := Compare(context.Background(), Input{Host: &model.Host{Hostname: "h", DeviceType: "vyos"}})
-	if err == nil || !strings.Contains(err.Error(), "no scoped comparison") {
-		t.Fatalf("err = %v", err)
-	}
-}
+// The registry dispatch tests that used to live here (TestRegistryDispatch,
+// TestCompareRejectsUnknownDeviceType) moved with the registry to
+// ../vendor: TestComparerDispatch. They assert the same thing -- eos has
+// a scoped comparer, the lookup is case-insensitive, and vyos/linux/
+// mikrotik fall through to the generic whole-config diff.
 
 // The zero value of Input must redact. The field used to be `Redact
 // bool`, so an Input built without setting it printed crypt hashes in

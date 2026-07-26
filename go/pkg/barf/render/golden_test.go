@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
-	"github.com/general-programming/megarepo/go/pkg/barf/render"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // barfRoot locates projects/barf relative to this source file, so the
@@ -59,11 +59,11 @@ func TestGoldenParity(t *testing.T) {
 			if !ok {
 				t.Fatalf("golden %s has no host in network.yml", name)
 			}
-			if _, ok := render.For(host.DeviceType); !ok {
+			if _, ok := vendor.Renderer(host.DeviceType); !ok {
 				t.Skipf("no Go renderer for device type %q yet", host.DeviceType)
 			}
 
-			got, err := render.Host(host, network, fakeSecrets{})
+			got, err := vendor.Render(host, network, fakeSecrets{})
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
@@ -85,14 +85,14 @@ func TestRenderIsDeterministic(t *testing.T) {
 	network := loadFleet(t)
 	for i := range network.Hosts {
 		host := &network.Hosts[i]
-		if _, ok := render.For(host.DeviceType); !ok {
+		if _, ok := vendor.Renderer(host.DeviceType); !ok {
 			continue
 		}
-		first, err := render.Host(host, network, fakeSecrets{})
+		first, err := vendor.Render(host, network, fakeSecrets{})
 		if err != nil {
 			continue
 		}
-		second, err := render.Host(host, network, fakeSecrets{})
+		second, err := vendor.Render(host, network, fakeSecrets{})
 		if err != nil {
 			t.Fatalf("%s: second render failed: %v", host.Hostname, err)
 		}

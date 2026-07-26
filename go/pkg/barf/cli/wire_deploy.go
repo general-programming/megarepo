@@ -6,21 +6,43 @@ import (
 
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // The write-side wiring, kept separate from wire.go so the read surface
 // and the write surface can be reasoned about (and deleted) apart.
-//
-// This is the ONE place where Options.AllowWrites is set. Everything
-// upstream of it — the deploy command's --yes, its per-device
-// confirmation — gates whether this code is reached at all; this line is
-// what lets the transport act once it is.
 
+// init registers a cli-level writer factory for exactly the vendors
+// whose row in the vendor table has a non-nil NewWriter.
+//
+// The loop is the point. There used to be a hand-written
+// `registerWriter("vyos", wireVyOSWriter)` here — a fourth registry
+// keyed by devicetype, in a fourth package, that a maintainer had to
+// remember. Now "which vendors can be deployed to" is asked once, of the
+// same table that answers "which vendors can be rendered/probed/scoped",
+// and the answer cannot disagree with the constructor it names.
+//
+// writerFactories stays a package var: deploy_test.go swaps it for fakes
+// and for the empty map (the "this build cannot deploy anything" case),
+// and that seam is untouched.
 func init() {
-	registerWriter("vyos", wireVyOSWriter)
+	for _, v := range vendor.All() {
+		if v.NewWriter == nil {
+			continue
+		}
+		registerWriter(v.Type, wireWriter)
+	}
 }
 
-func wireVyOSWriter(h *model.Host, address string, s SecretSource) (DeviceWriter, error) {
+// wireWriter builds the writer for h from the vendor table.
+//
+// This is still the ONE place in barf that sets Options.AllowWrites.
+// Everything upstream — the deploy command's --yes, its per-device
+// confirmation, the dry-run default — gates whether this function is
+// reached at all; this line is what lets the transport act once it is.
+// vendor.NewWriter only chooses the constructor; the constructor still
+// refuses if this flag is not set.
+func wireWriter(h *model.Host, address string, s SecretSource) (DeviceWriter, error) {
 	opts := device.Options{
 		Endpoint: address,
 		// Fleet devices serve the self-signed default SSL profile.
@@ -37,7 +59,7 @@ func wireVyOSWriter(h *model.Host, address string, s SecretSource) (DeviceWriter
 		opts.Secrets = src
 		opts.GlobalSecrets = src
 	}
-	w, err := device.NewVyOSWriter(h, opts)
+	w, err := vendor.NewWriter(h, opts)
 	if err != nil {
 		return nil, err
 	}

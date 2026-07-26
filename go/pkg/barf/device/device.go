@@ -26,8 +26,8 @@
 //
 // writer.go adds the Writer interface and VyOSWriter, the only type in
 // this package that can change a device. It is a different type with a
-// different constructor and its own request primitive; it is never
-// returned by New, and NewVyOSWriter errors out unless
+// different constructor and its own request primitive; no reader
+// constructor can return one, and NewVyOSWriter errors out unless
 // Options.AllowWrites was explicitly set. Nothing that holds a Reader can
 // turn it into a Writer.
 //
@@ -38,12 +38,8 @@ package device
 import (
 	"context"
 	"crypto/tls"
-	"fmt"
 	"net/http"
-	"strings"
 	"time"
-
-	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
 // Status is the small fleet-table summary every vendor can report.
@@ -215,24 +211,16 @@ func (o Options) httpClient() *http.Client {
 	return &http.Client{Transport: transport}
 }
 
-// New returns the Reader for h's DeviceType.
+// The devicetype -> constructor switch that used to live here (New) has
+// moved to ../vendor, which holds it in one table alongside the render
+// and scope entries for the same devicetype. It had a hand-written
+// duplicate in cli (wireReportsStatus) that had to be kept in sync by
+// memory; there is now one answer to "can barf talk to this vendor".
 //
-// Supported: "eos" (Arista eAPI), "vyos" (VyOS HTTPS API). Every other
-// devicetype returns ErrUnsupported — mirroring the Python
-// REPORTS_STATUS flag, which is only set on those two vendors.
-func New(h *model.Host, opts Options) (Reader, error) {
-	if h == nil {
-		return nil, fmt.Errorf("device: nil host")
-	}
-	switch strings.ToLower(h.DeviceType) {
-	case "eos":
-		return NewEOS(h, opts)
-	case "vyos":
-		return NewVyOS(h, opts)
-	default:
-		return nil, fmt.Errorf("device: %s: %w: devicetype %q does not report status",
-			h.Hostname, ErrUnsupported, h.DeviceType)
-	}
-}
+// Nothing about the guards changed. NewEOS and NewVyOS are still the
+// only ways to get a Reader, they still have no config path, and
+// NewVyOSWriter/NewEOSWriter still refuse without Options.AllowWrites.
+// vendor calls these constructors; it does not replace them and cannot
+// relax them.
 
 // The refusal errors and ErrUnsupported live in errors.go.

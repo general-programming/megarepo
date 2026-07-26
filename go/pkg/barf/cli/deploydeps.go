@@ -44,8 +44,10 @@ type writerFactory func(h *model.Host, address string, s SecretSource) (DeviceWr
 
 // writerFactories holds the vendors that have a write implementation, by
 // devicetype. It starts empty on purpose: a build with no wiring can
-// diff and plan but physically cannot deploy. wire_deploy.go registers
-// VyOS; other vendors register themselves the same way.
+// diff and plan but physically cannot deploy. wire_deploy.go fills it
+// from the rows of the vendor table whose NewWriter is non-nil, so this
+// map is derived from that table rather than being a fourth registry
+// maintained beside it.
 var writerFactories = map[string]writerFactory{}
 
 // registerWriter records a vendor's write implementation. Called from

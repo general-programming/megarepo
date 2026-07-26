@@ -10,6 +10,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // This is the only file in the package that names the render, device,
@@ -30,7 +31,7 @@ func init() {
 
 // wireRenderer resolves the renderer registered for a device type.
 func wireRenderer(deviceType string) (Renderer, error) {
-	r, ok := render.For(deviceType)
+	r, ok := vendor.Renderer(deviceType)
 	if !ok {
 		return nil, fmt.Errorf("no renderer for device type %q", deviceType)
 	}
@@ -47,20 +48,24 @@ func (a rendererAdapter) Render(h *model.Host, n *model.Network, s SecretSource)
 	return a.r.Render(h, n, s)
 }
 
+// wireTemplatable and wireReportsStatus are one lookup each against the
+// vendor table now. wireReportsStatus in particular used to be a
+// hand-written `case "vyos", "eos"` — a second, independently editable
+// copy of device.New's vendor switch, with nothing checking that the two
+// agreed. Adding a third readable vendor to one and not the other gave a
+// device barf refused to probe (or probed and then could not construct a
+// client for). `v.NewReader != nil` cannot drift from the constructor it
+// is asking about, because it IS the constructor.
+
 // wireTemplatable reports whether a device type has a renderer at all.
 func wireTemplatable(deviceType string) bool {
-	_, ok := render.For(deviceType)
-	return ok
+	return vendor.Templatable(deviceType)
 }
 
-// wireReportsStatus mirrors the Python REPORTS_STATUS flag: only the
-// vendors device.New builds a reader for.
+// wireReportsStatus mirrors the Python REPORTS_STATUS flag: the vendors
+// the table has a reader constructor for.
 func wireReportsStatus(deviceType string) bool {
-	switch deviceType {
-	case "vyos", "eos":
-		return true
-	}
-	return false
+	return vendor.ReportsStatus(deviceType)
 }
 
 // wireReader builds a read-only device client pinned to the endpoint the
@@ -76,7 +81,7 @@ func wireReader(h *model.Host, address string, s SecretSource) (DeviceReader, er
 		opts.Secrets = src
 		opts.GlobalSecrets = src
 	}
-	r, err := device.New(h, opts)
+	r, err := vendor.NewReader(h, opts)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +107,16 @@ func wireSecrets() (SecretSource, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &vaultSource{c: c}, nil
+	src := &vaultSource{c: c}
+	// The runtime half of the compile-time assertion below. It cannot
+	// fail for *vaultSource — that is what the assertion guarantees — but
+	// it is the check any OTHER secret source has to pass to get in here,
+	// and it fails at startup naming the missing capability instead of
+	// midway through a fleet render on one unlucky vendor.
+	if err := render.CheckSecretSource(src); err != nil {
+		return nil, err
+	}
+	return src, nil
 }
 
 // vaultSource satisfies every secret interface the render and device
@@ -110,16 +124,27 @@ func wireSecrets() (SecretSource, error) {
 // memory and are never logged or written to disk.
 type vaultSource struct{ c *vault.Client }
 
-// Every optional secret interface the render package asks for is
-// asserted here. render resolves them with a runtime type assertion, so
-// a missing method is otherwise only discovered when a real render of
-// that vendor fails in production — DNOS rendering did exactly that
-// while TacacsKey was unimplemented. These make it a build error.
+// The production secret source must implement EVERY optional interface
+// the render package asks for, and this line is what enforces it.
+//
+// render resolves those interfaces with runtime type assertions, so a
+// missing method is otherwise only discovered when a real render of that
+// vendor fails in production — DNOS rendering did exactly that while
+// TacacsKey was unimplemented, and the goldens stayed green because the
+// test fake had it.
+//
+// This is asserted against the COMPOSITE, not against the four members
+// individually. Four separate assertions still had the original defect
+// in miniature: adding a fifth optional interface to render meant
+// remembering to add a fifth line here, and forgetting was silent.
+// Against the composite, a new optional capability breaks this build the
+// moment it is embedded in render.CompleteSecretSource.
+var _ render.CompleteSecretSource = (*vaultSource)(nil)
+
+// The device package's optional interfaces get the same treatment.
 var (
-	_ render.SecretSource    = (*vaultSource)(nil)
-	_ render.VaultSource     = (*vaultSource)(nil)
-	_ render.TacacsSource    = (*vaultSource)(nil)
-	_ render.WireguardSource = (*vaultSource)(nil)
+	_ device.Secrets       = (*vaultSource)(nil)
+	_ device.GlobalSecrets = (*vaultSource)(nil)
 )
 
 // HostSecret is render.SecretSource / device.Secrets.

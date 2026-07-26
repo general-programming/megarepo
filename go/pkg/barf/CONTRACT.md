@@ -16,8 +16,10 @@ Go: 1.25 (toolchain 1.26 available)
    - Every write path is gated on an explicit `AllowWrites` opt-in whose
      zero value writes nothing.
    - Write capability lives in named types (`device.VyOSWriter`,
-     `device.EOSWriter`, `lifecycle`), never in a reader. `device.New`
-     returns a `Reader` and can never return a writer.
+     `device.EOSWriter`, `lifecycle`), never in a reader. `vendor.NewReader`
+     (formerly `device.New`) returns a `Reader` and can never return a
+     writer; `vendor.NewWriter` is a separate function, and the
+     constructors it dispatches to still refuse without `AllowWrites`.
    - Each write surface has its own closed allowlist of endpoints and
      command shapes. See "The write guards" below — those are the
      load-bearing detail, and they must not be merged.
@@ -57,6 +59,7 @@ produced are being folded back together.
 |---|---|---|
 | `go/common/pytext` | `SplitLines`, `ShellSplit`, `ShellQuote` | Go equivalents of Python stdlib text primitives, differentially validated against CPython. Domain-free, so monorepo-wide is correct. A leaf package, NOT the `go/common` root: that root pulls in redis and zap, which barf must not inherit. |
 | `go/pkg/barf/vyoswire` | the VyOS form-POST wire protocol | Vendor-specific, so it stays inside barf. Codec and HTTP call only — it holds no allowlist (see below). |
+| `go/pkg/barf/vendor` | the devicetype → capability table | The four registries keyed by devicetype (`render.For`, `device.New`, `scope.For`, `cli.writerFactories`) were one fact split across four packages, plus a hand-written fifth copy in `cli.wireReportsStatus`. They are now one row per vendor. It **composes** the small interfaces; it does not replace them, and the implementations never moved. Imports `render`+`device`+`scope`; nothing below it may import it. |
 
 `go/common` is **monorepo-wide** and shared with non-barf Go tools. Only
 genuinely generic, domain-free utilities may go there. Network-automation
