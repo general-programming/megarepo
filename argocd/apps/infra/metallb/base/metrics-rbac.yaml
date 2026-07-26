@@ -1,0 +1,66 @@
+---
+# MetalLB v0.16 dropped kube-rbac-proxy and now serves controller/speaker
+# metrics itself, over HTTPS on :9120, behind controller-runtime's
+# authn/authz filter. That filter runs a TokenReview and a
+# SubjectAccessReview against the API server for every scrape, using the
+# component's own ServiceAccount.
+#
+# The plain upstream manifest we vendor (upstream/metallb-frr-k8s.yaml) does
+# not grant those two verbs -- only the -prometheus flavour of the manifest
+# does -- so an authenticated scrape of :9120 fails with 500 while the
+# component logs a TokenReview forbidden error. frr-k8s is unaffected: it
+# ships its own frr-k8s-proxy-role.
+#
+# These are additive objects rather than a patch of the vendored
+# metallb-system:{controller,speaker} ClusterRoles, because `rules` has no
+# merge key -- a strategic merge patch would replace the whole list and drop
+# every permission MetalLB needs to function.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: metallb-system:metrics-auth
+  labels:
+    app: metallb
+rules:
+  - apiGroups:
+      - authentication.k8s.io
+    resources:
+      - tokenreviews
+    verbs:
+      - create
+  - apiGroups:
+      - authorization.k8s.io
+    resources:
+      - subjectaccessreviews
+    verbs:
+      - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: metallb-system:metrics-auth-controller
+  labels:
+    app: metallb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: metallb-system:metrics-auth
+subjects:
+  - kind: ServiceAccount
+    name: controller
+    namespace: metallb-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: metallb-system:metrics-auth-speaker
+  labels:
+    app: metallb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: metallb-system:metrics-auth
+subjects:
+  - kind: ServiceAccount
+    name: speaker
+    namespace: metallb-system
