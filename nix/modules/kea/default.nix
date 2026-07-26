@@ -58,6 +58,7 @@ let
         option-data = cfg.dhcp4.optionData;
         client-classes = cfg.dhcp4.clientClasses;
         subnet4 = cfg.dhcp4.subnets;
+        shared-networks = cfg.dhcp4.sharedNetworks;
         reservations = "@NETBOX_HOSTS4@";
         hooks-libraries = hooksLibraries;
       };
@@ -138,6 +139,15 @@ in
         description = ''
           Raw Kea client-classes entries (name, test, boot-file-name, ...).
           For boot-file-name, the first matching class in list order wins.
+        '';
+      };
+
+      sharedNetworks = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        default = [ ];
+        description = ''
+          Raw Kea shared-networks entries (name, interface, subnet4, ...).
+          Subnet ids must be unique across these and dhcp4.subnets.
         '';
       };
     };
