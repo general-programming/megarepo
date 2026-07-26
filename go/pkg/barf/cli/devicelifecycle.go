@@ -392,6 +392,9 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 		return errors.New("--force requires --yes: overriding the redundancy gate is not something " +
 			"a [y/N] prompt can authorise, it has to be stated on the command line")
 	}
+	if f.drainWait < 0 {
+		return fmt.Errorf("--drain-wait cannot be negative (got %s)", f.drainWait)
+	}
 
 	net, selected, err := o.loadTargets(targets)
 	if err != nil {
