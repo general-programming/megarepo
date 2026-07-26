@@ -89,6 +89,17 @@ type Updater struct {
 // DefaultDrainWait matches the Python --drain-wait default.
 const DefaultDrainWait = 5 * time.Second
 
+// drainWaitSeconds converts a drain wait to the whole seconds the reboot
+// script's `sleep` takes. Rounds UP: a sub-second --drain-wait (a valid
+// cobra DurationVar, e.g. 900ms) must never truncate to `sleep 0`, which
+// would reboot the device with no BGP drain at all.
+func drainWaitSeconds(d time.Duration) int {
+	if d <= 0 {
+		return 0
+	}
+	return int(math.Ceil(d.Seconds()))
+}
+
 func (u *Updater) drainWait() time.Duration {
 	if u.DrainWait > 0 {
 		return u.DrainWait
@@ -385,7 +396,7 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	drainWait := plan.DrainWait
 	fmt.Fprintf(out, "%slaunching detached drain+reboot\n", prefix)
 	logPath, err := conn.RunDetached(ctx, "barf-reboot.sh",
-		sshx.DrainAndRebootScript(version, int(drainWait.Seconds()), plan.DrainBGP))
+		sshx.DrainAndRebootScript(version, drainWaitSeconds(drainWait), plan.DrainBGP))
 	if err != nil {
 		return fmt.Errorf("%s: launching drain+reboot: %w", plan.Hostname, err)
 	}

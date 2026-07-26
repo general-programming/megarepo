@@ -525,6 +525,29 @@ func TestInjectedSleepReplacesTheDrainWait(t *testing.T) {
 	}
 }
 
+// Regression: int(900*time.Millisecond.Seconds()) truncates to 0, which the
+// reboot script reads as `sleep 0` — no BGP drain at all before rebooting.
+func TestDrainWaitSecondsRoundsUp(t *testing.T) {
+	cases := []struct {
+		name string
+		d    time.Duration
+		want int
+	}{
+		{"sub-second rounds up to one second", 900 * time.Millisecond, 1},
+		{"exact seconds unchanged", 5 * time.Second, 5},
+		{"fractional seconds round up", 1500 * time.Millisecond, 2},
+		{"zero means default, not sleep 0", 0, 0},
+		{"negative clamps to zero", -1 * time.Second, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := drainWaitSeconds(tc.d); got != tc.want {
+				t.Errorf("drainWaitSeconds(%v) = %d, want %d", tc.d, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestExecuteFailsWhenTheDeviceComesBackOnTheOldImage(t *testing.T) {
 	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true})
 	// It reboots but comes back on something unexpected.
