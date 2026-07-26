@@ -20,6 +20,7 @@ in
     (self.lib.nixosModule "disk/zfs-mirror")
     (self.lib.nixosModule "hardware/proxmox-vm")
     (self.lib.nixosModule "dns")
+    (self.lib.nixosModule "kea")
     (self.lib.nixosModule "gitops")
     (self.lib.nixosModule "glances-tty")
     (self.lib.nixosModule "impermanence")
@@ -35,6 +36,77 @@ in
 
   # Hourly DNS/DHCP regeneration from NetBox, keyed via vault-agent.
   dns.refresh.enable = true;
+
+  # DHCP for the fmt2 subnets via Kea, verbatim parity with the retired
+  # isc-dhcpd on fmt2-core-0/oob-backup (pools, options, lease times, PXE
+  # chain via 10.65.67.2). DNS handed out is this host (10.65.67.5).
+  # No DHCPv6: the legacy v6 config was never real.
+  kea = {
+    enable = true;
+    interfaces = [ "eno1" "vlan5" "vlan1000" ];
+    dhcp4 = {
+      optionData = [
+        { name = "domain-name"; data = "lasagna.dev"; }
+      ];
+      # isc-dhcpd's class "pxeclients": iPXE chains to the boot worker,
+      # plain PXE gets arch-matched iPXE binaries via TFTP. For
+      # boot-file-name the first matching class wins, so ipxe sits first.
+      clientClasses = [
+        {
+          name = "ipxe";
+          test = "option[77].text == 'iPXE'";
+          boot-file-name = "http://bootstraper.butt.workers.dev/config/boot";
+        }
+        {
+          name = "pxe-bios";
+          test = "not member('ipxe') and substring(option[60].text,0,9) == 'PXEClient' and option[93].hex == 0x0000";
+          boot-file-name = "ipxe.kpxe";
+        }
+        {
+          name = "pxe-efi";
+          test = "not member('ipxe') and substring(option[60].text,0,9) == 'PXEClient' and (option[93].hex == 0x0007 or option[93].hex == 0x0009)";
+          boot-file-name = "ipxe.efi";
+        }
+      ];
+      subnets = [
+        {
+          id = 1;
+          subnet = "79.110.170.0/24";
+          pools = [ { pool = "79.110.170.240 - 79.110.170.254"; } ];
+          option-data = [
+            { name = "routers"; data = "79.110.170.1"; }
+            { name = "domain-name-servers"; data = "1.1.1.1, 95.217.25.217, 8.8.8.8"; }
+          ];
+          valid-lifetime = 86400;
+          max-valid-lifetime = 604800;
+        }
+        {
+          id = 2;
+          subnet = "10.65.67.0/24";
+          pools = [ { pool = "10.65.67.128 - 10.65.67.254"; } ];
+          next-server = "10.65.67.2";
+          option-data = [
+            { name = "routers"; data = "10.65.67.1"; }
+            { name = "domain-name-servers"; data = "10.65.67.5, 1.1.1.1"; }
+            { name = "tftp-server-name"; data = "10.65.67.2"; }
+          ];
+          valid-lifetime = 604800;
+          max-valid-lifetime = 10368000;
+        }
+        {
+          id = 3;
+          subnet = "10.255.1.0/24";
+          pools = [ { pool = "10.255.1.128 - 10.255.1.254"; } ];
+          option-data = [
+            { name = "routers"; data = "10.255.1.1"; }
+            { name = "domain-name-servers"; data = "10.255.1.9, 10.255.1.1"; }
+          ];
+          valid-lifetime = 604800;
+          max-valid-lifetime = 10368000;
+        }
+      ];
+    };
+  };
 
   # First real consumer of the shared builder host (base.nix has vaultAgent
   # as a prerequisite, and this is the only machine with it enabled so far).

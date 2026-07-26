@@ -58,6 +58,7 @@ let
         reservations-global = true;
         reservations-in-subnet = false;
         option-data = cfg.dhcp4.optionData;
+        client-classes = cfg.dhcp4.clientClasses;
         subnet4 = cfg.dhcp4.subnets;
         reservations = "@NETBOX_HOSTS4@";
         hooks-libraries = hooksLibraries;
@@ -131,6 +132,15 @@ in
         type = lib.types.listOf lib.types.attrs;
         default = [ ];
         description = "Global Dhcp4 option-data entries.";
+      };
+
+      clientClasses = lib.mkOption {
+        type = lib.types.listOf lib.types.attrs;
+        default = [ ];
+        description = ''
+          Raw Kea client-classes entries (name, test, boot-file-name, ...).
+          For boot-file-name, the first matching class in list order wins.
+        '';
       };
     };
 
