@@ -224,21 +224,31 @@ func statusProbe(o *Options, net *model.Network, h *model.Host, rendered string,
 		row.Model = orUnknown(st.Model)
 		row.Status = "ok"
 
-		row.Consistent, row.State = consistencyCell(ctx, reader, rendered, renderErr)
+		row.Consistent, row.State = consistencyCell(ctx, reader, h, net, rendered, renderErr, secrets)
 		return row
 	}
 }
 
 // consistencyCell is the CONFIG CONSISTENT cell plus the row's state.
-func consistencyCell(ctx context.Context, reader DeviceReader, rendered string, renderErr error) (string, tui.RowState) {
+func consistencyCell(
+	ctx context.Context,
+	reader DeviceReader,
+	h *model.Host,
+	net *model.Network,
+	rendered string,
+	renderErr error,
+	secrets SecretSource,
+) (string, tui.RowState) {
 	if renderErr != nil {
 		return "render error: " + renderErr.Error(), tui.StateError
 	}
-	running, err := reader.RunningConfig(ctx)
+	// Same comparison `diff` and `deploy` use — see compare.go. Using a
+	// plain line diff here made VyOS rows report hundreds of phantom
+	// changes on devices the other two commands called clean.
+	diff, err := compareConfig(ctx, reader, h, net, rendered, secrets, DiffOptions{})
 	if err != nil {
 		return "error: " + err.Error(), tui.StateError
 	}
-	diff := DiffConfigs(rendered, running, DiffOptions{})
 	if !diff.HasChanges {
 		return "yes", tui.StateOK
 	}
