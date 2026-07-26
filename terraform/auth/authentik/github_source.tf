@@ -2,6 +2,11 @@ data "authentik_flow" "default_source_authentication" {
   slug = "default-source-authentication"
 }
 
+# Deprecation warning is expected: vault 5.x wants the ephemeral
+# vault_kv_secret_v2 instead, but ephemeral values can only feed write-only
+# attributes and authentik_source_oauth.consumer_secret is a regular one
+# (checked against provider 2026.5.0). Revisit when goauthentik ships
+# write-only credential attributes.
 data "vault_kv_secret_v2" "github_oauth" {
   mount = "secret"
   name  = "app/authentik/github"
