@@ -70,8 +70,26 @@ management api http-commands
 end
 ```
 
+**VRF gotcha (this bit is what makes 443 answer on the internal side):**
+EOS serves eAPI only in the default VRF unless each VRF is enabled
+explicitly. fmt2-cor-r's internal addresses (10.65.67.1, 10.255.1.1) live
+in `vrf internal`, so also:
+
+```text
+configure
+management api http-commands
+   vrf internal
+      no shutdown
+end
+copy running-config startup-config
+```
+
+(The provider manages this too — `eapi_vrf: internal` in network.yml —
+so once reachable, barf keeps it enforced.)
+
 Verify on-device: `show management api http-commands` → `Enabled: Yes`,
-`HTTPS server: running, port 443`.
+`HTTPS server: running, port 443`, and the `internal` VRF listed as
+running.
 
 ## Step 3 — verify from the devbox
 

@@ -69,6 +69,9 @@ hosts:
     role: core
     site: fmt2
     address: 10.65.67.1/24
+    # Internal addresses live in this VRF; eAPI must be enabled in it
+    # or 443 only answers in the default VRF.
+    eapi_vrf: internal
   # TODO: fmt2 100G router — not in NetBox yet; add with its hostname
   # and management address once identified, same shape as above.
   fmt2-vpn-spine-1:

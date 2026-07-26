@@ -7,6 +7,9 @@ and deploy all operate ONLY on:
   - the ``admin`` username: privilege 15, network-admin role, sha512
     secret, primary/secondary ssh-key
   - the ``enable`` password
+  - eAPI itself: ``management api http-commands`` enabled over HTTPS,
+    including the host's ``eapi_vrf`` (network.yml) so the API answers on
+    the internal-facing side, not just the default VRF
 
 Nothing else on the device is read into diffs or written by deploys — a
 deploy sends exactly the managed ``username admin ...`` / ``enable
@@ -27,7 +30,7 @@ sync, so adopting a hand-set device never rewrites matching credentials.
 import hashlib
 import re
 import ssl
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 # passlib's hash registry is populated at runtime, which ty cannot see.
 from passlib.hash import sha512_crypt  # ty: ignore[unresolved-import]
@@ -69,6 +72,16 @@ class EosHost(BaseHost):
     # load_network() attaches it right after construction.
     global_meta: Optional[dict] = None
 
+    # VRF the device's internal-facing addresses live in; eAPI must be
+    # explicitly enabled per VRF or it only answers in default.
+    eapi_vrf: Optional[str] = None
+
+    @classmethod
+    def from_meta(cls, hostname: str, meta: dict):
+        host = super().from_meta(hostname=hostname, meta=meta)
+        host.eapi_vrf = meta.get("eapi_vrf")
+        return host
+
     # -- desired state ------------------------------------------------
 
     def _admin_password(self) -> str:
@@ -108,6 +121,23 @@ class EosHost(BaseHost):
                 f"username {MANAGED_USERNAME} ssh-key secondary {keys[1]}"
             )
         commands.append(f"enable password sha512 {enable_hash}")
+        commands.extend(self._eapi_commands())
+        return commands
+
+    def _eapi_commands(self) -> List[str]:
+        """The eAPI slice: HTTPS on, plus the internal-facing VRF.
+
+        Emitted as the flat command sequence pyeapi sends in configure
+        mode; ``vrf <name>`` enters a sub-mode of the api block, so
+        order is the hierarchy.
+        """
+        commands = [
+            "management api http-commands",
+            "protocol https port 443",
+            "no shutdown",
+        ]
+        if self.eapi_vrf:
+            commands += [f"vrf {self.eapi_vrf}", "no shutdown"]
         return commands
 
     def render_managed_config(self, global_meta: dict) -> str:
@@ -139,7 +169,7 @@ class EosHost(BaseHost):
         node.enable_authentication(self._enable_password())
         return node
 
-    def _device_managed_state(self, node=None) -> Dict[str, Optional[str]]:
+    def _device_managed_state(self, node=None) -> Dict[str, Any]:
         """The device's current managed-scope lines, parsed.
 
         Returns ``admin_line``, ``admin_hash``, ``ssh_key``,
@@ -151,6 +181,7 @@ class EosHost(BaseHost):
             [
                 "show running-config all section username",
                 "show running-config all section enable",
+                "show running-config all section management api http-commands",
             ],
             encoding="text",
         )
@@ -158,7 +189,7 @@ class EosHost(BaseHost):
             response["result"]["output"] for response in responses
         )
 
-        state: Dict[str, Optional[str]] = {
+        state: Dict[str, Any] = {
             "admin_line": None,
             "admin_hash": None,
             "ssh_key": None,
@@ -166,6 +197,7 @@ class EosHost(BaseHost):
             "enable_line": None,
             "enable_hash": None,
         }
+        state.update(self._parse_eapi_section(text))
 
         for line in text.splitlines():
             line = line.strip()
@@ -193,6 +225,55 @@ class EosHost(BaseHost):
 
         return state
 
+    def _parse_eapi_section(self, text: str) -> Dict[str, Optional[bool]]:
+        """eAPI state from ``management api http-commands`` output.
+
+        ``show running-config all`` prints default state explicitly, so
+        both ``shutdown`` and ``no shutdown`` appear literally. The api
+        block's own shutdown line sits at one indent level; per-VRF
+        shutdown lines sit under their ``vrf <name>`` sub-block.
+        """
+        state: Dict[str, Optional[bool]] = {
+            "eapi_enabled": None,
+            "eapi_https": None,
+            "eapi_vrf_enabled": None,
+        }
+
+        in_block = False
+        current_vrf = None
+        for raw in text.splitlines():
+            stripped = raw.strip()
+            if stripped.startswith("management api http-commands"):
+                in_block = True
+                current_vrf = None
+                continue
+            if in_block and raw and not raw[0].isspace():
+                # Un-indented line: the section ended.
+                in_block = False
+                current_vrf = None
+            if not in_block:
+                continue
+
+            vrf_match = re.match(r"^vrf (\S+)$", stripped)
+            if vrf_match:
+                current_vrf = vrf_match.group(1)
+                continue
+            if stripped.startswith("protocol https"):
+                state["eapi_https"] = True
+                continue
+            if stripped == "no shutdown":
+                if current_vrf is None:
+                    state["eapi_enabled"] = True
+                elif current_vrf == self.eapi_vrf:
+                    state["eapi_vrf_enabled"] = True
+            elif stripped == "shutdown":
+                if current_vrf is None:
+                    state["eapi_enabled"] = False
+                elif current_vrf == self.eapi_vrf:
+                    state["eapi_vrf_enabled"] = False
+
+        return state
+
     # -- diff / deploy ------------------------------------------------
 
     @staticmethod
@@ -205,10 +286,14 @@ class EosHost(BaseHost):
             return False
 
     def _drift(
-        self, global_meta: dict, state: Dict[str, Optional[str]]
+        self, global_meta: dict, state: Dict[str, Any]
     ) -> List[Tuple[Optional[str], str]]:
         """(device line, desired line) pairs for every out-of-sync item."""
         desired = self.managed_commands(global_meta)
+        desired_admin = desired[0]
+        desired_enable = next(
+            line for line in desired if line.startswith("enable password")
+        )
         keys = self._ssh_keys(global_meta)
 
         drift: List[Tuple[Optional[str], str]] = []
@@ -219,7 +304,7 @@ class EosHost(BaseHost):
             and self._hash_matches(self._admin_password(), state["admin_hash"])
         )
         if not admin_ok:
-            drift.append((state["admin_line"], desired[0]))
+            drift.append((state["admin_line"], desired_admin))
 
         desired_primary = keys[0] if keys else None
         if desired_primary and state["ssh_key"] != desired_primary:
@@ -249,7 +334,28 @@ class EosHost(BaseHost):
             )
 
         if not self._hash_matches(self._enable_password(), state["enable_hash"]):
-            drift.append((state["enable_line"], desired[-1]))
+            drift.append((state["enable_line"], desired_enable))
+
+        if state.get("eapi_enabled") is not True or state.get("eapi_https") is not True:
+            drift.append(
+                (
+                    "management api http-commands: shutdown or non-https"
+                    if state.get("eapi_enabled") is not None
+                    else None,
+                    "management api http-commands / protocol https port 443"
+                    " / no shutdown",
+                )
+            )
+        if self.eapi_vrf and state.get("eapi_vrf_enabled") is not True:
+            drift.append(
+                (
+                    f"management api http-commands vrf {self.eapi_vrf}: shutdown"
+                    if state.get("eapi_vrf_enabled") is not None
+                    else None,
+                    f"management api http-commands / vrf {self.eapi_vrf}"
+                    " / no shutdown",
+                )
+            )
 
         return drift
 

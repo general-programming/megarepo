@@ -40,6 +40,7 @@ class FakeNode:
 def host(monkeypatch) -> EosHost:
     host = EosHost(hostname="test-eos-1", role="core")
     host.global_meta = GLOBAL_META
+    host.eapi_vrf = "internal"
     secrets = {"admin-password": ADMIN_PW, "enable-password": ENABLE_PW}
     monkeypatch.setattr(
         EosHost,
@@ -69,6 +70,15 @@ def in_sync_output(
     if key2:
         lines.append(f"username {MANAGED_USERNAME} ssh-key secondary {key2}")
     lines.append(f"enable password sha512 {enable_hash}")
+    lines += [
+        "management api http-commands",
+        "   protocol https port 443",
+        "   no shutdown",
+        "   vrf internal",
+        "      no shutdown",
+        "   vrf other",
+        "      shutdown",
+    ]
     return "\n".join(lines)
 
 
@@ -78,15 +88,22 @@ def test_render_is_deterministic_and_scoped(host):
     assert first == second
 
     lines = first.strip().splitlines()
-    assert len(lines) == 4
+    assert len(lines) == 9
     assert lines[0].startswith(
         f"username {MANAGED_USERNAME} privilege 15 role network-admin secret sha512 $6$"
     )
     assert lines[1] == f"username {MANAGED_USERNAME} ssh-key {KEY1}"
     assert lines[2] == f"username {MANAGED_USERNAME} ssh-key secondary {KEY2}"
     assert lines[3].startswith("enable password sha512 $6$")
-    # Nothing outside the managed slice, ever.
-    assert not any(line.startswith("no ") for line in lines)
+    assert lines[4:] == [
+        "management api http-commands",
+        "protocol https port 443",
+        "no shutdown",
+        "vrf internal",
+        "no shutdown",
+    ]
+    # Nothing outside the managed slice is ever removed.
+    assert not any(line.startswith("no ") and line != "no shutdown" for line in lines)
 
 
 def test_too_many_ssh_keys_refused(host):
@@ -122,8 +139,8 @@ def test_diff_detects_missing_admin_and_keys(host, monkeypatch):
     diff = host.diff_config("")
     assert diff.has_changes
     added = [line for line in diff.text.splitlines() if line.startswith("+ ")]
-    # admin user, two keys, enable password.
-    assert len(added) == 4
+    # admin user, two keys, enable password, eAPI, eAPI vrf.
+    assert len(added) == 6
 
 
 def test_diff_redacts_hashes_by_default(host, monkeypatch):
@@ -143,10 +160,15 @@ def test_deploy_sends_only_managed_commands_and_saves(host, monkeypatch):
     assert len(node.config_calls) == 1
     sent = node.config_calls[0]
     assert sent == host.managed_commands(GLOBAL_META)
-    assert all(
-        cmd.startswith((f"username {MANAGED_USERNAME} ", "enable password "))
-        for cmd in sent
+    allowed = (
+        f"username {MANAGED_USERNAME} ",
+        "enable password ",
+        "management api http-commands",
+        "protocol https",
+        "no shutdown",
+        "vrf internal",
     )
+    assert all(cmd.startswith(allowed) for cmd in sent)
     assert node.enable_calls[-1] == ["copy running-config startup-config"]
 
 
@@ -154,3 +176,29 @@ def test_diff_requires_global_meta():
     bare = EosHost(hostname="test-eos-2", role="core")
     with pytest.raises(RuntimeError, match="global_meta not attached"):
         bare._require_global_meta()
+
+
+def test_diff_detects_eapi_vrf_shutdown(host, monkeypatch):
+    output = in_sync_output().replace(
+        "   vrf internal\n      no shutdown", "   vrf internal\n      shutdown"
+    )
+    node = FakeNode(show_output=output)
+    monkeypatch.setattr(EosHost, "_eapi_node", lambda self: node)
+
+    diff = host.diff_config("")
+    assert diff.has_changes
+    assert "vrf internal" in diff.text
+    assert "username" not in diff.text
+
+
+def test_eapi_slice_skipped_without_vrf(monkeypatch):
+    host = EosHost(hostname="test-eos-3", role="core")
+    host.global_meta = {"ssh_keys": []}
+    monkeypatch.setattr(
+        EosHost,
+        "secret",
+        lambda self, key, default_value=None, secret_path=None: "pw",
+    )
+    commands = host.managed_commands(host.global_meta)
+    assert "vrf internal" not in commands
+    assert "management api http-commands" in commands
