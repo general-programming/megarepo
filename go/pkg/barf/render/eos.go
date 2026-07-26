@@ -13,8 +13,10 @@ import (
 // managedUsername is the one account barf owns on EOS devices.
 const managedUsername = "admin"
 
-// maxSSHKeys is all EOS models per user: one primary, one secondary.
-const maxSSHKeys = 2
+// MaxSSHKeys is all EOS models support per user: one primary, one
+// secondary. Exported alongside EOSSSHKeys so barf/scope shares the
+// limit rather than redeclaring it.
+const MaxSSHKeys = 2
 
 // EOS renders the scoped Arista management slice: the admin user with
 // its SSH keys, the enable password, and eAPI itself. Nothing else on
@@ -51,7 +53,7 @@ func EOSManagedCommands(h *model.Host, global model.GlobalMeta, s SecretSource) 
 		return nil, err
 	}
 
-	keys, err := eosSSHKeys(h, global)
+	keys, err := EOSSSHKeys(h, global)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +65,7 @@ func EOSManagedCommands(h *model.Host, global model.GlobalMeta, s SecretSource) 
 	if len(keys) > 0 {
 		commands = append(commands, fmt.Sprintf("username %s ssh-key %s", managedUsername, keys[0]))
 	}
-	if len(keys) == maxSSHKeys {
+	if len(keys) == MaxSSHKeys {
 		commands = append(commands,
 			fmt.Sprintf("username %s ssh-key secondary %s", managedUsername, keys[1]))
 	}
@@ -83,14 +85,26 @@ func EOSManagedCommands(h *model.Host, global model.GlobalMeta, s SecretSource) 
 	return commands, nil
 }
 
-func eosSSHKeys(h *model.Host, global model.GlobalMeta) ([]string, error) {
+// EOSSSHKeys is the trimmed, non-empty ssh key list for h, rejecting a
+// list EOS cannot express.
+//
+// Exported because barf/scope needs the identical list to decide whether
+// a device's keys have drifted. It kept its own copy, which trimmed and
+// filtered the same way but did NOT enforce MaxSSHKeys — so the strict
+// answer and the lenient answer were one call apart, and `diff` could in
+// principle report drift against a key list `generate` refuses to
+// produce. That only stayed consistent because EOSDrift happened to call
+// EOSManagedCommands (which validates) before building its own list; the
+// invariant depended on statement order in another package. There is now
+// one function and the strict behaviour is the only behaviour.
+func EOSSSHKeys(h *model.Host, global model.GlobalMeta) ([]string, error) {
 	var keys []string
 	for _, key := range global.SSHKeys {
 		if trimmed := strings.TrimSpace(key); trimmed != "" {
 			keys = append(keys, trimmed)
 		}
 	}
-	if len(keys) > maxSSHKeys {
+	if len(keys) > MaxSSHKeys {
 		return nil, fmt.Errorf("%s: EOS supports one primary and one secondary ssh-key"+
 			" per user; got %d global_meta.ssh_keys", h.Hostname, len(keys))
 	}

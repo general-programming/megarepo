@@ -291,7 +291,7 @@ func TestEOSRunShowRefusesWrites(t *testing.T) {
 
 	reader, _ := NewEOS(testHost("sw1", "eos"), testOptions(t, server))
 	_, err := reader.runShow(context.Background(), "json", "show version", "copy running-config startup-config")
-	var writeErr *ErrWriteAttempt
+	var writeErr *WriteAttemptError
 	if !errors.As(err, &writeErr) {
 		t.Fatalf("err = %v, want ErrWriteAttempt", err)
 	}
@@ -396,8 +396,8 @@ func TestHostForURL(t *testing.T) {
 		{"sw1.generalprogramming.org", "sw1.generalprogramming.org"},
 	}
 	for _, tc := range cases {
-		if got := hostForURL(tc.in); got != tc.want {
-			t.Errorf("hostForURL(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := HostForURL(tc.in); got != tc.want {
+			t.Errorf("HostForURL(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 	if !netip.MustParseAddr("fd00::1").Is6() {

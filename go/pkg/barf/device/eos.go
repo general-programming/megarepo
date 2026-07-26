@@ -59,10 +59,7 @@ type EOSReader struct {
 	client   *http.Client
 	resolver *endpointResolver
 
-	credsOnce sync.Once
-	admin     string
-	enable    string
-	credsErr  error
+	creds eosCredentials
 
 	versionOnce sync.Once
 	versionData eosShowVersion
@@ -88,16 +85,38 @@ func NewEOS(h *model.Host, opts Options) (*EOSReader, error) {
 }
 
 func (r *EOSReader) credentials() (admin, enable string, err error) {
-	r.credsOnce.Do(func() {
-		r.admin, r.credsErr = r.opts.Secrets.HostSecret(r.host.Hostname, "admin-password")
-		if r.credsErr != nil {
+	return r.creds.get(r.opts.Secrets, r.host.Hostname)
+}
+
+// eosCredentials caches one host's admin/enable secrets for the lifetime
+// of a reader or a writer, so a multi-command run resolves them once.
+//
+// Shared by EOSReader and EOSWriter, which had byte-identical copies of
+// this. Sharing the cache is safe in a way that sharing a transport
+// would not be: it only reads secrets, and it is the request builders on
+// either side — not this — that decide whether a command may be sent.
+type eosCredentials struct {
+	once   sync.Once
+	admin  string
+	enable string
+	err    error
+}
+
+// get resolves both secrets once.
+//
+// A missing enable secret is deliberately NOT fatal. For a reader, the
+// request simply goes unprivileged; for a writer, config mode will be
+// refused by the device itself, which is a better error than one guessed
+// at here. A missing admin secret is fatal in both cases.
+func (c *eosCredentials) get(secrets Secrets, hostname string) (admin, enable string, err error) {
+	c.once.Do(func() {
+		c.admin, c.err = secrets.HostSecret(hostname, "admin-password")
+		if c.err != nil {
 			return
 		}
-		// Some shows need enable mode; a missing enable secret is not
-		// fatal, the request just goes unprivileged.
-		r.enable, _ = r.opts.Secrets.HostSecret(r.host.Hostname, "enable-password")
+		c.enable, _ = secrets.HostSecret(hostname, "enable-password")
 	})
-	return r.admin, r.enable, r.credsErr
+	return c.admin, c.enable, c.err
 }
 
 // -- JSON-RPC wire types ---------------------------------------------
@@ -144,7 +163,7 @@ func (e *eosError) Error() string {
 func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) ([]json.RawMessage, error) {
 	for _, cmd := range cmds {
 		if !eosCommandAllowed(cmd) {
-			return nil, &ErrWriteAttempt{What: fmt.Sprintf("EOS command %q", cmd)}
+			return nil, &WriteAttemptError{What: fmt.Sprintf("EOS command %q", cmd)}
 		}
 	}
 
@@ -185,7 +204,7 @@ func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) 
 		return nil, err
 	}
 
-	url := fmt.Sprintf("https://%s:%d%s", hostForURL(address), r.opts.port(), eosCommandPath)
+	url := fmt.Sprintf("https://%s:%d%s", HostForURL(address), r.opts.port(), eosCommandPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

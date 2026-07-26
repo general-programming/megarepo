@@ -4,12 +4,13 @@ import (
 	"context"
 	"sync"
 
+	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// maxProbes matches the Python ThreadPoolExecutor(max_workers=8) that
-// backs safe_to_reboot.
-const maxProbes = 8
+// maxProbes is device.MaxProbes, matching the Python
+// ThreadPoolExecutor(max_workers=8) that backs safe_to_reboot.
+const maxProbes = device.MaxProbes
 
 // AliveProbe reports whether a fleet member is answering. It is the Go
 // shape of Python's `host.version() is not None`: any failure, and any

@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
@@ -81,29 +80,7 @@ type Writer interface {
 	SaveConfig(ctx context.Context) error
 }
 
-// ErrWritesNotAllowed is returned when a write transport is constructed
-// without Options.AllowWrites. It is the counterpart of ErrWriteAttempt:
-// that one guards the read transports, this one guards accidental
-// construction of a write transport.
-type ErrWritesNotAllowed struct {
-	What string
-}
-
-func (e *ErrWritesNotAllowed) Error() string {
-	return fmt.Sprintf("device: refusing to build %s: writes require Options.AllowWrites", e.What)
-}
-
-// ErrUnmanagedCommand is returned when a command outside the managed
-// scope is handed to a writer. Deploying the EOS slice must not be able
-// to touch config barf does not own.
-type ErrUnmanagedCommand struct {
-	Command string
-}
-
-func (e *ErrUnmanagedCommand) Error() string {
-	return fmt.Sprintf("device: refusing EOS command %q: outside the managed scope"+
-		" (admin user, ssh-keys, enable password, eAPI block)", e.Command)
-}
+// The refusal errors live in errors.go.
 
 // -- EOS writer -------------------------------------------------------
 
@@ -114,10 +91,7 @@ type EOSWriter struct {
 	client   *http.Client
 	resolver *endpointResolver
 
-	credsOnce sync.Once
-	admin     string
-	enable    string
-	credsErr  error
+	creds eosCredentials
 }
 
 var _ Writer = (*EOSWriter)(nil)
@@ -133,7 +107,7 @@ func NewEOSWriter(h *model.Host, opts Options) (*EOSWriter, error) {
 		return nil, fmt.Errorf("device: nil host")
 	}
 	if !opts.AllowWrites {
-		return nil, &ErrWritesNotAllowed{What: fmt.Sprintf("an EOS writer for %s", h.Hostname)}
+		return nil, &WritesNotAllowedError{What: fmt.Sprintf("an EOS writer for %s", h.Hostname)}
 	}
 	if opts.Secrets == nil {
 		return nil, fmt.Errorf("device: %s: eos writer needs Options.Secrets for the admin password", h.Hostname)
@@ -147,16 +121,7 @@ func NewEOSWriter(h *model.Host, opts Options) (*EOSWriter, error) {
 }
 
 func (w *EOSWriter) credentials() (admin, enable string, err error) {
-	w.credsOnce.Do(func() {
-		w.admin, w.credsErr = w.opts.Secrets.HostSecret(w.host.Hostname, "admin-password")
-		if w.credsErr != nil {
-			return
-		}
-		// Config mode needs enable; a missing enable secret is left to
-		// the device to reject rather than guessed at here.
-		w.enable, _ = w.opts.Secrets.HostSecret(w.host.Hostname, "enable-password")
-	})
-	return w.admin, w.enable, w.credsErr
+	return w.creds.get(w.opts.Secrets, w.host.Hostname)
 }
 
 // eosWriteCommandAllowed reports whether cmd is inside the EOS managed
@@ -230,10 +195,10 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 		// no meaning inside the EOS slice, and admitting it would be the
 		// one way a deploy could remove config.
 		if op.Verb != "" || len(op.Path) > 0 {
-			return &ErrUnmanagedCommand{Command: op.Verb + " " + strings.Join(op.Path, " ")}
+			return &UnmanagedCommandError{Command: op.Verb + " " + strings.Join(op.Path, " ")}
 		}
 		if !eosWriteCommandAllowed(op.Command) {
-			return &ErrUnmanagedCommand{Command: op.Command}
+			return &UnmanagedCommandError{Command: op.Command}
 		}
 		commands = append(commands, op.Command)
 	}
@@ -292,7 +257,7 @@ func (w *EOSWriter) run(ctx context.Context, cmds ...string) ([]json.RawMessage,
 		return nil, err
 	}
 
-	url := fmt.Sprintf("https://%s:%d%s", hostForURL(address), w.opts.port(), eosCommandPath)
+	url := fmt.Sprintf("https://%s:%d%s", HostForURL(address), w.opts.port(), eosCommandPath)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

@@ -50,21 +50,6 @@ func TestScriptOK(t *testing.T) {
 	}
 }
 
-func TestQuote(t *testing.T) {
-	cases := map[string]string{
-		"/tmp/barf-install.sh": "/tmp/barf-install.sh",
-		"":                     "''",
-		"a b":                  "'a b'",
-		"it's":                 `'it'"'"'s'`,
-		"$(reboot)":            "'$(reboot)'",
-	}
-	for in, want := range cases {
-		if got := Quote(in); got != want {
-			t.Fatalf("Quote(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestDialUsesPasswordAfterKeysFail(t *testing.T) {
 	server := newTestServer(t, "hunter2", nil)
 

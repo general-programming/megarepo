@@ -176,7 +176,7 @@ func TestVyOSRequestRefusesWrites(t *testing.T) {
 	reader, _ := NewVyOS(testHost("spine", "vyos"), testOptions(t, server))
 	_, err := reader.request(context.Background(), "configure", "set",
 		[]any{map[string]any{"op": "set", "path": []string{"system", "host-name", "pwned"}}})
-	var writeErr *ErrWriteAttempt
+	var writeErr *WriteAttemptError
 	if !errors.As(err, &writeErr) {
 		t.Fatalf("err = %v, want ErrWriteAttempt", err)
 	}
@@ -343,48 +343,5 @@ func TestParseVyOSHandlesPythonLineBoundaries(t *testing.T) {
 	images := ParseSystemImages("   1: 1.4.2 (default boot) (running image)\r\n   2: 1.4.1\r\n")
 	if len(images) != 2 || images[0].Name != "1.4.2" || !images[0].DefaultBoot || images[1].Name != "1.4.1" {
 		t.Errorf("CRLF images = %+v", images)
-	}
-}
-
-// splitLines is the shared helper those parsers rely on; pin its contract
-// against Python's str.splitlines() directly.
-func TestSplitLinesMatchesPythonSplitlines(t *testing.T) {
-	tests := []struct {
-		in   string
-		want []string
-	}{
-		{"", nil},
-		{"a", []string{"a"}},
-		{"a\n", []string{"a"}},
-		{"a\nb", []string{"a", "b"}},
-		{"a\r\nb", []string{"a", "b"}},
-		{"a\rb", []string{"a", "b"}},
-		{"a\r\n", []string{"a"}},
-		{"a\n\nb", []string{"a", "", "b"}},
-		{"a\vb", []string{"a", "b"}},
-		{"a\fb", []string{"a", "b"}},
-		{"a\x1cb", []string{"a", "b"}},
-		{"a\x1db", []string{"a", "b"}},
-		{"a\x1eb", []string{"a", "b"}},
-		{"a\u0085b", []string{"a", "b"}},
-		{"a\u2028b", []string{"a", "b"}},
-		{"a\u2029b", []string{"a", "b"}},
-		// Not boundaries in Python: tab, space, NBSP.
-		{"a\tb", []string{"a\tb"}},
-		{"a b", []string{"a b"}},
-		{"a\u00a0b", []string{"a\u00a0b"}},
-	}
-	for _, tc := range tests {
-		got := splitLines(tc.in)
-		if len(got) != len(tc.want) {
-			t.Errorf("splitLines(%q) = %q, want %q", tc.in, got, tc.want)
-			continue
-		}
-		for i := range got {
-			if got[i] != tc.want[i] {
-				t.Errorf("splitLines(%q) = %q, want %q", tc.in, got, tc.want)
-				break
-			}
-		}
 	}
 }

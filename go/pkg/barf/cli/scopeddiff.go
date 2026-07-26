@@ -69,7 +69,8 @@ func (a scopedReaderAdapter) ScopedDiff(ctx context.Context, h *model.Host, n *m
 		Network: n,
 		Secrets: s,
 		Reader:  a.sections,
-		Redact:  !opts.ShowSecrets,
+		// Same polarity on both sides; nothing to negate.
+		ShowSecrets: opts.ShowSecrets,
 	})
 	if err != nil {
 		return ConfigDiff{}, err

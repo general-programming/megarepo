@@ -83,7 +83,20 @@ type GlobalSecrets interface {
 const DefaultDomain = "generalprogramming.org"
 
 // DefaultPort is the HTTPS API port both vendors answer on.
+//
+// barf/cli probes it to pick a reachable address and barf/lifecycle
+// builds its API base URL from it; both used to spell it 443 themselves.
 const DefaultPort = 443
+
+// MaxProbes is how many devices barf contacts concurrently, matching the
+// Python ThreadPoolExecutor(max_workers=8) that backs safe_to_reboot and
+// the status fan-out.
+//
+// It lives here because it is a property of talking to devices, and
+// because barf/cli and barf/lifecycle both bound their fan-out by it and
+// had each declared their own 8. Two independently tunable copies of one
+// concurrency limit is how a fleet-wide run quietly ends up at 16.
+const MaxProbes = 8
 
 // Per-operation timeouts, mirroring the Python defaults in
 // projects/barf/barf/util/vyos_api.py. They are per *operation*, not
@@ -222,20 +235,4 @@ func New(h *model.Host, opts Options) (Reader, error) {
 	}
 }
 
-// ErrUnsupported is returned for devicetypes with no read transport.
-var ErrUnsupported = errUnsupported{}
-
-type errUnsupported struct{}
-
-func (errUnsupported) Error() string { return "unsupported devicetype" }
-
-// ErrWriteAttempt is returned when a command or request that could change
-// the device is passed to a transport. It is the package's structural
-// guarantee: callers cannot talk a Reader into writing.
-type ErrWriteAttempt struct {
-	What string
-}
-
-func (e *ErrWriteAttempt) Error() string {
-	return fmt.Sprintf("device: refusing %s: this package is read-only", e.What)
-}
+// The refusal errors and ErrUnsupported live in errors.go.

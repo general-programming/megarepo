@@ -6,12 +6,15 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// apiPort is the HTTPS management API port probed to decide which of a
-// host's addresses is reachable, matching the Python implementation.
-const apiPort = 443
+// apiPort is device.DefaultPort: the HTTPS management API port probed to
+// decide which of a host's addresses is reachable, matching the Python
+// implementation. The probe and the request that follows it must agree
+// on the port, so there is one constant rather than two.
+const apiPort = device.DefaultPort
 
 // endpointProbeTimeout is the per-candidate TCP connect timeout.
 var endpointProbeTimeout = 2 * time.Second

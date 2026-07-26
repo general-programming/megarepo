@@ -60,7 +60,7 @@ func TestNewVyOSWriterRequiresAllowWrites(t *testing.T) {
 	if err == nil {
 		t.Fatalf("NewVyOSWriter returned a writer without AllowWrites: %#v", writer)
 	}
-	var notAllowed *ErrWritesNotAllowed
+	var notAllowed *WritesNotAllowedError
 	if !errors.As(err, &notAllowed) {
 		t.Fatalf("err = %v, want ErrWritesNotAllowed", err)
 	}
@@ -247,7 +247,7 @@ func TestVyOSWriterRequestGuard(t *testing.T) {
 	writer, _ := NewVyOSWriter(testHost("spine", "vyos"), writeOptions(t, server))
 
 	_, err := writer.request(context.Background(), "image", "delete", map[string]any{"op": "delete"})
-	var attempt *ErrWriteAttempt
+	var attempt *WriteAttemptError
 	if !errors.As(err, &attempt) {
 		t.Fatalf("err = %v, want ErrWriteAttempt", err)
 	}

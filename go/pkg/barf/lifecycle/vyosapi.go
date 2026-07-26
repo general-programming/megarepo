@@ -5,27 +5,30 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/netip"
-	"net/url"
-	"regexp"
 	"strings"
 	"time"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/device"
+	"github.com/general-programming/megarepo/go/pkg/barf/vyoswire"
 )
 
 // The VyOS HTTPS API client used by the lifecycle commands.
 //
-// go/pkg/barf/device deliberately has no write path at all — its VyOS
-// transport rejects every endpoint but /show and /retrieve, on purpose,
-// and that guard must stay. Image deletion (`/image`, op "delete") is a
-// write, so it lives here instead, behind Options.AllowWrites.
+// go/pkg/barf/device's VyOS *reader* rejects every endpoint but /show and
+// /retrieve, and its *writer* accepts only /configure and /config-file.
+// Image deletion (`/image`, op "delete") is in neither allowlist, so it
+// lives here instead, behind APIOptions.AllowWrites — a third,
+// independent, equally closed guard (see apiEndpoint.write).
 //
-// The read halves (Show, SystemImages, version/BGP parsing) are
-// re-implemented rather than imported so this package depends on nothing
-// another worker is currently editing. They are small and pure; if the
-// duplication outlives the port, fold them back into device and have
-// this file embed a device.VyOSReader for reads.
+// The read halves and the parsers were originally re-implemented here
+// rather than imported, so this package would depend on nothing another
+// worker was editing. That reason is gone, and the copies had already
+// drifted: the parsers split on "\n" where device (and Python's
+// str.splitlines) split on any line boundary, and the response body cap
+// was 16 MiB here against 64 MiB in device, so a large /retrieve
+// truncated on this path only. The parsers now come from device and the
+// wire mechanics from vyoswire; only the /image guard is local.
 
 // APIEndpoint names one VyOS API endpoint plus whether reaching it can
 // change the device.
@@ -46,7 +49,7 @@ type APIOptions struct {
 	Address string
 	// Key is the VyOS API key (Vault `vyos-api-password`). Never logged.
 	Key string
-	// Port is the API port; 0 means 443.
+	// Port is the API port; 0 means device.DefaultPort.
 	Port int
 	// Timeout bounds one request; 0 means 30s.
 	Timeout time.Duration
@@ -102,74 +105,25 @@ func (c *APIClient) baseURL() string {
 	}
 	port := c.opts.Port
 	if port == 0 {
-		port = 443
+		port = device.DefaultPort
 	}
-	return fmt.Sprintf("https://%s:%d", hostForURL(c.opts.Address), port)
-}
-
-// hostForURL wraps a bare IPv6 literal in brackets.
-func hostForURL(address string) string {
-	if ip, err := netip.ParseAddr(address); err == nil && ip.Is6() && !ip.Is4In6() {
-		return "[" + address + "]"
-	}
-	return address
-}
-
-type apiResponse struct {
-	Success bool            `json:"success"`
-	Data    json.RawMessage `json:"data"`
-	Error   any             `json:"error"`
+	return fmt.Sprintf("https://%s:%d", device.HostForURL(c.opts.Address), port)
 }
 
 // request is the ONLY function here that performs an API request. Write
 // endpoints are refused outright unless AllowWrites is set, so a dry run
 // cannot reach one even through a bug in a caller.
+//
+// This guard is this package's own. vyoswire supplies the form encoding,
+// the body limit and the response envelope, and holds no allowlist of
+// its own, so sharing it with device's reader and writer does not let any
+// of the three reach an endpoint its own guard would refuse.
 func (c *APIClient) request(ctx context.Context, endpoint apiEndpoint, payload any) (json.RawMessage, error) {
 	if endpoint.write && !c.opts.AllowWrites {
 		return nil, fmt.Errorf("%s: /%s: %w", c.hostname, endpoint.name, ErrWritesNotAllowed)
 	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	form := url.Values{"data": {string(body)}, "key": {c.opts.Key}}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL()+"/"+endpoint.name, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s: vyos api request failed: %w", c.hostname, err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 16<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var decoded apiResponse
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil, fmt.Errorf("%s: malformed vyos api response (HTTP %d): %w",
-			c.hostname, resp.StatusCode, err)
-	}
-	if !decoded.Success {
-		message := "unknown API error"
-		if decoded.Error != nil {
-			if s, ok := decoded.Error.(string); ok && s != "" {
-				message = s
-			} else {
-				message = fmt.Sprint(decoded.Error)
-			}
-		}
-		return nil, fmt.Errorf("%s: vyos api: %s", c.hostname, message)
-	}
-	return decoded.Data, nil
+	return vyoswire.Post(ctx, c.client, c.hostname,
+		c.baseURL()+"/"+endpoint.name, c.opts.Key, payload)
 }
 
 // Show runs an operational `show` command. Read-only.
@@ -181,22 +135,17 @@ func (c *APIClient) Show(ctx context.Context, path ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(data) == 0 {
-		return "", nil
-	}
-	var text string
-	if err := json.Unmarshal(data, &text); err != nil {
-		return string(data), nil
-	}
-	return text, nil
+	return vyoswire.Text(data), nil
 }
 
 // SystemImage is one installed VyOS system image.
-type SystemImage struct {
-	Name        string
-	DefaultBoot bool
-	Running     bool
-}
+//
+// An alias, not a copy: cleanup.go and update.go name this type in their
+// interfaces and cli/devicelifecycle.go names it too, so aliasing keeps
+// those signatures while making a device.SystemImage and a
+// lifecycle.SystemImage the same type rather than two structs that merely
+// look alike.
+type SystemImage = device.SystemImage
 
 // SystemImages lists the installed system images, per `show system
 // image`. Read-only. Ports VyOSHost.system_images.
@@ -205,7 +154,7 @@ func (c *APIClient) SystemImages(ctx context.Context) ([]SystemImage, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParseSystemImages(output), nil
+	return device.ParseSystemImages(output), nil
 }
 
 // DeleteImage removes an installed system image. THIS IS A WRITE: it
@@ -226,7 +175,7 @@ func (c *APIClient) Version(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return ParseVersion(output), nil
+	return device.ParseVyOSVersion(output), nil
 }
 
 // VerifyRouting warns when BGP is still administratively down after a
@@ -249,77 +198,4 @@ func (c *APIClient) VerifyRouting(ctx context.Context, hasASN bool) string {
 		return "BGP still administratively down after reboot; the shutdown may have been saved"
 	}
 	return ""
-}
-
-// -- parsing ----------------------------------------------------------
-
-// ParseVersion pulls the version out of `show version` output, stripping
-// the "VyOS " prefix so it lines up with upstream release tags.
-func ParseVersion(output string) string {
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(strings.ToLower(line), "version:") {
-			_, value, _ := strings.Cut(line, ":")
-			return strings.TrimPrefix(strings.TrimSpace(value), "VyOS ")
-		}
-	}
-	if strings.TrimSpace(output) == "" {
-		return "-"
-	}
-	first := strings.SplitN(strings.TrimSpace(output), "\n", 2)[0]
-	return strings.TrimPrefix(first, "VyOS ")
-}
-
-var numberedImage = regexp.MustCompile(`^\s*\d+:\s+(\S+)(.*)$`)
-
-// ParseSystemImages parses `show system image` output, handling both the
-// modern table format and the legacy numbered list.
-func ParseSystemImages(output string) []SystemImage {
-	lines := strings.Split(output, "\n")
-
-	for i, line := range lines {
-		if strings.HasPrefix(strings.TrimSpace(line), "Name") && strings.Contains(line, "Running") {
-			defaultCol := strings.Index(line, "Default")
-			runningCol := strings.Index(line, "Running")
-			if defaultCol < 0 || runningCol < defaultCol {
-				break
-			}
-			images := []SystemImage{}
-			for _, row := range lines[i+1:] {
-				trimmed := strings.TrimSpace(row)
-				if trimmed == "" || strings.Trim(trimmed, "- ") == "" {
-					continue
-				}
-				images = append(images, SystemImage{
-					Name:        strings.Fields(row)[0],
-					DefaultBoot: columnYes(row, defaultCol, runningCol),
-					Running:     columnYes(row, runningCol, len(row)),
-				})
-			}
-			return images
-		}
-	}
-
-	images := []SystemImage{}
-	for _, line := range lines {
-		match := numberedImage.FindStringSubmatch(line)
-		if match == nil {
-			continue
-		}
-		images = append(images, SystemImage{
-			Name:        match[1],
-			DefaultBoot: strings.Contains(match[2], "default boot"),
-			Running:     strings.Contains(match[2], "running"),
-		})
-	}
-	return images
-}
-
-func columnYes(row string, start, end int) bool {
-	if start >= len(row) {
-		return false
-	}
-	if end > len(row) {
-		end = len(row)
-	}
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(row[start:end])), "yes")
 }
