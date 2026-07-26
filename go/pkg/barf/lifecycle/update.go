@@ -99,6 +99,10 @@ type Updater struct {
 	DrainWait time.Duration
 	// Wait tunes the post-reboot liveness poll.
 	Wait WaitOptions
+	// Sleep is the delay primitive used for the drain wait. nil means a
+	// real, context-interruptible sleep. It is injected by tests (in this
+	// package and in cli) so a suite never actually waits out a drain.
+	Sleep func(ctx context.Context, d time.Duration) error
 	// Opts holds the write opt-in and the unsafe override.
 	Opts Options
 
@@ -255,6 +259,10 @@ func planSteps(p *Plan) []string {
 //	Opts.ForceUnsafe  — required, separately, when the redundancy gate
 //	                    refused. Confirming the update does not imply it.
 //	one reboot only   — a second Execute on this Updater is refused.
+//
+// Opts.RequireRouting additionally makes the post-reboot routing check
+// fatal rather than advisory, so a caller with more devices to go stops
+// instead of rebooting into a fleet that has not recovered.
 func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 	if plan == nil {
 		return "", errors.New("lifecycle: Execute needs a Plan from BuildPlan")
@@ -323,9 +331,24 @@ func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 
 	if warning := u.API.VerifyRouting(ctx, u.Host.ASN != 0); warning != "" {
 		fmt.Fprintf(out, "%swarning: %s\n", prefix, warning)
+		if u.Opts.RequireRouting {
+			// The device IS updated -- that is reported alongside the
+			// error so a summary can say so -- but the fleet is not
+			// healthy, so the caller must not move on to the next device.
+			return "updated to " + version + ", but routing did not recover",
+				&RoutingNotRecoveredError{Hostname: plan.Hostname, Detail: warning}
+		}
 	}
 
 	return "updated to " + version, nil
+}
+
+// pause waits d, through the injected Sleep when there is one.
+func (u *Updater) pause(ctx context.Context, d time.Duration) error {
+	if u.Sleep != nil {
+		return u.Sleep(ctx, d)
+	}
+	return sleep(ctx, d)
 }
 
 func (u *Updater) waitOptions() WaitOptions {
@@ -417,7 +440,7 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	// so the script runs detached and we verify by absence: wait out the
 	// drain, and only if the device is still reachable afterwards look
 	// for a failure marker in its log.
-	if err := sleep(ctx, drainWait+5*time.Second); err != nil {
+	if err := u.pause(ctx, drainWait+5*time.Second); err != nil {
 		return err
 	}
 	if failure := u.detachedRebootFailure(ctx, logPath); failure != "" {

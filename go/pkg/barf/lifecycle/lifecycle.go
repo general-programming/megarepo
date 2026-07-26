@@ -50,6 +50,18 @@ type Options struct {
 	// this must say loudly what is being overridden.
 	ForceUnsafe bool
 
+	// RequireRouting turns the post-reboot routing check from a warning
+	// into a hard failure.
+	//
+	// A single-device run only warns: the operator is watching, the
+	// device is already back on the new image, and there is nothing left
+	// to protect. A run that still has devices to reboot must stop
+	// instead, because "the last device I rebooted is not carrying
+	// traffic" is exactly the state in which rebooting the next one
+	// black-holes the fabric. `barf device update` sets this whenever it
+	// selected more than one device.
+	RequireRouting bool
+
 	// Out receives human-readable progress. nil means io.Discard.
 	Out io.Writer
 }
@@ -85,6 +97,22 @@ type RedundancyError struct {
 
 func (e *RedundancyError) Error() string {
 	return fmt.Sprintf("refusing to reboot %s: %s", e.Hostname, e.Reason)
+}
+
+// RoutingNotRecoveredError means the device rebooted, came back on the
+// expected image, but its routing did not recover: BGP is still
+// administratively down, or the check itself could not be run.
+//
+// It is only returned when Options.RequireRouting is set. The device is
+// updated; what failed is the health verification afterwards. A caller
+// updating several devices must treat it as fatal to the whole run.
+type RoutingNotRecoveredError struct {
+	Hostname string
+	Detail   string
+}
+
+func (e *RoutingNotRecoveredError) Error() string {
+	return fmt.Sprintf("%s: routing did not recover after the reboot: %s", e.Hostname, e.Detail)
 }
 
 // DeviceUnreachableError means the device never answered pre-flight, so

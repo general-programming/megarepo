@@ -1,7 +1,10 @@
 // Package cli is the barf command surface: a cobra tree over the model,
-// render and device packages. Every command except `deploy` is
-// read-only, and `deploy` is a dry run unless it is given --yes (see
-// deploy.go for the full set of interlocks).
+// render and device packages. Every command is read-only except `deploy`
+// and `device update`/`device cleanup`, and those change nothing until
+// the operator confirms: on a terminal they ask per device, and with no
+// terminal they need --yes and are otherwise a dry run. See confirm.go
+// for the shared matrix and deploy.go / devicelifecycle.go for the rest
+// of the interlocks.
 //
 // All commands are dual-mode. On a TTY they run a Bubble Tea interface
 // (see barf/tui); with no TTY, or with --plain or --json, they emit
@@ -147,8 +150,10 @@ func NewRootCmd(o *Options) *cobra.Command {
 		Use:   "barf",
 		Short: "Network config tooling",
 		Long: "barf renders device configs from network.yml and compares them\n" +
-			"against what the fleet is actually running. Every command except\n" +
-			"`deploy` is read-only, and `deploy` is a dry run unless given --yes.",
+			"against what the fleet is actually running. Every command is\n" +
+			"read-only except `deploy` and `device update`/`device cleanup`, and\n" +
+			"those confirm each device before changing it (or, with no terminal\n" +
+			"to ask on, require --yes and are a dry run without it).",
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
