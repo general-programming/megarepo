@@ -181,11 +181,11 @@ func TestLinkDerivationAndSides(t *testing.T) {
 		t.Errorf("pinned key path = %q", got)
 	}
 	// Side A takes the first usable /31 address, side B the next.
-	if got := pinned.GetIP("fmt2-vpn-spine-1", true); got != "172.31.255.20/31" {
-		t.Errorf("side A ip = %q", got)
+	if got, err := pinned.GetIP("fmt2-vpn-spine-1", true); err != nil || got != "172.31.255.20/31" {
+		t.Errorf("side A ip = %q, err = %v", got, err)
 	}
-	if got := pinned.GetIP("oracle-vpn-1-1", false); got != "172.31.255.21" {
-		t.Errorf("side B ip = %q", got)
+	if got, err := pinned.GetIP("oracle-vpn-1-1", false); err != nil || got != "172.31.255.21" {
+		t.Errorf("side B ip = %q, err = %v", got, err)
 	}
 }
 
