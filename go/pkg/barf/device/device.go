@@ -1,11 +1,14 @@
-// Package device provides READ-ONLY transports to network devices.
+// Package device provides transports to network devices, split into a
+// read surface (the default) and a separate, opt-in write surface.
 //
-// Every exported entry point in this package maps to a device *read*:
-// `show ...` operational commands and config *retrieval*. There is
-// deliberately no configuration path — no eAPI `config()`/`runConfigCmds`,
-// no VyOS `/configure` or `/config-file`, no `copy running-config
-// startup-config`, no NETCONF edit-config. The transports enforce this
-// structurally rather than by convention:
+// # Readers are read-only, structurally
+//
+// Every entry point reachable from a Reader maps to a device *read*:
+// `show ...` operational commands and config *retrieval*. Readers have no
+// configuration path — no eAPI `config()`/`runConfigCmds`, no VyOS
+// `/configure` or `/config-file`, no `copy running-config
+// startup-config`, no NETCONF edit-config. The read transports enforce
+// this structurally rather than by convention:
 //
 //   - the eAPI client has exactly one request primitive, and it rejects
 //     any command that is not `enable` or a `show ...` verb before the
@@ -14,11 +17,21 @@
 //     any endpoint other than `show` and `retrieve`, and any op other
 //     than `show`/`showConfig` (see vyosRequestAllowed).
 //
-// Both guards are unconditional and have no bypass flag. A caller cannot
-// reach a write verb through this package's API, and a future edit that
-// tries to add one has to delete a guard to do it.
+// Both guards are unconditional and have no bypass flag — Options.
+// AllowWrites does not touch them. A caller cannot reach a write verb
+// through a Reader, and a future edit that tries to add one has to delete
+// a guard to do it.
 //
-// See ../CONTRACT.md; this package is the Go port of the read surfaces of
+// # Writers are separate and must be asked for by name
+//
+// writer.go adds the Writer interface and VyOSWriter, the only type in
+// this package that can change a device. It is a different type with a
+// different constructor and its own request primitive; it is never
+// returned by New, and NewVyOSWriter errors out unless
+// Options.AllowWrites was explicitly set. Nothing that holds a Reader can
+// turn it into a Writer.
+//
+// See ../CONTRACT.md; this package is the Go port of
 // projects/barf/barf/vendors/{arista,vyos}.py.
 package device
 
@@ -102,6 +115,13 @@ type Options struct {
 	// transports). When set, InsecureSkipVerify and Timeout do not apply
 	// to it.
 	HTTPClient *http.Client
+
+	// AllowWrites opts in to constructing a Writer (see writer.go). It
+	// has NO effect on any Reader: the read transports' guards are
+	// unconditional and this flag cannot loosen them. Its only job is to
+	// make a config-changing client impossible to build by accident —
+	// NewVyOSWriter refuses to return one unless this is explicitly true.
+	AllowWrites bool
 }
 
 func (o Options) port() int {

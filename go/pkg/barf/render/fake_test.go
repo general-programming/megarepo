@@ -16,6 +16,12 @@ func (fakeSecrets) HostSecret(hostname, key string) (string, error) {
 	return fmt.Sprintf("SECRET-host-%s-%s", hostname, key), nil
 }
 
+// TacacsKey mirrors the Python secret() stub for the fleet-wide
+// tacacs-keys path: secret(hostname, secret_path="tacacs-keys").
+func (fakeSecrets) TacacsKey(hostname string) (string, error) {
+	return "SECRET-tacacs-keys-" + hostname, nil
+}
+
 func (fakeSecrets) VaultSecret(key string) (string, error) {
 	return "VAULT-" + key, nil
 }

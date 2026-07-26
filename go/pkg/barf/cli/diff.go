@@ -157,11 +157,44 @@ func diffJob(o *Options, net *model.Network, h *model.Host, rendered string, ren
 			return out
 		}
 
+		// Vendors that own only a slice of the device config compare that
+		// slice instead of the whole running config; a reader advertises
+		// the capability by implementing ScopedDiffer (see scopeddiff.go).
+		if scoped, ok := reader.(ScopedDiffer); ok {
+			d, err := scoped.ScopedDiff(ctx, h, net, secrets, opts)
+			if err != nil {
+				log.Debug("scoped diff failed", "host", h.Hostname, "err", err)
+				out.Err = err
+				out.Summary = "failed: " + err.Error()
+				return out
+			}
+			out.Text = d.Text
+			out.Summary = d.Summary
+			return out
+		}
+
 		running, err := reader.RunningConfig(ctx)
 		if err != nil {
 			log.Debug("running config fetch failed", "host", h.Hostname, "err", err)
 			out.Err = err
 			out.Summary = "failed: " + err.Error()
+			return out
+		}
+
+		// VyOS is diffed as a path set, not a line set — the same
+		// computation `barf deploy` plans from, so the two can never
+		// disagree about what a deploy would do. See vyosdiff.go.
+		if h.DeviceType == "vyos" {
+			plan, err := planVyOS(rendered, running)
+			if err != nil {
+				log.Debug("vyos path diff failed", "host", h.Hostname, "err", err)
+				out.Err = err
+				out.Summary = "failed: " + err.Error()
+				return out
+			}
+			d := plan.configDiff(opts)
+			out.Text = d.Text
+			out.Summary = d.Summary
 			return out
 		}
 

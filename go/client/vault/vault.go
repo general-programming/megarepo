@@ -6,10 +6,11 @@
 // plus the ~/.vault-token fallback the Vault CLI writes. Reads are cached
 // per process and the cache is safe for concurrent use.
 //
-// The package deliberately exposes no write path. The Python
-// implementation (barf.vendors.BaseHost.secret) auto-mints missing host
-// secrets by writing them back to Vault; this package returns an error
-// instead — see ErrKeyNotFound.
+// The package is read-only by default. The Python implementation
+// (barf.vendors.BaseHost.secret) auto-mints missing host secrets by
+// writing them back to Vault; here that behaviour is opt-in and off
+// unless Options.AllowMint is set explicitly — without it a missing key
+// is an error (ErrKeyNotFound) and MintHostSecret refuses. See mint.go.
 //
 // Secret values are never logged and never written to disk.
 package vault
@@ -85,6 +86,11 @@ type Options struct {
 	// an alternate auth method). When set, Address/Token/Namespace are
 	// only applied if non-empty.
 	API *vaultapi.Client
+	// AllowMint opts this client in to the ONLY write path in the
+	// package: minting a missing per-host secret (see mint.go). It is
+	// false by default and must be set explicitly, so a client built the
+	// normal way stays strictly read-only.
+	AllowMint bool
 }
 
 // Client is a read-only Vault KV v2 reader. It is safe for concurrent use
@@ -93,6 +99,8 @@ type Client struct {
 	api          *vaultapi.Client
 	defaultMount string
 	hostMount    string
+	// allowMint gates the minting write path; see Options.AllowMint.
+	allowMint bool
 
 	mu    sync.RWMutex
 	cache map[string]map[string]any // "mount/path" -> secret data
@@ -142,6 +150,7 @@ func New(opts Options) (*Client, error) {
 		api:          api,
 		defaultMount: firstNonEmpty(opts.DefaultMount, MountSecret),
 		hostMount:    firstNonEmpty(opts.HostMount, MountClusterSecrets),
+		allowMint:    opts.AllowMint,
 		cache:        make(map[string]map[string]any),
 	}
 	return c, nil

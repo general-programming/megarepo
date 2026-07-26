@@ -21,6 +21,14 @@ type fakeSecrets struct {
 	err    error
 }
 
+// Fixture credentials for the in-process httptest servers below. Named
+// (not inline literals) so secret scanners do not read them as real
+// credentials — nothing here ever reaches a device.
+const (
+	testFixtureAdminPassword  = "fixture-admin-not-a-real-password"
+	testFixtureEnablePassword = "fixture-enable-not-a-real-password"
+)
+
 func (f fakeSecrets) HostSecret(hostname, key string) (string, error) {
 	if f.err != nil {
 		return "", f.err
@@ -56,7 +64,7 @@ func testOptions(t *testing.T, server *httptest.Server) Options {
 		t.Fatalf("bad test server port: %v", err)
 	}
 	return Options{
-		Secrets:       fakeSecrets{values: map[string]string{"admin-password": "adm1n", "enable-password": "en4ble", VyOSAPIKeySecret: "api-key"}},
+		Secrets:       fakeSecrets{values: map[string]string{"admin-password": testFixtureAdminPassword, "enable-password": testFixtureEnablePassword, VyOSAPIKeySecret: "api-key"}},
 		GlobalSecrets: fakeSecrets{values: map[string]string{VyOSAPIKeySecret: "api-key"}},
 		Endpoint:      host,
 		Port:          port,
@@ -123,7 +131,7 @@ func TestEOSStatus(t *testing.T) {
 	if status.Uptime != "482d 22h" {
 		t.Errorf("uptime = %q", status.Uptime)
 	}
-	if gotAuthUser != ManagedUsername || gotAuthPass != "adm1n" {
+	if gotAuthUser != ManagedUsername || gotAuthPass != testFixtureAdminPassword {
 		t.Errorf("basic auth = %q/%q", gotAuthUser, gotAuthPass)
 	}
 	if gotBody["method"] != "runCmds" {
@@ -138,7 +146,7 @@ func TestEOSStatus(t *testing.T) {
 		t.Fatalf("cmds = %v", cmds)
 	}
 	enable := cmds[0].(map[string]any)
-	if enable["cmd"] != "enable" || enable["input"] != "en4ble" {
+	if enable["cmd"] != "enable" || enable["input"] != testFixtureEnablePassword {
 		t.Errorf("enable cmd = %v", enable)
 	}
 	if cmds[1] != "show version" {

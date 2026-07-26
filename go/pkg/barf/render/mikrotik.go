@@ -23,8 +23,9 @@ type MikroTik struct{}
 // Render returns the RouterOS config commands for h.
 func (MikroTik) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		return "", fmt.Errorf("%s: only the vpn role is ported for mikrotik (got %q)",
-			h.Hostname, h.Role)
+		// Not a gap in the port: Python has no mikrotik template
+		// outside the vpn role either (see render.go's table).
+		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
 
