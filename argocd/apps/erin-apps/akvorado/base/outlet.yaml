@@ -1,0 +1,79 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: akvorado-outlet
+spec:
+  selector:
+    app: akvorado-outlet
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+    - name: bmp
+      port: 10179
+      targetPort: 10179
+---
+# Holds the metadata cache and IPFIX/NetFlow template state; flows with either
+# unresolved are dropped outright, so both are worth persisting.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: akvorado-outlet-state
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ceph-rbd-xfs
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akvorado-outlet
+spec:
+  replicas: 1
+  strategy:
+    # RWO volume.
+    type: Recreate
+  selector:
+    matchLabels:
+      app: akvorado-outlet
+  template:
+    metadata:
+      labels:
+        app: akvorado-outlet
+    spec:
+      # This is the component that polls exporters over SNMP, so it needs egress
+      # to device management addresses across the fabric.
+      terminationGracePeriodSeconds: 45
+      containers:
+        - name: outlet
+          image: quay.io/akvorado/akvorado:2.4.1
+          args:
+            - outlet
+            - http://akvorado-orchestrator:8080
+          ports:
+            - containerPort: 8080
+              name: http
+            - containerPort: 10179
+              name: bmp
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              memory: 4Gi
+          volumeMounts:
+            - name: state
+              mountPath: /run/akvorado
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: akvorado-outlet-state

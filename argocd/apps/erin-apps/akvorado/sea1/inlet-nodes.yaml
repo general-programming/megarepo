@@ -1,0 +1,22 @@
+---
+# Keep the inlet on the site LAN. Nodes off 10.3.2.0/23 can never own the
+# MetalLB VIP, and under externalTrafficPolicy: Local a pod there would only
+# advertise an endpoint nothing can reach.
+#
+# DoesNotExist, matching the no-database idiom: it selects every node until the
+# label is applied, so a talconfig that has not been rolled out yet degrades to
+# today's behaviour rather than leaving the DaemonSet unschedulable.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: akvorado-inlet
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: generalprogramming.org/no-lan-vip
+                    operator: DoesNotExist

@@ -1,0 +1,33 @@
+---
+# Flow collector VIP. externalTrafficPolicy: Local keeps the exporter's real
+# source IP intact -- akvorado keys every flow by it, so one SNAT hop collapses
+# the fabric into a single bogus exporter. It also keeps flow UDP off flannel's
+# VXLAN (cf. the tx-checksum workaround in infrastructure/talos/sea1/).
+#
+# The VIP is pinned because device configs hardcode it, via the metallb.io
+# annotation rather than the deprecated spec.loadBalancerIP.
+apiVersion: v1
+kind: Service
+metadata:
+  name: akvorado-flows
+  annotations:
+    metallb.io/address-pool: sea1-pool
+    metallb.io/loadBalancerIPs: 10.3.3.1
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  selector:
+    app: akvorado-inlet
+  ports:
+    - name: netflow
+      port: 2055
+      targetPort: 2055
+      protocol: UDP
+    - name: ipfix
+      port: 4739
+      targetPort: 4739
+      protocol: UDP
+    - name: sflow
+      port: 6343
+      targetPort: 6343
+      protocol: UDP

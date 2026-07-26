@@ -1,0 +1,69 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: akvorado-console
+spec:
+  selector:
+    app: akvorado-console
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8080
+---
+# Saved filters; memory-only and lost on restart without this.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: akvorado-console-db
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ceph-rbd-xfs
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: akvorado-console
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: akvorado-console
+  template:
+    metadata:
+      labels:
+        app: akvorado-console
+    spec:
+      containers:
+        - name: console
+          image: quay.io/akvorado/akvorado:2.4.1
+          args:
+            - console
+            - http://akvorado-orchestrator:8080
+          ports:
+            - containerPort: 8080
+              name: http
+          readinessProbe:
+            tcpSocket:
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              memory: 1Gi
+          volumeMounts:
+            - name: db
+              mountPath: /run/akvorado
+      volumes:
+        - name: db
+          persistentVolumeClaim:
+            claimName: akvorado-console-db
