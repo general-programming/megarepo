@@ -11,6 +11,7 @@ package render
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
@@ -55,78 +56,90 @@ type WireguardSource interface {
 	WireguardKeypair(path string) (Keypair, error)
 }
 
-// renderers is the devicetype -> Renderer registry, mirroring the
-// Python VENDOR_MAP. Every vendor Python renders config for is here;
-// `external` deliberately is not (see Templatable).
+// CompleteSecretSource is EVERY optional interface above, in one name.
 //
-// Which ROLES each vendor supports is the renderer's own business, and
-// the answer is narrow, because Python's role dispatch is just
-// `templates/<role>/<devicetype>.j2` existing on disk:
+// It exists because of a production outage. The optional capabilities
+// are discovered by type assertion (see vaultSecret and friends below),
+// so a secret source missing one compiles, links, passes every test that
+// uses a different fake, and then fails on a real render. That is not a
+// hypothetical: DNOS rendering failed 100% in production because the
+// Vault-backed adapter implemented three of these four and not
+// TacacsSource, while the test fake implemented all four.
 //
-//	vyos, linux, mikrotik   vpn only (barf.configs.BLOCK_REGISTRY)
-//	edgeos                  vpn only (templates/vpn/edgeos.j2)
-//	cisco, dnos6, dnos9     network_devices only
-//	eos                     any role -- arista.py renders a scoped
-//	                        managed slice, which render_host_config
-//	                        dispatches to before role is consulted
+// The rule, which is the whole point of this type:
 //
-// Those are all the (role, devicetype) pairs that exist: there is no
-// templates/vpn/vyos.j2, no templates/core/anything. A pair outside the
-// table fails in Python with a Jinja TemplateNotFound and fails here
-// with noTemplateError, which is the same answer said politely.
-var renderers = map[string]Renderer{
-	"eos":      EOS{},
-	"vyos":     VyOS{},
-	"linux":    Linux{},
-	"mikrotik": MikroTik{},
-	"edgeos":   EdgeOS{},
-	"cisco":    Cisco{},
-	"dnos6":    DNOS6{},
-	"dnos9":    DNOS9{},
+//	EVERY optional SecretSource interface in this file MUST be embedded
+//	here, and every production secret source MUST be asserted against
+//	this type (not against the members individually).
+//
+// A `var _ render.CompleteSecretSource = (*yourSource)(nil)` then turns
+// that entire bug class into a build error. Adding a fifth optional
+// interface and embedding it here breaks the build of every adapter that
+// has not caught up -- which is exactly what should happen.
+type CompleteSecretSource interface {
+	SecretSource
+	VaultSource
+	TacacsSource
+	WireguardSource
 }
 
-// aliases are the extra VENDOR_MAP spellings, which come from NetBox
-// platform slugs rather than from network.yml.
-var aliases = map[string]string{
-	"cisco-ios": "cisco",
-	"dnos-6":    "dnos6",
-	"dnos-9":    "dnos9",
-}
+// SecretCapability names one optional capability, for reporting.
+type SecretCapability string
 
-// Templatable reports whether barf generates config for a device type at
-// all (Python BaseHost.TEMPLATABLE).
+// The optional capabilities, in the order CheckSecretSource reports
+// them. Same list as CompleteSecretSource's members; keep them together.
+const (
+	CapVault     SecretCapability = "VaultSource.VaultSecret"
+	CapTacacs    SecretCapability = "TacacsSource.TacacsKey"
+	CapWireguard SecretCapability = "WireguardSource.WireguardKeypair"
+)
+
+// MissingCapabilities returns the optional interfaces s does not
+// implement, in declaration order. Empty means s is a
+// CompleteSecretSource.
 //
-// Only `external` is not: it marks the far side of a fabric link that
-// barf does not manage (a cloud VPN endpoint, a peer's router). Such
-// hosts exist in network.yml so links can name them and so their ASN
-// and endpoint address are known, but nothing is ever rendered FOR
-// them. Callers walking the fleet should skip them by asking this,
-// rather than treating them as a vendor whose port has not landed.
-func Templatable(deviceType string) bool {
-	return deviceType != "external"
-}
-
-// For returns the renderer registered for a device type.
-func For(deviceType string) (Renderer, bool) {
-	if alias, ok := aliases[deviceType]; ok {
-		deviceType = alias
+// This is the runtime half of the compile-time assertion above, for
+// sources that cannot be checked at build time (a source chosen by flag,
+// a fake in someone else's test). It answers WHICH capability is missing
+// before any host is rendered, instead of one vendor's render failing
+// deep in a fleet run.
+func MissingCapabilities(s SecretSource) []SecretCapability {
+	var missing []SecretCapability
+	if _, ok := s.(VaultSource); !ok {
+		missing = append(missing, CapVault)
 	}
-	renderer, ok := renderers[deviceType]
-	return renderer, ok
+	if _, ok := s.(TacacsSource); !ok {
+		missing = append(missing, CapTacacs)
+	}
+	if _, ok := s.(WireguardSource); !ok {
+		missing = append(missing, CapWireguard)
+	}
+	return missing
 }
 
-// Host renders one host with the renderer registered for its device type.
-func Host(h *model.Host, n *model.Network, s SecretSource) (string, error) {
-	if !Templatable(h.DeviceType) {
-		return "", fmt.Errorf("%s: device type %q is unmanaged; barf renders no config for it",
-			h.Hostname, h.DeviceType)
+// CheckSecretSource reports whether s can serve every render in the
+// fleet, naming what it cannot do.
+func CheckSecretSource(s SecretSource) error {
+	if s == nil {
+		return fmt.Errorf("render: nil secret source")
 	}
-	renderer, ok := For(h.DeviceType)
-	if !ok {
-		return "", fmt.Errorf("%s: no renderer for device type %q", h.Hostname, h.DeviceType)
+	missing := MissingCapabilities(s)
+	if len(missing) == 0 {
+		return nil
 	}
-	return renderer.Render(h, n, s)
+	names := make([]string, len(missing))
+	for i, c := range missing {
+		names[i] = string(c)
+	}
+	return fmt.Errorf("render: secret source %T is incomplete: missing %s", s, strings.Join(names, ", "))
 }
+
+// The devicetype -> Renderer registry used to live here, next to the
+// three other registries keyed by the same string in three other
+// packages. It now lives in one table in ../vendor, with the transport
+// and comparison entries for the same devicetype next to it. This
+// package deliberately has no dispatch left: it renders, and something
+// else decides who renders.
 
 // noTemplateError is the Go spelling of Jinja's TemplateNotFound for a
 // (role, devicetype) pair barf has no config for.

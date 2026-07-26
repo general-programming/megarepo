@@ -10,6 +10,7 @@ import (
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // The testdata/ corpus is Python output, not Go output.
@@ -70,7 +71,7 @@ func TestEdgeOSParity(t *testing.T) {
 			asEdgeOS := *host
 			asEdgeOS.DeviceType = "edgeos"
 
-			got, err := render.Host(&asEdgeOS, network, fakeSecrets{})
+			got, err := vendor.Render(&asEdgeOS, network, fakeSecrets{})
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
@@ -174,10 +175,10 @@ func TestDNOS9MatchesDNOS6(t *testing.T) {
 // TestExternalIsNotRendered guards the marker-type semantics: an
 // external host is a fabric link's far end that barf does not manage.
 func TestExternalIsNotRendered(t *testing.T) {
-	if render.Templatable("external") {
+	if vendor.Templatable("external") {
 		t.Error("external should not be templatable")
 	}
-	if _, ok := render.For("external"); ok {
+	if _, ok := vendor.Renderer("external"); ok {
 		t.Error("external should have no renderer")
 	}
 
@@ -189,7 +190,7 @@ func TestExternalIsNotRendered(t *testing.T) {
 			continue
 		}
 		found = true
-		if _, err := render.Host(host, network, fakeSecrets{}); err == nil {
+		if _, err := vendor.Render(host, network, fakeSecrets{}); err == nil {
 			t.Errorf("%s: rendering an external host should fail", host.Hostname)
 		}
 	}
@@ -222,7 +223,7 @@ func TestRolesOutsideTheTemplateMatrix(t *testing.T) {
 			candidate := *host
 			candidate.DeviceType = tc.deviceType
 			candidate.Role = tc.role
-			if _, err := render.Host(&candidate, network, fakeSecrets{}); err == nil {
+			if _, err := vendor.Render(&candidate, network, fakeSecrets{}); err == nil {
 				t.Errorf("%s in role %s rendered; Python has no template for it",
 					tc.deviceType, tc.role)
 			}
@@ -236,12 +237,12 @@ func TestAliasesResolve(t *testing.T) {
 	for alias, canonical := range map[string]string{
 		"cisco-ios": "cisco", "dnos-6": "dnos6", "dnos-9": "dnos9",
 	} {
-		aliased, ok := render.For(alias)
+		aliased, ok := vendor.Renderer(alias)
 		if !ok {
 			t.Errorf("%s: no renderer", alias)
 			continue
 		}
-		direct, _ := render.For(canonical)
+		direct, _ := vendor.Renderer(canonical)
 		if aliased != direct {
 			t.Errorf("%s should resolve to the %s renderer", alias, canonical)
 		}
@@ -287,7 +288,7 @@ func TestEdgeOSTunnelNamesTruncate(t *testing.T) {
 	asEdgeOS := *host
 	asEdgeOS.DeviceType = "edgeos"
 
-	got, err := render.Host(&asEdgeOS, network, fakeSecrets{})
+	got, err := vendor.Render(&asEdgeOS, network, fakeSecrets{})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}

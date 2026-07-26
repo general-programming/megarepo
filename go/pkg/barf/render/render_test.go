@@ -6,6 +6,7 @@ import (
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // TestDeterministicSHA512 pins the salt derivation and the passlib
@@ -53,7 +54,7 @@ func TestEOSRejectsTooManySSHKeys(t *testing.T) {
 		Hosts: []model.Host{*host},
 	}
 
-	_, err := render.Host(&network.Hosts[0], network, fakeSecrets{})
+	_, err := vendor.Render(&network.Hosts[0], network, fakeSecrets{})
 	if err == nil || !strings.Contains(err.Error(), "secondary ssh-key") {
 		t.Fatalf("expected an ssh-key limit error, got %v", err)
 	}
@@ -64,7 +65,7 @@ func TestEOSOmitsVRFWhenUnset(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "sw-1", DeviceType: "eos", Role: "core"}},
 	}
-	got, err := render.Host(&network.Hosts[0], network, fakeSecrets{})
+	got, err := vendor.Render(&network.Hosts[0], network, fakeSecrets{})
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
@@ -82,7 +83,7 @@ func TestUnknownDeviceTypeIsReported(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "x", DeviceType: "junos", Role: "vpn"}},
 	}
-	if _, err := render.Host(&network.Hosts[0], network, fakeSecrets{}); err == nil {
+	if _, err := vendor.Render(&network.Hosts[0], network, fakeSecrets{}); err == nil {
 		t.Fatal("expected an error for an unregistered device type")
 	}
 }
@@ -93,7 +94,7 @@ func TestVyOSRejectsNonVPNRole(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "x", DeviceType: "vyos", Role: "core"}},
 	}
-	_, err := render.Host(&network.Hosts[0], network, fakeSecrets{})
+	_, err := vendor.Render(&network.Hosts[0], network, fakeSecrets{})
 	if err == nil || !strings.Contains(err.Error(), `no config for role "core"`) {
 		t.Fatalf("expected a role error, got %v", err)
 	}
@@ -112,7 +113,7 @@ func TestMissingVaultSourceIsReported(t *testing.T) {
 	network := loadFleet(t)
 	host, _ := network.Host("fmt2-vpn-spine-1")
 
-	_, err := render.Host(host, network, noVaultSecrets{})
+	_, err := vendor.Render(host, network, noVaultSecrets{})
 	if err == nil || !strings.Contains(err.Error(), "vault key") {
 		t.Fatalf("expected a vault-source error, got %v", err)
 	}

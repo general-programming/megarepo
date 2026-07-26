@@ -345,31 +345,10 @@ func TestEOSModelFallback(t *testing.T) {
 	}
 }
 
-func TestNewDispatch(t *testing.T) {
-	opts := Options{
-		Secrets:       fakeSecrets{values: map[string]string{}},
-		GlobalSecrets: fakeSecrets{values: map[string]string{}},
-	}
-	eos, err := New(&model.Host{Hostname: "a", DeviceType: "eos"}, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := eos.(*EOSReader); !ok {
-		t.Errorf("eos -> %T", eos)
-	}
-
-	vyos, err := New(&model.Host{Hostname: "b", DeviceType: "VyOS"}, opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, ok := vyos.(*VyOSReader); !ok {
-		t.Errorf("vyos -> %T", vyos)
-	}
-
-	if _, err := New(&model.Host{Hostname: "c", DeviceType: "linux"}, opts); !errors.Is(err, ErrUnsupported) {
-		t.Errorf("linux err = %v, want ErrUnsupported", err)
-	}
-}
+// The devicetype dispatch that used to be tested here (TestNewDispatch,
+// against device.New) moved with New itself to ../vendor, where it is
+// TestNewReaderDispatch. It still asserts the same three things: eos ->
+// *EOSReader, vyos -> *VyOSReader, everything else -> ErrUnsupported.
 
 func TestInsecureSkipVerifyIsOptIn(t *testing.T) {
 	if client := (Options{}).httpClient(); transportSkipsVerify(t, client) {

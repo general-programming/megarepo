@@ -6,6 +6,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/scope"
+	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
 // ScopedDiffer is implemented by device readers for vendors that manage
@@ -39,7 +40,7 @@ func wrapScoped(h *model.Host, base DeviceReader, r device.Reader) DeviceReader 
 	if h == nil {
 		return base
 	}
-	comparer, ok := scope.For(h.DeviceType)
+	comparer, ok := vendor.Comparer(h.DeviceType)
 	if !ok {
 		return base
 	}

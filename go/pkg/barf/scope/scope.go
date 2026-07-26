@@ -11,13 +11,13 @@
 //
 // This package is that comparison, per vendor, behind one interface:
 //
-//	comparer, ok := scope.For(host.DeviceType)
+//	comparer, ok := vendor.Comparer(host.DeviceType)
 //	result, err := comparer.Compare(ctx, scope.Input{...})
 //
-// `barf diff` dispatches on the registry: a devicetype with no entry gets
-// the generic whole-config diff, a devicetype with one gets its scoped
-// comparison. Adding a third vendor is a new file plus a registry line;
-// no caller changes.
+// `barf diff` dispatches on the vendor table: a devicetype with a nil
+// Comparer gets the generic whole-config diff, a devicetype with one
+// gets its scoped comparison. Adding a third vendor is a new file here
+// plus one field in that vendor's existing row; no caller changes.
 //
 // Nothing here writes to a device. The Reader it takes is a read-only
 // section fetch, structurally satisfied by *device.EOSReader.
@@ -103,31 +103,15 @@ type Comparer interface {
 	Compare(ctx context.Context, in Input) (Result, error)
 }
 
-// comparers is the devicetype -> Comparer registry. A devicetype absent
-// here has no managed slice, and `barf diff` falls back to comparing the
-// whole config.
-var comparers = map[string]Comparer{
-	"eos": EOS{},
-}
-
-// For returns the scoped comparer registered for a device type.
-func For(deviceType string) (Comparer, bool) {
-	c, ok := comparers[strings.ToLower(deviceType)]
-	return c, ok
-}
-
-// Compare runs the scoped comparison registered for in.Host's devicetype.
-func Compare(ctx context.Context, in Input) (Result, error) {
-	if in.Host == nil {
-		return Result{}, fmt.Errorf("scope: nil host")
-	}
-	comparer, ok := For(in.Host.DeviceType)
-	if !ok {
-		return Result{}, fmt.Errorf("scope: %s: no scoped comparison for device type %q",
-			in.Host.Hostname, in.Host.DeviceType)
-	}
-	return comparer.Compare(ctx, in)
-}
+// The devicetype -> Comparer registry that used to live here has moved
+// to ../vendor, so that a vendor's comparer sits in the same row as its
+// renderer and its transports. The pattern this package was praised for
+// -- a small consumer-side interface plus a registry -- is unchanged;
+// only the registry's address is, and it is now shared with the three
+// other registries that were keyed by the same string.
+//
+// A devicetype whose row has a nil Comparer has no managed slice, and
+// `barf diff` falls back to comparing the whole config.
 
 // RedactedHash is what a `$6$...` crypt hash is replaced with in output.
 // Matches the Python `_REDACTED`.

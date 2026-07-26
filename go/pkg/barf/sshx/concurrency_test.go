@@ -359,18 +359,12 @@ func TestDialClosesTheAgentSocket(t *testing.T) {
 		}
 	}
 
-	if got := ag.opened.Load(); got != dials {
-		t.Fatalf("agent connections opened = %d, want %d", got, dials)
-	}
-	// Closes are observed by the agent goroutine, so give it a moment.
-	deadline := time.Now().Add(5 * time.Second)
-	for ag.closed.Load() < dials {
-		if time.Now().After(deadline) {
-			t.Fatalf("agent sockets left open: %d of %d dials closed theirs",
-				ag.closed.Load(), dials)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	// Both counters are incremented by the agent goroutine, so neither is
+	// readable synchronously: a unix net.Dial returns as soon as the
+	// connection is queued in the listen backlog, before Accept has run.
+	// Poll both rather than racing the accept loop.
+	waitForCount(t, "agent connections opened", dials, &ag.opened)
+	waitForCount(t, "agent sockets closed", dials, &ag.closed)
 }
 
 // TestAgentAuthStillWorks is the other side of the fix: the agent
@@ -445,4 +439,22 @@ func deadPort(t *testing.T) int {
 	_ = listener.Close()
 	p, _ := strconv.Atoi(port)
 	return p
+}
+
+// waitFor blocks until counter reaches want, reporting what it saw if it
+// does not. Counters here are written by the fake agent's accept loop, so
+// a synchronous read races it.
+func waitForCount(t *testing.T, what string, want int64, counter *atomic.Int64) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		got := counter.Load()
+		if got >= want {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("%s = %d, want %d", what, got, want)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }
