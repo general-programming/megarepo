@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -180,22 +181,22 @@ func (v *validator) checkGlobalMeta(node *yaml.Node) {
 	sites := ymap(yget(entries, "sites"))
 	byID := map[int]string{}
 	for _, site := range sites {
-		where := "global_meta.sites." + site.key
-		v.sites[site.key] = true
-		fields := ymap(site.val)
+		where := "global_meta.sites." + site.Key
+		v.sites[site.Key] = true
+		fields := ymap(site.Val)
 
 		id, ok := yint(yget(fields, "id"))
 		if !ok {
-			v.add(where, site.val.Line, "no id")
+			v.add(where, site.Val.Line, "no id")
 		} else if other, dup := byID[id]; dup {
-			v.add(where, site.val.Line, "id %d is already used by site %q", id, other)
+			v.add(where, site.Val.Line, "id %d is already used by site %q", id, other)
 		} else {
-			byID[id] = site.key
+			byID[id] = site.Key
 		}
 
 		coords := yseq(yget(fields, "coords"))
 		if len(coords) != 2 {
-			v.add(where, site.val.Line, "needs exactly two coords, got %d", len(coords))
+			v.add(where, site.Val.Line, "needs exactly two coords, got %d", len(coords))
 		} else {
 			for i, name := range []string{"latitude", "longitude"} {
 				if _, err := strconv.ParseFloat(coords[i].Value, 64); err != nil {
@@ -220,32 +221,32 @@ func (v *validator) checkHosts(node *yaml.Node) {
 
 	seenID := map[int]string{}
 	for _, host := range entries {
-		where := "hosts." + host.key
-		v.hostOrder = append(v.hostOrder, host.key)
-		fields := ymap(host.val)
+		where := "hosts." + host.Key
+		v.hostOrder = append(v.hostOrder, host.Key)
+		fields := ymap(host.Val)
 
 		deviceType := ystr(yget(fields, "type"))
 		switch {
 		case deviceType == "":
-			v.add(where, host.val.Line, "missing required field 'type'")
+			v.add(where, host.Val.Line, "missing required field 'type'")
 		case !validDeviceTypes[deviceType]:
-			v.add(where, host.val.Line, "unsupported type %q", deviceType)
+			v.add(where, host.Val.Line, "unsupported type %q", deviceType)
 		}
 
 		if role := ystr(yget(fields, "role")); role == "" {
-			v.add(where, host.val.Line, "missing required field 'role'")
+			v.add(where, host.Val.Line, "missing required field 'role'")
 		}
 
 		if site := ystr(yget(fields, "site")); site != "" && !v.sites[site] {
-			v.add(where, host.val.Line, "unknown site %q", site)
+			v.add(where, host.Val.Line, "unknown site %q", site)
 		}
 
 		if id, ok := yint(yget(fields, "id")); ok {
-			v.hostIDs[host.key] = id
+			v.hostIDs[host.Key] = id
 			if other, dup := seenID[id]; dup {
-				v.add(where, host.val.Line, "id %d is already used by host %q", id, other)
+				v.add(where, host.Val.Line, "id %d is already used by host %q", id, other)
 			} else {
-				seenID[id] = host.key
+				seenID[id] = host.Key
 			}
 		}
 
@@ -256,7 +257,7 @@ func (v *validator) checkHosts(node *yaml.Node) {
 			}
 			if _, err := netip.ParsePrefix(raw); err != nil {
 				if _, plainErr := netip.ParseAddr(raw); plainErr != nil {
-					v.add(where, host.val.Line, "%s %q is not an IP address", field, raw)
+					v.add(where, host.Val.Line, "%s %q is not an IP address", field, raw)
 				}
 			}
 		}
@@ -312,22 +313,22 @@ func (v *validator) checkLinks(node *yaml.Node) {
 	count := 0
 
 	for _, outer := range ymap(node) {
-		sideB := outer.key
+		sideB := outer.Key
 		if !known[sideB] {
-			v.add("links."+sideB, outer.val.Line, "%q is not a host", sideB)
+			v.add("links."+sideB, outer.Val.Line, "%q is not a host", sideB)
 		}
 
-		for _, inner := range ymap(outer.val) {
-			sideA := inner.key
+		for _, inner := range ymap(outer.Val) {
+			sideA := inner.Key
 			where := fmt.Sprintf("links.%s.%s", sideB, sideA)
 			count++
 			if !known[sideA] {
-				v.add(where, inner.val.Line, "%q is not a host", sideA)
+				v.add(where, inner.Val.Line, "%q is not a host", sideA)
 			}
 
-			port, pinned := yint(inner.val)
+			port, pinned := yint(inner.Val)
 			if !pinned {
-				port, pinned = yint(yget(ymap(inner.val), "port"))
+				port, pinned = yint(yget(ymap(inner.Val), "port"))
 			}
 			if !pinned {
 				// Derived ports need both ids; model.Load refuses otherwise.
@@ -339,7 +340,7 @@ func (v *validator) checkLinks(node *yaml.Node) {
 				}
 				if len(missing) > 0 {
 					sort.Strings(missing)
-					v.add(where, inner.val.Line,
+					v.add(where, inner.Val.Line,
 						"cannot derive a port: %s has no 'id' (pin 'port' instead)",
 						strings.Join(missing, " and "))
 					continue
@@ -351,9 +352,23 @@ func (v *validator) checkLinks(node *yaml.Node) {
 			}
 
 			if other, dup := byPort[port]; dup {
-				v.add(where, inner.val.Line, "port %d is already used by %s", port, other)
+				v.add(where, inner.Val.Line, "port %d is already used by %s", port, other)
 			} else {
 				byPort[port] = where
+			}
+
+			// A `network:` with host bits set (e.g. "172.31.255.21/31",
+			// whose network address is .20) would deploy at a different
+			// address than what network.yml names: model.Link.GetIP now
+			// refuses it at render time (see model/types.go), but a
+			// validate pass should catch the typo before then, not send the
+			// operator to a render failure to find it.
+			if network := ystr(yget(ymap(inner.Val), "network")); network != "" {
+				if prefix, err := netip.ParsePrefix(network); err != nil {
+					v.add(where, inner.Val.Line, "network %q: %s", network, err)
+				} else if prefix.Masked().Addr() != prefix.Addr() {
+					v.add(where, inner.Val.Line, "network %q has host bits set", network)
+				}
 			}
 		}
 	}
@@ -370,76 +385,16 @@ func derivedLinkPort(a, b int) int {
 
 // --- tolerant YAML helpers -------------------------------------------
 // model's equivalents are unexported, and validate must keep walking a
-// document model.Load would have rejected.
+// document model.Load would have rejected; but the `<<`-merge WALK itself
+// (model.MapEntries) is shared, so this file cannot drift from PyYAML's
+// "earlier alias wins" semantics the way a second reimplementation did.
 
-type yentry struct {
-	key string
-	val *yaml.Node
-}
+func ymap(n *yaml.Node) []model.Entry { return model.MapEntries(n) }
 
-func yderef(n *yaml.Node) *yaml.Node {
-	for n != nil && n.Kind == yaml.AliasNode {
-		n = n.Alias
-	}
-	return n
-}
-
-// ymap flattens a mapping into ordered entries, resolving `<<` merge keys as
-// PyYAML does: merged entries first, an explicit same-name key overriding in
-// place.
-func ymap(n *yaml.Node) []yentry {
-	n = yderef(n)
-	if n == nil || n.Kind != yaml.MappingNode {
-		return nil
-	}
-
-	var ordered []yentry
-	index := map[string]int{}
-	add := func(e yentry) {
-		if at, ok := index[e.key]; ok {
-			ordered[at] = e
-			return
-		}
-		index[e.key] = len(ordered)
-		ordered = append(ordered, e)
-	}
-	isMerge := func(k *yaml.Node) bool { return k.Tag == "!!merge" || k.Value == "<<" }
-
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if !isMerge(n.Content[i]) {
-			continue
-		}
-		val := yderef(n.Content[i+1])
-		sources := []*yaml.Node{val}
-		if val != nil && val.Kind == yaml.SequenceNode {
-			sources = val.Content
-		}
-		for _, source := range sources {
-			for _, merged := range ymap(source) {
-				add(merged)
-			}
-		}
-	}
-	for i := 0; i+1 < len(n.Content); i += 2 {
-		if isMerge(n.Content[i]) {
-			continue
-		}
-		add(yentry{key: n.Content[i].Value, val: n.Content[i+1]})
-	}
-	return ordered
-}
-
-func yget(entries []yentry, key string) *yaml.Node {
-	for _, e := range entries {
-		if e.key == key {
-			return yderef(e.val)
-		}
-	}
-	return nil
-}
+func yget(entries []model.Entry, key string) *yaml.Node { return model.Lookup(entries, key) }
 
 func ystr(n *yaml.Node) string {
-	n = yderef(n)
+	n = model.Deref(n)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
 		return ""
 	}
@@ -447,7 +402,7 @@ func ystr(n *yaml.Node) string {
 }
 
 func yint(n *yaml.Node) (int, bool) {
-	n = yderef(n)
+	n = model.Deref(n)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
 		return 0, false
 	}
@@ -459,13 +414,13 @@ func yint(n *yaml.Node) (int, bool) {
 }
 
 func yseq(n *yaml.Node) []*yaml.Node {
-	n = yderef(n)
+	n = model.Deref(n)
 	if n == nil || n.Kind != yaml.SequenceNode {
 		return nil
 	}
 	out := make([]*yaml.Node, 0, len(n.Content))
 	for _, item := range n.Content {
-		out = append(out, yderef(item))
+		out = append(out, model.Deref(item))
 	}
 	return out
 }

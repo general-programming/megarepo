@@ -151,6 +151,43 @@ func TestValidateMissingSections(t *testing.T) {
 	}
 }
 
+// For `<<: [*a, *b]` the EARLIER alias must win, matching PyYAML and
+// model.MapEntries. Regression: validate's own merge walker let the later
+// alias win, so a host merging a valid type first and a bogus one second
+// reported a false "unsupported type".
+func TestValidateSequenceMergeEarlierAliasWins(t *testing.T) {
+	report, err := validateFile(writeYAML(t, `
+global_meta:
+  community_asn: 65000
+  sites:
+    sea1: {id: 1, coords: [0, 0]}
+good: &good
+  type: vyos
+  role: vpn
+  site: sea1
+bad: &bad
+  type: bogus-vendor
+  role: vpn
+  site: sea1
+hosts:
+  merged:
+    <<: [*good, *bad]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, p := range report.Problems {
+		joined += p.String() + "\n"
+	}
+	if strings.Contains(joined, "unsupported type") {
+		t.Errorf("earlier alias should have won (type vyos), got problems: %s", joined)
+	}
+	if !report.OK {
+		t.Errorf("report not OK: %s", joined)
+	}
+}
+
 func TestValidateDerivedPortCollision(t *testing.T) {
 	// Two links between the same pair derive the same port.
 	report, err := validateFile(writeYAML(t, `
@@ -183,6 +220,56 @@ links:
 	}
 	if !strings.Contains(joined, "c has no 'id'") {
 		t.Errorf("missing-id link not reported:\n%s", joined)
+	}
+}
+
+// Regression: a link `network:` with host bits set ("172.31.255.21/31",
+// whose network address is .20) used to render at the wrong address rather
+// than fail; validate should catch it before a render/deploy does.
+func TestValidateRejectsLinkNetworkWithHostBitsSet(t *testing.T) {
+	report, err := validateFile(writeYAML(t, `
+global_meta:
+  community_asn: 65000
+hosts:
+  a: {type: vyos, role: vpn, id: 1}
+  b: {type: vyos, role: vpn, id: 2}
+links:
+  a:
+    b: {network: 172.31.255.21/31}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := ""
+	for _, p := range report.Problems {
+		joined += p.String() + "\n"
+	}
+	if !strings.Contains(joined, `network "172.31.255.21/31" has host bits set`) {
+		t.Errorf("host-bits-set network not reported:\n%s", joined)
+	}
+}
+
+// A correctly aligned network must not be flagged.
+func TestValidateAcceptsAlignedLinkNetwork(t *testing.T) {
+	report, err := validateFile(writeYAML(t, `
+global_meta:
+  community_asn: 65000
+hosts:
+  a: {type: vyos, role: vpn, id: 1}
+  b: {type: vyos, role: vpn, id: 2}
+links:
+  a:
+    b: {network: 172.31.255.20/31}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !report.OK {
+		joined := ""
+		for _, p := range report.Problems {
+			joined += p.String() + "\n"
+		}
+		t.Errorf("an aligned network was flagged:\n%s", joined)
 	}
 }
 
