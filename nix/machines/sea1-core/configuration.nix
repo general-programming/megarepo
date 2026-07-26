@@ -92,6 +92,9 @@ in
         {
           id = 1;
           subnet = "2602:fa6d:10:ffff::/64";
+          # DHCPv6 clients talk from link-local sources; Kea needs the
+          # explicit interface binding to select this subnet for them.
+          interface = "ens18";
           pools = [ { pool = "2602:fa6d:10:ffff::200 - 2602:fa6d:10:ffff::fff"; } ];
           option-data = [
             { name = "dns-servers"; data = "2602:fa6d:10:ffff::f00"; }
