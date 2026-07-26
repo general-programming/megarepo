@@ -24,7 +24,7 @@ buildGoModule {
 
   # Bump alongside go.mod/go.sum: `nix build ./nix#barf` prints the new hash
   # on mismatch.
-  vendorHash = "sha256-BUg6g1Xot149e1cmGUAIQJCVqJxBcsv9TSOh61NwOUo=";
+  vendorHash = "sha256-hSGkTIPE4sjnlvNsvUgjgCCqKMUX5zeHMByh5EvZKdE=";
 
   subPackages = [ "go/cmd/barf" ];
 
