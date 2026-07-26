@@ -27,10 +27,19 @@ type renderCtx struct {
 	communityAS int
 }
 
-func newRenderCtx(h *model.Host, n *model.Network, s SecretSource) *renderCtx {
+// newRenderCtx builds the shared render context, or fails fast on a
+// configuration bird cannot express. Port of build_context
+// (barf/configs/__init__.py): bird.import_filter is a standalone filter, and
+// bird filters cannot call other filters, so combining it with the
+// generated site-weighted filters (linux.go's genprog_import_<site>) would
+// silently discard the host's own filter on every weighted peer — the
+// override happens unconditionally in birdChannels' caller. Catching it here
+// means every vendor sharing this context (linux, vyos, mikrotik, edgeos)
+// refuses the same way, rather than one of them quietly losing the filter.
+func newRenderCtx(h *model.Host, n *model.Network, s SecretSource) (*renderCtx, error) {
 	ctx := &renderCtx{host: h, network: n, global: n.Global, secrets: s}
 	if h.Role != "vpn" {
-		return ctx
+		return ctx, nil
 	}
 	ctx.links = n.LinksFor(h.Hostname)
 	ctx.importRules = siteImportRules(h, ctx.links, n)
@@ -38,7 +47,14 @@ func newRenderCtx(h *model.Host, n *model.Network, s SecretSource) *renderCtx {
 		ctx.originSite = &site
 	}
 	ctx.communityAS = n.Global.CommunityASN
-	return ctx
+
+	if len(ctx.importRules) > 0 && h.Bird.ImportFilter != "" {
+		return nil, fmt.Errorf(
+			"%s: bird.import_filter cannot be combined with site weighting; "+
+				"expose the check as a function and set bird.import_check_function instead",
+			h.Hostname)
+	}
+	return ctx, nil
 }
 
 // peer returns the host on the far side of a link.
@@ -57,7 +73,10 @@ func (VyOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, err
 		// Not a gap: Python has no vyos template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
-	ctx := newRenderCtx(h, n, s)
+	ctx, err := newRenderCtx(h, n, s)
+	if err != nil {
+		return "", err
+	}
 
 	blocks := []func(*renderCtx) ([]string, error){
 		vyosSystemConfig,
@@ -346,11 +365,19 @@ func wgStrings(m map[string]any, key string) []string {
 func vyosFirewallGroups(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, group := range c.host.Firewall.Address {
-		for _, member := range group.MembersV(4) {
+		v4, err := group.MembersV(4)
+		if err != nil {
+			return nil, err
+		}
+		for _, member := range v4 {
 			lines = append(lines, fmt.Sprintf(
 				"set firewall group network-group %s network %s", group.Name, member.Address))
 		}
-		for _, member := range group.MembersV(6) {
+		v6, err := group.MembersV(6)
+		if err != nil {
+			return nil, err
+		}
+		for _, member := range v6 {
 			lines = append(lines, fmt.Sprintf(
 				"set firewall group ipv6-network-group %s network %s", group.Name, member.Address))
 		}
@@ -536,9 +563,12 @@ func vyosFabricWireGuard(c *renderCtx) ([]string, error) {
 			interfaceName = name
 		}
 
-		bgpNeighbor := link.GetIP(peer.Hostname, false)
-		if link.Unnumbered() {
-			bgpNeighbor = interfaceName
+		bgpNeighbor := interfaceName
+		if !link.Unnumbered() {
+			bgpNeighbor, err = link.GetIP(peer.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
 		}
 		neigh := "set protocols bgp neighbor " + bgpNeighbor
 		if link.Unnumbered() {
@@ -586,9 +616,14 @@ func vyosIPsecLink(c *renderCtx, link model.Link, peer *model.Host) ([]string, s
 	psk := "set vpn ipsec authentication psk " + peerName
 	sts := "set vpn ipsec site-to-site peer " + peerName
 
+	ourIP, err := link.GetIP(c.host.Hostname, false)
+	if err != nil {
+		return nil, "", err
+	}
+
 	return []string{
 		fmt.Sprintf("set interfaces vti %s address '%s/31'",
-			interfaceName, link.GetIP(c.host.Hostname, false)),
+			interfaceName, ourIP),
 		"",
 		fmt.Sprintf("%s id '%s'", psk, c.host.AddressRaw),
 		fmt.Sprintf("%s id '%s'", psk, peer.AddressRaw),
@@ -627,7 +662,11 @@ func vyosWireguardLink(c *renderCtx, link model.Link, peer *model.Host) ([]strin
 		fmt.Sprintf("%s description 'wg link (%s -> %s)'", iw, link.A, link.B),
 	}
 	if !link.Unnumbered() {
-		lines = append(lines, fmt.Sprintf("%s address %s", iw, link.GetIP(c.host.Hostname, true)))
+		ourIP, err := link.GetIP(c.host.Hostname, true)
+		if err != nil {
+			return nil, "", err
+		}
+		lines = append(lines, fmt.Sprintf("%s address %s", iw, ourIP))
 	}
 	lines = append(lines,
 		fmt.Sprintf("%s private-key '%s'", iw, ourKeys.Private),

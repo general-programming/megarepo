@@ -95,6 +95,54 @@ func TestVyOSRejectsNonVPNRole(t *testing.T) {
 	}
 }
 
+// Regression: bird filters cannot call other filters, so a standalone
+// bird.import_filter combined with geographic site weighting silently lost
+// the host's own filter on every weighted peer (birdChannels' caller
+// unconditionally overrides the channel with the generated
+// genprog_import_<site> filter). Python's build_context fails fast on this
+// combination instead of emitting broken bird config; newRenderCtx must too.
+func TestImportFilterWithSiteWeightingFailsFast(t *testing.T) {
+	network := loadFleet(t)
+	host, ok := network.Host("sea21-hv-egg-irl")
+	if !ok {
+		t.Fatal("fixture host sea21-hv-egg-irl missing from network.yml")
+	}
+	// This host is exactly the documented case: site weighting (site: sea)
+	// with import_check_function instead of import_filter, per the comment
+	// in network.yml. Force the forbidden combination.
+	clone := *host
+	clone.Bird.ImportFilter = "imp_fil"
+
+	_, err := vendor.Render(&clone, network, fakeSecrets{})
+	if err == nil {
+		t.Fatal("expected an error combining bird.import_filter with site weighting")
+	}
+	if !strings.Contains(err.Error(), "bird.import_filter cannot be combined with site weighting") {
+		t.Fatalf("err = %v, want the import_filter/site-weighting message", err)
+	}
+}
+
+// The combination the fleet actually uses — import_check_function, not
+// import_filter, alongside site weighting — must keep rendering.
+func TestImportCheckFunctionWithSiteWeightingRenders(t *testing.T) {
+	network := loadFleet(t)
+	host, ok := network.Host("sea21-hv-egg-irl")
+	if !ok {
+		t.Fatal("fixture host sea21-hv-egg-irl missing from network.yml")
+	}
+	if host.Bird.ImportCheckFunction == "" {
+		t.Fatal("fixture host no longer sets import_check_function; test needs updating")
+	}
+
+	out, err := vendor.Render(host, network, fakeSecrets{})
+	if err != nil {
+		t.Fatalf("import_check_function + site weighting must render: %v", err)
+	}
+	if !strings.Contains(out, "genprog_import_") {
+		t.Errorf("weighted peer's generated import filter missing:\n%s", out)
+	}
+}
+
 // Implements only the frozen SecretSource: renders needing a Vault attribute
 // must fail rather than emit an empty key.
 type noVaultSecrets struct{}

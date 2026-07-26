@@ -18,7 +18,10 @@ func (Linux) Render(h *model.Host, n *model.Network, s SecretSource) (string, er
 		// Not a gap: Python has no linux template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
-	ctx := newRenderCtx(h, n, s)
+	ctx, err := newRenderCtx(h, n, s)
+	if err != nil {
+		return "", err
+	}
 
 	blocks := []func(*renderCtx) ([]string, error){
 		linuxHeader,
@@ -162,11 +165,15 @@ func linuxFabricWireGuard(c *renderCtx) ([]string, error) {
 				"        post-down ip link del $IFACE",
 			}
 		} else {
+			ourIP, err := link.GetIP(c.host.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
 			ifupdown = []string{
 				header,
 				"auto " + name,
 				fmt.Sprintf("iface %s inet static", name),
-				"        address " + link.GetIP(c.host.Hostname, false),
+				"        address " + ourIP,
 				"        netmask 255.255.255.254",
 				"        mtu 1420",
 				"        pre-up ip link add $IFACE type wireguard",
@@ -181,9 +188,9 @@ func linuxFabricWireGuard(c *renderCtx) ([]string, error) {
 }
 
 // linuxBirdRouterID is configs.routing.BirdBase._router_id.
-func linuxBirdRouterID(c *renderCtx) string {
+func linuxBirdRouterID(c *renderCtx) (string, error) {
 	if c.host.Bird.RouterID != "" {
-		return c.host.Bird.RouterID
+		return c.host.Bird.RouterID, nil
 	}
 	for _, link := range c.links {
 		if link.Unnumbered() {
@@ -191,12 +198,16 @@ func linuxBirdRouterID(c *renderCtx) string {
 		}
 		return link.GetIP(c.host.Hostname, false)
 	}
-	return "192.0.2.1"
+	return "192.0.2.1", nil
 }
 
 // linuxBirdBase is configs.routing.BirdBase: bird.conf plus 00-local.conf.
 func linuxBirdBase(c *renderCtx) ([]string, error) {
 	host := c.host
+	routerID, err := linuxBirdRouterID(c)
+	if err != nil {
+		return nil, err
+	}
 	content := []string{
 		fmt.Sprintf("# /etc/bird/bird.conf - barf-managed bird2 base for %s.", host.Hostname),
 		fmt.Sprintf("# DO NOT HAND-EDIT: `barf config deploy %s` overwrites it.", host.Hostname),
@@ -213,7 +224,7 @@ func linuxBirdBase(c *renderCtx) ([]string, error) {
 		"#   /etc/bird/conf.d/genprog.conf  -- the barf-managed fabric.",
 		"#   /etc/bird/conf.d/<anything else> -- yours; barf never touches it.",
 		"log syslog all;",
-		fmt.Sprintf("router id %s;", linuxBirdRouterID(c)),
+		fmt.Sprintf("router id %s;", routerID),
 		"",
 		"protocol device {",
 		"\tscan time 10;",
@@ -427,9 +438,17 @@ func linuxBirdFabric(c *renderCtx) ([]string, error) {
 				fmt.Sprintf("\tdynamic name \"%s_\";", pname),
 			)
 		} else {
+			ourIP, err := link.GetIP(c.host.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
+			peerIP, err := link.GetIP(peer.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
 			content = append(content,
-				fmt.Sprintf("\tsource address %s;", link.GetIP(c.host.Hostname, false)),
-				fmt.Sprintf("\tneighbor %s as %d;", link.GetIP(peer.Hostname, false), peer.ASN),
+				fmt.Sprintf("\tsource address %s;", ourIP),
+				fmt.Sprintf("\tneighbor %s as %d;", peerIP, peer.ASN),
 			)
 		}
 		if weighted {
