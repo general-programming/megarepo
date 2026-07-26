@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
 )
 
 // DiffOutcome is one device's rendered-vs-running diff; Err is a per-device
@@ -65,9 +65,7 @@ func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = stylePending
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(stylePending))
 
 	jobCtx, cancel := context.WithCancel(ctx)
 	m := &DiffModel{
@@ -77,7 +75,7 @@ func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 		outcomes:    make([]DiffOutcome, len(jobs)),
 		filled:      make([]bool, len(jobs)),
 		pending:     len(jobs),
-		vp:          viewport.New(80, 20),
+		vp:          viewport.New(viewport.WithWidth(80), viewport.WithHeight(20)),
 		spin:        sp,
 		concurrency: DefaultConcurrency,
 	}
@@ -142,12 +140,15 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		// Two lines of chrome: the header and the help line.
-		m.vp.Width = msg.Width
-		m.vp.Height = max(msg.Height-3, 3)
+		m.vp.SetWidth(msg.Width)
+		m.vp.SetHeight(max(msg.Height-3, 3))
 		m.ready = true
 		m.vp.SetContent(m.body())
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
+		// v2 made tea.KeyMsg an interface covering presses AND releases;
+		// matching it would fire the quit path twice on terminals that report
+		// releases. Only a press quits.
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
@@ -223,18 +224,27 @@ func (m *DiffModel) body() string {
 	return b.String()
 }
 
-// View renders the header, the viewport, and the key help.
-func (m *DiffModel) View() string {
+// View renders the header, the viewport, and the key help. In v2 the screen
+// modes are properties of the view rather than Program options, so the
+// altscreen and mouse reporting the scrollable viewport needs are declared
+// here instead of at tea.NewProgram.
+func (m *DiffModel) View() tea.View {
 	answered := len(m.outcomes) - m.pending
 	header := styleTitle.Render("barf diff") + styleDim.Render(
 		fmt.Sprintf("  %d/%d devices diffed  (read-only)", answered, len(m.outcomes)))
 
-	if !m.ready {
-		// No WindowSizeMsg yet: print unpaged so a short run shows something.
-		return header + "\n" + m.body()
+	content := header + "\n" + m.body()
+	if m.ready {
+		help := styleDim.Render("↑/↓ pgup/pgdn scroll · q quit")
+		content = header + "\n" + m.vp.View() + "\n" + help
 	}
-	help := styleDim.Render("↑/↓ pgup/pgdn scroll · q quit")
-	return header + "\n" + m.vp.View() + "\n" + help
+	// Otherwise: no WindowSizeMsg yet, so print unpaged; a short run still
+	// shows something.
+
+	v := tea.NewView(content)
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	return v
 }
 
 // Outcomes is the current per-device result set, valid after exit.
@@ -245,11 +255,8 @@ func RunDiff(ctx context.Context, jobs []DiffJob) ([]DiffOutcome, error) {
 	m := NewDiffModel(ctx, jobs)
 	// The program watches the PARENT ctx; the model's own ctx stops the jobs.
 	defer m.Cancel()
-	final, err := tea.NewProgram(m,
-		tea.WithContext(ctx),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	).Run()
+	// Altscreen and mouse motion are declared by DiffModel.View, not here.
+	final, err := tea.NewProgram(m, tea.WithContext(ctx)).Run()
 	if err != nil {
 		return m.Outcomes(), err
 	}

@@ -14,7 +14,7 @@ import (
 	"path/filepath"
 	"syscall"
 
-	charmlog "github.com/charmbracelet/log"
+	charmlog "charm.land/log/v2"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )

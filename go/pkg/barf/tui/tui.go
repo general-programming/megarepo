@@ -4,7 +4,7 @@
 // imports none of barf/cli, barf/device or barf/render.
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import "charm.land/lipgloss/v2"
 
 // DefaultConcurrency caps in-flight probes, and so goroutines: Bubble Tea runs
 // one per batched command. Matches the cli limit (Python max_workers=8).

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	ltable "github.com/charmbracelet/lipgloss/table"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	ltable "charm.land/lipgloss/v2/table"
 )
 
 // StatusColumns are the `barf status` headers in Python's order, less firmware.
@@ -83,9 +83,7 @@ func NewStatusModel(ctx context.Context, probes []StatusProbe) *StatusModel {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	sp := spinner.New()
-	sp.Spinner = spinner.Dot
-	sp.Style = stylePending
+	sp := spinner.New(spinner.WithSpinner(spinner.Dot), spinner.WithStyle(stylePending))
 
 	rows := make([]StatusRow, len(probes))
 	for i, p := range probes {
@@ -155,7 +153,10 @@ func (m *StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		return m, nil
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
+		// v2 made tea.KeyMsg an interface covering presses AND releases;
+		// matching it would fire the quit path twice on terminals that report
+		// releases. Only a press quits.
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.done = true
@@ -189,8 +190,10 @@ func (m *StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// View renders the table plus a one-line progress header.
-func (m *StatusModel) View() string {
+// View renders the table plus a one-line progress header. Status runs inline
+// (no altscreen), so the finished table is left on screen when the program
+// exits; the zero tea.View fields are exactly that.
+func (m *StatusModel) View() tea.View {
 	answered := len(m.rows) - m.pending
 	header := styleTitle.Render("barf status") + styleDim.Render(
 		fmt.Sprintf("  %d/%d devices reported", answered, len(m.rows)))
@@ -237,7 +240,7 @@ func (m *StatusModel) View() string {
 		b.WriteString(styleDim.Render("q to quit"))
 		b.WriteString("\n")
 	}
-	return b.String()
+	return tea.NewView(b.String())
 }
 
 // Rows is the current table contents, valid after the program exits.

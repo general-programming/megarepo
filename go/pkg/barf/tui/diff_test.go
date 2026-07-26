@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func diffJobs(names ...string) []DiffJob {
@@ -47,8 +47,8 @@ func TestDiffModelRendersOutcomes(t *testing.T) {
 	if !strings.Contains(body, "error: unreachable") {
 		t.Errorf("error missing:\n%s", body)
 	}
-	if !strings.Contains(m.View(), "2/2 devices diffed") {
-		t.Errorf("progress header missing:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "2/2 devices diffed") {
+		t.Errorf("progress header missing:\n%s", m.View().Content)
 	}
 	if m.Outcomes()[0].Summary != "+1" {
 		t.Errorf("outcome not recorded: %+v", m.Outcomes()[0])
@@ -72,7 +72,7 @@ func TestDiffModelStaysOpenUntilQuit(t *testing.T) {
 	if cmd != nil {
 		t.Error("diff viewer quit on its own")
 	}
-	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd = m.Update(keyPress("q"))
 	if cmd == nil {
 		t.Fatal("q did not quit")
 	}
@@ -102,10 +102,10 @@ func TestDiffModelResizes(t *testing.T) {
 	m := NewDiffModel(context.Background(), diffJobs("a"))
 	updated, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m = updated.(*DiffModel)
-	if m.vp.Width != 100 || m.vp.Height != 27 {
-		t.Errorf("viewport = %dx%d, want 100x27", m.vp.Width, m.vp.Height)
+	if m.vp.Width() != 100 || m.vp.Height() != 27 {
+		t.Errorf("viewport = %dx%d, want 100x27", m.vp.Width(), m.vp.Height())
 	}
-	if !strings.Contains(m.View(), "scroll") {
-		t.Errorf("help line missing:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "scroll") {
+		t.Errorf("help line missing:\n%s", m.View().Content)
 	}
 }

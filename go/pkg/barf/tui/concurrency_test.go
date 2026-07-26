@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Regression tests for fan-out sized by input length, and for q/ctrl+c
@@ -120,13 +120,9 @@ func TestStatusQuitCancelsTheProbes(t *testing.T) {
 			if m.ctx.Err() != nil {
 				t.Fatal("the probe context is cancelled before the model even starts")
 			}
-			m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-			if key == "esc" {
-				m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-			}
-			if key == "ctrl+c" {
-				m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
-			}
+			// One faithful key press per case: each of these must cancel
+			// on its own, so no key can coast on another having fired.
+			m.Update(keyPress(key))
 			if m.ctx.Err() == nil {
 				t.Fatalf("%q quit the UI without cancelling the probes", key)
 			}
@@ -208,7 +204,7 @@ func TestDiffQuitCancelsTheJobs(t *testing.T) {
 	if m.ctx.Err() != nil {
 		t.Fatal("the job context is cancelled before the model even starts")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlC})
+	m.Update(keyPress("ctrl+c"))
 	if m.ctx.Err() == nil {
 		t.Fatal("ctrl+c quit the viewer without cancelling the queued diffs; " +
 			"runDiff would print its summary while devices were still being contacted")
