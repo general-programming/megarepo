@@ -202,3 +202,25 @@ def test_eapi_slice_skipped_without_vrf(monkeypatch):
     commands = host.managed_commands(host.global_meta)
     assert "vrf internal" not in commands
     assert "management api http-commands" in commands
+
+
+def test_model_and_uptime_from_show_version(host, monkeypatch):
+    class VersionNode(FakeNode):
+        def enable(self, commands, encoding="json"):
+            self.enable_calls.append(list(commands))
+            return [
+                {
+                    "result": {
+                        "modelName": "DCS-7050QX-32S-R",
+                        "version": "4.28.13M",
+                        "uptime": 41708280.0,
+                    }
+                }
+            ]
+
+    node = VersionNode()
+    monkeypatch.setattr(EosHost, "_eapi_node", lambda self: node)
+
+    assert host.model() == "DCS-7050QX-32S-R"
+    assert host.human_version() == "4.28.13M"
+    assert host.uptime() == "482d 17h"

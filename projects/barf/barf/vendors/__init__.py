@@ -684,6 +684,15 @@ class BaseHost:
             f"{self.devicetype!r} devices do not report an uptime"
         )
 
+    def model(self) -> str:
+        """The device's hardware model, or ``"?"`` when unknown.
+
+        Physical vendors report their SKU; virtual ones report what the
+        hypervisor advertises over SMBIOS. Vendors that can report a
+        model override this.
+        """
+        return "?"
+
     def safe_to_reboot(self, fleet: List[BaseHost]) -> bool:
         """Whether rebooting this host leaves the fleet redundant.
 

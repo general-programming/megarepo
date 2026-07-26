@@ -265,3 +265,25 @@ class TestVyOSPushRenderedConfig:
             {"op": "set", "path": ["system", "host-name", "testbox"]},
         ]
         assert calls.saved is True
+
+
+def test_parse_model_prefixes_vendor_when_distinct():
+    from barf.vendors.vyos import _parse_model
+
+    output = (
+        "Version:          VyOS 2026.07.11-0033-rolling\n"
+        "Hardware vendor:  QEMU\n"
+        "Hardware model:   Standard PC (Q35 + ICH9, 2009)\n"
+    )
+    assert _parse_model(output) == "QEMU Standard PC (Q35 + ICH9, 2009)"
+
+
+def test_parse_model_avoids_duplicate_vendor_and_handles_missing():
+    from barf.vendors.vyos import _parse_model
+
+    assert (
+        _parse_model("Hardware vendor:  Supermicro\nHardware model:   Supermicro X11")
+        == "Supermicro X11"
+    )
+    assert _parse_model("Hardware vendor:  Dell Inc.\n") == "Dell Inc."
+    assert _parse_model("Version: VyOS 1.2\n") == "?"

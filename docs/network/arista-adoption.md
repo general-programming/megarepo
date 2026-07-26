@@ -70,6 +70,33 @@ management api http-commands
 end
 ```
 
+**Certificate gotcha (fmt2-cor-r hit this):** eAPI will not start without a
+valid server certificate, and "no profile bound" does NOT mean "use a
+self-signed default" — the API sits in `HTTPS server: starting` forever
+with `! No server certificate configured`. The stock `main` profile on
+fmt2-cor-r was invalid (`ssl_host.crt` expired in 2022). Mint a fresh
+self-signed cert and bind it:
+
+```text
+security pki key generate rsa 2048 eapi.key
+security pki certificate generate self-signed eapi.crt key eapi.key \
+   generate rsa 2048 validity 3650 parameters common-name <hostname>
+configure
+management security
+   ssl profile eapi
+      certificate eapi.crt key eapi.key
+!
+management api http-commands
+   protocol https ssl profile eapi
+end
+copy running-config startup-config
+```
+
+Both the profile validation and the HTTPS listener take ~10-30s to settle
+after each change — `show management api http-commands` may still say
+`starting` / `VRFs: None` immediately afterwards. Wait and re-check before
+concluding it failed.
+
 **VRF gotcha (this bit is what makes 443 answer on the internal side):**
 EOS serves eAPI only in the default VRF unless each VRF is enabled
 explicitly. fmt2-cor-r's internal addresses (10.65.67.1, 10.255.1.1) live

@@ -153,6 +153,10 @@ class EosHost(BaseHost):
     def human_version(self) -> str:
         return self._show_version()["version"]
 
+    def model(self) -> str:
+        version = self._show_version()
+        return version.get("modelName") or version.get("hardwareRevision") or "?"
+
     def uptime(self) -> str:
         seconds = self._show_version().get("uptime")
         if seconds is None:

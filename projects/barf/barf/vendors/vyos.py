@@ -29,6 +29,26 @@ def _parse_version(output: str) -> str:
     return output.strip().splitlines()[0].removeprefix("VyOS ")
 
 
+def _parse_model(output: str) -> str:
+    """Pull the SMBIOS hardware model out of ``show version`` output.
+
+    VyOS surfaces the DMI vendor/model the platform advertises, so
+    physical boxes report their SKU and VMs report what the hypervisor
+    claims (e.g. ``QEMU Standard PC (Q35 + ICH9, 2009)``).
+    """
+    vendor = model = ""
+    for line in output.splitlines():
+        line = line.strip()
+        if line.lower().startswith("hardware vendor:"):
+            vendor = line.split(":", 1)[1].strip()
+        elif line.lower().startswith("hardware model:"):
+            model = line.split(":", 1)[1].strip()
+
+    if vendor and model and not model.lower().startswith(vendor.lower()):
+        return f"{vendor} {model}"
+    return model or vendor or "?"
+
+
 def _parse_uptime(output: str) -> str:
     """Pull a human uptime out of ``show system uptime`` output."""
     for line in output.splitlines():
@@ -166,7 +186,16 @@ class VyOSHost(BaseHost):
         return vyos_api.parse_system_images(self._api_show(["system", "image"]))
 
     def human_version(self) -> str:
-        return _parse_version(self._api_show(["version"]))
+        return _parse_version(self._version_output())
+
+    def _version_output(self) -> str:
+        """``show version``, fetched once per host (version + model)."""
+        if getattr(self, "_version_cache", None) is None:
+            self._version_cache = self._api_show(["version"])
+        return self._version_cache
+
+    def model(self) -> str:
+        return _parse_model(self._version_output())
 
     def uptime(self) -> str:
         return _parse_uptime(self._api_show(["system", "uptime"]))

@@ -91,6 +91,7 @@ def device_status(filename: str) -> None:
                 "-",
                 "-",
                 "-",
+                "-",
                 "error: no reachable address",
             ]
 
@@ -99,11 +100,18 @@ def device_status(filename: str) -> None:
             uptime = host.uptime()
         except Exception as e:  # noqa: BLE001 - report the failure in the table
             log.debug("Failed to reach %s via %s: %s", host.hostname, address, e)
-            return [host.hostname, address, "-", "-", "-", "-", f"error: {e}"]
+            return [host.hostname, address, "-", "-", "-", "-", "-", f"error: {e}"]
+
+        try:
+            model = host.model()
+        except Exception as e:  # noqa: BLE001 - a missing model is not fatal
+            log.debug("No model for %s: %s", host.hostname, e)
+            model = "?"
 
         return [
             host.hostname,
             address,
+            model,
             uptime,
             version,
             firmware_cell(host, version),
@@ -120,6 +128,7 @@ def device_status(filename: str) -> None:
         [
             "DEVICE",
             "ENDPOINT",
+            "MODEL",
             "UPTIME",
             "VERSION",
             "LATEST FIRMWARE",
