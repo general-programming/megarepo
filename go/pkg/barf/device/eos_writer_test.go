@@ -305,6 +305,29 @@ func TestWriterSurfacesAuthFailure(t *testing.T) {
 	}
 }
 
+// The EOS writer shares the VyOS writer's problem and its fix: a commit
+// and a save each get their own budget instead of the read client's 10s.
+func TestEOSWriterGivesEachOperationItsOwnTimeout(t *testing.T) {
+	s := newEOSWriteServer(t)
+	opts, recorder := recordingOptions(writerOptions(t, s))
+	w, err := NewEOSWriter(testHost("h", "eos"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Configure(context.Background(), EOSOps([]string{"no shutdown"})); err != nil {
+		t.Fatal(err)
+	}
+	if got := recorder.budget(eosCommandPath); got != TimeoutConfigure {
+		t.Errorf("Configure budget = %v, want %v", got, TimeoutConfigure)
+	}
+	if err := w.SaveConfig(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := recorder.budget(eosCommandPath); got != TimeoutSave {
+		t.Errorf("SaveConfig budget = %v, want %v", got, TimeoutSave)
+	}
+}
+
 func TestEOSWriteCommandAllowed(t *testing.T) {
 	allowed := []string{
 		"username admin privilege 15 role network-admin secret sha512 $6$a$b",
@@ -315,7 +338,6 @@ func TestEOSWriteCommandAllowed(t *testing.T) {
 		"protocol https port 443",
 		"vrf internal",
 		"no shutdown",
-		"shutdown",
 	}
 	for _, cmd := range allowed {
 		if !eosWriteCommandAllowed(cmd) {
@@ -325,6 +347,61 @@ func TestEOSWriteCommandAllowed(t *testing.T) {
 	// `username admin` prefixed accounts must not smuggle others in.
 	if eosWriteCommandAllowed("username administrator privilege 15 secret x") {
 		t.Error("a different account matched the admin prefix")
+	}
+}
+
+// Regression: bare `shutdown` used to be allowlisted alongside
+// `no shutdown`. Inside `management api http-commands` it disables eAPI —
+// the transport barf itself speaks — so the write succeeds and then locks
+// barf out of the device. Nothing in the managed slice needs it.
+func TestEOSWriteCommandRefusesBareShutdown(t *testing.T) {
+	if eosWriteCommandAllowed("shutdown") {
+		t.Error("bare `shutdown` is allowed; it disables eAPI and locks barf out")
+	}
+	if !eosWriteCommandAllowed("no shutdown") {
+		t.Error("`no shutdown` must stay allowed: it is what enables eAPI")
+	}
+}
+
+// Regression: TrimSpace strips the ends of a command, not its interior,
+// and every allowlist arm is a prefix test — so a newline inside one
+// "command" smuggled a second, unreviewed line past the guard. eAPI runs
+// a multi-line string as multiple config lines. Reachable in practice via
+// a two-line authorized_keys blob pasted into one YAML value.
+func TestEOSWriteCommandRefusesEmbeddedSeparators(t *testing.T) {
+	smuggled := []string{
+		"username admin ssh-key ssh-ed25519 AAAA x\nno ip routing",
+		"enable password sha512 $6$x$y\nwrite erase",
+		"management api http-commands\nshutdown",
+		"username admin ssh-key ssh-ed25519 AAAA x\r\nno ip routing",
+		"vrf internal\rshutdown",
+		"no shutdown;write erase",
+		"protocol https port 443; reload",
+	}
+	for _, cmd := range smuggled {
+		if eosWriteCommandAllowed(cmd) {
+			t.Errorf("command with an embedded separator was allowed: %q", cmd)
+		}
+	}
+}
+
+// The guard must also stop the smuggled command at Configure, not merely
+// at the predicate — nothing may reach the wire.
+func TestEOSWriterConfigureRejectsEmbeddedNewline(t *testing.T) {
+	s := newEOSWriteServer(t)
+	w, err := NewEOSWriter(testHost("h", "eos"), writerOptions(t, s))
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = w.Configure(context.Background(), EOSOps([]string{
+		"username admin ssh-key ssh-ed25519 AAAA x\nno ip routing",
+	}))
+	var unmanaged *ErrUnmanagedCommand
+	if !errors.As(err, &unmanaged) {
+		t.Fatalf("err = %v, want ErrUnmanagedCommand", err)
+	}
+	if len(s.bodies) != 0 {
+		t.Error("a request reached the device despite the refusal")
 	}
 }
 

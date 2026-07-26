@@ -106,13 +106,26 @@ var (
 type firmwareProvider struct {
 	provider firmware.Provider
 
+	// once fetches the release tag exactly once; mu guards the result, so
+	// the ctx-less IsCurrent can read it without racing the fetch. once
+	// alone only orders callers that go through once.Do, and IsCurrent
+	// deliberately does not (it must never start a network fetch of its
+	// own — it has no context to bound one with).
 	once   sync.Once
+	mu     sync.RWMutex
 	latest string
 	err    error
 }
 
 func (f *firmwareProvider) LatestVersion(ctx context.Context) (string, error) {
-	f.once.Do(func() { f.latest, f.err = f.provider.LatestVersion(ctx) })
+	f.once.Do(func() {
+		latest, err := f.provider.LatestVersion(ctx)
+		f.mu.Lock()
+		f.latest, f.err = latest, err
+		f.mu.Unlock()
+	})
+	f.mu.RLock()
+	defer f.mu.RUnlock()
 	return f.latest, f.err
 }
 
@@ -121,10 +134,13 @@ func (f *firmwareProvider) LatestVersion(ctx context.Context) (string, error) {
 // resolved, "not current" is the safe answer: it makes the updater do
 // more work (and hit a real error later), never less.
 func (f *firmwareProvider) IsCurrent(version string) bool {
-	if f.latest == "" {
+	f.mu.RLock()
+	latest := f.latest
+	f.mu.RUnlock()
+	if latest == "" {
 		return false
 	}
-	return firmware.IsCurrent(f.latest, version)
+	return firmware.IsCurrent(latest, version)
 }
 
 func (f *firmwareProvider) Download(ctx context.Context) (string, int64, error) {

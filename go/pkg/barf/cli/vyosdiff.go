@@ -79,9 +79,17 @@ func parseVyOSRunning(running string) (vyosconfig.Set, error) {
 // the whole VyOS tree, so there is no "device-only" set to opt into —
 // removals are always shown because they are always real deletions.
 func (p *vyosPlan) configDiff(opts DiffOptions) ConfigDiff {
+	// Redaction is applied to the PATHS here (redactVyOSPath in
+	// configdiff.go) rather than being left to FormatDiff's own
+	// node-name test, which misses the fleet API key and the SNMP
+	// community. FormatDiff then only formats.
+	shown := p.diff
+	if !opts.ShowSecrets {
+		shown = redactVyOSDiff(p.diff)
+	}
 	d := ConfigDiff{
 		HasChanges: p.diff.HasChanges(),
-		Text:       vyosconfig.FormatDiff(p.diff, !opts.ShowSecrets),
+		Text:       vyosconfig.FormatDiff(shown, false),
 		Summary:    vyosconfig.SummarizeDiff(p.diff),
 	}
 	for _, path := range p.diff.Added {
@@ -121,7 +129,7 @@ func describeOps(ops []ConfigOp, opts DiffOptions) []string {
 	for _, op := range ops {
 		path := vyosconfig.Path(op.Path)
 		if !opts.ShowSecrets {
-			path = vyosconfig.RedactPath(path)
+			path = redactVyOSPath(path)
 		}
 		verb := op.Verb
 		if verb == "" {

@@ -148,6 +148,11 @@ func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) 
 		}
 	}
 
+	// A read's budget. Writes get their own, longer ones — see
+	// eos_writer.go's run.
+	ctx, cancel := r.opts.withOpTimeout(ctx, TimeoutShow)
+	defer cancel()
+
 	admin, enable, err := r.credentials()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", r.host.Hostname, err)

@@ -19,6 +19,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -188,6 +189,15 @@ func cacheKey(mount, path string) string { return mount + "/" + path }
 // ReadSecret returns the full data map at mount/path, caching the result
 // for the life of the process. An empty mount uses the client's default
 // mount.
+//
+// The returned map is a COPY. Handing out the cached map itself would
+// give every caller a reference to the same map: one caller mutating it
+// (adding a key, deleting one) is an unsynchronised map write racing all
+// the other readers, which Go turns into "fatal error: concurrent map
+// writes" — a crash no RWMutex here can prevent, because the mutation
+// happens outside this package entirely. cacheMint already copies on
+// write for the same reason. The copy is shallow: nested values are still
+// shared, but KV v2 secrets are flat string maps in this repo.
 func (c *Client) ReadSecret(ctx context.Context, mount, path string) (map[string]any, error) {
 	if mount == "" {
 		mount = c.defaultMount
@@ -203,7 +213,7 @@ func (c *Client) ReadSecret(ctx context.Context, mount, path string) (map[string
 	cached, ok := c.cache[key]
 	c.mu.RUnlock()
 	if ok {
-		return cached, nil
+		return maps.Clone(cached), nil
 	}
 
 	secret, err := c.api.KVv2(mount).Get(ctx, path)
@@ -226,7 +236,7 @@ func (c *Client) ReadSecret(ctx context.Context, mount, path string) (map[string
 	c.cache[key] = secret.Data
 	c.mu.Unlock()
 
-	return secret.Data, nil
+	return maps.Clone(secret.Data), nil
 }
 
 // Get returns a single string key from mount/path. An empty mount uses the

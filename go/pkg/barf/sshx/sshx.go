@@ -142,6 +142,13 @@ func (o Options) hostKeyCallback() ssh.HostKeyCallback {
 	return ssh.InsecureIgnoreHostKey() // #nosec G106 -- documented policy parity with the Python implementation
 }
 
+// DefaultCloseGrace bounds how long a cancelled or timed-out command
+// waits for its session to unwind politely before the socket underneath
+// it is torn down. See Client.exec: after the handshake the transport has
+// no deadline at all, so on a black-holed path nothing else would ever
+// make the reader return.
+const DefaultCloseGrace = 2 * time.Second
+
 // Client is one authenticated SSH connection to a device.
 type Client struct {
 	hostname string
@@ -149,9 +156,23 @@ type Client struct {
 	username string
 
 	client *ssh.Client
+	// conn is the socket the ssh client rides on. It is kept so a
+	// timed-out command can tear the transport down; closing only the
+	// session is not enough when the peer has stopped answering.
+	conn net.Conn
+
+	// closeGrace overrides DefaultCloseGrace (tests).
+	closeGrace time.Duration
 
 	closeOnce sync.Once
 	closeErr  error
+}
+
+func (c *Client) grace() time.Duration {
+	if c.closeGrace > 0 {
+		return c.closeGrace
+	}
+	return DefaultCloseGrace
 }
 
 // Hostname is the device's name (for messages).
@@ -165,8 +186,24 @@ func (c *Client) Username() string { return c.username }
 
 // Close closes the connection. Safe to call more than once.
 func (c *Client) Close() error {
-	c.closeOnce.Do(func() { c.closeErr = c.client.Close() })
+	c.closeOnce.Do(func() {
+		c.closeErr = c.client.Close()
+		if c.conn != nil {
+			_ = c.conn.Close()
+		}
+	})
 	return c.closeErr
+}
+
+// closeTransport drops the socket under the ssh client, which is the only
+// thing that unblocks a read from a peer that has stopped answering.
+// Deliberately separate from Close: it is a teardown, not a clean
+// shutdown, and it must be callable while a session is still open.
+func (c *Client) closeTransport() {
+	if c.conn != nil {
+		_ = c.conn.Close()
+	}
+	_ = c.client.Close()
 }
 
 // Dial connects to address as the right user for host.
@@ -201,7 +238,13 @@ func Dial(ctx context.Context, hostname, address string, opts Options) (*Client,
 	// attempt can get the transport dropped ("saw EOF") before password
 	// auth is ever tried -- and key-only fleets never need the password.
 	var attempts []([]ssh.AuthMethod)
-	if methods := keyAuthMethods(opts); len(methods) > 0 {
+	// keyAuthMethods may open a connection to the SSH agent. It stays open
+	// for the whole of Dial because the signers are pulled from it during
+	// each handshake, and is closed on every exit path -- Updater dials
+	// twice per host, and a leaked agent fd per dial exhausts the process.
+	methods, closers := keyAuthMethods(opts)
+	defer closeAll(closers)
+	if len(methods) > 0 {
 		attempts = append(attempts, methods)
 	}
 	if passwordAttempt {
@@ -215,9 +258,12 @@ func Dial(ctx context.Context, hostname, address string, opts Options) (*Client,
 	target := net.JoinHostPort(address, strconv.Itoa(opts.port()))
 	var failures []string
 	for _, methods := range attempts {
-		client, err := dialOnce(ctx, target, username, methods, opts)
+		client, conn, err := dialOnce(ctx, target, username, methods, opts)
 		if err == nil {
-			return &Client{hostname: hostname, address: address, username: username, client: client}, nil
+			return &Client{
+				hostname: hostname, address: address, username: username,
+				client: client, conn: conn,
+			}, nil
 		}
 		failures = append(failures, err.Error())
 	}
@@ -226,7 +272,7 @@ func Dial(ctx context.Context, hostname, address string, opts Options) (*Client,
 		username, address, strings.Join(failures, "; "))
 }
 
-func dialOnce(ctx context.Context, target, username string, methods []ssh.AuthMethod, opts Options) (*ssh.Client, error) {
+func dialOnce(ctx context.Context, target, username string, methods []ssh.AuthMethod, opts Options) (*ssh.Client, net.Conn, error) {
 	dial := opts.Dial
 	if dial == nil {
 		dial = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -237,7 +283,7 @@ func dialOnce(ctx context.Context, target, username string, methods []ssh.AuthMe
 
 	conn, err := dial(ctx, "tcp", target)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	config := &ssh.ClientConfig{
@@ -255,21 +301,29 @@ func dialOnce(ctx context.Context, target, username string, methods []ssh.AuthMe
 	sshConn, chans, reqs, err := ssh.NewClientConn(conn, target, config)
 	if err != nil {
 		_ = conn.Close()
-		return nil, err
+		return nil, nil, err
 	}
 	// Clear the handshake deadline; long-running scripts must not trip it.
+	// NOTE: from here nothing bounds a read on this socket, which is why a
+	// timed-out exec has to close the conn itself -- see Client.exec.
 	_ = conn.SetDeadline(time.Time{})
-	return ssh.NewClient(sshConn, chans, reqs), nil
+	return ssh.NewClient(sshConn, chans, reqs), conn, nil
 }
 
 // keyAuthMethods is Python's allow_agent=True, look_for_keys=True: the
 // agent when one is reachable, plus any readable default identity files.
-func keyAuthMethods(opts Options) []ssh.AuthMethod {
+//
+// The returned closers own the agent connection; the caller must close
+// them once every handshake that uses these methods has finished (the
+// signers are read from the agent lazily, during auth).
+func keyAuthMethods(opts Options) ([]ssh.AuthMethod, []io.Closer) {
 	var methods []ssh.AuthMethod
+	var closers []io.Closer
 
 	if opts.agentEnabled() {
 		if sock := os.Getenv("SSH_AUTH_SOCK"); sock != "" {
 			if conn, err := net.Dial("unix", sock); err == nil {
+				closers = append(closers, conn)
 				methods = append(methods, ssh.PublicKeysCallback(agent.NewClient(conn).Signers))
 			}
 		}
@@ -292,7 +346,13 @@ func keyAuthMethods(opts Options) []ssh.AuthMethod {
 	if len(signers) > 0 {
 		methods = append(methods, ssh.PublicKeys(signers...))
 	}
-	return methods
+	return methods, closers
+}
+
+func closeAll(closers []io.Closer) {
+	for _, c := range closers {
+		_ = c.Close()
+	}
 }
 
 func identityFiles(opts Options) []string {
@@ -362,53 +422,81 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	session, err := c.client.NewSession()
-	if err != nil {
-		return Result{ExitStatus: -1}, fmt.Errorf("%s: opening session: %w", c.hostname, err)
-	}
-
-	var stdout, stderr bytes.Buffer
-	var stdoutSink io.Writer = &stdout
+	// Opening the session must be bounded too. NewSession, RequestPty and
+	// the exec request all wait for the PEER to reply, so on a black-holed
+	// path every one of them blocks for as long as the socket stays "up" —
+	// which, after dialOnce clears the handshake deadline, is forever.
+	// Everything that talks to the device therefore happens on one
+	// goroutine that the select below can walk away from.
+	out := &capture{}
 	if opts.echo != nil {
-		stdoutSink = io.MultiWriter(&stdout, &lineEcho{w: opts.echo, prefix: opts.echoPrefix})
-	}
-	session.Stdout = stdoutSink
-	session.Stderr = &stderr
-	if opts.stdin != "" {
-		session.Stdin = strings.NewReader(opts.stdin)
+		out.echo = &lineEcho{w: opts.echo, prefix: opts.echoPrefix}
 	}
 
-	if opts.pty {
-		modes := ssh.TerminalModes{ssh.ECHO: 0}
-		if err := session.RequestPty("vt100", 24, 200, modes); err != nil {
-			_ = session.Close()
-			return Result{ExitStatus: -1}, fmt.Errorf("%s: requesting pty: %w", c.hostname, err)
-		}
-	}
-
+	// Buffered: the goroutine can always deliver and retire, even when
+	// nobody is left waiting for it.
 	done := make(chan error, 1)
-	go func() { done <- session.Run(command) }()
+	// sessions carries the session out so a timed-out exec can still close
+	// it once it materialises. Buffered for the same reason.
+	sessions := make(chan *ssh.Session, 1)
+
+	go func() {
+		session, err := c.client.NewSession()
+		if err != nil {
+			done <- fmt.Errorf("opening session: %w", err)
+			return
+		}
+		sessions <- session
+		defer func() { _ = session.Close() }()
+
+		session.Stdout = out.stdoutWriter()
+		session.Stderr = out.stderrWriter()
+		if opts.stdin != "" {
+			session.Stdin = strings.NewReader(opts.stdin)
+		}
+		if opts.pty {
+			modes := ssh.TerminalModes{ssh.ECHO: 0}
+			if err := session.RequestPty("vt100", 24, 200, modes); err != nil {
+				done <- fmt.Errorf("requesting pty: %w", err)
+				return
+			}
+		}
+		done <- session.Run(command)
+	}()
 
 	var runErr error
 	select {
 	case runErr = <-done:
 	case <-ctx.Done():
-		// Closing the session unblocks Run; take whatever it reports and
-		// surface the timeout instead.
-		_ = session.Close()
-		<-done
+		// A timeout must return within a bounded time. Closing the session
+		// is the polite move, but it only unblocks Run once the peer
+		// answers the channel close -- and the whole reason this path
+		// exists (installAndReboot / RunDetached drain the BGP sessions the
+		// SSH connection rides) is that the peer has stopped answering. The
+		// handshake deadline was cleared in dialOnce, so nothing else
+		// bounds the transport: after a grace period, drop the socket. That
+		// makes the read fail, Run return, and the goroutine retire.
+		closeSession(sessions)
+		if !waitFor(done, c.grace()) {
+			c.closeTransport()
+			_ = waitFor(done, c.grace())
+		}
+		// Stop accepting output before reading it: the session goroutine
+		// may still be unwinding, and neither the buffers nor the caller's
+		// echo writer may be touched after this returns.
+		stdout, stderr := out.release()
 		return Result{
 			ExitStatus: -1,
-			Stdout:     stdout.String(),
-			Stderr:     stderr.String(),
-			Output:     combined(stdout.String(), stderr.String(), opts.pty),
+			Stdout:     stdout,
+			Stderr:     stderr,
+			Output:     combined(stdout, stderr, opts.pty),
 		}, fmt.Errorf("%s: command timed out after %s: %s", c.hostname, timeout, command)
 	}
-	_ = session.Close()
 
+	stdoutText, stderrText := out.release()
 	result := Result{
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
+		Stdout: stdoutText,
+		Stderr: stderrText,
 	}
 	result.Output = combined(result.Stdout, result.Stderr, opts.pty)
 
@@ -425,6 +513,80 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 		return result, fmt.Errorf("%s: running %q: %w", c.hostname, command, runErr)
 	}
 	return result, nil
+}
+
+// closeSession closes the session if it has been opened yet. The polite
+// first move on a timeout: it unblocks Run whenever the peer is still
+// answering, which is the common case (a slow command, a Ctrl-C).
+func closeSession(sessions <-chan *ssh.Session) {
+	select {
+	case session := <-sessions:
+		_ = session.Close()
+	default:
+	}
+}
+
+// waitFor reports whether done fired within d.
+func waitFor(done <-chan error, d time.Duration) bool {
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-done:
+		return true
+	case <-timer.C:
+		return false
+	}
+}
+
+// capture collects one session's output.
+//
+// Writes arrive on the session goroutine, which can outlive a timed-out
+// exec (the transport is torn down asynchronously and the peer may take a
+// moment to notice). So every write and every read is guarded, and once
+// release has been called writes are dropped rather than racing the
+// caller -- including writes to the caller's echo writer, which must not
+// receive anything after exec has returned.
+type capture struct {
+	mu       sync.Mutex
+	stdout   bytes.Buffer
+	stderr   bytes.Buffer
+	echo     *lineEcho
+	released bool
+}
+
+func (c *capture) stdoutWriter() io.Writer { return captureWriter{c: c} }
+func (c *capture) stderrWriter() io.Writer { return captureWriter{c: c, stderr: true} }
+
+// release returns the output collected so far and stops accepting more.
+func (c *capture) release() (string, string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.released = true
+	return c.stdout.String(), c.stderr.String()
+}
+
+type captureWriter struct {
+	c      *capture
+	stderr bool
+}
+
+func (w captureWriter) Write(p []byte) (int, error) {
+	c := w.c
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.released {
+		// Discard, but report success: erroring here would only make the
+		// already-abandoned session log a confusing write failure.
+		return len(p), nil
+	}
+	if w.stderr {
+		return c.stderr.Write(p)
+	}
+	n, err := c.stdout.Write(p)
+	if c.echo != nil {
+		_, _ = c.echo.Write(p)
+	}
+	return n, err
 }
 
 // combined is what marker checks run against. Under a pty the device has

@@ -132,14 +132,41 @@ func (v *VyOS) cacheDir() string {
 	return CacheDir()
 }
 
-// fetchRelease returns the latest release metadata, fetched once.
+// fetchRelease returns the latest release metadata, fetched once on
+// success.
+//
+// The HTTP round trip deliberately happens OUTSIDE the mutex. firmware.For
+// hands out a package-level shared provider, so holding the lock across a
+// 30s request makes every other caller — including one whose context is
+// already cancelled — block on the first caller's network call. Two
+// concurrent cold callers may each do a request; that is a wasted GET,
+// which is much cheaper than an unbounded, uncancellable wait. Only a
+// successful fetch is cached, and the first one to land wins so every
+// caller sees the same release.
 func (v *VyOS) fetchRelease(ctx context.Context) (*githubRelease, error) {
 	v.mu.Lock()
-	defer v.mu.Unlock()
-	if v.release != nil {
-		return v.release, nil
+	cached := v.release
+	v.mu.Unlock()
+	if cached != nil {
+		return cached, nil
 	}
 
+	rel, err := v.getRelease(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	if v.release == nil {
+		v.release = rel
+	}
+	return v.release, nil
+}
+
+// getRelease does the actual request. It holds no lock and caches
+// nothing.
+func (v *VyOS) getRelease(ctx context.Context) (*githubRelease, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, v.releaseURL(), nil)
 	if err != nil {
 		return nil, err
@@ -163,9 +190,7 @@ func (v *VyOS) fetchRelease(ctx context.Context) (*githubRelease, error) {
 	if rel.TagName == "" {
 		return nil, fmt.Errorf("firmware: vyos release feed has no tag_name")
 	}
-
-	v.release = &rel
-	return v.release, nil
+	return &rel, nil
 }
 
 // LatestVersion implements Provider.
@@ -252,11 +277,20 @@ func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 		return "", fmt.Errorf("firmware: downloading %s: %s", a.Name, resp.Status)
 	}
 
-	partial := target + ".partial"
-	f, err := os.Create(partial)
+	// The scratch file MUST be unique. A deterministic "<name>.partial"
+	// under a shared cache dir means two concurrent barf processes both
+	// create and truncate the same inode and then io.Copy into it at
+	// independent offsets. Each writes Size bytes, so the length guard
+	// below passes for both, and the rename promotes an interleaved,
+	// corrupt ISO — which is then mirrored and installed on a router.
+	f, err := os.CreateTemp(dir, a.Name+".*.partial")
 	if err != nil {
-		return "", fmt.Errorf("firmware: creating %s: %w", partial, err)
+		return "", fmt.Errorf("firmware: creating a scratch file in %s: %w", dir, err)
 	}
+	partial := f.Name()
+	// CreateTemp makes the file 0600; the cache is readable like any other
+	// downloaded artifact (and may be served by the mirror).
+	_ = f.Chmod(0o644)
 	written, copyErr := io.Copy(f, resp.Body)
 	closeErr := f.Close()
 	if copyErr != nil {
@@ -271,7 +305,11 @@ func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 		_ = os.Remove(partial)
 		return "", fmt.Errorf("firmware: short download for %s: got %d bytes, want %d", a.Name, written, a.Size)
 	}
+	// Rename is atomic within the directory, so a concurrent downloader
+	// either sees the old file or a complete new one, never a half-written
+	// mix. Two racing downloads both promote a complete, correct file.
 	if err := os.Rename(partial, target); err != nil {
+		_ = os.Remove(partial)
 		return "", fmt.Errorf("firmware: finalising %s: %w", target, err)
 	}
 	return target, nil

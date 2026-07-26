@@ -128,7 +128,7 @@ var IgnoredPaths = []Path{{"interfaces", "ethernet", "*", "hw-id"}}
 // templates' inconsistent quoting normalizes to the same path.
 func ParseSetCommands(text string) Set {
 	paths := Set{}
-	for _, raw := range strings.Split(text, "\n") {
+	for _, raw := range splitLines(text) {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

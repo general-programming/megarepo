@@ -8,7 +8,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 // Every test here talks to an httptest server. NOTHING in this file may
@@ -299,6 +301,142 @@ func TestVyOSWriterSurfacesAPIErrors(t *testing.T) {
 	err := writer.Configure(context.Background(), []Op{{Verb: OpSet, Path: []string{"a", "b"}}})
 	if err == nil || !strings.Contains(err.Error(), "commit failed") {
 		t.Fatalf("err = %v, want the API error surfaced", err)
+	}
+}
+
+// deadlineRecorder observes the budget each outgoing request carries on
+// its context. It is a client-side probe on purpose: an HTTP server
+// context does not inherit the client's deadline, so the assertion has
+// to be made before the request leaves.
+type deadlineRecorder struct {
+	base http.RoundTripper
+	mu   sync.Mutex
+	seen map[string]time.Duration
+}
+
+func newDeadlineRecorder(base http.RoundTripper) *deadlineRecorder {
+	return &deadlineRecorder{base: base, seen: map[string]time.Duration{}}
+}
+
+func (d *deadlineRecorder) RoundTrip(req *http.Request) (*http.Response, error) {
+	var budget time.Duration
+	if deadline, ok := req.Context().Deadline(); ok {
+		budget = time.Until(deadline).Round(time.Second)
+	}
+	d.mu.Lock()
+	d.seen[req.URL.Path] = budget
+	d.mu.Unlock()
+	return d.base.RoundTrip(req)
+}
+
+func (d *deadlineRecorder) budget(path string) time.Duration {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return d.seen[path]
+}
+
+// recordingOptions returns opts with its client wrapped so every request's
+// context budget is captured.
+func recordingOptions(opts Options) (Options, *deadlineRecorder) {
+	recorder := newDeadlineRecorder(opts.HTTPClient.Transport)
+	client := *opts.HTTPClient
+	client.Transport = recorder
+	opts.HTTPClient = &client
+	return opts, recorder
+}
+
+// Regression: the writer used one client-wide http.Client.Timeout of 10s
+// for everything. Python gives /configure 120s and /config-file 60s
+// (vyos_api.py), and a real commit on a busy router regularly takes
+// longer than 10s — so barf aborted the request, reported a failed
+// deploy, and skipped SaveConfig, leaving the device running config that
+// would not survive a reboot. The commit itself had already landed.
+func TestVyOSWriterGivesEachOperationItsOwnTimeout(t *testing.T) {
+	server := newVyOSWriteServer(t)
+	opts, recorder := recordingOptions(writeOptions(t, server))
+	opts.Timeout = 0 // the default: per-operation budgets apply
+
+	writer, err := NewVyOSWriter(testHost("spine", "vyos"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.Configure(context.Background(), []Op{{Verb: OpSet, Path: []string{"a", "b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if err := writer.SaveConfig(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := recorder.budget("/configure"); got != TimeoutConfigure {
+		t.Errorf("/configure budget = %v, want %v (Python: vyos_api_configure=120s)", got, TimeoutConfigure)
+	}
+	if got := recorder.budget("/config-file"); got != TimeoutSave {
+		t.Errorf("/config-file budget = %v, want %v (Python: vyos_api_config_save=60s)", got, TimeoutSave)
+	}
+}
+
+// Reads keep the read budgets (10s show, 30s retrieve), and an explicit
+// Options.Timeout still overrides every operation — the escape hatch must
+// not have been lost along the way.
+func TestVyOSReaderTimeoutsAndOverride(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/retrieve" {
+			io.WriteString(w, `{"success":true,"data":{"system":{}},"error":null}`)
+			return
+		}
+		io.WriteString(w, `{"success":true,"data":"VyOS 1.4.2","error":null}`)
+	}))
+	defer server.Close()
+
+	opts, recorder := recordingOptions(testOptions(t, server))
+	reader, err := NewVyOS(testHost("spine", "vyos"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.RetrieveConfig(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := reader.Show(context.Background(), "version"); err != nil {
+		t.Fatal(err)
+	}
+	if got := recorder.budget("/retrieve"); got != TimeoutRetrieve {
+		t.Errorf("/retrieve budget = %v, want %v (Python: 30s)", got, TimeoutRetrieve)
+	}
+	if got := recorder.budget("/show"); got != TimeoutShow {
+		t.Errorf("/show budget = %v, want %v (Python: 10s)", got, TimeoutShow)
+	}
+
+	pinnedOpts, pinnedRecorder := recordingOptions(testOptions(t, server))
+	pinnedOpts.Timeout = 5 * time.Second
+	pinned, err := NewVyOS(testHost("spine", "vyos"), pinnedOpts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pinned.RetrieveConfig(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got := pinnedRecorder.budget("/retrieve"); got != 5*time.Second {
+		t.Errorf("Options.Timeout override = %v, want 5s", got)
+	}
+}
+
+// A caller's own, shorter deadline must still win: an operation budget
+// may only bound a request, never extend one.
+func TestOperationTimeoutNeverExtendsCallerDeadline(t *testing.T) {
+	server := newVyOSWriteServer(t)
+	opts, recorder := recordingOptions(writeOptions(t, server))
+	writer, err := NewVyOSWriter(testHost("spine", "vyos"), opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	if err := writer.Configure(ctx, []Op{{Verb: OpSet, Path: []string{"a", "b"}}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := recorder.budget("/configure"); got != 3*time.Second {
+		t.Errorf("budget = %v, want the caller's 3s, not the 120s commit budget", got)
 	}
 }
 

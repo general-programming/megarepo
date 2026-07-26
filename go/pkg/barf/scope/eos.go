@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/GehirnInc/crypt/sha512_crypt"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
@@ -115,7 +117,7 @@ func ParseEOSManagedState(text, eapiVRF string) EOSManagedState {
 	state := EOSManagedState{}
 	parseEOSAPISection(text, eapiVRF, &state)
 
-	for _, raw := range strings.Split(text, "\n") {
+	for _, raw := range splitLines(text) {
 		line := strings.TrimSpace(raw)
 		if m := eosSSHKeySecondaryRe.FindStringSubmatch(line); m != nil {
 			state.SSHKeySecondary = strings.TrimSpace(m[1])
@@ -150,14 +152,14 @@ func parseEOSAPISection(text, eapiVRF string, state *EOSManagedState) {
 	inBlock := false
 	currentVRF := ""
 
-	for _, raw := range strings.Split(text, "\n") {
+	for _, raw := range splitLines(text) {
 		stripped := strings.TrimSpace(raw)
 		if strings.HasPrefix(stripped, "management api http-commands") {
 			inBlock = true
 			currentVRF = ""
 			continue
 		}
-		if inBlock && raw != "" && !isSpace(raw[0]) {
+		if inBlock && raw != "" && !startsIndented(raw) {
 			// An un-indented line: the section ended.
 			inBlock = false
 			currentVRF = ""
@@ -193,7 +195,26 @@ func parseEOSAPISection(text, eapiVRF string, state *EOSManagedState) {
 	}
 }
 
-func isSpace(b byte) bool { return b == ' ' || b == '\t' || b == '\r' }
+// startsIndented reports whether line begins with a whitespace
+// character, i.e. whether it is still inside the open config block.
+//
+// The Python port asks `line[0].isspace()`, which is a Unicode question,
+// and this used to be a three-byte comparison (' ', '\t', '\r'). Any
+// other whitespace indent — a form feed, a non-breaking space, anything
+// pasted in from a document — read as "un-indented", closed the
+// `management api http-commands` block early, and made barf report the
+// eAPI block absent on a device where it is present: spurious drift, and
+// a deploy that rewrites config that was already correct.
+//
+// unicode.IsSpace is Python's set except for the C0 file/group/record/
+// unit separators, which Py_UNICODE_ISSPACE counts and Go does not.
+func startsIndented(line string) bool {
+	if line == "" {
+		return false
+	}
+	r, _ := utf8.DecodeRuneInString(line)
+	return unicode.IsSpace(r) || (r >= 0x1c && r <= 0x1f)
+}
 
 func boolPtr(v bool) *bool { return &v }
 

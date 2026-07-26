@@ -390,3 +390,186 @@ func equal(a, b []string) bool {
 	}
 	return true
 }
+
+// TestYAML11BooleanSpellings pins PyYAML's YAML 1.1 boolean resolution
+// plus Python truthiness, which is what BaseHost.from_meta gets: every
+// bool-ish field is `meta.get(field, default)` fed straight into an
+// `if`, never bool()-cast.
+//
+// Before this was implemented Go used strconv.ParseBool, which rejects
+// `yes`/`on`/`off` (silently false) and parses the quoted string "no"
+// as false where Python sees a truthy non-empty string. Both are silent
+// wrong-config with exit 0, so each case below failed then.
+func TestYAML11BooleanSpellings(t *testing.T) {
+	cases := []struct {
+		spelling string
+		want     bool
+	}{
+		{"yes", true},
+		{"Yes", true},
+		{"YES", true},
+		{"on", true},
+		{"On", true},
+		{"true", true},
+		{"True", true},
+		{"1", true},
+		// PyYAML does NOT resolve bare y/n as booleans; they stay
+		// strings, and a non-empty string is truthy in Python.
+		{"y", true},
+		{"n", true},
+		{`"no"`, true},
+		{`'off'`, true},
+		{`"false"`, true},
+		{`""`, false},
+		{"no", false},
+		{"No", false},
+		{"off", false},
+		{"OFF", false},
+		{"false", false},
+		{"FALSE", false},
+		{"0", false},
+		{"null", false},
+		{"~", false},
+		{"", false},
+	}
+
+	for _, tc := range cases {
+		t.Run("management_"+tc.spelling, func(t *testing.T) {
+			network, err := model.Load(writeYAML(t, minimalGlobal+`hosts:
+  a:
+    type: vyos
+    role: vpn
+    interfaces:
+      - name: eth0
+        management: `+tc.spelling+"\n"))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			host, _ := network.Host("a")
+			if got := host.Interfaces[0].Management; got != tc.want {
+				t.Errorf("management: %s -> %v, want %v", tc.spelling, got, tc.want)
+			}
+		})
+	}
+
+	// `enabled` is the one field whose Python default is True, so it is
+	// worth pinning that an explicit falsey spelling still turns it off
+	// and that a quoted "no" leaves it on.
+	for _, tc := range []struct {
+		spelling string
+		want     bool
+	}{{"off", false}, {"no", false}, {`"no"`, true}, {"yes", true}} {
+		t.Run("enabled_"+tc.spelling, func(t *testing.T) {
+			network, err := model.Load(writeYAML(t, minimalGlobal+`hosts:
+  a:
+    type: vyos
+    role: vpn
+    interfaces:
+      - name: eth0
+        enabled: `+tc.spelling+"\n"))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			host, _ := network.Host("a")
+			if got := host.Interfaces[0].Enabled; got != tc.want {
+				t.Errorf("enabled: %s -> %v, want %v", tc.spelling, got, tc.want)
+			}
+		})
+	}
+
+	// cloud_init sits on the host, not the interface.
+	for _, tc := range []struct {
+		spelling string
+		want     bool
+	}{{"yes", true}, {"on", true}, {`"no"`, true}, {"no", false}, {"false", false}} {
+		t.Run("cloud_init_"+tc.spelling, func(t *testing.T) {
+			network, err := model.Load(writeYAML(t, minimalGlobal+`hosts:
+  a:
+    type: vyos
+    role: vpn
+    cloud_init: `+tc.spelling+"\n"))
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			host, _ := network.Host("a")
+			if got := host.CloudInit; got != tc.want {
+				t.Errorf("cloud_init: %s -> %v, want %v", tc.spelling, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestSequenceMergeEarlierAliasWins pins the YAML spec / PyYAML rule for
+// `<<: [*a, *b]`: the EARLIER alias wins. Go previously let the later
+// one win, which would have rendered a different fabric with no error.
+func TestSequenceMergeEarlierAliasWins(t *testing.T) {
+	network, err := model.Load(writeYAML(t, minimalGlobal+`
+first: &first
+  type: vyos
+  role: vpn
+  site: sea
+  location: from-first
+
+second: &second
+  type: linux
+  role: core
+  site: fmt2
+  location: from-second
+  eapi_vrf: from-second
+
+hosts:
+  a:
+    <<: [*first, *second]
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	host, ok := network.Host("a")
+	if !ok {
+		t.Fatal("host a missing")
+	}
+	if host.DeviceType != "vyos" {
+		t.Errorf("type = %q, want vyos (earlier alias wins)", host.DeviceType)
+	}
+	if host.Role != "vpn" {
+		t.Errorf("role = %q, want vpn", host.Role)
+	}
+	if host.Site != "sea" {
+		t.Errorf("site = %q, want sea", host.Site)
+	}
+	if host.SNMPLocation != "from-first" {
+		t.Errorf("location = %q, want from-first", host.SNMPLocation)
+	}
+	// A key only the later alias has is still merged in.
+	if host.EAPIVRF != "from-second" {
+		t.Errorf("eapi_vrf = %q, want from-second", host.EAPIVRF)
+	}
+}
+
+// TestExplicitKeyBeatsSequenceMerge keeps the other half of the rule:
+// an explicit key on the mapping still overrides everything merged.
+func TestExplicitKeyBeatsSequenceMerge(t *testing.T) {
+	network, err := model.Load(writeYAML(t, minimalGlobal+`
+first: &first
+  type: vyos
+  role: vpn
+  location: from-first
+
+second: &second
+  type: linux
+  role: core
+  location: from-second
+
+hosts:
+  a:
+    <<: [*first, *second]
+    location: from-host
+`))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	host, _ := network.Host("a")
+	if host.SNMPLocation != "from-host" {
+		t.Errorf("location = %q, want from-host", host.SNMPLocation)
+	}
+}

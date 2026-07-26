@@ -11,6 +11,13 @@ package tui
 
 import "github.com/charmbracelet/lipgloss"
 
+// DefaultConcurrency is how many probes/jobs a model keeps in flight,
+// and therefore how many goroutines it creates: Bubble Tea runs one
+// goroutine per batched command, so a model that fired every device's
+// work up front would size its goroutine count by the fleet. It matches
+// the cli package's own probe limit (Python's max_workers=8).
+const DefaultConcurrency = 8
+
 // RowState is how a probed device is doing, and picks the row colour.
 type RowState int
 

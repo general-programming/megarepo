@@ -69,17 +69,35 @@ func runGenerate(_ context.Context, o *Options, targets []string, outputDir stri
 	return nil
 }
 
+// Rendered configs contain live credentials — the admin password, the
+// fleet VyOS API key, WireGuard private keys, IPsec PSKs. The output
+// tree is therefore owner-only: 0700 directories, 0600 files. `output/`
+// is only gitignored under projects/barf, and `barf generate` run from
+// the repo root or go/ writes somewhere `git add -A` would happily
+// stage, so the mode is the part that has to be right here.
+const (
+	renderDirMode  os.FileMode = 0o700
+	renderFileMode os.FileMode = 0o600
+)
+
 // writeRenderedConfig writes a rendered config and its cloud-init twin
 // under outputDir, returning the path of the main config file. Ported
 // from barf/util/render.py write_rendered_config.
 func writeRenderedConfig(h *model.Host, rendered, outputDir string) (string, error) {
 	roleDir := filepath.Join(outputDir, h.Role)
-	if err := os.MkdirAll(filepath.Join(roleDir, "cloud_init"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(roleDir, "cloud_init"), renderDirMode); err != nil {
 		return "", err
+	}
+	// MkdirAll leaves a pre-existing directory's mode alone, and umask
+	// can only ever clear bits, so tighten explicitly.
+	for _, dir := range []string{outputDir, roleDir, filepath.Join(roleDir, "cloud_init")} {
+		if err := os.Chmod(dir, renderDirMode); err != nil {
+			return "", err
+		}
 	}
 
 	configPath := filepath.Join(roleDir, h.Hostname)
-	if err := os.WriteFile(configPath, []byte(rendered), 0o644); err != nil {
+	if err := writeSecretFile(configPath, []byte(rendered)); err != nil {
 		return "", err
 	}
 
@@ -94,8 +112,18 @@ func writeRenderedConfig(h *model.Host, rendered, outputDir string) (string, err
 		return "", err
 	}
 	cloudInit := append([]byte("#cloud-config\n"), body...)
-	if err := os.WriteFile(filepath.Join(roleDir, "cloud_init", h.Hostname), cloudInit, 0o644); err != nil {
+	if err := writeSecretFile(filepath.Join(roleDir, "cloud_init", h.Hostname), cloudInit); err != nil {
 		return "", err
 	}
 	return configPath, nil
+}
+
+// writeSecretFile writes credential-bearing output owner-only, chmod'ing
+// even when the file already exists (os.WriteFile keeps the old mode) and
+// regardless of umask.
+func writeSecretFile(path string, body []byte) error {
+	if err := os.WriteFile(path, body, renderFileMode); err != nil {
+		return err
+	}
+	return os.Chmod(path, renderFileMode)
 }

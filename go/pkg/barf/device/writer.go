@@ -34,6 +34,7 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
@@ -86,6 +87,18 @@ func vyosWriteRequestAllowed(endpoint, op string) bool {
 
 func vyosWriteOpAllowed(op string) bool {
 	return op == OpSet || op == OpDelete
+}
+
+// vyosWriteTimeout is the per-endpoint budget for a write, matching the
+// Python defaults (vyos_api_configure=120s, vyos_api_config_save=60s).
+// A commit is emphatically not a read: bounding it with the 10s read
+// budget aborted the HTTP request while the router went on to apply the
+// config, so the deploy reported failure and skipped the save.
+func vyosWriteTimeout(endpoint string) time.Duration {
+	if endpoint == "configure" {
+		return TimeoutConfigure
+	}
+	return TimeoutSave
 }
 
 // VyOSWriter applies configuration to a VyOS device over its HTTPS API.
@@ -148,6 +161,9 @@ func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload a
 	if !vyosWriteRequestAllowed(endpoint, op) {
 		return "", &ErrWriteAttempt{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
 	}
+
+	ctx, cancel := w.opts.withOpTimeout(ctx, vyosWriteTimeout(endpoint))
+	defer cancel()
 
 	key, err := w.apiKey()
 	if err != nil {

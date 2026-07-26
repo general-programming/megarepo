@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/general-programming/megarepo/go/client/netbox"
 	"github.com/general-programming/megarepo/go/client/vault"
@@ -91,21 +93,43 @@ func reverseARPA(ipv4 string) string {
 	return strings.Join(octets, ".") + ".in-addr.arpa"
 }
 
+// warnSkip reports a NetBox row barf declined to render. An empty
+// hostname is spelled out rather than printed blank, because a blank
+// field in a log line reads as a logging bug rather than as the NetBox
+// data problem it is.
+func warnSkip(warn func(hostname, reason string), hostname, reason string) {
+	if warn == nil {
+		return
+	}
+	if hostname == "" {
+		hostname = "<unnamed>"
+	}
+	warn(hostname, reason)
+}
+
 // dnsLines renders the dnsmasq address= / ptr-record= lines for every
 // host. Hosts with no primary address are reported through warn and
 // skipped, as refresh_dns.py does on stderr.
-func dnsLines(hosts []netbox.Host, domain string, warn func(hostname string)) []string {
+func dnsLines(hosts []netbox.Host, domain string, warn func(hostname, reason string)) []string {
 	var out []string
 	for _, host := range hosts {
+		// NetBox permits an unnamed device, and its `name` comes back
+		// null. Python blows up on `is_non_static(None)` and the
+		// last-good include survives; Go decoded it to "" and emitted
+		// `address=/.generalprogramming.org/10.0.0.5`, a malformed
+		// record with exit 0. Skip and say so instead: one bad NetBox
+		// row must not cost the other few hundred good ones.
+		if strings.TrimSpace(host.Name) == "" {
+			warnSkip(warn, "", "device has no name in NetBox")
+			continue
+		}
 		if isNonStaticHost(host.Name) {
 			continue
 		}
 
 		ipv4, ipv6 := host.IPv4(), host.IPv6()
 		if ipv4 == "" && ipv6 == "" {
-			if warn != nil {
-				warn(host.Name)
-			}
+			warnSkip(warn, host.Name, "no primary ip")
 			continue
 		}
 
@@ -186,7 +210,7 @@ func (r reservation) DnsmasqLine() string {
 // per MAC — dnsmasq and Kea both reject duplicates — keeping the first
 // interface that carries a usable address. An interface with a MAC but
 // no addresses does not consume the MAC.
-func reservations(interfaces []netbox.Interface) []reservation {
+func reservations(interfaces []netbox.Interface, warn func(hostname, reason string)) []reservation {
 	seen := map[string]bool{}
 	var out []reservation
 
@@ -196,7 +220,7 @@ func reservations(interfaces []netbox.Interface) []reservation {
 			continue
 		}
 		owner := iface.OwnerRef()
-		if owner == nil || owner.Name == "" {
+		if owner == nil || strings.TrimSpace(owner.Name) == "" {
 			continue
 		}
 		if seen[strings.ToLower(mac)] {
@@ -221,10 +245,21 @@ func reservations(interfaces []netbox.Interface) []reservation {
 		if ipv4 == "" && ipv6 == "" {
 			continue
 		}
-		seen[strings.ToLower(mac)] = true
-
 		primaryIP := owner.PrimaryIP4.IP()
 		isPrimary := primaryIP != "" && ipv4 == primaryIP
+		// A secondary interface's name is part of the reservation
+		// hostname, and NetBox allows it to be null. Python raises on
+		// `clean_hostname(None)`; Go turned it into a trailing "-" and
+		// wrote a silently wrong reservation. The primary interface
+		// never uses the name, so only this case has to skip — and it
+		// skips before claiming the MAC, like the no-address case, so a
+		// sibling interface on the same MAC can still be rendered.
+		if !isPrimary && strings.TrimSpace(iface.Name) == "" {
+			warnSkip(warn, owner.Name, "secondary interface has no name in NetBox")
+			continue
+		}
+		seen[strings.ToLower(mac)] = true
+
 		out = append(out, reservation{
 			MAC:      mac,
 			Hostname: dhcpHostname(owner.Name, iface.Name, isPrimary),
@@ -315,14 +350,87 @@ func (o *Options) writeOut(path, text string) error {
 	return os.WriteFile(path, []byte(text), 0o644)
 }
 
+// pythonJSON marshals value the way Python's json module does, so a file
+// barf writes is byte-identical to the one refresh_kea.py / the Python
+// barf CLI writes. Two differences from encoding/json's defaults matter:
+//
+//   - Go HTML-escapes <, > and & into </>/&. Python does
+//     not, so SetEscapeHTML(false).
+//   - Python defaults to ensure_ascii=True and escapes every non-ASCII
+//     rune as \uXXXX (surrogate pairs above the BMP). Go emits raw
+//     UTF-8, so that escaping is redone here.
+//
+// Without this every generated Kea file differed from the Python one,
+// and any `cmp`/hash "did reservations change?" gate flapped every run.
+func pythonJSON(value any, indent string) ([]byte, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", indent)
+	if err := enc.Encode(value); err != nil {
+		return nil, err
+	}
+	// Encode always appends a newline; the caller decides about that.
+	return asciiEscape(bytes.TrimSuffix(buf.Bytes(), []byte("\n"))), nil
+}
+
+// asciiEscape rewrites every non-ASCII rune as a \uXXXX escape, matching
+// Python's ensure_ascii=True. Structural JSON characters are all ASCII,
+// so a flat scan can only ever touch string contents.
+func asciiEscape(body []byte) []byte {
+	if isASCII(body) {
+		return body
+	}
+	var out bytes.Buffer
+	out.Grow(len(body))
+	for _, r := range string(body) {
+		switch {
+		case r < utf8.RuneSelf:
+			out.WriteByte(byte(r))
+		case r > 0xFFFF:
+			r -= 0x10000
+			fmt.Fprintf(&out, "\\u%04x\\u%04x",
+				0xD800+(r>>10), 0xDC00+(r&0x3FF))
+		default:
+			fmt.Fprintf(&out, "\\u%04x", r)
+		}
+	}
+	return out.Bytes()
+}
+
+func isASCII(body []byte) bool {
+	for _, b := range body {
+		if b >= utf8.RuneSelf {
+			return false
+		}
+	}
+	return true
+}
+
 // writeJSON marshals value to path (or stdout) with the indentation the
-// rest of the CLI uses.
+// rest of the CLI uses. The Python barf CLI prints its JSON with
+// `print(json.dumps(...))`, so these carry a trailing newline; the Kea
+// array files written by refresh_kea.py's json.dump do not — see
+// writeJSONNoNewline.
 func (o *Options) writeJSON(path string, value any, indent string) error {
-	body, err := json.MarshalIndent(value, "", indent)
+	body, err := pythonJSON(value, indent)
 	if err != nil {
 		return err
 	}
 	return o.writeOut(path, string(body)+"\n")
+}
+
+// writeJSONNoNewline writes a JSON document with no trailing newline,
+// exactly as `json.dump(hosts, f, indent=1)` in
+// nix/modules/kea/refresh_kea.py does. The Kea files feed a
+// "did reservations change?" comparison, so a spurious trailing byte
+// makes every run look like a change.
+func (o *Options) writeJSONNoNewline(path string, value any, indent string) error {
+	body, err := pythonJSON(value, indent)
+	if err != nil {
+		return err
+	}
+	return o.writeOut(path, string(body))
 }
 
 func newGenerateDNSCmd(o *Options) *cobra.Command {
@@ -364,8 +472,8 @@ func runGenerateDNS(ctx context.Context, o *Options, domain, output string, with
 	}
 
 	log := o.Logger()
-	lines := dnsLines(dns.Hosts(), dnsDomain(domain), func(hostname string) {
-		log.Warn("missing primary ip", "host", hostname)
+	lines := dnsLines(dns.Hosts(), dnsDomain(domain), func(hostname, reason string) {
+		log.Warn("skipping netbox record", "host", hostname, "reason", reason)
 	})
 	// An empty NetBox response renders a valid-but-empty config that would
 	// wipe internal DNS; fail instead and keep the last-good file.
@@ -384,7 +492,9 @@ func runGenerateDNS(ctx context.Context, o *Options, domain, output string, with
 			return err
 		}
 		body = append([]string{dnsmasqHeader}, lines...)
-		for _, r := range reservations(dhcp.AllInterfaces()) {
+		for _, r := range reservations(dhcp.AllInterfaces(), func(hostname, reason string) {
+			log.Warn("skipping netbox record", "host", hostname, "reason", reason)
+		}) {
 			body = append(body, r.DnsmasqLine())
 		}
 	}
@@ -440,7 +550,10 @@ func runGenerateDHCP(ctx context.Context, o *Options, format, output, output4, o
 		return err
 	}
 
-	res := reservations(dhcp.AllInterfaces())
+	log := o.Logger()
+	res := reservations(dhcp.AllInterfaces(), func(hostname, reason string) {
+		log.Warn("skipping netbox record", "host", hostname, "reason", reason)
+	})
 	// An empty response would wipe every reservation; refuse so the
 	// last-good file survives.
 	if len(res) == 0 {
@@ -457,12 +570,12 @@ func runGenerateDHCP(ctx context.Context, o *Options, format, output, output4, o
 		// json.dump(..., indent=1); match that when paths are given.
 		if output4 != "" || output6 != "" {
 			if output4 != "" {
-				if err := o.writeJSON(output4, hosts4, " "); err != nil {
+				if err := o.writeJSONNoNewline(output4, hosts4, " "); err != nil {
 					return err
 				}
 			}
 			if output6 != "" {
-				if err := o.writeJSON(output6, hosts6, " "); err != nil {
+				if err := o.writeJSONNoNewline(output6, hosts6, " "); err != nil {
 					return err
 				}
 			}

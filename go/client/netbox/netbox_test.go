@@ -464,3 +464,31 @@ func TestIPAddressAndMACNilSafety(t *testing.T) {
 		t.Errorf("prefixless address = %q", got)
 	}
 }
+
+// TestNullNamesDecodeToEmptyNotGarbage pins that a NetBox null `name`
+// (which NetBox permits on both devices and interfaces) decodes to ""
+// and never produces a record. The callers in cli/generatedns.go treat
+// "" as "absent"; this is the half of the contract that lives here.
+func TestNullNamesDecodeToEmptyNotGarbage(t *testing.T) {
+	var host Host
+	if err := json.Unmarshal([]byte(`{
+	  "name": null,
+	  "primary_ip4": {"address": "10.0.0.5/24"},
+	  "interfaces": [{"name": null, "ip_addresses": [{"address": "10.0.1.5/24"}]}]
+	}`), &host); err != nil {
+		t.Fatal(err)
+	}
+	if host.Name != "" {
+		t.Errorf("null device name = %q, want empty", host.Name)
+	}
+	if host.Interfaces[0].Name != "" {
+		t.Errorf("null interface name = %q, want empty", host.Interfaces[0].Name)
+	}
+	// An unnamed interface must not be mistaken for out-of-band kit.
+	if IsIPMIInterface("") || IsIPMIInterface("  ") {
+		t.Error("an unnamed interface was treated as IPMI")
+	}
+	if got := host.IPMIAddress(); got != "" {
+		t.Errorf("IPMIAddress from an unnamed interface = %q, want empty", got)
+	}
+}

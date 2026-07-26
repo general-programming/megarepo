@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -109,6 +110,18 @@ func wireSecrets() (SecretSource, error) {
 // memory and are never logged or written to disk.
 type vaultSource struct{ c *vault.Client }
 
+// Every optional secret interface the render package asks for is
+// asserted here. render resolves them with a runtime type assertion, so
+// a missing method is otherwise only discovered when a real render of
+// that vendor fails in production — DNOS rendering did exactly that
+// while TacacsKey was unimplemented. These make it a build error.
+var (
+	_ render.SecretSource    = (*vaultSource)(nil)
+	_ render.VaultSource     = (*vaultSource)(nil)
+	_ render.TacacsSource    = (*vaultSource)(nil)
+	_ render.WireguardSource = (*vaultSource)(nil)
+)
+
 // HostSecret is render.SecretSource / device.Secrets.
 func (v *vaultSource) HostSecret(hostname, key string) (string, error) {
 	return v.c.HostSecret(hostname, key)
@@ -127,6 +140,49 @@ func (v *vaultSource) VaultSecret(key string) (string, error) {
 // GlobalSecret is device.GlobalSecrets; same lookup as VaultSecret.
 func (v *vaultSource) GlobalSecret(name string) (string, error) {
 	return v.VaultSecret(name)
+}
+
+// tacacsKeysPath is the fleet-wide secret every device's TACACS+ key
+// lives in: cluster-secrets/tacacs-keys, one field per hostname.
+const tacacsKeysPath = "tacacs-keys"
+
+// TacacsKey is render.TacacsSource. Python's BaseHost.tacacs_key reads
+// `self.secret(self.hostname, ..., secret_path="tacacs-keys")["key"]`,
+// i.e. the cluster-secrets mount, path `tacacs-keys`, FIELD <hostname>,
+// whose value is a `{"address": ..., "key": ...}` object; only "key" is
+// rendered.
+//
+// Unlike Python this never mints and writes back a missing key: barf-go
+// reads secrets and nothing else, so an absent host is an error the
+// operator resolves, not a silent Vault write during a render.
+func (v *vaultSource) TacacsKey(hostname string) (string, error) {
+	data, err := v.c.ReadSecret(context.Background(), vault.MountClusterSecrets, tacacsKeysPath)
+	if err != nil {
+		return "", err
+	}
+	entry, ok := data[hostname]
+	if !ok {
+		return "", fmt.Errorf("no tacacs key for %q in %s/%s",
+			hostname, vault.MountClusterSecrets, tacacsKeysPath)
+	}
+	// KV v2 returns the nested object as a decoded map, but a value
+	// written as a JSON *string* (the CLI's `vault kv patch k=@file`
+	// spelling) round-trips as text; accept both.
+	fields, ok := entry.(map[string]any)
+	if !ok {
+		text, isText := entry.(string)
+		if !isText {
+			return "", fmt.Errorf("tacacs key for %q is %T, not an object", hostname, entry)
+		}
+		if err := json.Unmarshal([]byte(text), &fields); err != nil {
+			return "", fmt.Errorf("tacacs key for %q is not a JSON object", hostname)
+		}
+	}
+	key, ok := fields["key"].(string)
+	if !ok || key == "" {
+		return "", fmt.Errorf("tacacs key for %q has no %q field", hostname, "key")
+	}
+	return key, nil
 }
 
 // WireguardKeypair is render.WireguardSource: the fabric mesh keypairs,

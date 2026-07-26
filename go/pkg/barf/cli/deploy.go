@@ -8,7 +8,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/spf13/cobra"
@@ -149,18 +148,16 @@ func computeDeployPlans(ctx context.Context, o *Options, net *model.Network, hos
 
 	plans := make([]deployPlan, len(hosts))
 	sem := make(chan struct{}, maxProbes)
-	var wg sync.WaitGroup
 
-	for i, h := range hosts {
-		wg.Add(1)
-		go func(i int, h *model.Host) {
-			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			plans[i] = planDeploy(ctx, o, net, h, rendered[h.Hostname], renderErrs[h.Hostname], secrets, diffOpts)
-		}(i, h)
-	}
-	wg.Wait()
+	runBounded(len(hosts), func(i int) {
+		h := hosts[i]
+		if !acquire(ctx, sem) {
+			plans[i] = deployPlan{host: h, err: context.Cause(ctx)}
+			return
+		}
+		defer func() { <-sem }()
+		plans[i] = planDeploy(ctx, o, net, h, rendered[h.Hostname], renderErrs[h.Hostname], secrets, diffOpts)
+	})
 	return plans
 }
 
@@ -168,6 +165,12 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 	rendered string, renderErr error, secrets SecretSource, diffOpts DiffOptions) deployPlan {
 
 	plan := deployPlan{host: h}
+	if err := ctx.Err(); err != nil {
+		// Cancelled between admission and here: do not start a fresh
+		// device read.
+		plan.err = err
+		return plan
+	}
 	if renderErr != nil {
 		plan.err = fmt.Errorf("render: %w", renderErr)
 		return plan
@@ -218,6 +221,15 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 
 	for _, plan := range plans {
 		name := plan.host.Hostname
+
+		// An interrupted run stops here rather than carrying on down the
+		// fleet: the operator asked it to stop, and the remaining devices
+		// have not been written to yet.
+		if err := ctx.Err(); err != nil {
+			failed = true
+			rows = append(rows, []string{name, "cancelled"})
+			continue
+		}
 
 		if plan.err != nil {
 			failed = true

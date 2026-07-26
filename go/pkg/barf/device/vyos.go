@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
@@ -32,6 +33,15 @@ var vyosAllowedRequests = map[string]map[string]bool{
 // endpoint/op pair not in vyosAllowedRequests never reaches the wire.
 func vyosRequestAllowed(endpoint, op string) bool {
 	return vyosAllowedRequests[endpoint][op]
+}
+
+// vyosReadTimeout is the per-endpoint budget for a read, matching the
+// Python defaults (vyos_api_show=10s, vyos_api_retrieve_config=30s).
+func vyosReadTimeout(endpoint string) time.Duration {
+	if endpoint == "retrieve" {
+		return TimeoutRetrieve
+	}
+	return TimeoutShow
 }
 
 // VyOSReader reads a VyOS device over its HTTPS API.
@@ -95,6 +105,9 @@ func (r *VyOSReader) request(ctx context.Context, endpoint, op string, payload a
 	if !vyosRequestAllowed(endpoint, op) {
 		return nil, &ErrWriteAttempt{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
 	}
+
+	ctx, cancel := r.opts.withOpTimeout(ctx, vyosReadTimeout(endpoint))
+	defer cancel()
 
 	key, err := r.apiKey()
 	if err != nil {
@@ -184,7 +197,30 @@ func (r *VyOSReader) RetrieveConfig(ctx context.Context, path ...string) (map[st
 	if err := json.Unmarshal(data, &tree); err != nil {
 		return nil, fmt.Errorf("%s: unexpected /retrieve payload: %w", r.host.Hostname, err)
 	}
+	// A JSON `null` (or an absent data field) unmarshals into a nil map
+	// without error, and a nil map is indistinguishable from an empty
+	// config downstream: the running set collapses to nothing and the
+	// operator is shown a full-reconfigure diff for what was really a
+	// failed read. Python refuses it explicitly —
+	// vyos_api.py: `if not isinstance(data, dict): raise`.
+	if tree == nil {
+		return nil, fmt.Errorf("%s: unexpected /retrieve payload: %s is not a config tree",
+			r.host.Hostname, retrievePayloadDescription(data))
+	}
 	return tree, nil
+}
+
+// retrievePayloadDescription names what came back instead of an object,
+// without echoing a whole config into an error message.
+func retrievePayloadDescription(data json.RawMessage) string {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" {
+		return "an empty response"
+	}
+	if trimmed == "null" {
+		return "JSON null"
+	}
+	return trimmed
 }
 
 // -- parsing ----------------------------------------------------------
@@ -193,7 +229,7 @@ func (r *VyOSReader) RetrieveConfig(ctx context.Context, path ...string) (map[st
 // "VyOS " prefix is stripped so the value lines up with upstream release
 // tags (e.g. "2026.06.30-0048-rolling").
 func ParseVyOSVersion(output string) string {
-	for _, line := range strings.Split(output, "\n") {
+	for _, line := range splitLines(output) {
 		if strings.HasPrefix(strings.ToLower(line), "version:") {
 			_, value, _ := strings.Cut(line, ":")
 			return strings.TrimPrefix(strings.TrimSpace(value), "VyOS ")
@@ -202,7 +238,10 @@ func ParseVyOSVersion(output string) string {
 	if strings.TrimSpace(output) == "" {
 		return "-"
 	}
-	first := strings.SplitN(strings.TrimSpace(output), "\n", 2)[0]
+	// splitLines, not Split(_, "\n"): this branch returns the line
+	// verbatim, so a CRLF device answer would otherwise come back as
+	// "1.4.2\r" where Python's splitlines() gives "1.4.2".
+	first := splitLines(strings.TrimSpace(output))[0]
 	return strings.TrimPrefix(first, "VyOS ")
 }
 
@@ -211,7 +250,7 @@ func ParseVyOSVersion(output string) string {
 // repeat it.
 func ParseVyOSModel(output string) string {
 	var vendor, hardware string
-	for _, raw := range strings.Split(output, "\n") {
+	for _, raw := range splitLines(output) {
 		line := strings.TrimSpace(raw)
 		lower := strings.ToLower(line)
 		switch {
@@ -239,7 +278,7 @@ func ParseVyOSModel(output string) string {
 
 // ParseVyOSUptime pulls a human uptime out of `show system uptime`.
 func ParseVyOSUptime(output string) string {
-	for _, raw := range strings.Split(output, "\n") {
+	for _, raw := range splitLines(output) {
 		line := strings.TrimSpace(raw)
 		if line == "" {
 			continue
@@ -266,7 +305,7 @@ var vyosNumberedImage = regexp.MustCompile(`^\s*\d+:\s+(\S+)(.*)$`)
 // modern table format (Name / Default boot / Running columns) and the
 // legacy numbered list ("1: name (default boot) (running image)").
 func ParseSystemImages(output string) []SystemImage {
-	lines := strings.Split(output, "\n")
+	lines := splitLines(output)
 
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimSpace(line), "Name") && strings.Contains(line, "Running") {
