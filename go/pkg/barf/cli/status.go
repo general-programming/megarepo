@@ -40,6 +40,7 @@ type statusJSON struct {
 	Model            string `json:"model"`
 	Uptime           string `json:"uptime"`
 	Version          string `json:"version"`
+	LatestFirmware   string `json:"latest_firmware"`
 	ConfigConsistent string `json:"config_consistent"`
 	Status           string `json:"status"`
 	State            string `json:"state"`
@@ -103,6 +104,9 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 	}
 
 	rows := runProbesPlain(ctx, probes)
+	// LATEST FIRMWARE: one release lookup for the whole table, "?" when
+	// the vendor has no image provider or the feed is unreachable.
+	firmware := firmwareCells(ctx, log, hosts, rows)
 
 	if jsonOut {
 		out := make([]statusJSON, len(rows))
@@ -110,6 +114,7 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 			out[i] = statusJSON{
 				Device: r.Device, Endpoint: r.Endpoint, Model: r.Model,
 				Uptime: r.Uptime, Version: r.Version,
+				LatestFirmware:   firmware[r.Device],
 				ConfigConsistent: r.Consistent, Status: r.Status,
 				State: r.State.String(),
 			}
@@ -121,9 +126,9 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 
 	cells := make([][]string, len(rows))
 	for i, r := range rows {
-		cells[i] = r.Cells()
+		cells[i] = spliceFirmwareCell(r.Cells(), firmware[r.Device])
 	}
-	printTable(o.Out, tui.StatusColumns, cells)
+	printTable(o.Out, statusColumnsWithFirmware(), cells)
 	return nil
 }
 

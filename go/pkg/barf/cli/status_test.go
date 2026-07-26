@@ -25,10 +25,13 @@ func TestStatusPlainTable(t *testing.T) {
 	}
 
 	want := strings.Join([]string{
-		"DEVICE      ENDPOINT  MODEL     UPTIME  VERSION      CONFIG CONSISTENT  STATUS",
-		"----------  --------  --------  ------  -----------  -----------------  ------",
-		"sea1-vpn-0  10.0.0.1  vyos-vm   5d4h    1.5-rolling  yes                ok",
-		"fmt2-core   10.0.0.2  DCS-7050  12d     4.31.2F      +0 -1              ok",
+		// LATEST FIRMWARE is "?" here: package tests stub the release
+		// lookup out (see firmware_test.go), so nothing reaches the
+		// network and no version is known.
+		"DEVICE      ENDPOINT  MODEL     UPTIME  VERSION      LATEST FIRMWARE  CONFIG CONSISTENT  STATUS",
+		"----------  --------  --------  ------  -----------  ---------------  -----------------  ------",
+		"sea1-vpn-0  10.0.0.1  vyos-vm   5d4h    1.5-rolling  ?                yes                ok",
+		"fmt2-core   10.0.0.2  DCS-7050  12d     4.31.2F      ?                +0 -1              ok",
 		"",
 	}, "\n")
 	if got := h.out.String(); got != want {

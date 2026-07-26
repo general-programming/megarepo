@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/general-programming/megarepo/go/client/vault"
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
-	"github.com/general-programming/megarepo/go/client/vault"
 )
 
 // This is the only file in the package that names the render, device,
@@ -79,7 +79,9 @@ func wireReader(h *model.Host, address string, s SecretSource) (DeviceReader, er
 	if err != nil {
 		return nil, err
 	}
-	return readerAdapter{r}, nil
+	// Vendors that manage only a slice of the device config (EOS) get a
+	// reader that can also answer a scoped comparison; see scopeddiff.go.
+	return wrapScoped(h, readerAdapter{r}, r), nil
 }
 
 type readerAdapter struct{ r device.Reader }

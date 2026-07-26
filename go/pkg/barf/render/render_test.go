@@ -80,7 +80,7 @@ func TestEOSOmitsVRFWhenUnset(t *testing.T) {
 // rather than rendering something plausible-but-wrong.
 func TestUnknownDeviceTypeIsReported(t *testing.T) {
 	network := &model.Network{
-		Hosts: []model.Host{{Hostname: "x", DeviceType: "cisco", Role: "vpn"}},
+		Hosts: []model.Host{{Hostname: "x", DeviceType: "junos", Role: "vpn"}},
 	}
 	if _, err := render.Host(&network.Hosts[0], network, fakeSecrets{}); err == nil {
 		t.Fatal("expected an error for an unregistered device type")
@@ -94,7 +94,7 @@ func TestVyOSRejectsNonVPNRole(t *testing.T) {
 		Hosts: []model.Host{{Hostname: "x", DeviceType: "vyos", Role: "core"}},
 	}
 	_, err := render.Host(&network.Hosts[0], network, fakeSecrets{})
-	if err == nil || !strings.Contains(err.Error(), "vpn role") {
+	if err == nil || !strings.Contains(err.Error(), `no config for role "core"`) {
 		t.Fatalf("expected a role error, got %v", err)
 	}
 }

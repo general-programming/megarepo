@@ -35,6 +35,8 @@ func newGenerateCmd(o *Options) *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVarP(&outputDir, "output", "o", "output", "directory to write rendered configs into")
+	// NetBox-sourced generators (see generatedns.go).
+	cmd.AddCommand(newGenerateDNSCmd(o), newGenerateDHCPCmd(o))
 	return cmd
 }
 

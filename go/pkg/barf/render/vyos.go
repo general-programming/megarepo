@@ -58,8 +58,9 @@ func (c *renderCtx) peer(link model.Link) (*model.Host, error) {
 // Render returns the full VyOS config text for h.
 func (VyOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		return "", fmt.Errorf("%s: only the vpn role is ported for vyos (got %q)",
-			h.Hostname, h.Role)
+		// Not a gap in the port: Python has no vyos template outside
+		// the vpn role either (see the renderers table in render.go).
+		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
 
@@ -232,10 +233,17 @@ func vyosInterfacePrefix(iface *model.Interface) string {
 // vyosInterfaces is configs.interfaces.InterfacesConfig: every modeled
 // interface through the one vyatta loop.
 func vyosInterfaces(c *renderCtx) ([]string, error) {
+	return vyattaInterfaces(c, vyosInterfacePrefix)
+}
+
+// vyattaInterfaces is the shared common/vyatta.j2 interface loop. The
+// only thing that varies between the vyatta-lineage vendors is
+// `device.interface_prefix`, so it is the one parameter.
+func vyattaInterfaces(c *renderCtx, interfacePrefix func(*model.Interface) string) ([]string, error) {
 	var lines []string
 	for i := range c.host.Interfaces {
 		iface := &c.host.Interfaces[i]
-		prefix := vyosInterfacePrefix(iface)
+		prefix := interfacePrefix(iface)
 
 		if iface.DHCP {
 			lines = append(lines, prefix+" address dhcp")

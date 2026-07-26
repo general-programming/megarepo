@@ -1,0 +1,400 @@
+package scope
+
+import (
+	"context"
+	"errors"
+	"strings"
+	"testing"
+
+	"github.com/GehirnInc/crypt/sha512_crypt"
+	"github.com/general-programming/megarepo/go/pkg/barf/model"
+)
+
+const (
+	testAdminPassword  = "fixture-admin-not-a-real-password"
+	testEnablePassword = "fixture-enable-not-a-real-password"
+	testSSHKey         = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPrimaryKey erin@devbox"
+	testSSHKey2        = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISecondKey erin@laptop"
+)
+
+type fakeSecrets struct {
+	admin  string
+	enable string
+	err    error
+}
+
+func (f fakeSecrets) HostSecret(hostname, key string) (string, error) {
+	if f.err != nil {
+		return "", f.err
+	}
+	switch key {
+	case "admin-password":
+		return f.admin, nil
+	case "enable-password":
+		return f.enable, nil
+	}
+	return "", errors.New("no such key: " + key)
+}
+
+func defaultSecrets() fakeSecrets {
+	return fakeSecrets{admin: testAdminPassword, enable: testEnablePassword}
+}
+
+// fakeSections stands in for the read-only eAPI section fetch.
+type fakeSections struct {
+	text string
+	err  error
+	// asked records the sections the comparer requested, so the test can
+	// assert the full running config is never fetched.
+	asked []string
+}
+
+func (f *fakeSections) RunningConfigSections(ctx context.Context, names ...string) (string, error) {
+	f.asked = append(f.asked, names...)
+	if f.err != nil {
+		return "", f.err
+	}
+	return f.text, nil
+}
+
+// deviceHash is a sha512-crypt hash with a salt that is NOT the one barf
+// derives — the adopted-device case, where the password is right but the
+// hash text differs.
+func deviceHash(t *testing.T, password string) string {
+	t.Helper()
+	hash, err := sha512_crypt.New().Generate([]byte(password), []byte("$6$handsetsalt00"))
+	if err != nil {
+		t.Fatalf("hashing: %v", err)
+	}
+	return hash
+}
+
+func testHost() *model.Host {
+	return &model.Host{Hostname: "fmt2-cor-r-140752-1", DeviceType: "eos", EAPIVRF: "internal"}
+}
+
+func testNetwork(keys ...string) *model.Network {
+	return &model.Network{Global: model.GlobalMeta{SSHKeys: keys}}
+}
+
+// inSyncConfig is shaped like real `show running-config all section ...`
+// output: three-space indent, explicit default state, unmanaged users and
+// several hundred lines of unrelated `... enable ...` config that the
+// section filter drags in.
+func inSyncConfig(t *testing.T) string {
+	t.Helper()
+	return strings.Join([]string{
+		"no username root ssh principal",
+		"username admin privilege 15 role network-admin secret sha512 " + deviceHash(t, testAdminPassword),
+		"username admin ssh-key " + testSSHKey,
+		"username erin privilege 15 secret sha512 $6$other$hash",
+		"username erin ssh-key ssh-rsa AAAAsomethingelse erin@elsewhere",
+		"tacacs-server username max-length 255",
+		"enable password sha512 " + deviceHash(t, testEnablePassword),
+		"default snmp-server enable traps bgp",
+		"aaa authentication enable default local",
+		"interface Ethernet1",
+		"   no ipv6 enable",
+		"   default sflow enable",
+		"management api http-commands",
+		"   protocol https port 443",
+		"   no protocol http port 80",
+		"   no protocol unix-socket",
+		"   protocol https ssl profile eapi",
+		"   no shutdown",
+		"   !",
+		"   vrf internal",
+		"      no shutdown",
+		"no mpls oam downstream validation enabled",
+	}, "\n")
+}
+
+func TestParseEOSManagedStateFromRealisticOutput(t *testing.T) {
+	state := ParseEOSManagedState(inSyncConfig(t), "internal")
+
+	if !strings.HasPrefix(state.AdminLine, "username admin privilege 15 role network-admin secret sha512 ") {
+		t.Errorf("AdminLine = %q", redact(state.AdminLine))
+	}
+	if !strings.HasPrefix(state.AdminHash, "$6$") {
+		t.Errorf("AdminHash not a crypt hash")
+	}
+	if state.SSHKey != testSSHKey {
+		t.Errorf("SSHKey = %q, want the admin key", state.SSHKey)
+	}
+	if state.SSHKeySecondary != "" {
+		t.Errorf("SSHKeySecondary = %q, want empty", state.SSHKeySecondary)
+	}
+	if !strings.HasPrefix(state.EnableHash, "$6$") {
+		t.Errorf("EnableHash = %q", redact(state.EnableHash))
+	}
+	if !isTrue(state.EAPIEnabled) || !isTrue(state.EAPIHTTPS) || !isTrue(state.EAPIVRFEnabled) {
+		t.Errorf("eAPI state = %v/%v/%v, want all true",
+			state.EAPIEnabled, state.EAPIHTTPS, state.EAPIVRFEnabled)
+	}
+}
+
+// The `username` section also lists accounts barf does not manage; none
+// of them may be mistaken for the managed one.
+func TestParseEOSManagedStateIgnoresOtherUsers(t *testing.T) {
+	text := strings.Join([]string{
+		"username erin privilege 15 secret sha512 $6$erin$hash",
+		"username erin ssh-key ssh-rsa AAAAerin erin@elsewhere",
+	}, "\n")
+	state := ParseEOSManagedState(text, "")
+	if state.AdminLine != "" || state.AdminHash != "" || state.SSHKey != "" {
+		t.Errorf("unmanaged user leaked into state: %+v", state)
+	}
+}
+
+// `show running-config all` prints defaults literally, so a disabled eAPI
+// block says so out loud rather than by omission.
+func TestParseEOSAPISectionShutdownAndVRF(t *testing.T) {
+	text := strings.Join([]string{
+		"management api http-commands",
+		"   no protocol http port 80",
+		"   shutdown",
+		"   vrf mgmt",
+		"      no shutdown",
+		"   vrf internal",
+		"      shutdown",
+		"interface Ethernet1",
+		"   no shutdown",
+	}, "\n")
+	state := ParseEOSManagedState(text, "internal")
+
+	if state.EAPIEnabled == nil || *state.EAPIEnabled {
+		t.Errorf("EAPIEnabled = %v, want false", state.EAPIEnabled)
+	}
+	if state.EAPIHTTPS != nil {
+		t.Errorf("EAPIHTTPS = %v, want nil (no https line)", state.EAPIHTTPS)
+	}
+	if state.EAPIVRFEnabled == nil || *state.EAPIVRFEnabled {
+		t.Errorf("EAPIVRFEnabled = %v, want false", state.EAPIVRFEnabled)
+	}
+}
+
+// An un-indented line ends the block; the `no shutdown` under a later
+// interface must not be read as eAPI state.
+func TestParseEOSAPISectionEndsAtUnindentedLine(t *testing.T) {
+	text := strings.Join([]string{
+		"management api http-commands",
+		"   shutdown",
+		"interface Ethernet1",
+		"   no shutdown",
+	}, "\n")
+	state := ParseEOSManagedState(text, "")
+	if state.EAPIEnabled == nil || *state.EAPIEnabled {
+		t.Errorf("EAPIEnabled = %v, want false", state.EAPIEnabled)
+	}
+}
+
+// The headline case: an adopted device whose hash carries a different
+// salt but the same password is IN SYNC, so a deploy never needlessly
+// rewrites its credentials.
+func TestEOSCompareInSyncDespiteDifferentSalt(t *testing.T) {
+	sections := &fakeSections{text: inSyncConfig(t)}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: defaultSecrets(),
+		Reader:  sections,
+		Redact:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.HasChanges {
+		t.Errorf("device reported drift:\n%s", result.Text)
+	}
+	if result.Summary != "no changes" {
+		t.Errorf("Summary = %q", result.Summary)
+	}
+	if result.Text != "" {
+		t.Errorf("Text = %q, want empty", result.Text)
+	}
+}
+
+// Only the managed sections are read; the megabyte running-config dump
+// that produced the `+4 -32859` nonsense is never fetched.
+func TestEOSCompareReadsOnlyManagedSections(t *testing.T) {
+	sections := &fakeSections{text: inSyncConfig(t)}
+	if _, err := (EOS{}).Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: defaultSecrets(),
+		Reader:  sections,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"username", "enable", "management api http-commands"}
+	if strings.Join(sections.asked, "|") != strings.Join(want, "|") {
+		t.Errorf("sections read = %v, want %v", sections.asked, want)
+	}
+}
+
+func TestEOSCompareWrongPasswordDrifts(t *testing.T) {
+	sections := &fakeSections{text: inSyncConfig(t)}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: fakeSecrets{admin: "a-different-password", enable: "another-one"},
+		Reader:  sections,
+		Redact:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Drift) != 2 {
+		t.Fatalf("Drift = %d items, want admin + enable:\n%s", len(result.Drift), result.Text)
+	}
+	if result.Summary != "2 managed item(s) drifted" {
+		t.Errorf("Summary = %q", result.Summary)
+	}
+	// Both the device line and the desired line appear, hashes redacted.
+	if strings.Count(result.Text, "- ") != 2 || strings.Count(result.Text, "+ ") != 2 {
+		t.Errorf("body is not `- device / + desired` shaped:\n%s", result.Text)
+	}
+	if strings.Contains(result.Text, "$6$") {
+		t.Errorf("hash leaked into redacted output:\n%s", result.Text)
+	}
+	if !strings.Contains(result.Text, RedactedHash) {
+		t.Errorf("no redaction marker:\n%s", result.Text)
+	}
+}
+
+func TestEOSCompareShowSecrets(t *testing.T) {
+	sections := &fakeSections{text: inSyncConfig(t)}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: fakeSecrets{admin: "wrong", enable: "wrong"},
+		Reader:  sections,
+		Redact:  false,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Text, "$6$") {
+		t.Errorf("--show-secrets still redacted:\n%s", result.Text)
+	}
+}
+
+// A device that has never been adopted: no admin user, no enable
+// password, eAPI block absent. Every item drifts and no `- ` line is
+// emitted, because there is nothing on the device to show.
+func TestEOSCompareUnadoptedDevice(t *testing.T) {
+	sections := &fakeSections{text: "username erin privilege 15 secret sha512 $6$e$h\n"}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey, testSSHKey2),
+		Secrets: defaultSecrets(),
+		Reader:  sections,
+		Redact:  true,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// admin, primary key, secondary key, enable, eAPI block, eAPI vrf.
+	if len(result.Drift) != 6 {
+		t.Fatalf("Drift = %d items, want 6:\n%s", len(result.Drift), result.Text)
+	}
+	if strings.Contains(result.Text, "\n- ") || strings.HasPrefix(result.Text, "- ") {
+		t.Errorf("absent items must not print a device line:\n%s", result.Text)
+	}
+	if !strings.Contains(result.Text, "+ management api http-commands / vrf internal / no shutdown") {
+		t.Errorf("eAPI VRF drift missing:\n%s", result.Text)
+	}
+}
+
+func TestEOSCompareSSHKeyRotation(t *testing.T) {
+	text := inSyncConfig(t)
+	sections := &fakeSections{text: text}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey2),
+		Secrets: defaultSecrets(),
+		Reader:  sections,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Drift) != 1 {
+		t.Fatalf("Drift = %d, want just the ssh-key:\n%s", len(result.Drift), result.Text)
+	}
+	if result.Drift[0].Device != "username admin ssh-key "+testSSHKey {
+		t.Errorf("device line = %q", result.Drift[0].Device)
+	}
+	if result.Drift[0].Desired != "username admin ssh-key "+testSSHKey2 {
+		t.Errorf("desired line = %q", result.Drift[0].Desired)
+	}
+}
+
+// A device with the right password but privilege dropped is drift: the
+// hash check alone is not enough.
+func TestEOSCompareRequiresPrivilege15(t *testing.T) {
+	text := strings.Replace(inSyncConfig(t),
+		"username admin privilege 15 role network-admin secret",
+		"username admin privilege 1 role network-admin secret", 1)
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: defaultSecrets(),
+		Reader:  &fakeSections{text: text},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Drift) != 1 || !strings.Contains(result.Drift[0].Desired, "privilege 15") {
+		t.Errorf("privilege drop not reported:\n%s", result.Text)
+	}
+}
+
+func TestEOSHashMatches(t *testing.T) {
+	hash := deviceHash(t, testAdminPassword)
+	if !EOSHashMatches(testAdminPassword, hash) {
+		t.Error("correct password did not verify")
+	}
+	if EOSHashMatches("nope", hash) {
+		t.Error("wrong password verified")
+	}
+	// Non-crypt values (a plaintext or md5 secret) are never a match.
+	for _, bad := range []string{"", "plaintextpassword", "$5$md5ish$hash", "$1$x$y"} {
+		if EOSHashMatches(testAdminPassword, bad) {
+			t.Errorf("hash %q counted as a match", bad)
+		}
+	}
+}
+
+func TestEOSCompareReaderErrorPropagates(t *testing.T) {
+	_, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: defaultSecrets(),
+		Reader:  &fakeSections{err: errors.New("unreachable")},
+	})
+	if err == nil || !strings.Contains(err.Error(), "unreachable") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRegistryDispatch(t *testing.T) {
+	if _, ok := For("eos"); !ok {
+		t.Error("eos has no scoped comparer")
+	}
+	if _, ok := For("EOS"); !ok {
+		t.Error("devicetype lookup must be case-insensitive")
+	}
+	// VyOS is owned whole; it must fall through to the generic diff.
+	for _, dt := range []string{"vyos", "linux", "mikrotik", ""} {
+		if _, ok := For(dt); ok {
+			t.Errorf("%q unexpectedly has a scoped comparer", dt)
+		}
+	}
+}
+
+func TestCompareRejectsUnknownDeviceType(t *testing.T) {
+	_, err := Compare(context.Background(), Input{Host: &model.Host{Hostname: "h", DeviceType: "vyos"}})
+	if err == nil || !strings.Contains(err.Error(), "no scoped comparison") {
+		t.Fatalf("err = %v", err)
+	}
+}

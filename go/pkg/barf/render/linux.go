@@ -16,8 +16,9 @@ type Linux struct{}
 // Render returns the deploy script for h.
 func (Linux) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		return "", fmt.Errorf("%s: only the vpn role is ported for linux (got %q)",
-			h.Hostname, h.Role)
+		// Not a gap in the port: Python has no linux template outside
+		// the vpn role either (see the renderers table in render.go).
+		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
 
