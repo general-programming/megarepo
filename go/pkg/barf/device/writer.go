@@ -142,11 +142,11 @@ func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload a
 
 	key, err := w.apiKey()
 	if err != nil {
-		return "", fmt.Errorf("%s: %w", w.host.Hostname, err)
+		return "", &PreSendError{What: fmt.Sprintf("%s: resolving the VyOS API key", w.host.Hostname), Err: err}
 	}
 	address, err := w.resolver.resolve(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%s: no reachable address: %w", w.host.Hostname, err)
+		return "", &PreSendError{What: fmt.Sprintf("%s: no reachable address", w.host.Hostname), Err: err}
 	}
 
 	target := fmt.Sprintf("https://%s:%d/%s", HostForURL(address), w.opts.port(), endpoint)
@@ -171,11 +171,11 @@ func (w *VyOSWriter) Configure(ctx context.Context, ops []Op) error {
 		}
 		if len(op.Path) == 0 {
 			// A path-less delete would target the whole config root.
-			return fmt.Errorf("%s: refusing %s op with an empty path", w.host.Hostname, op.Verb)
+			return &PreSendError{What: fmt.Sprintf("%s: refusing %s op with an empty path", w.host.Hostname, op.Verb)}
 		}
 		if op.Command != "" {
 			// An EOS-shaped op here is a wiring bug, not something to drop.
-			return fmt.Errorf("%s: refusing op[%d]: EOS Command set on a VyOS op", w.host.Hostname, i)
+			return &PreSendError{What: fmt.Sprintf("%s: refusing op[%d]: EOS Command set on a VyOS op", w.host.Hostname, i)}
 		}
 		wire = append(wire, vyosWireOp{Op: op.Verb, Path: op.Path})
 	}
