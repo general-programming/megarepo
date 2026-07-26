@@ -1,13 +1,8 @@
-// Package prefetch warms the secret cache before a fleet render.
-//
-// It is the Go port of barf.util.render.prefetch_link_keys: rendering a
-// host needs the WireGuard keypairs of BOTH sides of each of its links,
-// and fetching them one at a time from Vault dominates render time, so
-// they are pulled concurrently up front.
-//
-// Warming is read-only and best-effort by construction: the Prefetcher
-// it drives never creates a secret and never reports an error, so a
-// genuinely missing keypair is left for the render to handle serially.
+// Package prefetch warms the secret cache before a fleet render, porting
+// barf.util.render.prefetch_link_keys: a host needs the WireGuard keypairs of
+// BOTH sides of each link, and fetching them serially dominates render time.
+// Warming is read-only and best-effort — the Prefetcher never creates a secret
+// and never reports an error, so a missing keypair falls back to the render.
 package prefetch
 
 import (
@@ -17,18 +12,14 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// Prefetcher warms a cache of per-host secret paths. Declared locally so
-// this package does not import the vault client; *vault.Client satisfies
-// it.
+// Prefetcher warms a cache of per-host secret paths, declared locally so this
+// package does not import the vault client.
 type Prefetcher interface {
 	PrefetchHostSecrets(ctx context.Context, paths ...string)
 }
 
 // LinkKeyPaths is every Vault path holding a WireGuard keypair for a link
-// that touches one of targets, both sides included, sorted so the work is
-// deterministic.
-//
-// IPsec links are skipped: they have no WireGuard keypairs in Vault.
+// touching targets, both sides, sorted. IPsec links have no keypairs.
 func LinkKeyPaths(targets []string, links []model.Link) []string {
 	if len(targets) == 0 || len(links) == 0 {
 		return nil
@@ -60,8 +51,7 @@ func LinkKeyPaths(targets []string, links []model.Link) []string {
 	return paths
 }
 
-// Hostnames is the hostnames of a set of hosts, the usual input to
-// LinkKeyPaths.
+// Hostnames is the hostnames of a set of hosts, LinkKeyPaths' usual input.
 func Hostnames(hosts []*model.Host) []string {
 	names := make([]string, 0, len(hosts))
 	for _, h := range hosts {
@@ -72,10 +62,8 @@ func Hostnames(hosts []*model.Host) []string {
 	return names
 }
 
-// LinkKeys warms the keypair cache for every link touching targets.
-//
-// A nil Prefetcher (a secret source with no cache to warm, e.g. a test
-// fake) is a no-op, so callers can always call this unconditionally.
+// LinkKeys warms the keypair cache for every link touching targets; a nil
+// Prefetcher is a no-op, so callers may always call it unconditionally.
 func LinkKeys(ctx context.Context, p Prefetcher, targets []string, links []model.Link) {
 	if p == nil {
 		return

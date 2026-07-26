@@ -1,10 +1,6 @@
-// Package model holds the network.yml fabric description: the hosts,
-// their interfaces, the wireguard links between them, and the global
-// metadata every render needs.
-//
-// These types are the coordination contract between the render, device,
-// and cli packages (see ../CONTRACT.md). Field names are frozen; adding
-// fields is fine, renaming them is not.
+// Package model holds the network.yml fabric description: hosts, interfaces,
+// the wireguard links between them, and global metadata. These types are the
+// contract between render, device, and cli (../CONTRACT.md); names are frozen.
 package model
 
 import (
@@ -14,8 +10,7 @@ import (
 	"strings"
 )
 
-// Site is a geographic location, used for BGP large-community origin
-// tagging and import local-pref weighting.
+// Site is a geographic location, used for BGP origin tagging and local-pref.
 type Site struct {
 	Name   string
 	ID     int
@@ -40,8 +35,7 @@ type Address struct {
 	Prefix int
 }
 
-// String renders the address as Python's ip_interface.with_prefixlen does
-// (host bits preserved, compressed form).
+// String renders as Python ip_interface.with_prefixlen (host bits preserved).
 func (a Address) String() string {
 	return fmt.Sprintf("%s/%d", a.IP.String(), a.Prefix)
 }
@@ -70,13 +64,9 @@ type Interface struct {
 	Wireguard    map[string]any
 	RA           map[string]any
 
-	// Type mirrors the Python HostInterface.type: "VPNLink" (the
-	// network.yml default), "bridge", "wireguard", ...
-	Type string
-	// DHCPv6 is the network.yml `dhcpv6` knob (distinct from DHCP).
-	DHCPv6 bool
-	// Enabled defaults to true; network.yml may switch it off.
-	Enabled bool
+	Type    string // "VPNLink" (network.yml default), "bridge", "wireguard", ...
+	DHCPv6  bool   // network.yml `dhcpv6`, distinct from DHCP
+	Enabled bool   // defaults to true
 }
 
 // IsBridge reports whether the interface is a modeled L2 bridge.
@@ -222,8 +212,8 @@ func (g FirewallAddressGroup) MembersV(v int) []FirewallAddressMember {
 	return out
 }
 
-// FirewallInterfaceGroup is a named set of interfaces, optionally
-// including other groups (RouterOS interface-list nesting).
+// FirewallInterfaceGroup is a named set of interfaces, optionally including
+// other groups (RouterOS interface-list nesting).
 type FirewallInterfaceGroup struct {
 	Name       string
 	Interfaces []string
@@ -236,8 +226,8 @@ type FirewallGroups struct {
 	Interface []FirewallInterfaceGroup
 }
 
-// ResolvedInterfaces returns every interface in group name, resolving
-// include nesting. First-seen order, de-duplicated, cycle-safe.
+// ResolvedInterfaces returns every interface in group name, resolving include
+// nesting: first-seen order, de-duplicated, cycle-safe.
 func (f FirewallGroups) ResolvedInterfaces(name string) []string {
 	byName := map[string]FirewallInterfaceGroup{}
 	for _, g := range f.Interface {
@@ -283,16 +273,12 @@ type Host struct {
 	CloudInit   bool
 	EAPIVRF     string // eos only: network.yml `eapi_vrf`
 
-	// AddressRaw / IP6AddressRaw keep the network.yml spelling of
-	// `address:` / `ip6_address:`. Several renders interpolate the
-	// literal string (IPsec peer ids and peer names), so a normalized
-	// form would drift from the Python output.
+	// AddressRaw / IP6AddressRaw keep the network.yml spelling of `address:` /
+	// `ip6_address:`; renders interpolate the literal string (IPsec peer ids).
 	AddressRaw    string
 	IP6AddressRaw string
 
-	// SNMPLocation is the host-level `location:` override; empty means
-	// inherit GlobalMeta.SNMPLocation.
-	SNMPLocation string
+	SNMPLocation string // host-level `location:`; empty inherits GlobalMeta
 
 	NATMasquerades  []NATMasquerade
 	NATPortForwards []PortForward
@@ -302,20 +288,18 @@ type Host struct {
 	BGP             BGPConfig
 	Firewall        FirewallGroups
 
-	// Raw keeps the untranslated yaml for knobs not yet ported, so a
-	// partial port never silently drops configuration.
+	// Raw keeps untranslated yaml so a partial port never drops configuration.
 	Raw map[string]any
 }
 
-// CanBFD reports whether the device supports BFD (VyOS only, as in the
-// Python vendor classes).
+// CanBFD reports whether the device supports BFD (VyOS only, as in Python).
 func (h *Host) CanBFD() bool { return h.DeviceType == "vyos" }
 
 // IsSpine mirrors the Python BaseHost.is_spine heuristic.
 func (h *Host) IsSpine() bool { return strings.Contains(h.Hostname, "-spine-") }
 
-// ManagementAddress returns the address of the first interface flagged
-// `management: true`, preferring its IPv6 address (BaseHost.management_address).
+// ManagementAddress returns the first `management: true` interface's address,
+// preferring IPv6 (BaseHost.management_address).
 func (h *Host) ManagementAddress() *Address {
 	for i := range h.Interfaces {
 		if !h.Interfaces[i].Management {
@@ -329,9 +313,8 @@ func (h *Host) ManagementAddress() *Address {
 	return nil
 }
 
-// WGEndpoint is the address peers dial to reach this host's WireGuard:
-// the global IPv6 address when there is one, else a global IPv4 one.
-// Empty for hosts nobody can dial (BaseHost.wg_endpoint).
+// WGEndpoint is the address peers dial for WireGuard, preferring global IPv6;
+// empty for hosts nobody can dial (BaseHost.wg_endpoint).
 func (h *Host) WGEndpoint() string {
 	for _, candidate := range []*Address{h.IP6Address, h.Address} {
 		if candidate == nil {
@@ -344,8 +327,8 @@ func (h *Host) WGEndpoint() string {
 	return ""
 }
 
-// Link is a wireguard fabric link. A is the uplink side (side_a in the
-// Python implementation), which decides numbered-link IP assignment.
+// Link is a wireguard fabric link. A is the uplink side (Python side_a),
+// which decides numbered-link IP assignment.
 type Link struct {
 	A, B    string
 	Port    int
@@ -353,9 +336,9 @@ type Link struct {
 	Secret  string
 	IPsec   bool
 
-	// Pinned is true when network.yml pins the port explicitly. Pinned
-	// links keep the legacy port-based Vault key paths; derived links
-	// use pair-based paths, so unpinning is the whole per-link migration.
+	// Pinned links (explicit network.yml port) keep the legacy port-based
+	// Vault key paths; derived links use pair-based paths, so unpinning is
+	// the whole per-link migration.
 	Pinned bool
 }
 
@@ -385,8 +368,8 @@ func (l Link) Other(hostname string) string {
 	return l.A
 }
 
-// GetIP returns hostname's address on this link, empty for unnumbered
-// links. Side A takes the first usable address, side B the next one.
+// GetIP returns hostname's address on this link (empty when unnumbered):
+// side A takes the first usable address, side B the next one.
 func (l Link) GetIP(hostname string, withNetmask bool) string {
 	if l.Network == "" {
 		return ""
@@ -411,9 +394,8 @@ func (l Link) GetIP(hostname string, withNetmask bool) string {
 	return addr.String()
 }
 
-// firstHost mirrors next(ipaddress.ip_network(...).hosts()): point-to-point
-// and single-host prefixes start at the network address, everything else
-// skips it.
+// firstHost mirrors next(ipaddress.ip_network(...).hosts()): /31 and /32
+// start at the network address, everything else skips it.
 func firstHost(p netip.Prefix) netip.Addr {
 	network := p.Masked().Addr()
 	full := network.BitLen()

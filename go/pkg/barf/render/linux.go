@@ -7,17 +7,15 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// Linux renders a bird2 + ifupdown + wg-quick host as the shell script
-// the Python linux vendor emits: one quoted heredoc per barf-owned file.
-//
-// Port of the ("vpn", "linux") entry of the Python BLOCK_REGISTRY.
+// Linux renders a bird2 + ifupdown + wg-quick host as a shell script: one
+// quoted heredoc per barf-owned file. Port of the ("vpn", "linux") entry of
+// the Python BLOCK_REGISTRY.
 type Linux struct{}
 
 // Render returns the deploy script for h.
 func (Linux) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		// Not a gap in the port: Python has no linux template outside
-		// the vpn role either (see the renderers table in render.go).
+		// Not a gap: Python has no linux template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
@@ -42,10 +40,9 @@ func (Linux) Render(h *model.Host, n *model.Network, s SecretSource) (string, er
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// barfFile is configs.lines.barf_file: the BARF_FILE heredoc stanza
-// writing content to path. The deploy path parses these blocks back into
-// a path -> content map; the quoted delimiter means nothing expands when
-// the script is run by hand.
+// barfFile is configs.lines.barf_file: the BARF_FILE heredoc writing content
+// to path. Deploy parses these blocks back into a path -> content map; the
+// quoted delimiter means nothing expands if the script is run by hand.
 func barfFile(path string, content []string) []string {
 	lines := make([]string, 0, len(content)+2)
 	lines = append(lines, "cat << 'BARF_FILE' > "+path)
@@ -69,9 +66,8 @@ func linuxHeader(c *renderCtx) ([]string, error) {
 	}, nil
 }
 
-// linuxInterfaces is configs.interfaces.InterfacesConfig's linux method:
-// only the dum* identity anchors are modeled (fabric wg interfaces come
-// from the fabric blocks).
+// linuxInterfaces is configs.interfaces.InterfacesConfig's linux method; only
+// dum* identity anchors are modeled, fabric wg comes from the fabric blocks.
 func linuxInterfaces(c *renderCtx) ([]string, error) {
 	var lines []string
 	for i := range c.host.Interfaces {
@@ -104,9 +100,8 @@ func linuxInterfaces(c *renderCtx) ([]string, error) {
 	return lines, nil
 }
 
-// linuxFabricWireGuard is configs.fabric.FabricWireGuard's linux method:
-// one wg .conf plus one interfaces.d stanza per link. The BGP sessions
-// live in bird's drop-in (linuxBirdFabric).
+// linuxFabricWireGuard is configs.fabric.FabricWireGuard's linux method: one
+// wg .conf plus one interfaces.d stanza per link; BGP is in linuxBirdFabric.
 func linuxFabricWireGuard(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, link := range c.links {
@@ -199,8 +194,7 @@ func linuxBirdRouterID(c *renderCtx) string {
 	return "192.0.2.1"
 }
 
-// linuxBirdBase is configs.routing.BirdBase: bird.conf plumbing plus the
-// optional 00-local.conf drop-in.
+// linuxBirdBase is configs.routing.BirdBase: bird.conf plus 00-local.conf.
 func linuxBirdBase(c *renderCtx) ([]string, error) {
 	host := c.host
 	content := []string{
@@ -263,24 +257,21 @@ func linuxBirdBase(c *renderCtx) ([]string, error) {
 
 	lines := append(barfFile("/etc/bird/bird.conf", content), "")
 	if local := host.Bird.LocalConf; local != "" {
-		// Host-specific human bird config, tracked in network.yml. 00- so
-		// its definitions parse before genprog.conf.
+		// 00- so its definitions parse before genprog.conf.
 		lines = append(lines, barfFile("/etc/bird/conf.d/00-local.conf",
 			strings.Split(strings.TrimRight(local, "\n"), "\n"))...)
 	}
 	return append(lines, ""), nil
 }
 
-// birdRejectBlacklisted is the blacklist-reject statement referencing a
-// 00-local function.
+// birdRejectBlacklisted references a 00-local function.
 func birdRejectBlacklisted(checkFunction string) string {
 	return fmt.Sprintf(`if %s() then reject "REJECTED ", net, " from ", proto, " blacklisted";`,
 		checkFunction)
 }
 
-// birdChannels renders both address-family channels of a fabric BGP
-// protocol. A multi-line import expression rides inside the channel
-// lines, reproducing the template macro's odd-but-committed indentation.
+// birdChannels renders both address-family channels of a fabric BGP protocol,
+// reproducing the template macro's odd-but-committed indentation.
 func birdChannels(importExpr string) []string {
 	block := []string{
 		"\tipv4 {",
@@ -298,8 +289,7 @@ func birdChannels(importExpr string) []string {
 	return strings.Split(strings.Join(block, "\n"), "\n")
 }
 
-// linuxBirdFabric is configs.fabric.BirdFabric: conf.d/genprog.conf, the
-// barf-managed bird fabric plus geographic weighting.
+// linuxBirdFabric is configs.fabric.BirdFabric: conf.d/genprog.conf.
 func linuxBirdFabric(c *renderCtx) ([]string, error) {
 	host := c.host
 	rejectBlacklisted := ""
@@ -344,10 +334,9 @@ func linuxBirdFabric(c *renderCtx) ([]string, error) {
 		fmt.Sprintf("define GENPROG_ASN = %d;", host.ASN),
 		"",
 		"",
-		// Site-origin tags carry the fabric-wide community_asn (RFC 8195
-		// Global Administrator), never the per-host ASN: bird's set
-		// grammar cannot wildcard the first field of a large-community
-		// set, so importers must match the exact triplet.
+		// Site-origin tags carry the fabric-wide community_asn, never the
+		// per-host ASN: bird's set grammar cannot wildcard the first field, so
+		// importers must match the exact triplet.
 		"filter genprog_export {",
 		"\tif source = RTS_STATIC then {",
 	}

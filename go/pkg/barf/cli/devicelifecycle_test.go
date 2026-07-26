@@ -20,30 +20,18 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 )
 
-// deviceHarness extends the shared command harness with the lifecycle
-// seams: a fake VyOS API, fake credentials, and an ssh(1) that is never
-// actually spawned. No test here can reach a real device.
-//
-// One httptest server stands in for the whole fleet: the API base URL
-// override routes each device to /<hostname>/<endpoint>, so every fake
-// device answers for itself and the redundancy probe sees a real per-host
-// answer.
+// deviceHarness adds the lifecycle seams to the shared command harness so
+// no test here can reach a real device. One httptest server stands in for
+// the whole fleet: the API base URL override routes each device to
+// /<hostname>/<endpoint>, so the redundancy probe sees per-host answers.
 type deviceHarness struct {
 	*harness
 
-	mu sync.Mutex
-	// devices holds each fake device's canned answers, by hostname.
-	devices map[string]*fakeDevice
-	// requests records every API request that reached "a device", as
-	// "<hostname>/<endpoint>".
-	requests []string
-	// sshArgs records the ssh(1) command line, when one was run.
-	sshArgs []string
-	// sshSteps records every script the fake SSH sessions ran, in order,
-	// as "<hostname>:<script>". It is the ordering evidence for the
-	// sequential multi-device run.
-	sshSteps []string
-	// scriptFails makes one "<hostname>:<script>" report failure.
+	mu          sync.Mutex
+	devices     map[string]*fakeDevice
+	requests    []string // "<hostname>/<endpoint>"
+	sshArgs     []string
+	sshSteps    []string // "<hostname>:<script>", the ordering evidence
 	scriptFails map[string]bool
 	server      *httptest.Server
 }
@@ -53,21 +41,17 @@ type deviceHarness struct {
 // The version deliberately does NOT advance on each read: the redundancy
 // probe reads other devices' versions constantly, so a consumed sequence
 // would make a probed device look updated. It changes exactly once, when
-// the fake SSH session is asked to launch the detached reboot — which is
-// what really happens.
+// the fake SSH session launches the detached reboot.
 type fakeDevice struct {
-	// catchAll answers any show path with no specific field set.
-	catchAll string
+	catchAll string // answers any show path with no specific field set
 	version  string
-	// afterReboot is what `show version` reports once the device has been
-	// asked to reboot.
+	// afterReboot is what `show version` reports post-reboot.
 	afterReboot string
 	images      string
 	bgp         string
 
 	rebooted bool
-	// writes records every write endpoint the device was asked for.
-	writes []string
+	writes   []string
 }
 
 func (f *fakeDevice) answer(key string) (string, bool) {
@@ -143,9 +127,8 @@ func newDeviceHarness(t *testing.T) *deviceHarness {
 	}))
 	t.Cleanup(d.server.Close)
 
-	// Every candidate address "answers", so probing succeeds; the real
-	// requests go to the httptest server via the base URL override
-	// installed below.
+	// Every candidate address "answers" so probing succeeds; the real
+	// requests go to the httptest server via the base URL override.
 	for _, address := range []string{"10.0.0.1", "10.0.0.2", "sea1-vpn-0.example.invalid"} {
 		d.reachable[address] = true
 	}
@@ -169,8 +152,7 @@ func newDeviceHarness(t *testing.T) *deviceHarness {
 	}
 	apiBaseURLOverride = func(hostname string) string { return d.server.URL + "/" + hostname }
 
-	// No test in this package may open an SSH connection, and none may
-	// really wait out a drain or a reboot.
+	// No test may open an SSH connection or really wait out a reboot.
 	newSSHDialer = func(context.Context, *model.Host, *model.Network, sshx.CredentialSource) lifecycle.SSHDialer {
 		return func(context.Context) (lifecycle.SSHSession, error) {
 			return nil, errors.New("this test must not reach the SSH path")
@@ -182,7 +164,6 @@ func newDeviceHarness(t *testing.T) *deviceHarness {
 	return d
 }
 
-// device returns (creating if needed) a fake device's canned answers.
 func (d *deviceHarness) device(hostname string) *fakeDevice {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -200,7 +181,6 @@ func (d *deviceHarness) recorded() []string {
 	return append([]string(nil), d.requests...)
 }
 
-// writesTo returns the write endpoints one device received.
 func (d *deviceHarness) writesTo(hostname string) []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -283,8 +263,7 @@ const (
 	adminDown  = "Neighbor  V  AS  Up/Down  State\n10.0.0.2  4  65000  never  Idle (Admin)\n"
 )
 
-// setShow makes every `show` on sea1-vpn-0 return output, whatever the
-// path. The single-device tests only need one answer.
+// setShow answers every `show` path on sea1-vpn-0 with the same output.
 func (d *deviceHarness) setShow(output string) {
 	f := d.device("sea1-vpn-0")
 	d.mu.Lock()
@@ -292,8 +271,6 @@ func (d *deviceHarness) setShow(output string) {
 	f.catchAll = output
 }
 
-// endpointsHit returns just the endpoint halves of the recorded
-// "<hostname>/<endpoint>" requests.
 func (d *deviceHarness) endpointsHit() []string {
 	var out []string
 	for _, r := range d.recorded() {
@@ -319,10 +296,10 @@ func versionOutput(v string) string { return "Version:          VyOS " + v + "\n
 
 // -- the multi-device fleet -------------------------------------------
 
-// fleetNetwork is two leaves and two spines, all VyOS and all with an ASN,
-// so the redundancy gate and the BGP drain both have something to decide
-// on. Deliberately declared spine-first so the leaves-before-spines
-// ordering is a real assertion and not an accident of input order.
+// fleetNetwork is two leaves and two spines, all VyOS with an ASN, so the
+// redundancy gate and the BGP drain both have something to decide on.
+// Deliberately declared spine-first so the leaves-before-spines ordering is
+// a real assertion and not an accident of input order.
 func fleetNetwork() *model.Network {
 	addr := func(s string) *model.Address {
 		return &model.Address{IP: netip.MustParseAddr(s), Prefix: 32}
@@ -338,8 +315,8 @@ func fleetNetwork() *model.Network {
 	}
 }
 
-// fleetHarness swaps in fleetNetwork, makes every member reachable and
-// stale, and installs an SSH fake so a whole update can be driven.
+// fleetHarness swaps in fleetNetwork and makes every member reachable and
+// stale, so a whole update can be driven.
 func fleetHarness(t *testing.T) *deviceHarness {
 	t.Helper()
 	d := newDeviceHarness(t)
@@ -359,8 +336,7 @@ func fleetHarness(t *testing.T) *deviceHarness {
 	return d
 }
 
-// installFakeSSH replaces the SSH dialer with sessions that record what
-// they were asked to run. Nothing is connected to anything.
+// installFakeSSH swaps the dialer for sessions that only record scripts.
 func (d *deviceHarness) installFakeSSH() {
 	newSSHDialer = func(_ context.Context, host *model.Host, _ *model.Network, _ sshx.CredentialSource) lifecycle.SSHDialer {
 		return func(context.Context) (lifecycle.SSHSession, error) {
@@ -369,7 +345,6 @@ func (d *deviceHarness) installFakeSSH() {
 	}
 }
 
-// fakeSession stands in for an SSH connection to one device.
 type fakeSession struct {
 	d        *deviceHarness
 	hostname string
@@ -409,8 +384,7 @@ func (s *fakeSession) Run(context.Context, string, time.Duration) (sshx.Result, 
 
 func (s *fakeSession) Close() error { return nil }
 
-// rebootOrder is the hostnames whose reboot script was launched, in the
-// order it happened.
+// rebootOrder is the hostnames whose reboot script was launched, in order.
 func (d *deviceHarness) rebootOrder() []string {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -454,8 +428,8 @@ func TestDeviceUpdateDryRunChangesNothing(t *testing.T) {
 func TestDeviceUpdateDryRunReportsARedundancyRefusal(t *testing.T) {
 	d := newDeviceHarness(t)
 	d.setShow(versionOutput(oldVersion))
-	// sea1-vpn-0 is the only VyOS host in the fake network, so nothing
-	// else is alive and the gate must refuse.
+	// sea1-vpn-0 is the only VyOS host here, so nothing else is alive and
+	// the gate must refuse.
 	if err := d.run(t, "device", "update", "sea1-vpn-0", "--image-url", imageURL); err != nil {
 		t.Fatalf("a dry run must not fail: %v", err)
 	}
@@ -483,8 +457,7 @@ func TestDeviceUpdateYesAloneCannotOverrideTheRefusal(t *testing.T) {
 	d.assertReadOnly(t, "a refused update")
 }
 
-// TestDeviceUpdateForceRequiresYes: overriding a hard safety refusal is
-// not something a [y/N] prompt can authorise.
+// A [y/N] prompt cannot authorise overriding a hard safety refusal.
 func TestDeviceUpdateForceRequiresYes(t *testing.T) {
 	d := newDeviceHarness(t)
 	d.setShow(versionOutput(oldVersion))
@@ -524,8 +497,7 @@ func TestDeviceUpdateRejectsNonVyOS(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateSkipsNonVyOSInAWiderSelection: `all` must not fail on
-// the EOS boxes, it must skip them and say so.
+// `all` must not fail on the EOS boxes; it must skip them and say so.
 func TestDeviceUpdateSkipsNonVyOSInAWiderSelection(t *testing.T) {
 	d := newDeviceHarness(t)
 	d.setShow(versionOutput(newVersion))
@@ -540,8 +512,7 @@ func TestDeviceUpdateSkipsNonVyOSInAWiderSelection(t *testing.T) {
 }
 
 func TestDeviceUpdateFailsClosedWithoutAnImageSource(t *testing.T) {
-	// No --image-url and no usable firmware mirror: the command must
-	// fail before it has read anything from the device, not fall back to
+	// No image source: fail before reading the device, never fall back to
 	// "reboot it anyway".
 	d := newDeviceHarness(t)
 	d.setShow(versionOutput(oldVersion))
@@ -554,9 +525,8 @@ func TestDeviceUpdateFailsClosedWithoutAnImageSource(t *testing.T) {
 
 // -- the prompt matrix ------------------------------------------------
 
-// TestDeviceUpdatePromptMatrix is the whole of FIX 1 for `device
-// update`: on a terminal the prompt IS the confirmation, and with no
-// terminal --yes is required and nothing is ever asked.
+// On a terminal the prompt IS the confirmation; with no terminal --yes is
+// required and nothing is ever asked.
 func TestDeviceUpdatePromptMatrix(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -583,8 +553,8 @@ func TestDeviceUpdatePromptMatrix(t *testing.T) {
 			o := d.options()
 			o.SetInteractive(tc.interactive)
 
-			// One named leaf: the other two devices keep the fleet
-			// redundant, so the gate passes and only the prompt decides.
+			// One named leaf: the rest keep the fleet redundant, so the
+			// gate passes and only the prompt decides.
 			in := io.Reader(errReader{})
 			if tc.interactive && !tc.yes {
 				in = strings.NewReader(tc.answer)
@@ -607,7 +577,7 @@ func TestDeviceUpdatePromptMatrix(t *testing.T) {
 				t.Fatalf("dry-run trailer = %v, want %v:\n%s", got, tc.wantDryRun, out)
 			}
 			// A declined prompt is a skip, not a dry run: the operator
-			// answered, and must not be told to re-run with --yes.
+			// answered and must not be told to re-run with --yes.
 			if tc.wantPrompt && !tc.wantReboot && !strings.Contains(out, "skipped sea1-leaf-0") {
 				t.Fatalf("a declined device was not reported as skipped:\n%s", out)
 			}
@@ -617,8 +587,7 @@ func TestDeviceUpdatePromptMatrix(t *testing.T) {
 
 // -- the multi-device run ---------------------------------------------
 
-// TestDeviceUpdateAllIsSequentialLeavesFirst is FIX 2's headline: "all"
-// works, one device at a time, leaves before spines.
+// "all" updates one device at a time, leaves before spines.
 func TestDeviceUpdateAllIsSequentialLeavesFirst(t *testing.T) {
 	d := fleetHarness(t)
 	o := d.options()
@@ -636,8 +605,7 @@ func TestDeviceUpdateAllIsSequentialLeavesFirst(t *testing.T) {
 		t.Fatalf("reboot order = %v, want %v\n%s", got, want, d.out.String())
 	}
 
-	// Strictly one at a time: each device's install+reboot completes
-	// before the next device's install starts.
+	// Each device's install+reboot completes before the next one starts.
 	d.mu.Lock()
 	steps := append([]string(nil), d.sshSteps...)
 	d.mu.Unlock()
@@ -662,9 +630,8 @@ func TestDeviceUpdateAllIsSequentialLeavesFirst(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateRechecksRedundancyPerDevice is the reason this command
-// cannot hoist the safety check: rebooting leaf-1 changes what is safe
-// for the spine, so a check made once at the start is stale.
+// The safety check cannot be hoisted: rebooting leaf-1 changes what is
+// safe for the spine, so a check made once at the start is stale.
 func TestDeviceUpdateRechecksRedundancyPerDevice(t *testing.T) {
 	d := fleetHarness(t)
 
@@ -683,8 +650,7 @@ func TestDeviceUpdateRechecksRedundancyPerDevice(t *testing.T) {
 		t.Fatalf("update all: %v", err)
 	}
 
-	// One evaluation per device planned, not one for the run. (The
-	// executing updater reuses the plan, so it is exactly three.)
+	// One evaluation per device planned, not one for the whole run.
 	if got := atomic.LoadInt32(&checks); got != 4 {
 		t.Fatalf("the redundancy gate was evaluated %d times, want 4 (once per device)", got)
 	}
@@ -693,8 +659,7 @@ func TestDeviceUpdateRechecksRedundancyPerDevice(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateStopsOnTheFirstFailure: a fleet whose last member did
-// not come back is not a fleet to keep rebooting.
+// A fleet whose last member did not come back is not one to keep rebooting.
 func TestDeviceUpdateStopsOnTheFirstFailure(t *testing.T) {
 	d := fleetHarness(t)
 	d.scriptFails = map[string]bool{"sea1-leaf-1:barf-install.sh": true}
@@ -725,9 +690,8 @@ func TestDeviceUpdateStopsOnTheFirstFailure(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateHaltsWhenRoutingDoesNotRecover: the device is back on
-// the new image but BGP is still admin-down, so the run must stop rather
-// than reboot the next member of an already-degraded fleet.
+// Back on the new image but BGP still admin-down: stop rather than reboot
+// the next member of an already-degraded fleet.
 func TestDeviceUpdateHaltsWhenRoutingDoesNotRecover(t *testing.T) {
 	d := fleetHarness(t)
 	d.device("sea1-leaf-0").bgp = adminDown
@@ -747,8 +711,6 @@ func TestDeviceUpdateHaltsWhenRoutingDoesNotRecover(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateSkipsCurrentDevicesWithoutRebooting: a device already
-// on the target version costs no downtime at all.
 func TestDeviceUpdateSkipsCurrentDevicesWithoutRebooting(t *testing.T) {
 	d := fleetHarness(t)
 	d.device("sea1-leaf-1").version = versionOutput(newVersion)
@@ -770,11 +732,9 @@ func TestDeviceUpdateSkipsCurrentDevicesWithoutRebooting(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateAllRunsTheWholeFleet: "all" with --yes is allowed.
-// The protection is the mechanism — one device at a time, redundancy
-// re-checked before each, stop on first failure — not the spelling of
-// the selection. Pinning hostnames instead goes stale, and a device
-// quietly missed for a year is this fleet's real failure mode.
+// "all" with --yes is allowed: the protection is the mechanism (one device
+// at a time, redundancy re-checked before each, stop on first failure), not
+// the spelling of the selection.
 func TestDeviceUpdateAllRunsTheWholeFleet(t *testing.T) {
 	d := fleetHarness(t)
 
@@ -784,8 +744,8 @@ func TestDeviceUpdateAllRunsTheWholeFleet(t *testing.T) {
 	if got := len(d.rebootOrder()); got == 0 {
 		t.Fatal("all --yes rebooted nothing")
 	}
-	// It still says out loud what it is about to reboot, so an
-	// unattended run is legible in the log afterwards.
+	// It still names what it is about to reboot, so an unattended run is
+	// legible in the log afterwards.
 	out := d.out.String()
 	if !strings.Contains(out, "unattended run over the whole fleet") {
 		t.Fatalf("the fleet selection was not announced:\n%s", out)
@@ -795,10 +755,8 @@ func TestDeviceUpdateAllRunsTheWholeFleet(t *testing.T) {
 	}
 }
 
-// TestFleetAnnouncementShape pins when the announcement is printed: only
-// for an unattended ("--yes") selection of the whole fleet. Naming hosts
-// explicitly, or confirming interactively, already says what is going
-// down.
+// The announcement prints only for an unattended (--yes) selection of the
+// whole fleet; naming hosts or confirming interactively already says so.
 func TestFleetAnnouncementShape(t *testing.T) {
 	fleet := fleetNetwork()
 	many := []*model.Host{&fleet.Hosts[0], &fleet.Hosts[1]}
@@ -830,8 +788,7 @@ func TestFleetAnnouncementShape(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateMultiDeviceDryRun: a non-TTY run with no --yes plans
-// every device and changes none of them.
+// A non-TTY run with no --yes plans every device and changes none of them.
 func TestDeviceUpdateMultiDeviceDryRun(t *testing.T) {
 	d := fleetHarness(t)
 
@@ -854,14 +811,11 @@ func TestDeviceUpdateMultiDeviceDryRun(t *testing.T) {
 	d.assertReadOnly(t, "a multi-device dry run")
 }
 
-// TestDeviceUpdateForcePerDevice: --force overrides the refusal for the
-// device it is refused on, loudly, and does not disable the gate for the
-// run — every other device is still evaluated normally.
+// --force overrides the refusal loudly, per device; it does not disable the
+// gate for the rest of the run.
 func TestDeviceUpdateForcePerDevice(t *testing.T) {
 	d := fleetHarness(t)
-	// Only leaf-0 is alive besides the target, so rebooting the spine is
-	// fine but rebooting the last leaf is not... make it starker: nothing
-	// else answers at all, so every device is refused.
+	// Nothing but leaf-0 answers, so every device is refused.
 	d.reachable = map[string]bool{
 		"sea1-leaf-0.example.invalid": true,
 		"10.1.0.1":                    true,
@@ -883,8 +837,8 @@ func TestDeviceUpdateForcePerDevice(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateBuildsAFreshUpdaterPerDevice: ErrAlreadyExecuted still
-// holds per Updater, so a multi-device run must not be sharing one.
+// ErrAlreadyExecuted holds per Updater, so a multi-device run must not
+// share one.
 func TestDeviceUpdateBuildsAFreshUpdaterPerDevice(t *testing.T) {
 	d := fleetHarness(t)
 	o := d.options()
@@ -953,10 +907,9 @@ func TestDeviceCleanupSkipsNonVyOS(t *testing.T) {
 	}
 }
 
-// An image source with no known target version must never report a
-// device as already current: strings.Contains(v, "") is true, so the
-// inline substring test this replaced skipped upgrades silently.
-// imageSource refuses to build one, but the predicate guards itself.
+// Regression: strings.Contains(v, "") is true, so an image source with no
+// known target version once reported every device as already current and
+// skipped upgrades silently.
 func TestStaticImageUnknownVersionIsNotCurrent(t *testing.T) {
 	unknown := staticImage{url: "https://example.invalid/i.iso"}
 	for _, version := range []string{"2026.07.21-1151-rolling", "1.4.2", ""} {

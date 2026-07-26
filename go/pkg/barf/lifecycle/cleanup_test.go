@@ -50,9 +50,8 @@ func TestBuildCleanupPlanKeepsRunningAndDefaultBoot(t *testing.T) {
 }
 
 func TestBuildCleanupPlanRejectsAnEmptyImageList(t *testing.T) {
-	// A booted device always has at least the running image, so an empty
-	// list means the API answer could not be parsed — not "nothing to
-	// keep". Treating it as the latter would delete everything.
+	// A booted device always lists its running image, so an empty list means
+	// an unparseable API answer; treating it as "keep nothing" deletes all.
 	device := &fakeImages{}
 	if _, err := BuildCleanupPlan(context.Background(), "sea1-leaf-0", device); err == nil {
 		t.Fatal("expected an error for an unparseable image list")
@@ -112,8 +111,8 @@ func TestExecuteCleanupStopsOnTheFirstFailure(t *testing.T) {
 	}
 }
 
-// The end-to-end guard: cleanup driven through the real API client with
-// writes off must not send a single request to the device.
+// End-to-end: cleanup through the real API client with writes off must send
+// no request at all.
 func TestCleanupThroughTheAPIClientRespectsTheWriteGate(t *testing.T) {
 	server := newAPIServer(t)
 	server.reply["show"] = "Name                     Default boot    Running\n" +

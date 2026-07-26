@@ -11,9 +11,7 @@ import (
 	ltable "github.com/charmbracelet/lipgloss/table"
 )
 
-// StatusColumns are the `barf status` table headers, in the order the
-// Python implementation prints them (minus the firmware column, which
-// needs an image provider this port does not have).
+// StatusColumns are the `barf status` headers in Python's order, less firmware.
 var StatusColumns = []string{
 	"DEVICE", "ENDPOINT", "MODEL", "UPTIME", "VERSION", "CONFIG CONSISTENT", "STATUS",
 }
@@ -30,8 +28,8 @@ type StatusRow struct {
 	State      RowState
 }
 
-// PendingRow is the placeholder shown for a device that has not answered
-// yet. The STATUS cell is filled in by the model's spinner.
+// PendingRow is the placeholder for an unanswered device; the spinner fills
+// in the STATUS cell.
 func PendingRow(device string) StatusRow {
 	return StatusRow{
 		Device:     device,
@@ -50,10 +48,8 @@ func (r StatusRow) Cells() []string {
 	return []string{r.Device, r.Endpoint, r.Model, r.Uptime, r.Version, r.Consistent, r.Status}
 }
 
-// StatusProbe is one device's probe. Run is called on its own goroutine
-// (as a tea.Cmd in TUI mode, in a worker pool in plain mode) and must
-// return a fully populated row rather than an error: per-device failures
-// belong in the table, not in the command's exit path.
+// StatusProbe is one device's probe. Run must return a populated row rather
+// than an error: per-device failures belong in the table, not the exit path.
 type StatusProbe struct {
 	Device string
 	Run    func(ctx context.Context) StatusRow
@@ -65,9 +61,8 @@ type statusDoneMsg struct {
 	row   StatusRow
 }
 
-// StatusModel renders the status table live: every device is on screen
-// from the first frame in a "probing" state, and rows are replaced as
-// their probes answer.
+// StatusModel renders the status table live: every device is on screen from
+// the first frame "probing", and rows are replaced as their probes answer.
 type StatusModel struct {
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -78,20 +73,12 @@ type StatusModel struct {
 	width   int
 	done    bool
 
-	// concurrency caps how many probes are in flight, and therefore how
-	// many goroutines exist: tea.Batch runs one goroutine per command, so
-	// firing every probe up front means one goroutine per device.
-	concurrency int
-	// next is the index of the first probe not yet dispatched. Only
-	// Update touches it, like every other field here.
-	next int
+	concurrency int // caps in-flight probes: tea.Batch is one goroutine per cmd
+	next        int // first probe not yet dispatched; Update-only, as is all state
 }
 
-// NewStatusModel builds the live status model for the given probes.
-//
-// The returned model derives a cancellable context from ctx; call Cancel
-// (RunStatus does) so probes that are still parked are released when the
-// model is finished with.
+// NewStatusModel builds the live status model, deriving a cancellable context
+// from ctx; call Cancel (RunStatus does) to release probes still parked.
 func NewStatusModel(ctx context.Context, probes []StatusProbe) *StatusModel {
 	if ctx == nil {
 		ctx = context.Background()
@@ -118,8 +105,7 @@ func NewStatusModel(ctx context.Context, probes []StatusProbe) *StatusModel {
 	}
 }
 
-// SetConcurrency caps how many probes run at once. Values below 1 are
-// ignored. Call it before Init.
+// SetConcurrency caps how many probes run at once; call it before Init.
 func (m *StatusModel) SetConcurrency(n int) {
 	if n > 0 {
 		m.concurrency = n
@@ -133,10 +119,8 @@ func (m *StatusModel) Cancel() {
 	}
 }
 
-// Init starts the spinner and fires the first batch of probes, so the
-// table fills in as devices answer instead of after the slowest one.
-// Only `concurrency` probes are launched; each completion dispatches the
-// next, which bounds the goroutine count regardless of fleet size.
+// Init starts the spinner and dispatches the first `concurrency` probes; each
+// completion dispatches the next, bounding goroutines regardless of fleet size.
 func (m *StatusModel) Init() tea.Cmd {
 	cmds := make([]tea.Cmd, 0, m.concurrency+1)
 	cmds = append(cmds, m.spin.Tick)
@@ -147,9 +131,7 @@ func (m *StatusModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// dispatchNext returns the command for the next undispatched probe, or
-// nil when every probe has been started. Update-only, like all mutation
-// in this model.
+// dispatchNext returns the next undispatched probe's command, nil when done.
 func (m *StatusModel) dispatchNext() tea.Cmd {
 	if m.next >= len(m.probes) {
 		return nil
@@ -177,9 +159,8 @@ func (m *StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.done = true
-			// Cancel as well as quit: tea.Quit only stops the UI, and
-			// without this the probes still in flight would keep
-			// contacting devices while the summary is printed.
+			// tea.Quit only stops the UI; without Cancel, in-flight probes
+			// keep contacting devices while the summary prints.
 			m.Cancel()
 			return m, tea.Quit
 		}
@@ -195,8 +176,7 @@ func (m *StatusModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.pending <= 0 {
 			m.done = true
 			m.Cancel()
-			// Every device has answered; the finished table is the
-			// command's output, so leave it on screen and exit.
+			// The finished table is the output: leave it on screen and exit.
 			return m, tea.Quit
 		}
 		return m, m.dispatchNext()
@@ -266,13 +246,11 @@ func (m *StatusModel) Rows() []StatusRow { return m.rows }
 // Done reports whether every probe has answered (or the user quit).
 func (m *StatusModel) Done() bool { return m.done }
 
-// RunStatus drives the live status table to completion and returns the
-// final rows. Rows for probes the user quit before are left pending.
+// RunStatus drives the live status table to completion and returns the final
+// rows; probes the user quit before are left pending.
 func RunStatus(ctx context.Context, probes []StatusProbe) ([]StatusRow, error) {
 	m := NewStatusModel(ctx, probes)
-	// The program watches the PARENT context: cancelling the model's own
-	// context is how the probes are stopped, and must not be mistaken for
-	// the program being killed.
+	// The program watches the PARENT ctx; the model's own ctx stops the probes.
 	defer m.Cancel()
 	final, err := tea.NewProgram(m, tea.WithContext(ctx)).Run()
 	if err != nil {

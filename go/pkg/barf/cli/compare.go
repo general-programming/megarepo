@@ -6,24 +6,13 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// compareConfig is the single place that decides how a device's running
-// config is compared against the rendered one.
-//
-// Every command that answers "does this device match network.yml?" —
-// `status`, `diff` and `deploy` — must give the same answer, so they all
-// come through here. They did not always: `status` used to line-diff
-// every vendor, which for VyOS compares `set` commands against a JSON
-// tree and reported hundreds of phantom changes on a device `diff` and
-// `deploy` both called clean.
-//
-// The comparison used is the one the vendor actually owns:
-//   - a reader advertising ScopedDiffer owns only a slice of the device
-//     config (EOS: the admin user, its keys, the enable secret and the
-//     eAPI block) and compares that slice;
-//   - VyOS owns the whole tree and is diffed as a path set — the same
-//     computation `deploy` plans from, so the two cannot disagree about
-//     what a deploy would do;
-//   - anything else falls back to a plain line set.
+// compareConfig is the single place deciding how a running config is compared
+// against the rendered one; `status`, `diff` and `deploy` all come through
+// here so they cannot disagree. The comparison is the one the vendor owns:
+// a reader advertising ScopedDiffer compares only its managed slice (EOS: the
+// admin user, its keys, the enable secret, the eAPI block); VyOS owns the
+// whole tree and is diffed as a path set, the same computation `deploy` plans
+// from; anything else falls back to a plain line set.
 func compareConfig(
 	ctx context.Context,
 	reader DeviceReader,

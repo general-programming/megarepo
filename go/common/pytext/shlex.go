@@ -5,23 +5,12 @@ import (
 	"strings"
 )
 
-// This file is a port of the two Python `shlex` entry points
-// projects/barf/barf/util/vyos_config.py relies on: `shlex.split` (POSIX
-// mode) for parsing rendered `set` lines, and `shlex.quote` for printing
-// them back. Go has neither in its standard library, and the templates'
-// inconsistent quoting (`'aes256'` vs `aes256`) means the normalization
-// has to match Python's byte for byte or paths stop comparing equal.
-//
-// ShellQuote had a second, independently written implementation in
-// barf/sshx, where it built the `vbash`/`cat` command lines sent over
-// SSH. The two agreed on the safe-character set but only this one was
-// checked against CPython, so this is the copy that survived; sshx now
-// calls it. That matters more there than in vyosconfig: sshx interpolates
-// the result straight into a remote shell command, so the quoting is a
-// command-injection boundary, not just a formatting detail.
-//
-// Both entry points are differentially validated against CPython — see
-// shlex_test.go and the captured corpus in testdata/python_shlex.json.
+// Port of the two Python `shlex` entry points vyos_config.py needs and Go's
+// stdlib lacks: `shlex.split` (POSIX) for rendered `set` lines, `shlex.quote`
+// for printing them back. The templates quote inconsistently (`'aes256'` vs
+// `aes256`), so normalization must match Python byte for byte or config paths
+// stop comparing equal. ShellQuote is also barf/sshx's quoter for remote shell
+// lines, a command-injection boundary. Both validated against CPython.
 
 // ErrNoClosingQuote mirrors Python's ValueError("No closing quotation").
 var ErrNoClosingQuote = errors.New("no closing quotation")
@@ -37,8 +26,8 @@ const (
 	shlexEscape        = '\\'
 )
 
-// ShellSplit tokenizes s exactly as Python's `shlex.split(s)` does:
-// POSIX mode, whitespace splitting, comments disabled.
+// ShellSplit tokenizes s as Python's `shlex.split(s)`: POSIX mode, whitespace
+// splitting, comments disabled.
 func ShellSplit(s string) ([]string, error) {
 	var (
 		tokens  []string
@@ -65,8 +54,7 @@ func ShellSplit(s string) ([]string, error) {
 		switch {
 		case state == shlexEscape:
 			// POSIX: inside a quoted string only the quote itself and the
-			// escape char may be escaped; anything else keeps its
-			// backslash.
+			// escape char may be escaped; anything else keeps its backslash.
 			if strings.ContainsRune(shlexQuotes, escapedState) &&
 				c != shlexEscape && c != escapedState {
 				token.WriteRune(shlexEscape)
@@ -117,8 +105,8 @@ func ShellSplit(s string) ([]string, error) {
 	return tokens, nil
 }
 
-// ShellQuote is Python's `shlex.quote`: return s unchanged when every
-// character is shell-safe, otherwise wrap it in single quotes.
+// ShellQuote is Python's `shlex.quote`: s unchanged when every character is
+// shell-safe, otherwise wrapped in single quotes.
 func ShellQuote(s string) string {
 	if s == "" {
 		return "''"
@@ -129,9 +117,8 @@ func ShellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }
 
-// shlexUnsafe is Python's `re.compile(r"[^\w@%+=:,./-]", re.ASCII)`:
-// with the ASCII flag `\w` is exactly [A-Za-z0-9_], so any non-ASCII rune
-// is unsafe too.
+// shlexUnsafe is Python's `re.compile(r"[^\w@%+=:,./-]", re.ASCII)`: with the
+// ASCII flag `\w` is exactly [A-Za-z0-9_], so non-ASCII runes are unsafe too.
 func shlexUnsafe(c rune) bool {
 	switch {
 	case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':

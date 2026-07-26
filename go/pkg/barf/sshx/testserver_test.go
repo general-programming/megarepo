@@ -16,7 +16,7 @@ import (
 // An in-process SSH server, so every test here talks real SSH over a
 // loopback socket and NOTHING in this package is ever pointed at a device.
 
-// execHandler answers one exec request. It receives the command line and
+// execHandler answers one exec request, given the command line and
 // whatever the client wrote to stdin.
 type execHandler func(command, stdin string) (stdout, stderr string, rc int)
 
@@ -27,8 +27,7 @@ type testServer struct {
 	handler  execHandler
 
 	mu sync.Mutex
-	// commands records every exec command line the server was asked to
-	// run, in order.
+	// commands records every exec command line, in order.
 	commands []string
 	// files records what was written via `cat > path`.
 	files map[string]string
@@ -38,16 +37,14 @@ type testServer struct {
 	wg sync.WaitGroup
 }
 
-// newTestServer starts a server accepting the given password and any
-// public key. handler answers exec requests.
+// newTestServer accepts the given password and any public key.
 func newTestServer(t *testing.T, password string, handler execHandler) *testServer {
 	t.Helper()
 	return newTestServerWith(t, password, handler, nil)
 }
 
-// newTestServerWith is newTestServer with a chance to adjust the server
-// config BEFORE it starts accepting. Mutating s.config afterwards races
-// the accept loop.
+// newTestServerWith adjusts the server config BEFORE it starts
+// accepting; mutating s.config afterwards races the accept loop.
 func newTestServerWith(t *testing.T, password string, handler execHandler, configure func(*ssh.ServerConfig)) *testServer {
 	t.Helper()
 
@@ -224,8 +221,8 @@ func encodeUint32(v uint32) []byte {
 	return b
 }
 
-// dialTest connects to the test server as the supertech user, with the
-// agent and identity files disabled so the run is hermetic.
+// dialTest connects as the supertech user with the agent and identity
+// files disabled, so the run is hermetic.
 func dialTest(t *testing.T, s *testServer, password string) *Client {
 	t.Helper()
 	host, port := s.addr()

@@ -13,9 +13,8 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// ManagementAddress returns the address of h's management interface,
-// preferring IPv6, or the zero Addr when h has no management interface.
-// Mirrors Python BaseHost.management_address.
+// ManagementAddress returns h's management interface address, preferring
+// IPv6, or the zero Addr when there is none.
 func ManagementAddress(h *model.Host) netip.Addr {
 	for _, iface := range h.Interfaces {
 		if !iface.Management {
@@ -35,10 +34,9 @@ func ManagementAddress(h *model.Host) netip.Addr {
 	return netip.Addr{}
 }
 
-// EndpointCandidates lists the addresses to try for reaching h, most
-// specific first: FQDN, management address, the host's own addresses,
-// then interface addresses with global ones first. Deduplicated, order
-// preserved. Mirrors Python BaseHost._endpoint_candidates.
+// EndpointCandidates lists the addresses to try for h, most specific first:
+// FQDN, management address, host addresses, then interface addresses with
+// global ones first. Deduplicated, order preserved.
 func EndpointCandidates(h *model.Host, domain string) []string {
 	if domain == "" {
 		domain = DefaultDomain
@@ -56,8 +54,7 @@ func EndpointCandidates(h *model.Host, domain string) []string {
 
 	var ifaceIPs []netip.Addr
 	for _, iface := range h.Interfaces {
-		// Python takes (ip6_address, address) per interface: the first
-		// address of each family, v6 first.
+		// Python takes the first address of each family per interface, v6 first.
 		var v6, v4 netip.Addr
 		for _, addr := range iface.Addresses {
 			if addr.IP.Is6() && !addr.IP.Is4In6() {
@@ -74,13 +71,9 @@ func EndpointCandidates(h *model.Host, domain string) []string {
 			}
 		}
 	}
-	// External (global) addresses first; stable, like Python's sort.
-	//
-	// model.IsGlobal, not a local copy: this package had its own
-	// hand-rolled version that disagreed with model's on 0.0.0.0/8 and on
-	// four IPv6 ranges (64:ff9b:1::/48, 100::/64, 2001::/23, 2002::/16),
-	// calling them globally routable when Python's ipaddress does not. A
-	// 6to4 or Teredo address would have been probed ahead of a real one.
+	// Global addresses first, stably. Must be model.IsGlobal: it matches
+	// Python's ipaddress on 0.0.0.0/8, 64:ff9b:1::/48, 100::/64, 2001::/23 and
+	// 2002::/16, which a hand-rolled check calls routable.
 	sort.SliceStable(ifaceIPs, func(i, j int) bool {
 		return model.IsGlobal(ifaceIPs[i]) && !model.IsGlobal(ifaceIPs[j])
 	})
@@ -100,10 +93,8 @@ func EndpointCandidates(h *model.Host, domain string) []string {
 	return out
 }
 
-// ProbeEndpoint returns the first candidate answering a TCP connect on
-// port. Mirrors Python BaseHost._probe_endpoint (which backs
-// management_ip). It opens and immediately closes a connection; nothing
-// is sent.
+// ProbeEndpoint returns the first candidate answering a TCP connect on port;
+// it opens and immediately closes a connection, sending nothing.
 func ProbeEndpoint(ctx context.Context, h *model.Host, port int, domain string, timeout time.Duration) (string, error) {
 	if timeout <= 0 {
 		timeout = 2 * time.Second
@@ -125,9 +116,8 @@ func ProbeEndpoint(ctx context.Context, h *model.Host, port int, domain string, 
 	return "", fmt.Errorf("%s: no address answering on %d (last error: %v)", h.Hostname, port, lastErr)
 }
 
-// endpointResolver caches the probed endpoint for one device, so a Reader
-// probes at most once regardless of how many reads it serves (Python
-// memoizes _probe_endpoint with lru_cache).
+// endpointResolver caches the probed endpoint, so a Reader probes at most
+// once however many reads it serves.
 type endpointResolver struct {
 	host  *model.Host
 	opts  Options
@@ -147,12 +137,6 @@ func (r *endpointResolver) resolve(ctx context.Context) (string, error) {
 }
 
 // HostForURL wraps a bare IPv6 literal in brackets for use in a URL.
-//
-// Exported so barf/lifecycle can share it rather than keep its own copy.
-// It stays here rather than in go/common because its only consumers are
-// the barf transports that build device URLs; a five-line helper does not
-// earn a slot in a monorepo-wide package until something outside barf
-// needs it.
 func HostForURL(address string) string {
 	if ip, err := netip.ParseAddr(address); err == nil && ip.Is6() && !ip.Is4In6() {
 		return "[" + address + "]"

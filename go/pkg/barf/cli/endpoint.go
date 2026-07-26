@@ -10,10 +10,9 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// apiPort is device.DefaultPort: the HTTPS management API port probed to
-// decide which of a host's addresses is reachable, matching the Python
-// implementation. The probe and the request that follows it must agree
-// on the port, so there is one constant rather than two.
+// apiPort is device.DefaultPort, probed to decide which of a host's addresses
+// is reachable. One constant: the probe and the request that follows it must
+// agree.
 const apiPort = device.DefaultPort
 
 // endpointProbeTimeout is the per-candidate TCP connect timeout.
@@ -25,9 +24,8 @@ var dialContext = func(ctx context.Context, network, address string) (net.Conn, 
 	return d.DialContext(ctx, network, address)
 }
 
-// endpointCandidates are the addresses to try for reaching a host, most
-// specific first: FQDN, the management interface address, the host's own
-// addresses, then the remaining interface addresses. Ported from
+// endpointCandidates are the addresses to try, most specific first: FQDN,
+// management interface, the host's own addresses, then the rest. From
 // BaseHost._endpoint_candidates.
 func endpointCandidates(h *model.Host, searchDomain string) []string {
 	var candidates []string
@@ -59,8 +57,8 @@ func endpointCandidates(h *model.Host, searchDomain string) []string {
 			add(a.IP.String())
 		}
 	}
-	// Globally routable interface addresses before private ones, as the
-	// fleet's management path is frequently only reachable globally.
+	// Globally routable before private: the fleet's management path is
+	// frequently only reachable globally.
 	var global, local []string
 	for _, iface := range h.Interfaces {
 		for _, a := range iface.Addresses {
@@ -77,9 +75,8 @@ func endpointCandidates(h *model.Host, searchDomain string) []string {
 	return candidates
 }
 
-// probeEndpoint returns the first candidate address answering on the
-// management API port, or "" when nothing answers. Connecting and
-// immediately closing is the only device contact this makes.
+// probeEndpoint returns the first candidate answering on the management API
+// port, or "". Connect-and-close is its only device contact.
 func probeEndpoint(ctx context.Context, h *model.Host, searchDomain string) string {
 	for _, candidate := range endpointCandidates(h, searchDomain) {
 		if ctx.Err() != nil {

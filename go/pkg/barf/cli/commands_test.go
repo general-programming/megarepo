@@ -151,10 +151,8 @@ func TestDiffFailureExitsNonZero(t *testing.T) {
 }
 
 func TestDiffNeverWritesToTheDevice(t *testing.T) {
-	// fakeReader only exposes Status and RunningConfig; that the diff
-	// path compiles against DeviceReader at all is the guarantee. This
-	// test pins the interface's method set so a write verb cannot be
-	// added without failing here.
+	// Pins DeviceReader's method set so a write verb cannot be added
+	// without failing here.
 	var r DeviceReader = fakeReader{}
 	switch any(r).(type) {
 	case interface{ Push(string) error }:

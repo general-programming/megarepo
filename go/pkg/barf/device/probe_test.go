@@ -54,9 +54,8 @@ func TestEndpointCandidates(t *testing.T) {
 		"2602:fd37::1",
 		"2001:470:1::5",
 		"23.150.40.5",
-		// The management interface's v4 is still an interface candidate
-		// (Python takes both families per interface); it just sorts
-		// behind the global ones.
+		// The management interface's v4 is still a candidate (Python takes
+		// both families per interface); it just sorts behind the globals.
 		"10.65.0.9",
 		"192.168.1.5",
 	}

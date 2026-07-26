@@ -10,9 +10,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// DiffOutcome is one device's diff between its rendered config and the
-// config it is actually running. Err is a per-device failure; it never
-// aborts the other devices.
+// DiffOutcome is one device's rendered-vs-running diff; Err is a per-device
+// failure and never aborts the other devices.
 type DiffOutcome struct {
 	Device  string
 	Text    string
@@ -32,8 +31,7 @@ func (o DiffOutcome) State() RowState {
 	}
 }
 
-// DiffJob renders and diffs one device. Run must not write to the
-// device; `barf diff` is a read-only command.
+// DiffJob renders and diffs one device; Run must not write to it.
 type DiffJob struct {
 	Device string
 	Run    func(ctx context.Context) DiffOutcome
@@ -44,8 +42,7 @@ type diffDoneMsg struct {
 	outcome DiffOutcome
 }
 
-// DiffModel streams per-device diffs into a scrollable viewport as they
-// arrive.
+// DiffModel streams per-device diffs into a scrollable viewport as they arrive.
 type DiffModel struct {
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -58,17 +55,12 @@ type DiffModel struct {
 	ready    bool
 	quitting bool
 
-	// concurrency caps in-flight jobs, and so the goroutine count:
-	// tea.Batch runs one goroutine per command.
-	concurrency int
-	// next is the index of the first job not yet dispatched; Update-only.
-	next int
+	concurrency int // caps in-flight jobs: tea.Batch is one goroutine per cmd
+	next        int // first job not yet dispatched; Update-only
 }
 
-// NewDiffModel builds the diff viewer for the given jobs.
-//
-// The model derives a cancellable context from ctx; call Cancel (RunDiff
-// does) to release jobs that are still queued or in flight.
+// NewDiffModel builds the diff viewer, deriving a cancellable context from
+// ctx; call Cancel (RunDiff does) to release queued and in-flight jobs.
 func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	if ctx == nil {
 		ctx = context.Background()
@@ -96,8 +88,7 @@ func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	return m
 }
 
-// SetConcurrency caps how many jobs run at once. Values below 1 are
-// ignored. Call it before Init.
+// SetConcurrency caps how many jobs run at once; call it before Init.
 func (m *DiffModel) SetConcurrency(n int) {
 	if n > 0 {
 		m.concurrency = n
@@ -111,9 +102,8 @@ func (m *DiffModel) Cancel() {
 	}
 }
 
-// Init starts the spinner and the first batch of diff jobs. Only
-// `concurrency` are launched; each completion dispatches the next, so a
-// 300-device run does not become 300 goroutines.
+// Init starts the spinner and the first `concurrency` jobs; each completion
+// dispatches the next, so a 300-device run is not 300 goroutines.
 func (m *DiffModel) Init() tea.Cmd {
 	cmds := make([]tea.Cmd, 0, m.concurrency+1)
 	cmds = append(cmds, m.spin.Tick)
@@ -124,8 +114,7 @@ func (m *DiffModel) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// dispatchNext returns the command for the next undispatched job, or nil
-// when they have all been started.
+// dispatchNext returns the next undispatched job's command, nil when done.
 func (m *DiffModel) dispatchNext() tea.Cmd {
 	if m.next >= len(m.jobs) {
 		return nil
@@ -162,8 +151,8 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
-			// Cancel as well as quit, or `runDiff` would print its summary
-			// while queued jobs kept contacting devices.
+			// Without Cancel, runDiff prints its summary while queued
+			// jobs keep contacting devices.
 			m.Cancel()
 			return m, tea.Quit
 		}
@@ -241,8 +230,7 @@ func (m *DiffModel) View() string {
 		fmt.Sprintf("  %d/%d devices diffed  (read-only)", answered, len(m.outcomes)))
 
 	if !m.ready {
-		// No WindowSizeMsg yet: print the document unpaged so a very
-		// short-lived run still shows something useful.
+		// No WindowSizeMsg yet: print unpaged so a short run shows something.
 		return header + "\n" + m.body()
 	}
 	help := styleDim.Render("↑/↓ pgup/pgdn scroll · q quit")
@@ -255,8 +243,7 @@ func (m *DiffModel) Outcomes() []DiffOutcome { return m.outcomes }
 // RunDiff drives the diff viewer and returns the per-device outcomes.
 func RunDiff(ctx context.Context, jobs []DiffJob) ([]DiffOutcome, error) {
 	m := NewDiffModel(ctx, jobs)
-	// The program watches the PARENT context; the model's own context is
-	// what stops the jobs.
+	// The program watches the PARENT ctx; the model's own ctx stops the jobs.
 	defer m.Cancel()
 	final, err := tea.NewProgram(m,
 		tea.WithContext(ctx),

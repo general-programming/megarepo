@@ -10,7 +10,6 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// writeYAML drops a network.yml into a temp dir and returns its path.
 func writeYAML(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "network.yml")
@@ -20,7 +19,6 @@ func writeYAML(t *testing.T, body string) string {
 	return path
 }
 
-// minimalGlobal is enough global_meta for a fixture to load.
 const minimalGlobal = `
 global_meta:
   search_domain: example.org
@@ -60,8 +58,7 @@ func loadReal(t *testing.T) *model.Network {
 	return network
 }
 
-// TestProfileAnchorsMerge covers the `profiles:` block: a host using
-// `<<: *fmt2-leaf` inherits every profile key, and its own keys win.
+// `<<: *fmt2-leaf` inherits every profile key; the host's own keys win.
 func TestProfileAnchorsMerge(t *testing.T) {
 	network := loadReal(t)
 
@@ -81,11 +78,9 @@ func TestProfileAnchorsMerge(t *testing.T) {
 	if len(leaf.ExtraConfig) != 5 {
 		t.Errorf("extra_config lines = %d, want 5", len(leaf.ExtraConfig))
 	}
-	// Own key wins over the profile: leaf-1 declares its own interfaces.
 	if len(leaf.Interfaces) != 4 {
 		t.Errorf("interfaces = %d, want 4", len(leaf.Interfaces))
 	}
-	// Profile-supplied nat / ospf survive the merge.
 	if len(leaf.NATMasquerades) != 1 || leaf.NATMasquerades[0].Rule != 10 {
 		t.Errorf("nat masquerades = %+v", leaf.NATMasquerades)
 	}
@@ -94,7 +89,6 @@ func TestProfileAnchorsMerge(t *testing.T) {
 	}
 }
 
-// TestNameserverInheritance covers the global fallback and the override.
 func TestNameserverInheritance(t *testing.T) {
 	network := loadReal(t)
 
@@ -110,8 +104,7 @@ func TestNameserverInheritance(t *testing.T) {
 	}
 }
 
-// TestInterfaceAddressForms covers `address:`, `addresses:`, and a mix
-// of the two families on one interface.
+// `address:`, `addresses:`, and both families on one interface.
 func TestInterfaceAddressForms(t *testing.T) {
 	network := loadReal(t)
 
@@ -126,12 +119,10 @@ func TestInterfaceAddressForms(t *testing.T) {
 	if got := dum0.Addresses[1].String(); got != "10.255.2.9/32" {
 		t.Errorf("dum0 second address = %q", got)
 	}
-	// The management address prefers the v6 one.
 	if got := leaf.ManagementAddress().String(); got != "2602:fa6d:f:aaaa::f01/128" {
 		t.Errorf("management address = %q", got)
 	}
 
-	// A single `address:` on a spine's eth0 alongside dhcp/autoconf.
 	spine, _ := network.Host("fmt2-vpn-spine-1")
 	eth0 := spine.Interfaces[0]
 	if !eth0.DHCP || !eth0.IPv6Autoconf {
@@ -145,8 +136,7 @@ func TestInterfaceAddressForms(t *testing.T) {
 	}
 }
 
-// TestLinkDerivationAndSides covers derived vs pinned ports, the uplink
-// (inner key) becoming side A, and the Vault key paths that follow.
+// Derived vs pinned ports, the uplink (inner key) as side A, and key paths.
 func TestLinkDerivationAndSides(t *testing.T) {
 	network := loadReal(t)
 
@@ -199,8 +189,8 @@ func TestLinkDerivationAndSides(t *testing.T) {
 	}
 }
 
-// TestRawKeepsUnmappedKeys proves nothing is silently dropped: sea1-vpn-leaf-1
-// carries `management:` and `cloudinit:` that no typed field claims.
+// Nothing is silently dropped: sea1-vpn-leaf-1's `management:`/`cloudinit:`
+// match no typed field.
 func TestRawKeepsUnmappedKeys(t *testing.T) {
 	network := loadReal(t)
 
@@ -391,15 +381,10 @@ func equal(a, b []string) bool {
 	return true
 }
 
-// TestYAML11BooleanSpellings pins PyYAML's YAML 1.1 boolean resolution
-// plus Python truthiness, which is what BaseHost.from_meta gets: every
-// bool-ish field is `meta.get(field, default)` fed straight into an
-// `if`, never bool()-cast.
-//
-// Before this was implemented Go used strconv.ParseBool, which rejects
-// `yes`/`on`/`off` (silently false) and parses the quoted string "no"
-// as false where Python sees a truthy non-empty string. Both are silent
-// wrong-config with exit 0, so each case below failed then.
+// Pins PyYAML's YAML 1.1 booleans plus Python truthiness: BaseHost.from_meta
+// feeds `meta.get(field, default)` straight into an `if`, never bool()-cast.
+// Regression: strconv.ParseBool rejects `yes`/`on`/`off` and reads the quoted
+// string "no" as false — silent wrong-config with exit 0.
 func TestYAML11BooleanSpellings(t *testing.T) {
 	cases := []struct {
 		spelling string
@@ -413,8 +398,7 @@ func TestYAML11BooleanSpellings(t *testing.T) {
 		{"true", true},
 		{"True", true},
 		{"1", true},
-		// PyYAML does NOT resolve bare y/n as booleans; they stay
-		// strings, and a non-empty string is truthy in Python.
+		// PyYAML leaves bare y/n as strings, truthy in Python.
 		{"y", true},
 		{"n", true},
 		{`"no"`, true},
@@ -452,9 +436,7 @@ func TestYAML11BooleanSpellings(t *testing.T) {
 		})
 	}
 
-	// `enabled` is the one field whose Python default is True, so it is
-	// worth pinning that an explicit falsey spelling still turns it off
-	// and that a quoted "no" leaves it on.
+	// `enabled` is the one field defaulting to True in Python.
 	for _, tc := range []struct {
 		spelling string
 		want     bool
@@ -499,9 +481,8 @@ func TestYAML11BooleanSpellings(t *testing.T) {
 	}
 }
 
-// TestSequenceMergeEarlierAliasWins pins the YAML spec / PyYAML rule for
-// `<<: [*a, *b]`: the EARLIER alias wins. Go previously let the later
-// one win, which would have rendered a different fabric with no error.
+// For `<<: [*a, *b]` the EARLIER alias wins. Regression: Go let the later one
+// win, silently rendering a different fabric.
 func TestSequenceMergeEarlierAliasWins(t *testing.T) {
 	network, err := model.Load(writeYAML(t, minimalGlobal+`
 first: &first
@@ -546,8 +527,7 @@ hosts:
 	}
 }
 
-// TestExplicitKeyBeatsSequenceMerge keeps the other half of the rule:
-// an explicit key on the mapping still overrides everything merged.
+// The other half of the rule: an explicit key overrides everything merged.
 func TestExplicitKeyBeatsSequenceMerge(t *testing.T) {
 	network, err := model.Load(writeYAML(t, minimalGlobal+`
 first: &first

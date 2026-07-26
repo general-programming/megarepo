@@ -25,7 +25,6 @@ func TestPrefetchWarmsCacheConcurrently(t *testing.T) {
 		t.Fatalf("prefetch made %d reads, want 32", got)
 	}
 
-	// Every path is now cached: the reads below must not hit the server.
 	for _, p := range paths {
 		if _, err := c.ReadSecret(context.Background(), "cluster-secrets", p); err != nil {
 			t.Fatalf("ReadSecret(%s): %v", p, err)
@@ -37,8 +36,7 @@ func TestPrefetchWarmsCacheConcurrently(t *testing.T) {
 }
 
 func TestPrefetchIsConcurrent(t *testing.T) {
-	// The whole point is not serialising on Vault round trips, so assert
-	// that more than one read is genuinely in flight at a time.
+	// Prefetch must not serialise on Vault round trips.
 	var mu sync.Mutex
 	inFlight, peak := 0, 0
 
@@ -93,14 +91,12 @@ func TestPrefetchSkipsCachedAndMissing(t *testing.T) {
 	}
 	before := fv.calls.Load()
 
-	// "present" is already cached, "gone" does not exist: neither may
-	// produce an error, and the cached one must not be re-read.
+	// A cached path must not be re-read; a missing one must not error.
 	c.PrefetchHostSecrets(context.Background(), "present", "present", "gone", "")
 	if got := fv.calls.Load(); got != before+1 {
 		t.Fatalf("prefetch made %d extra reads, want 1 (the missing path)", got-before)
 	}
 
-	// A missing path stays missing: warming never creates anything.
 	if _, err := c.ReadSecret(context.Background(), "cluster-secrets", "gone"); err == nil {
 		t.Fatal("prefetch must not have created the missing secret")
 	}

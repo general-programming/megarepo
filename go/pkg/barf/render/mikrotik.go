@@ -7,31 +7,26 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// fabricLinkNet is the fabric's numbered-link /31 pool (transit export
-// policy).
+// fabricLinkNet is the fabric's numbered-link /31 pool (transit export policy).
 const fabricLinkNet = "172.31.255.0/24"
 
-// mikrotikSSHUser is where the fleet ssh_keys land: RouterOS has no
-// supertech account.
+// mikrotikSSHUser is where the fleet ssh_keys land: RouterOS has no supertech.
 const mikrotikSSHUser = "admin"
 
-// MikroTik renders a RouterOS v7 CLI script.
-//
-// Port of the ("vpn", "mikrotik") entry of the Python BLOCK_REGISTRY.
+// MikroTik renders a RouterOS v7 CLI script. Port of the ("vpn", "mikrotik")
+// entry of the Python BLOCK_REGISTRY.
 type MikroTik struct{}
 
 // Render returns the RouterOS config commands for h.
 func (MikroTik) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		// Not a gap in the port: Python has no mikrotik template
-		// outside the vpn role either (see render.go's table).
+		// Not a gap: Python has no mikrotik template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
 
-	// The RouterOS path has no IPsec branch: such a link would render as
-	// WireGuard (generating spurious keypairs) and then vanish from the
-	// diff via ownership scoping. Fail fast instead.
+	// No IPsec branch: such a link would render as WireGuard (spurious
+	// keypairs) then vanish from the diff via ownership scoping. Fail fast.
 	for _, link := range ctx.links {
 		if link.IPsec {
 			return "", fmt.Errorf("%s: ipsec link to %s is not supported on mikrotik hosts",
@@ -67,17 +62,16 @@ func (MikroTik) Render(h *model.Host, n *model.Network, s SecretSource) (string,
 
 // -- line builders ----------------------------------------------------
 
-// prop is one RouterOS property. A slice of these rather than a map:
-// emission order is part of the output contract.
+// prop is one RouterOS property; a slice, not a map, because emission order
+// is part of the output contract.
 type prop struct {
 	key   string
 	value string
 }
 
-// rosValue quotes a RouterOS property value exactly when it needs it.
-// Unquoted values with spaces silently break (the find-where gotcha), so
-// anything containing whitespace, quotes, or backslashes -- or the empty
-// string -- is double-quoted with RouterOS escaping.
+// rosValue quotes a RouterOS property value exactly when it needs it: unquoted
+// values with spaces silently break (the find-where gotcha), so whitespace,
+// quotes, backslashes or the empty string get double-quoted and escaped.
 func rosValue(value string) string {
 	if value == "" || strings.ContainsAny(value, " \t\"\\") {
 		escaped := strings.ReplaceAll(value, "\\", "\\\\")
@@ -87,8 +81,8 @@ func rosValue(value string) string {
 	return value
 }
 
-// rosLine builds one RouterOS command from ordered props. Props with an
-// empty key are skipped, mirroring how the Python builder drops None.
+// rosLine builds one RouterOS command from ordered props; empty-key props are
+// skipped, mirroring how the Python builder drops None.
 func rosLine(path, verb string, props []prop) string {
 	parts := []string{path, verb}
 	for _, p := range props {
@@ -110,11 +104,9 @@ func mikrotikHeader(c *renderCtx) ([]string, error) {
 	}, nil
 }
 
-// mikrotikSSHConfig is configs.system.SshConfig's mikrotik method.
-//
-// RouterOS never reads key material back (write-only in the diff), so
-// rotating a key must also change its trailing comment. `key-owner` is
-// not a valid `add` parameter, so only user/key are sent.
+// mikrotikSSHConfig is configs.system.SshConfig's mikrotik method. RouterOS
+// never reads key material back, so rotating a key must also change its
+// trailing comment; `key-owner` is not a valid `add` parameter.
 func mikrotikSSHConfig(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, sshKey := range c.global.SSHKeys {
@@ -126,8 +118,8 @@ func mikrotikSSHConfig(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// mikrotikNTPConfig is configs.system.NtpConfig's mikrotik method:
-// RouterOS owns only the client sync, serving LAN clients stays unmodeled.
+// mikrotikNTPConfig is configs.system.NtpConfig's mikrotik method; only the
+// client sync is owned.
 func mikrotikNTPConfig(c *renderCtx) ([]string, error) {
 	return []string{
 		rosLine("/system/ntp/client", "set", []prop{
@@ -139,9 +131,8 @@ func mikrotikNTPConfig(c *renderCtx) ([]string, error) {
 	}, nil
 }
 
-// mikrotikBridges is configs.interfaces.Bridges: LAN/L2 bridges modeled
-// in network.yml. barf owns the bridge by name, its L3 addresses, and
-// its member ports.
+// mikrotikBridges is configs.interfaces.Bridges; barf owns the bridge by name,
+// its L3 addresses and its member ports.
 func mikrotikBridges(c *renderCtx) ([]string, error) {
 	var lines []string
 	for i := range c.host.Interfaces {
@@ -263,8 +254,8 @@ func mikrotikStaticWireGuard(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// mikrotikFirewallGroups is configs.firewall.FirewallGroups' mikrotik
-// method: address members split by family, interface lists nesting natively.
+// mikrotikFirewallGroups is configs.firewall.FirewallGroups' mikrotik method;
+// address members split by family, interface lists nest natively.
 func mikrotikFirewallGroups(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, group := range c.host.Firewall.Address {
@@ -296,9 +287,8 @@ func mikrotikFirewallGroups(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// announcedNetworks is the host's own networks plus modeled transit link
-// networks: transit link nets are announced (and tagged) like our own so
-// every fabric session advertises identically.
+// announcedNetworks adds transit link nets, tagged like our own so every
+// fabric session advertises identically.
 func announcedNetworks(h *model.Host) []string {
 	out := append([]string{}, h.Networks...)
 	for _, transit := range h.BGP.Transit {
@@ -307,8 +297,7 @@ func announcedNetworks(h *model.Host) []string {
 	return out
 }
 
-// mikrotikAnnouncedNetworks is configs.fabric.AnnouncedNetworks: the
-// genprog-networks address-list backing BGP origination.
+// mikrotikAnnouncedNetworks is configs.fabric.AnnouncedNetworks.
 func mikrotikAnnouncedNetworks(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, network := range announcedNetworks(c.host) {
@@ -319,12 +308,9 @@ func mikrotikAnnouncedNetworks(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// mikrotikFabricWireGuard is configs.fabric.FabricWireGuard's mikrotik
-// method.
-//
-// Unnumbered links (RFC 5549) get ND instead of an address: RAs teach us
-// the peer's link-local. /ipv6/nd entries silently discard comment=, so
-// none is rendered there: it would read as a forever-pending diff.
+// mikrotikFabricWireGuard is configs.fabric.FabricWireGuard's mikrotik method.
+// Unnumbered links (RFC 5549) get ND instead of an address. /ipv6/nd entries
+// silently discard comment=, so none is rendered: it would diff forever.
 func mikrotikFabricWireGuard(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, link := range c.links {
@@ -423,12 +409,10 @@ func mikrotikSiteWeighting(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// mikrotikFabricBGP is configs.fabric.FabricBGP's mikrotik method.
-//
-// Unnumbered connections: local.address is the INTERFACE, no
-// remote.address (the peer's link-local is discovered via ND), and
-// afi=ip,ipv6 is mandatory -- the default afi=ip establishes but
-// exchanges zero prefixes.
+// mikrotikFabricBGP is configs.fabric.FabricBGP's mikrotik method. On
+// unnumbered connections local.address is the INTERFACE, there is no
+// remote.address (ND discovers it), and afi=ip,ipv6 is mandatory: the default
+// afi=ip establishes but exchanges zero prefixes.
 func mikrotikFabricBGP(c *renderCtx) ([]string, error) {
 	template := fmt.Sprintf(
 		"/routing/bgp/template add name=genprog-fabric as=%d hold-time=30s keepalive-time=10s",
@@ -475,8 +459,8 @@ func mikrotikFabricBGP(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// mikrotikTransitBGP is configs.fabric.TransitBGP: the transit sessions
-// barf owns, reproducing the retired hand-written `export` chain.
+// mikrotikTransitBGP is configs.fabric.TransitBGP, reproducing the retired
+// hand-written `export` chain.
 func mikrotikTransitBGP(c *renderCtx) ([]string, error) {
 	transit := c.host.BGP.Transit
 	if len(transit) == 0 {

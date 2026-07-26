@@ -8,49 +8,24 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/tui"
 )
 
-// The LATEST FIRMWARE column of `barf status`.
-//
-// Python prints it between VERSION and CONFIG CONSISTENT, filled from
-// the vendor's image provider: "yes" when the device runs the newest
-// release, "no (<latest>)" when it is behind, and "?" for a vendor with
-// no provider (everything except VyOS today) or when the release feed
-// could not be reached.
-//
-// It lives here rather than in tui.StatusRow so the column is additive:
-// the plain and --json paths splice it in, and the live TUI table is
-// unchanged.
-//
-// TODO(firmware-tui): the live TUI table still omits this column,
-// because tui.StatusRow has no field for it. The exact change, once the
-// tui package is free to edit:
-//
-//  1. tui/status.go StatusColumns: insert "LATEST FIRMWARE" after "VERSION"
-//  2. tui/status.go StatusRow: add `Firmware string` after Version
-//  3. tui/status.go Cells(): insert r.Firmware after r.Version
-//  4. tui/status.go PendingRow(): add Firmware: "…"
-//  5. cli/status.go statusProbe(): row.Firmware = fw.Cell(h.DeviceType, st.Version)
-//     with the Checker primed before the probe pool starts, and errorRow
-//     gaining one more "-".
-//
-// At that point firmwareCells and the splice helpers below go away.
+// The LATEST FIRMWARE column of `barf status`, between VERSION and CONFIG
+// CONSISTENT as Python does: "yes", "no (<latest>)", or "?" for a vendor with
+// no image provider or an unreachable feed. Spliced in by the plain and
+// --json paths, so the live TUI table still omits the column.
+// TODO(firmware-tui): give tui.StatusRow a Firmware field and drop these.
 
-// firmwareColumnName is the header Python prints.
 const firmwareColumnName = "LATEST FIRMWARE"
 
-// newFirmwareChecker is the seam the release lookup goes through, in the
-// same spirit as deps.go: tests replace it so no unit test ever reaches
-// the network for a firmware release.
+// newFirmwareChecker is the seam keeping unit tests off the network.
 var newFirmwareChecker = firmware.NewChecker
 
-// statusColumnsWithFirmware is tui.StatusColumns with LATEST FIRMWARE
-// spliced back in after VERSION.
+// statusColumnsWithFirmware splices LATEST FIRMWARE back in after VERSION.
 func statusColumnsWithFirmware() []string {
 	return spliceAfterVersion(tui.StatusColumns, firmwareColumnName)
 }
 
-// spliceAfterVersion inserts value immediately after the VERSION column.
-// A table without a VERSION column gets the value appended, so this can
-// never drop a cell if the column set changes underneath it.
+// spliceAfterVersion appends when there is no VERSION column, so it can never
+// drop a cell if the column set changes underneath it.
 func spliceAfterVersion(row []string, value string) []string {
 	at := len(row)
 	for i, c := range row {
@@ -66,8 +41,7 @@ func spliceAfterVersion(row []string, value string) []string {
 	return out
 }
 
-// versionColumnIndex is where VERSION sits in tui.StatusColumns, so a
-// row's cells can be spliced at the same offset as the headers.
+// versionColumnIndex is where VERSION sits in tui.StatusColumns.
 func versionColumnIndex() int {
 	for i, c := range tui.StatusColumns {
 		if c == "VERSION" {
@@ -77,7 +51,6 @@ func versionColumnIndex() int {
 	return len(tui.StatusColumns) - 1
 }
 
-// spliceFirmwareCell inserts a row's firmware cell after its version cell.
 func spliceFirmwareCell(cells []string, cell string) []string {
 	at := versionColumnIndex() + 1
 	if at > len(cells) {
@@ -90,12 +63,9 @@ func spliceFirmwareCell(cells []string, cell string) []string {
 	return out
 }
 
-// firmwareCells is the LATEST FIRMWARE cell for every probed device,
-// keyed by hostname.
-//
-// The release feed is fetched once for the whole table, and an
-// unreachable feed is not fatal: it is logged and every cell reads "?",
-// exactly as the Python implementation does.
+// firmwareCells keys the LATEST FIRMWARE cell by hostname. The feed is
+// fetched once per table and, as in Python, an unreachable feed is logged
+// rather than fatal: every cell reads "?".
 func firmwareCells(ctx context.Context, log warnLogger, hosts []*model.Host, rows []tui.StatusRow) map[string]string {
 	deviceTypes := make([]string, 0, len(hosts))
 	byHost := make(map[string]string, len(hosts))
@@ -120,9 +90,8 @@ func firmwareCells(ctx context.Context, log warnLogger, hosts []*model.Host, row
 	return cells
 }
 
-// warnLogger is the slice of the command logger firmwareCells needs.
-// charmbracelet/log types its message as any, so it is adapted onto the
-// firmware package's slog-shaped interface below.
+// warnLogger adapts charmbracelet/log (message typed as any) onto the
+// firmware package's slog-shaped interface.
 type warnLogger interface {
 	Warn(msg any, keyvals ...any)
 }

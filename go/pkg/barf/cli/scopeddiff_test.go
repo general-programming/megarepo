@@ -12,9 +12,9 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// fakeScopedReader is a DeviceReader that also answers a scoped
-// comparison. RunningConfig fails loudly: a vendor with a managed slice
-// must never have its whole config pulled for a diff.
+// fakeScopedReader answers a scoped comparison. RunningConfig fails
+// loudly: a vendor with a managed slice must never have its whole config
+// pulled for a diff.
 type fakeScopedReader struct {
 	diff   ConfigDiff
 	err    error
@@ -36,8 +36,6 @@ func (f *fakeScopedReader) ScopedDiff(_ context.Context, _ *model.Host, _ *model
 	return f.diff, f.err
 }
 
-// installScoped points the eos host at a scoped reader and every other
-// host at the harness's plain fakes.
 func installScoped(h *harness, hostname string, scoped *fakeScopedReader) {
 	plain := newReader
 	newReader = func(host *model.Host, address string, s SecretSource) (DeviceReader, error) {
@@ -72,14 +70,13 @@ func TestDiffUsesScopedComparisonWhenTheReaderOffersOne(t *testing.T) {
 	if !strings.Contains(out, "- enable password sha512 <hash-redacted>") {
 		t.Errorf("scoped body missing:\n%s", out)
 	}
-	// The scoped path must not report the tens of thousands of unmanaged
-	// lines the generic whole-config diff used to.
+	// The scoped path must not report the unmanaged lines the generic
+	// whole-config diff used to.
 	if strings.Contains(out, "-32859") || strings.Contains(out, "+4 ") {
 		t.Errorf("whole-config diff leaked into a scoped vendor:\n%s", out)
 	}
 }
 
-// Redaction is on unless the operator explicitly asks for secrets.
 func TestScopedDiffRedactsByDefault(t *testing.T) {
 	h := newHarness(t)
 	h.reachable["10.0.0.2"] = true
@@ -119,8 +116,7 @@ func TestScopedDiffErrorFailsTheDevice(t *testing.T) {
 	}
 }
 
-// Dispatch is a capability of the reader: the real EOS reader gets one,
-// VyOS (owned whole) does not.
+// Dispatch is a reader capability: EOS gets one, VyOS (owned whole) does not.
 func TestWrapScopedOnlyUpgradesScopedVendors(t *testing.T) {
 	for _, tc := range []struct {
 		deviceType string

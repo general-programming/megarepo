@@ -8,10 +8,9 @@ import (
 )
 
 // printTable writes the plain-mode table: columns padded to their widest
-// cell, joined by two spaces, with a dashed rule under the header. This
-// is barf/cli/common.py's print_table, with one deliberate difference —
-// trailing padding is trimmed, so piping into grep/awk/diff never turns
-// up invisible whitespace.
+// cell, joined by two spaces, dashed rule under the header. This is
+// common.py's print_table but with trailing padding trimmed, so piping never
+// yields stray whitespace.
 func printTable(w io.Writer, headers []string, rows [][]string) {
 	widths := make([]int, len(headers))
 	for i, h := range headers {

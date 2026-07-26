@@ -2,8 +2,7 @@ package pytext
 
 import "testing"
 
-// SplitLines is the shared helper those parsers rely on; pin its contract
-// against Python's str.splitlines() directly.
+// Pins SplitLines against Python's str.splitlines().
 func TestSplitLinesMatchesPythonSplitlines(t *testing.T) {
 	tests := []struct {
 		in   string

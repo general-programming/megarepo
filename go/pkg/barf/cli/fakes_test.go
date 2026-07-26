@@ -59,8 +59,8 @@ func (f fakeReader) RunningConfig(context.Context) (string, error) {
 	return f.running, f.configErr
 }
 
-// fakeConn is the connection the fake dialer hands back; nothing is ever
-// read from or written to it, the CLI only cares that dialing worked.
+// fakeConn is never read from or written to; the CLI only cares that
+// dialing worked.
 type fakeConn struct{ net.Conn }
 
 func (fakeConn) Close() error { return nil }
@@ -125,14 +125,12 @@ func newHarness(t *testing.T) *harness {
 	return h
 }
 
-// options returns Options wired to the harness buffers, forced plain.
 func (h *harness) options() *Options {
 	o := &Options{Out: &h.out, ErrOut: &h.errOut, Plain: true}
 	o.SetInteractive(false)
 	return o
 }
 
-// run executes the barf command tree with the harness's options.
 func (h *harness) run(t *testing.T, args ...string) error {
 	t.Helper()
 	o := h.options()

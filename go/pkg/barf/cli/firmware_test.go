@@ -10,17 +10,15 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/tui"
 )
 
-// TestMain stubs the firmware release lookup for the whole package, so
-// no unit test reaches out to the vendor's release feed. Tests that care
-// about the column install their own stub and restore this one.
+// Stubs the firmware release lookup package-wide so no test reaches the
+// vendor's release feed.
 func TestMain(m *testing.M) {
 	newFirmwareChecker = offlineChecker(nil)
 	os.Exit(m.Run())
 }
 
 // offlineChecker builds a Checker seeded with fixed versions and no
-// network access. A nil map yields a checker that reports everything
-// unknown, which is what an unreachable feed looks like.
+// network. A nil map reports everything unknown, i.e. an unreachable feed.
 func offlineChecker(latest map[string]string) func(context.Context, firmware.WarnLogger, ...string) *firmware.Checker {
 	return func(ctx context.Context, _ firmware.WarnLogger, deviceTypes ...string) *firmware.Checker {
 		c := &firmware.Checker{}
@@ -39,8 +37,8 @@ func withFirmware(t *testing.T, latest map[string]string) {
 }
 
 func TestStatusLatestFirmwareColumn(t *testing.T) {
-	// Real fleet values: the VyOS box is a release behind, and the EOS
-	// box has no image provider at all, so it shows "?" like Python.
+	// Real fleet values: the VyOS box is a release behind; the EOS box has
+	// no image provider, so it shows "?" like Python.
 	withFirmware(t, map[string]string{"vyos": "2026.07.21-1151-rolling"})
 
 	h := newHarness(t)
@@ -66,16 +64,14 @@ func TestStatusLatestFirmwareColumn(t *testing.T) {
 	if !strings.Contains(out, "no (2026.07.21-1151-rolling)") {
 		t.Errorf("the behind VyOS box should report the latest release:\n%s", out)
 	}
-	// The eos row's firmware cell is "?" (no image provider), so its
-	// cells read ... 4.31.2F | ? | yes ... whatever the column widths.
 	eos := rowFields(t, out, "fmt2-core")
 	if eos[4] != "4.31.2F" || eos[5] != "?" || eos[6] != "yes" {
 		t.Errorf("a vendor without an image provider should show ?: %v", eos)
 	}
 }
 
-// rowFields is one device's table row split on whitespace runs, so
-// assertions do not depend on column padding.
+// rowFields splits a device's row on whitespace runs, so assertions do
+// not depend on column padding.
 func rowFields(t *testing.T, table, device string) []string {
 	t.Helper()
 	for _, line := range strings.Split(table, "\n") {
@@ -149,8 +145,7 @@ func TestFirmwareColumnSplicedAfterVersion(t *testing.T) {
 }
 
 func TestSpliceFallsBackToAppend(t *testing.T) {
-	// A column set without VERSION must still produce a well-formed row
-	// rather than dropping a cell.
+	// A column set without VERSION must not drop a cell.
 	got := spliceAfterVersion([]string{"DEVICE", "STATUS"}, firmwareColumnName)
 	if len(got) != 3 || got[2] != firmwareColumnName {
 		t.Fatalf("spliceAfterVersion = %v", got)

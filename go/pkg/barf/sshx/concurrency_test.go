@@ -20,14 +20,12 @@ import (
 )
 
 // Regression tests for the two ways this package used to wedge or leak.
-// Both talk to in-process servers over loopback; nothing here contacts a
-// device.
+// Everything here talks to in-process servers over loopback.
 
 // -- finding 1: a black-holed path used to hang forever ---------------
 
-// blackHole is a TCP proxy that can be told to stop forwarding without
-// closing anything, which is what a drained BGP path looks like from the
-// SSH client's side: the socket stays "up", packets go nowhere, and no
+// blackHole is a TCP proxy that stops forwarding without closing
+// anything, mimicking a drained BGP path: the socket stays "up" and no
 // FIN or RST ever arrives.
 type blackHole struct {
 	listener net.Listener
@@ -45,9 +43,8 @@ func (b *blackHole) track(conns ...net.Conn) {
 	b.conns = append(b.conns, conns...)
 }
 
-// shutdown closes every proxied connection. A frozen pump is parked in
-// Read with nothing to wake it, so the test has to break the sockets
-// itself before waiting on the goroutines.
+// shutdown closes every proxied connection: a frozen pump is parked in
+// Read with nothing else to wake it.
 func (b *blackHole) shutdown() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -111,24 +108,16 @@ func (b *blackHole) pump(from, to net.Conn) {
 				return
 			}
 		}
-		// When frozen the bytes are simply dropped: no close, no error,
-		// nothing for the peer to notice.
+		// Frozen: bytes are dropped silently, nothing for the peer to notice.
 		if err != nil {
 			return
 		}
 	}
 }
 
-// TestRunReturnsOnABlackHoledPath is the reproduction of the wedge.
-//
-// Before the fix, exec closed the session and then blocked
-// unconditionally on <-done. session.Run only returns once the peer
-// answers the channel close, and dialOnce clears the socket deadline
-// after the handshake, so with the path black-holed nothing bounded the
-// transport at all: the reviewer measured Run still not returned 10s
-// after its 1s timeout. This is exactly the state installAndReboot and
-// RunDetached exist for — the drain tears down the BGP paths the SSH
-// session is riding on.
+// Regression: exec blocked unconditionally on <-done and dialOnce clears
+// the socket deadline after the handshake, so a black-holed path (what a
+// drain-and-reboot produces) left Run wedged past its timeout.
 func TestRunReturnsOnABlackHoledPath(t *testing.T) {
 	release := make(chan struct{})
 	server := newTestServer(t, "pw", func(string, string) (string, string, int) {
@@ -158,8 +147,7 @@ func TestRunReturnsOnABlackHoledPath(t *testing.T) {
 	hole.freeze()
 
 	const timeout = 300 * time.Millisecond
-	// Generous: the point is "bounded", not "fast". Before the fix this
-	// never fired at all.
+	// Generous: the point is "bounded", not "fast".
 	bound := timeout + 4*client.grace() + 2*time.Second
 
 	returned := make(chan error, 1)
@@ -180,8 +168,7 @@ func TestRunReturnsOnABlackHoledPath(t *testing.T) {
 			"a black-holed path still wedges the caller", bound, timeout)
 	}
 
-	// The transport was torn down, not merely the session: a follow-up
-	// command must fail immediately rather than wedge in its turn.
+	// The transport was torn down, not merely the session.
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -196,11 +183,8 @@ func TestRunReturnsOnABlackHoledPath(t *testing.T) {
 	}
 }
 
-// TestTimedOutRunDoesNotLeakItsGoroutine checks the other half of the
-// fix: bounding the wait must not simply abandon the session goroutine.
-// Closing the socket makes the blocked read fail, so Run returns and the
-// goroutine retires on its own (its channel is buffered, so it never
-// needs a reader).
+// The other half of the fix: bounding the wait must not abandon the
+// session goroutine.
 func TestTimedOutRunDoesNotLeakItsGoroutine(t *testing.T) {
 	release := make(chan struct{})
 	server := newTestServer(t, "pw", func(string, string) (string, string, int) {
@@ -226,9 +210,8 @@ func TestTimedOutRunDoesNotLeakItsGoroutine(t *testing.T) {
 	client.closeGrace = 100 * time.Millisecond
 	hole.freeze()
 
-	// Baseline with the connection already up, so the proxy's own pumps
-	// and the ssh mux are counted on both sides of the measurement. What
-	// must not survive is the goroutine running the abandoned command.
+	// Baseline with the connection up, so proxy pumps and the ssh mux are
+	// counted on both sides.
 	settle()
 	before := runtime.NumGoroutine()
 
@@ -237,9 +220,8 @@ func TestTimedOutRunDoesNotLeakItsGoroutine(t *testing.T) {
 	}
 	_ = client.Close()
 
-	// The transport is gone, so the session goroutine's read fails and it
-	// retires (its channel is buffered, so it never needs a reader). Give
-	// the runtime a moment to reap it.
+	// Transport gone, so the session goroutine's read fails and it retires
+	// (buffered channel, no reader needed). Give the runtime time to reap.
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		settle()
@@ -262,9 +244,8 @@ func settle() {
 
 // -- finding 3: one agent socket fd leaked per Dial -------------------
 
-// fakeAgent is a real SSH agent on a unix socket. It counts how many
-// connections have been closed by the client, which is what the leak is
-// visible as.
+// fakeAgent is a real SSH agent on a unix socket; the leak shows up as a
+// gap between the opened and client-closed counts.
 type fakeAgent struct {
 	path   string
 	keys   agent.Agent
@@ -276,7 +257,7 @@ type fakeAgent struct {
 	conns []net.Conn
 }
 
-// shutdown closes any connection the client left open, so a FAILING test
+// shutdown closes connections the client left open, so a FAILING test
 // reports its assertion instead of hanging in cleanup.
 func (a *fakeAgent) shutdown() {
 	a.mu.Lock()
@@ -289,8 +270,7 @@ func (a *fakeAgent) shutdown() {
 
 func newFakeAgent(t *testing.T) *fakeAgent {
 	t.Helper()
-	// Unix socket paths are length-limited; a short dir keeps this safe on
-	// every platform's temp layout.
+	// Unix socket paths are length-limited; keep the dir name short.
 	dir, err := os.MkdirTemp("", "sshxag")
 	if err != nil {
 		t.Fatalf("temp dir: %v", err)
@@ -335,15 +315,12 @@ func newFakeAgent(t *testing.T) *fakeAgent {
 	return a
 }
 
-// TestDialClosesTheAgentSocket reproduces the fd leak: keyAuthMethods
-// dialled SSH_AUTH_SOCK and handed the conn to agent.NewClient(...).Signers
-// without ever closing it, on any path. The reviewer measured 50 failed
-// dials leaving 100 open fds, and Updater dials twice per host.
+// Regression: keyAuthMethods dialled SSH_AUTH_SOCK and never closed the
+// conn it handed to agent.NewClient(...).Signers, leaking an fd per Dial.
 func TestDialClosesTheAgentSocket(t *testing.T) {
 	ag := newFakeAgent(t)
 
-	// A port nothing is listening on: every dial fails at connect, which
-	// is the path that leaked hardest (auth is never even reached).
+	// Nothing listening: every dial fails at connect, the worst leak path.
 	dead := deadPort(t)
 
 	const dials = 50
@@ -359,18 +336,13 @@ func TestDialClosesTheAgentSocket(t *testing.T) {
 		}
 	}
 
-	// Both counters are incremented by the agent goroutine, so neither is
-	// readable synchronously: a unix net.Dial returns as soon as the
-	// connection is queued in the listen backlog, before Accept has run.
-	// Poll both rather than racing the accept loop.
+	// A unix net.Dial returns before the agent's Accept runs, so poll.
 	waitForCount(t, "agent connections opened", dials, &ag.opened)
 	waitForCount(t, "agent sockets closed", dials, &ag.closed)
 }
 
-// TestAgentAuthStillWorks is the other side of the fix: the agent
-// connection must survive until the handshake has pulled its signers out
-// of it. Closing too early would break every key-authenticated login on
-// the fleet, which is publickey-only.
+// The other side of the fix: the agent connection must survive until the
+// handshake has pulled its signers out of it.
 func TestAgentAuthStillWorks(t *testing.T) {
 	ag := newFakeAgent(t)
 
@@ -418,7 +390,7 @@ func TestAgentAuthStillWorks(t *testing.T) {
 		t.Fatalf("unexpected output %q", result.Output)
 	}
 
-	// The session outlived the handshake, and the agent socket did not.
+	// The session outlived the handshake; the agent socket did not.
 	deadline := time.Now().Add(5 * time.Second)
 	for ag.closed.Load() < 1 {
 		if time.Now().After(deadline) {
@@ -428,7 +400,6 @@ func TestAgentAuthStillWorks(t *testing.T) {
 	}
 }
 
-// deadPort returns a port with nothing listening on it.
 func deadPort(t *testing.T) int {
 	t.Helper()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -441,9 +412,6 @@ func deadPort(t *testing.T) int {
 	return p
 }
 
-// waitFor blocks until counter reaches want, reporting what it saw if it
-// does not. Counters here are written by the fake agent's accept loop, so
-// a synchronous read races it.
 func waitForCount(t *testing.T, what string, want int64, counter *atomic.Int64) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

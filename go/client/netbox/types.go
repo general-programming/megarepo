@@ -2,14 +2,12 @@ package netbox
 
 import "strings"
 
-// IPAddress is NetBox's ip-address object as exposed over GraphQL. Address
-// carries a prefix length ("10.0.0.1/24").
+// IPAddress is NetBox's ip-address object; Address includes a prefix length.
 type IPAddress struct {
 	Address string `json:"address"`
 }
 
-// IP returns the address with its prefix length stripped, or "" when the
-// address is absent. Mirrors Python's strip_prefix().
+// IP is the address minus its prefix length, Python's strip_prefix().
 func (a *IPAddress) IP() string {
 	if a == nil {
 		return ""
@@ -18,8 +16,7 @@ func (a *IPAddress) IP() string {
 	return ip
 }
 
-// MACAddress is NetBox's mac-address object (NetBox >= 4.2 models MACs as
-// first-class objects hung off an interface as primary_mac_address).
+// MACAddress is NetBox's mac-address object, first-class since 4.2.
 type MACAddress struct {
 	MACAddress string `json:"mac_address"`
 }
@@ -38,21 +35,15 @@ type VLAN struct {
 	VID  int    `json:"vid"`
 }
 
-// NamedRef is the common `{ name }` shape used for LAGs, VRFs, platforms
-// and tags.
+// NamedRef is the `{ name }` shape used for LAGs, VRFs, platforms, tags.
 type NamedRef struct {
 	Name string `json:"name"`
 	Slug string `json:"slug,omitempty"`
 }
 
-// Interface is a device interface. Not every query populates every field;
-// unrequested fields stay at their zero value.
-//
-// Name is a plain string, so a NetBox null decodes to "" rather than
-// failing. That is deliberate — one bad row must not fail the whole
-// fetch — but it means every consumer has to treat "" as "absent" and
-// refuse to build a name out of it. Python gets an AttributeError on
-// None and aborts; barf skips and warns (see cli/generatedns.go).
+// Interface is a device interface; unrequested fields stay zero. Name is a
+// plain string so a NetBox null decodes to "" (treat it as absent) rather
+// than failing the whole fetch as Python does.
 type Interface struct {
 	Name              string      `json:"name"`
 	Type              string      `json:"type,omitempty"`
@@ -66,14 +57,13 @@ type Interface struct {
 	UntaggedVLAN      *VLAN       `json:"untagged_vlan,omitempty"`
 	Cable             *Cable      `json:"cable,omitempty"`
 
-	// Device is set on interface_list results; VirtualMachine is set on
-	// vm_interface_list results. Exactly one is non-nil in practice.
+	// Exactly one is set: Device on interface_list, VirtualMachine on
+	// vm_interface_list results.
 	Device         *Owner `json:"device,omitempty"`
 	VirtualMachine *Owner `json:"virtual_machine,omitempty"`
 }
 
-// Owner returns whichever of Device / VirtualMachine owns the interface,
-// or nil when neither was requested or present.
+// OwnerRef returns whichever of Device / VirtualMachine owns the interface.
 func (i Interface) OwnerRef() *Owner {
 	if i.Device != nil {
 		return i.Device
@@ -87,10 +77,8 @@ type Cable struct {
 	Terminations []CableTermination `json:"terminations"`
 }
 
-// CableTermination is one end of a cable. NetBox 4.x models the far side as
-// a `termination` union; only the InterfaceType members are requested, so
-// non-interface terminations (power, console, circuits) decode as an empty
-// Termination.
+// CableTermination is one end of a cable. Only InterfaceType members of
+// NetBox 4.x's union are requested, so power/console/circuit ends decode empty.
 type CableTermination struct {
 	CableEnd    string       `json:"cable_end"`
 	Termination *Termination `json:"termination,omitempty"`
@@ -102,8 +90,7 @@ type Termination struct {
 	Device *NamedRef `json:"device,omitempty"`
 }
 
-// DeviceName returns the name of the device on this end of the cable, or ""
-// when the termination is not an interface on a device.
+// DeviceName returns the device on this end of the cable, or "".
 func (t CableTermination) DeviceName() string {
 	if t.Termination == nil || t.Termination.Device == nil {
 		return ""
@@ -111,8 +98,7 @@ func (t CableTermination) DeviceName() string {
 	return t.Termination.Device.Name
 }
 
-// InterfaceName returns the interface name on this end of the cable, or ""
-// when the termination is not an interface.
+// InterfaceName returns the interface on this end of the cable, or "".
 func (t CableTermination) InterfaceName() string {
 	if t.Termination == nil {
 		return ""
@@ -120,16 +106,14 @@ func (t CableTermination) InterfaceName() string {
 	return t.Termination.Name
 }
 
-// Owner is the trimmed device/virtual-machine reference embedded in
-// interface results.
+// Owner is the device/VM reference embedded in interface results.
 type Owner struct {
 	Name       string     `json:"name"`
 	PrimaryIP4 *IPAddress `json:"primary_ip4,omitempty"`
 	PrimaryIP6 *IPAddress `json:"primary_ip6,omitempty"`
 }
 
-// Host is a device or virtual machine as returned by the DNS query. The
-// same struct is used for both lists; VMs simply have no Interfaces.
+// Host is a device or VM from the DNS query; VMs have no Interfaces.
 type Host struct {
 	Name       string      `json:"name"`
 	PrimaryIP4 *IPAddress  `json:"primary_ip4,omitempty"`
@@ -137,8 +121,7 @@ type Host struct {
 	Interfaces []Interface `json:"interfaces,omitempty"`
 }
 
-// Device is the richer device shape returned by DevicesByTag, used for
-// switch config generation.
+// Device is the richer shape DevicesByTag returns, for config generation.
 type Device struct {
 	Name          string      `json:"name"`
 	Serial        string      `json:"serial,omitempty"`
@@ -150,8 +133,7 @@ type Device struct {
 	Interfaces    []Interface `json:"interfaces,omitempty"`
 }
 
-// IPMIInterfaceNames are the interface names treated as out-of-band
-// management. Matched case-insensitively.
+// IPMIInterfaceNames are out-of-band management names, matched case-insensitively.
 var IPMIInterfaceNames = map[string]struct{}{
 	"ipmi":  {},
 	"idrac": {},
@@ -161,10 +143,8 @@ var IPMIInterfaceNames = map[string]struct{}{
 	"imm":   {},
 }
 
-// IsIPMIInterface reports whether an interface name is an out-of-band
-// management interface. An absent name (NetBox null, decoded to "") is
-// never one — matching it would attach a BMC record to an interface
-// nobody named.
+// IsIPMIInterface reports whether name is out-of-band management; an absent
+// name ("") never matches, which would attach a BMC record to an unnamed one.
 func IsIPMIInterface(name string) bool {
 	name = strings.TrimSpace(name)
 	if name == "" {
@@ -174,9 +154,7 @@ func IsIPMIInterface(name string) bool {
 	return ok
 }
 
-// IPMIAddress returns the first IP on the host's first IPMI-ish interface,
-// or "" when the host has no out-of-band address. Mirrors refresh_dns.py's
-// ipmi_ip().
+// IPMIAddress is the first IP on the first IPMI-ish interface (ipmi_ip()).
 func (h Host) IPMIAddress() string {
 	for _, iface := range h.Interfaces {
 		if !IsIPMIInterface(iface.Name) {
@@ -196,11 +174,10 @@ func (h Host) IPv4() string { return h.PrimaryIP4.IP() }
 // IPv6 returns the host's primary IPv6 without its prefix length.
 func (h Host) IPv6() string { return h.PrimaryIP6.IP() }
 
-// CleanHostname normalises a NetBox name into something usable as a DNS
-// label component. Byte-identical to Python's clean_hostname().
+// CleanHostname normalises a NetBox name into a DNS label component,
+// byte-identical to Python's clean_hostname().
 func CleanHostname(data string) string {
-	// Applied in the same order as the Python original; the order matters
-	// because earlier substitutions can create matches for later ones.
+	// Order is load-bearing: earlier substitutions create matches for later ones.
 	out := strings.ReplaceAll(data, " ", "_")
 	out = strings.ReplaceAll(out, ":", "")
 	out = strings.ReplaceAll(out, "_-_", "_")

@@ -8,10 +8,6 @@ import (
 // Ground truth captured from CPython:
 //
 //	python3 -c "import ipaddress; print(ipaddress.ip_address(a).is_global)"
-//
-// barf/device used to carry a second implementation of this; it was
-// deleted in favour of this one after losing on the cases marked below,
-// so this table is also the record of why.
 func TestIsGlobalMatchesPythonIsGlobal(t *testing.T) {
 	tests := []struct {
 		addr string
@@ -60,10 +56,8 @@ func TestIsGlobalMatchesPythonIsGlobal(t *testing.T) {
 	}
 }
 
-// Deliberate divergence from Python, documented on IsGlobal: multicast is
-// "global" to ipaddress but is not a dialable endpoint, and both callers
-// are picking an address to dial. Pin it so the divergence stays a
-// decision rather than becoming an accident.
+// Deliberate divergence from Python: ipaddress calls multicast global, but
+// callers here are picking an address to dial.
 func TestIsGlobalTreatsMulticastAsNonGlobal(t *testing.T) {
 	for _, addr := range []string{"224.0.0.1", "239.1.2.3", "ff02::1"} {
 		if IsGlobal(netip.MustParseAddr(addr)) {

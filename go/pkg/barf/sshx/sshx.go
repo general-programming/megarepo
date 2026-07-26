@@ -1,29 +1,6 @@
-// Package sshx is the SSH substrate the device-lifecycle commands run on.
-//
-// It is the Go port of projects/barf/barf/util/ssh.py (the DeviceSSH
-// paramiko wrapper) and projects/barf/barf/util/vyos_scripts.py (the
-// oneshot vbash stage scripts).
-//
-// Two things about this package are load-bearing and must not be
-// "simplified" away:
-//
-//  1. ScriptOK. A VyOS oneshot script only passed if rc == 0 AND the
-//     "<MARKER>-OK" line is present AND "<MARKER>-FAIL" is absent.
-//     Sourcing VyOS's script-template replaces the `exit` builtin with
-//     the config-mode `exit` command, so a script that hit a failure and
-//     called `exit 1` keeps running and can still finish with rc 0 and
-//     its OK line printed further down. Checking rc alone silently turns
-//     failures into successes on a router.
-//
-//  2. Auth attempts are split. sshd counts every offered agent key
-//     against MaxAuthTries, so one combined key+password attempt can get
-//     the transport dropped before password auth is ever tried. Keys go
-//     in one connection attempt, the password in a second, exactly as the
-//     Python implementation does it.
-//
-// This package opens sessions and runs commands; it does not itself
-// decide that a device should be changed. It is the transport, and the
-// callers in barf/lifecycle hold the safety gates.
+// Package sshx is the SSH transport the device-lifecycle commands run on,
+// porting barf/util/ssh.py and barf/util/vyos_scripts.py. The safety gates
+// live in barf/lifecycle.
 package sshx
 
 import (
@@ -51,25 +28,19 @@ const DefaultPort = 22
 // DefaultConnectTimeout mirrors DeviceSSH's connect_timeout default.
 const DefaultConnectTimeout = 10 * time.Second
 
-// Credentials is a username/password pair. Values are used in memory
-// only: nothing in this package logs, formats or persists a password.
+// Credentials is a username/password pair; nothing here logs or persists it.
 type Credentials struct {
 	Username string
 	Password string
 }
 
-// CredentialSource supplies the shared "supertech" account, whose
-// password lives in Vault at `supertech-credentials`. Declared here as a
-// local interface so this package does not depend on go/client/vault
-// (which another worker owns).
-//
-// Ports barf.actions.get_supertech_creditentials.
+// CredentialSource supplies the shared "supertech" account from Vault. Local
+// interface so this package does not depend on go/client/vault.
 type CredentialSource interface {
 	Supertech(ctx context.Context) (Credentials, error)
 }
 
-// StaticCredentials is a CredentialSource returning a fixed pair; tests
-// and callers that already hold the credentials use it.
+// StaticCredentials is a CredentialSource returning a fixed pair.
 type StaticCredentials Credentials
 
 // Supertech implements CredentialSource.
@@ -79,40 +50,30 @@ func (s StaticCredentials) Supertech(context.Context) (Credentials, error) {
 
 // Options configures a Dial.
 type Options struct {
-	// Username logs in as this user with keys only, instead of the shared
-	// supertech user (whose Vault password is the fallback). Mirrors
-	// BaseHost.SSH_USERNAME: empty means "use supertech".
+	// Username logs in with keys only; empty means the supertech user.
 	Username string
 
-	// Credentials resolves the supertech account. Required unless
-	// Username is set.
+	// Credentials resolves supertech. Required unless Username is set.
 	Credentials CredentialSource
 
 	// Port is the SSH port; 0 means DefaultPort.
 	Port int
 
-	// ConnectTimeout bounds each auth attempt; 0 means
-	// DefaultConnectTimeout.
+	// ConnectTimeout bounds each auth attempt; 0 means the default.
 	ConnectTimeout time.Duration
 
-	// HostKeyCallback is the host-key policy. nil reproduces what the
-	// Python implementation does with paramiko's AutoAddPolicy on a
-	// throwaway (in-memory) host key store: accept whatever the device
-	// presents. The fleet's host keys are reinstalled by every image
-	// install, so pinning them here would break every update; the
-	// management path is a private fabric. Set this to a real callback
-	// (e.g. knownhosts.New) to opt into verification.
+	// HostKeyCallback is the host-key policy; nil accepts whatever the device
+	// presents, because every image install reinstalls the fleet's host keys
+	// and the management path is a private fabric.
 	HostKeyCallback ssh.HostKeyCallback
 
-	// Agent enables SSH_AUTH_SOCK agent auth. Nil means enabled (Python
-	// passes allow_agent=True).
+	// Agent enables SSH_AUTH_SOCK agent auth; nil means enabled.
 	Agent *bool
 
-	// IdentityFiles are private keys to offer. Nil means the usual
-	// ~/.ssh/id_* set (Python's look_for_keys=True).
+	// IdentityFiles are private keys to offer; nil means ~/.ssh/id_*.
 	IdentityFiles []string
 
-	// Dial overrides the network dial (tests). nil means net.Dialer.
+	// Dial overrides the network dial (tests); nil means net.Dialer.
 	Dial func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
@@ -138,16 +99,12 @@ func (o Options) hostKeyCallback() ssh.HostKeyCallback {
 	if o.HostKeyCallback != nil {
 		return o.HostKeyCallback
 	}
-	// See Options.HostKeyCallback: this mirrors paramiko's AutoAddPolicy
-	// against a non-persistent host key store.
-	return ssh.InsecureIgnoreHostKey() // #nosec G106 -- documented policy parity with the Python implementation
+	return ssh.InsecureIgnoreHostKey() // #nosec G106 -- see Options.HostKeyCallback
 }
 
-// DefaultCloseGrace bounds how long a cancelled or timed-out command
-// waits for its session to unwind politely before the socket underneath
-// it is torn down. See Client.exec: after the handshake the transport has
-// no deadline at all, so on a black-holed path nothing else would ever
-// make the reader return.
+// DefaultCloseGrace bounds how long a cancelled command waits for its session
+// to unwind before the socket is torn down: past the handshake the transport
+// has no deadline, so nothing else frees a black-holed read.
 const DefaultCloseGrace = 2 * time.Second
 
 // Client is one authenticated SSH connection to a device.
@@ -157,11 +114,9 @@ type Client struct {
 	username string
 
 	client *ssh.Client
-	// conn is the socket the ssh client rides on. It is kept so a
-	// timed-out command can tear the transport down; closing only the
-	// session is not enough when the peer has stopped answering.
+	// conn is kept so a timed-out command can tear the transport down;
+	// closing only the session is not enough once the peer stops answering.
 	conn net.Conn
-
 	// closeGrace overrides DefaultCloseGrace (tests).
 	closeGrace time.Duration
 
@@ -182,7 +137,7 @@ func (c *Client) Hostname() string { return c.hostname }
 // Address is the address actually connected to.
 func (c *Client) Address() string { return c.address }
 
-// Username is the account the connection authenticated as.
+// Username is the account authenticated as.
 func (c *Client) Username() string { return c.username }
 
 // Close closes the connection. Safe to call more than once.
@@ -196,10 +151,8 @@ func (c *Client) Close() error {
 	return c.closeErr
 }
 
-// closeTransport drops the socket under the ssh client, which is the only
-// thing that unblocks a read from a peer that has stopped answering.
-// Deliberately separate from Close: it is a teardown, not a clean
-// shutdown, and it must be callable while a session is still open.
+// closeTransport drops the socket under the ssh client, the only thing that
+// unblocks a read from a dead peer. Unlike Close it must work mid-session.
 func (c *Client) closeTransport() {
 	if c.conn != nil {
 		_ = c.conn.Close()
@@ -207,13 +160,10 @@ func (c *Client) closeTransport() {
 	_ = c.client.Close()
 }
 
-// Dial connects to address as the right user for host.
-//
-// Ports DeviceSSH.__init__: agent/local keys first (the fleet is
-// publickey-only), then — only when logging in as the shared supertech
-// account — a second, separate attempt with its Vault password. Every
-// attempt's error is collected so a total failure says what each method
-// reported.
+// Dial connects to address as the right user for host: keys in one attempt,
+// then — only for supertech — a SECOND attempt with its Vault password,
+// because sshd counts every offered agent key against MaxAuthTries and drops
+// a combined attempt before the password.
 func Dial(ctx context.Context, hostname, address string, opts Options) (*Client, error) {
 	if address == "" {
 		return nil, fmt.Errorf("sshx: %s: no address to connect to", hostname)
@@ -234,15 +184,9 @@ func Dial(ctx context.Context, hostname, address string, opts Options) (*Client,
 		passwordAttempt = password != ""
 	}
 
-	// Keys and password go in separate connection attempts: sshd counts
-	// every offered agent key against MaxAuthTries, so one combined
-	// attempt can get the transport dropped ("saw EOF") before password
-	// auth is ever tried -- and key-only fleets never need the password.
 	var attempts []([]ssh.AuthMethod)
-	// keyAuthMethods may open a connection to the SSH agent. It stays open
-	// for the whole of Dial because the signers are pulled from it during
-	// each handshake, and is closed on every exit path -- Updater dials
-	// twice per host, and a leaked agent fd per dial exhausts the process.
+	// The agent connection must stay open for all of Dial (signers are pulled
+	// per handshake) and closed on every exit path: leaked fds exhaust us.
 	methods, closers := keyAuthMethods(opts)
 	defer closeAll(closers)
 	if len(methods) > 0 {
@@ -305,18 +249,15 @@ func dialOnce(ctx context.Context, target, username string, methods []ssh.AuthMe
 		return nil, nil, err
 	}
 	// Clear the handshake deadline; long-running scripts must not trip it.
-	// NOTE: from here nothing bounds a read on this socket, which is why a
-	// timed-out exec has to close the conn itself -- see Client.exec.
+	// Nothing bounds a read from here, which is why a timed-out exec has to
+	// close the conn itself (see Client.exec).
 	_ = conn.SetDeadline(time.Time{})
 	return ssh.NewClient(sshConn, chans, reqs), conn, nil
 }
 
-// keyAuthMethods is Python's allow_agent=True, look_for_keys=True: the
-// agent when one is reachable, plus any readable default identity files.
-//
-// The returned closers own the agent connection; the caller must close
-// them once every handshake that uses these methods has finished (the
-// signers are read from the agent lazily, during auth).
+// keyAuthMethods offers the agent when reachable plus readable identity
+// files. The returned closers own the agent connection and must outlive every
+// handshake using these methods (signers are read lazily).
 func keyAuthMethods(opts Options) ([]ssh.AuthMethod, []io.Closer) {
 	var methods []ssh.AuthMethod
 	var closers []io.Closer
@@ -338,8 +279,7 @@ func keyAuthMethods(opts Options) ([]ssh.AuthMethod, []io.Closer) {
 		}
 		signer, err := ssh.ParsePrivateKey(raw)
 		if err != nil {
-			// Encrypted keys are the agent's job; skip them silently
-			// rather than prompting mid-update.
+			// Encrypted keys are the agent's job; never prompt mid-update.
 			continue
 		}
 		signers = append(signers, signer)
@@ -373,18 +313,17 @@ func identityFiles(opts Options) []string {
 
 // Result is the outcome of one remote command.
 type Result struct {
-	// ExitStatus is the remote exit status. A command killed by a signal,
-	// or a session that ended without a status, reports -1.
+	// ExitStatus is -1 for a signal kill or a session with no status.
 	ExitStatus int
 	Stdout     string
 	Stderr     string
-	// Output is what the caller should check markers against: stdout,
-	// plus stderr when the session ran under a pty (which merges them).
+	// Output is what markers are checked against: stdout, plus stderr unless
+	// a pty already merged them.
 	Output string
 }
 
-// OK reports a clean exit. It is deliberately NOT enough on its own for
-// a VyOS oneshot script — see ScriptOK.
+// OK reports a clean exit. Deliberately NOT enough for a VyOS oneshot
+// script — see ScriptOK.
 func (r Result) OK() bool { return r.ExitStatus == 0 }
 
 // DefaultRunTimeout matches DeviceSSH.run's default.
@@ -395,9 +334,8 @@ const DefaultRunTimeout = 60 * time.Second
 const DefaultScriptTimeout = 15 * time.Minute
 
 // Run executes command and captures its exit status, stdout and stderr.
-// Ports DeviceSSH.run (which returns stdout only; stderr is captured
-// here as well, because a lifecycle failure with an empty stdout is
-// otherwise undebuggable).
+// DeviceSSH.run returns stdout only, but a failure with empty stdout is
+// undebuggable.
 func (c *Client) Run(ctx context.Context, command string, timeout time.Duration) (Result, error) {
 	if timeout <= 0 {
 		timeout = DefaultRunTimeout
@@ -406,12 +344,9 @@ func (c *Client) Run(ctx context.Context, command string, timeout time.Duration)
 }
 
 type execOptions struct {
-	// pty requests a pseudo-terminal, which merges stderr into stdout and
-	// keeps sudo happy (Python's get_pty=True).
-	pty bool
-	// stdin is fed to the command, then closed.
-	stdin string
-	// echo receives each output line as it arrives, prefixed.
+	// pty merges stderr into stdout and keeps sudo happy (get_pty=True).
+	pty        bool
+	stdin      string
 	echo       io.Writer
 	echoPrefix string
 }
@@ -423,22 +358,16 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	// Opening the session must be bounded too. NewSession, RequestPty and
-	// the exec request all wait for the PEER to reply, so on a black-holed
-	// path every one of them blocks for as long as the socket stays "up" —
-	// which, after dialOnce clears the handshake deadline, is forever.
-	// Everything that talks to the device therefore happens on one
-	// goroutine that the select below can walk away from.
+	// NewSession, RequestPty and the exec request each wait unbounded for a
+	// peer reply, so device I/O runs on one goroutine select can abandon.
 	out := &capture{}
 	if opts.echo != nil {
 		out.echo = &lineEcho{w: opts.echo, prefix: opts.echoPrefix}
 	}
 
-	// Buffered: the goroutine can always deliver and retire, even when
-	// nobody is left waiting for it.
+	// Buffered so the goroutine retires with nobody waiting; sessions hands
+	// the session to a timed-out exec to close.
 	done := make(chan error, 1)
-	// sessions carries the session out so a timed-out exec can still close
-	// it once it materialises. Buffered for the same reason.
 	sessions := make(chan *ssh.Session, 1)
 
 	go func() {
@@ -469,22 +398,16 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 	select {
 	case runErr = <-done:
 	case <-ctx.Done():
-		// A timeout must return within a bounded time. Closing the session
-		// is the polite move, but it only unblocks Run once the peer
-		// answers the channel close -- and the whole reason this path
-		// exists (installAndReboot / RunDetached drain the BGP sessions the
-		// SSH connection rides) is that the peer has stopped answering. The
-		// handshake deadline was cleared in dialOnce, so nothing else
-		// bounds the transport: after a grace period, drop the socket. That
-		// makes the read fail, Run return, and the goroutine retire.
+		// Closing the session only unblocks Run once the peer answers -- and
+		// this path exists because it stopped (the drain cuts the BGP paths
+		// this session rides). So: grace, then drop the socket.
 		closeSession(sessions)
 		if !waitFor(done, c.grace()) {
 			c.closeTransport()
 			_ = waitFor(done, c.grace())
 		}
-		// Stop accepting output before reading it: the session goroutine
-		// may still be unwinding, and neither the buffers nor the caller's
-		// echo writer may be touched after this returns.
+		// Stop accepting output before reading it: the session goroutine may
+		// still be unwinding.
 		stdout, stderr := out.release()
 		return Result{
 			ExitStatus: -1,
@@ -506,8 +429,7 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 	case runErr == nil:
 		result.ExitStatus = 0
 	case errors.As(runErr, &exitErr):
-		// A non-zero exit is a result, not a transport error: the caller
-		// decides what rc means (and for scripts, rc is not enough).
+		// A non-zero exit is a result, not a transport error.
 		result.ExitStatus = exitErr.ExitStatus()
 	default:
 		result.ExitStatus = -1
@@ -516,9 +438,8 @@ func (c *Client) exec(ctx context.Context, command string, timeout time.Duration
 	return result, nil
 }
 
-// closeSession closes the session if it has been opened yet. The polite
-// first move on a timeout: it unblocks Run whenever the peer is still
-// answering, which is the common case (a slow command, a Ctrl-C).
+// closeSession closes the session if opened yet: the polite first move on a
+// timeout, enough while the peer still answers.
 func closeSession(sessions <-chan *ssh.Session) {
 	select {
 	case session := <-sessions:
@@ -539,14 +460,9 @@ func waitFor(done <-chan error, d time.Duration) bool {
 	}
 }
 
-// capture collects one session's output.
-//
-// Writes arrive on the session goroutine, which can outlive a timed-out
-// exec (the transport is torn down asynchronously and the peer may take a
-// moment to notice). So every write and every read is guarded, and once
-// release has been called writes are dropped rather than racing the
-// caller -- including writes to the caller's echo writer, which must not
-// receive anything after exec has returned.
+// capture collects one session's output. Writes arrive on the session
+// goroutine, which can outlive a timed-out exec, so access is guarded and
+// post-release writes are dropped, including to the caller's echo.
 type capture struct {
 	mu       sync.Mutex
 	stdout   bytes.Buffer
@@ -576,8 +492,8 @@ func (w captureWriter) Write(p []byte) (int, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.released {
-		// Discard, but report success: erroring here would only make the
-		// already-abandoned session log a confusing write failure.
+		// Discard but report success; an error would only make the abandoned
+		// session log a confusing write failure.
 		return len(p), nil
 	}
 	if w.stderr {
@@ -590,9 +506,8 @@ func (w captureWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// combined is what marker checks run against. Under a pty the device has
-// already merged stderr into stdout, so appending it again would double
-// every line.
+// combined is what marker checks run against; under a pty the device already
+// merged stderr in, so appending it would double every line.
 func combined(stdout, stderr string, pty bool) string {
 	if pty || stderr == "" {
 		return stdout
@@ -603,8 +518,8 @@ func combined(stdout, stderr string, pty bool) string {
 	return stdout + "\n" + stderr
 }
 
-// lineEcho forwards whole lines to w with a prefix, so progress from a
-// long script appears as it happens instead of at the end.
+// lineEcho forwards whole lines to w with a prefix, so a long script's
+// progress appears as it happens.
 type lineEcho struct {
 	w      io.Writer
 	prefix string
@@ -633,40 +548,30 @@ func (e *lineEcho) Write(p []byte) (int, error) {
 type ScriptRequest struct {
 	// Name is the basename the script gets under /tmp.
 	Name string
-	// Content is the whole script; everything a stage needs must be in
-	// here, so we never dribble commands at a device over separate
-	// channels.
+	// Content is the whole script: a stage never dribbles commands at a device
+	// over separate channels.
 	Content string
-	// Marker is the stage marker ("PRECHECK", "INSTALL", ...). Empty
-	// disables the marker check.
+	// Marker is the stage marker ("PRECHECK", ...); empty disables the check.
 	Marker string
 	// Timeout bounds the run; 0 means DefaultScriptTimeout.
 	Timeout time.Duration
 	// Echo receives the script's output line by line as it arrives.
-	Echo io.Writer
-	// EchoPrefix is prepended to each echoed line.
+	Echo       io.Writer
 	EchoPrefix string
 }
 
-// ScriptOK reports whether a oneshot script really passed.
-//
-// THIS IS THE LOAD-BEARING CHECK. Requires a clean exit AND the OK
-// marker AND no FAIL marker: VyOS's script-template hijacks `exit`, so a
-// failed script can still finish with rc 0 and its OK line printed
-// further down. Ports vendors/vyos.py `_script_ok` exactly.
+// ScriptOK reports whether a oneshot script really passed. LOAD-BEARING:
+// clean exit AND OK marker AND no FAIL marker, because script-template
+// hijacks `exit`, so a failed script can finish rc 0 with its OK line.
 func ScriptOK(rc int, output, marker string) bool {
 	return rc == 0 &&
 		strings.Contains(output, marker+"-OK") &&
 		!strings.Contains(output, marker+"-FAIL")
 }
 
-// uploadScript writes a script to /tmp and makes it executable,
-// returning its remote path.
-//
-// The Python implementation uses SFTP; this streams the script over the
-// exec channel's stdin instead, which needs no extra dependency and no
-// second subsystem, and fails identically (non-zero rc) when /tmp is not
-// writable.
+// uploadScript writes a script to /tmp and makes it executable, returning its
+// remote path. Python uses SFTP; this streams over the exec channel's stdin,
+// needing no second subsystem.
 func (c *Client) uploadScript(ctx context.Context, name, content string) (string, error) {
 	if name == "" || strings.ContainsAny(name, "/ \t\n") {
 		return "", fmt.Errorf("%s: bad script name %q", c.hostname, name)
@@ -686,10 +591,8 @@ func (c *Client) uploadScript(ctx context.Context, name, content string) (string
 }
 
 // RunScript uploads a script and executes it in a single exec channel,
-// returning the result and whether ScriptOK accepts it.
-//
-// Ports DeviceSSH.run_script plus the caller-side `_script_ok` check that
-// always accompanied it, so no caller can forget the marker rule.
+// returning the result and whether ScriptOK accepts it (folded in so no
+// caller forgets the marker rule).
 func (c *Client) RunScript(ctx context.Context, req ScriptRequest) (Result, bool, error) {
 	timeout := req.Timeout
 	if timeout <= 0 {
@@ -701,7 +604,6 @@ func (c *Client) RunScript(ctx context.Context, req ScriptRequest) (Result, bool
 		return Result{ExitStatus: -1}, false, err
 	}
 
-	// A pty merges stderr into stdout and keeps sudo happy.
 	result, err := c.exec(ctx, "vbash "+pytext.ShellQuote(remote), timeout, execOptions{
 		pty:        true,
 		echo:       req.Echo,
@@ -716,13 +618,9 @@ func (c *Client) RunScript(ctx context.Context, req ScriptRequest) (Result, bool
 	return result, ScriptOK(result.ExitStatus, result.Output, req.Marker), nil
 }
 
-// RunDetached uploads a script and launches it detached from this
-// session, returning the remote log path.
-//
-// For scripts that sever our own connectivity (BGP drain + reboot): the
-// exec returns immediately and the script keeps running on the device
-// even after the session drops, logging to "<script>.log". Ports
-// DeviceSSH.run_detached.
+// RunDetached uploads a script and launches it detached, returning the remote
+// log path. For scripts that sever our own connectivity: the exec returns at
+// once and the script outlives the session.
 func (c *Client) RunDetached(ctx context.Context, name, content string) (string, error) {
 	remote, err := c.uploadScript(ctx, name, content)
 	if err != nil {

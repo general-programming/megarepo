@@ -16,14 +16,10 @@ import (
 // matching the Python ThreadPoolExecutor(max_workers=8).
 const maxProbes = device.MaxProbes
 
-// runBounded calls fn(0..n-1) on at most maxProbes goroutines.
-//
-// Sizing the fan-out by the number of selected devices (one goroutine per
-// host, all parked on a semaphore) means a 300-device run spawns 300
-// goroutines that cannot be reclaimed until they are admitted. A fixed
-// pool bounds the goroutine count, not just the in-flight network calls.
-// Cancellation is handled by fn itself, which returns a filled-in
-// "cancelled" result rather than leaving a hole in the output.
+// runBounded calls fn(0..n-1) on at most maxProbes goroutines. The fixed pool
+// bounds the goroutine count, not just in-flight network calls: one goroutine
+// per selected host would park 300 of them on a semaphore. Cancellation is
+// fn's business — it fills in a "cancelled" result rather than leaving a hole.
 func runBounded(n int, fn func(i int)) {
 	workers := min(n, maxProbes)
 	if workers <= 0 {
@@ -47,16 +43,14 @@ func runBounded(n int, fn func(i int)) {
 	wg.Wait()
 }
 
-// acquire takes a semaphore slot, giving up if ctx is cancelled first.
-// A plain `sem <- struct{}{}` cannot be interrupted, so on Ctrl-C the
-// queued probes stay parked and keep contacting devices as slots free up
-// while the command is already printing its summary.
+// acquire takes a semaphore slot, giving up if ctx is cancelled first: an
+// uninterruptible send would let queued probes keep contacting devices after
+// Ctrl-C, while the summary is already printing.
 func acquire(ctx context.Context, sem chan struct{}) bool {
 	select {
 	case sem <- struct{}{}:
 		if ctx.Err() != nil {
-			// Cancelled while we were being admitted: hand the slot back
-			// rather than holding it for a probe that will not run.
+			// Cancelled mid-admission: hand the slot back.
 			<-sem
 			return false
 		}
@@ -112,15 +106,14 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 		return fmt.Errorf("no status-reporting devices selected")
 	}
 
-	// Fail fast on secret-backend problems in the main goroutine, the
-	// way the Python implementation primes VaultSecrets before probing.
+	// Fail fast in the main goroutine, as Python primes VaultSecrets.
 	secrets, err := newSecrets()
 	if err != nil {
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
 
-	// Render up front and serially: templating may create missing
-	// secrets, which must not race across probes.
+	// Render serially: templating may create missing secrets, which must not
+	// race across probes.
 	rendered := make(map[string]string, len(hosts))
 	renderErrs := make(map[string]error, len(hosts))
 	for _, h := range hosts {
@@ -157,8 +150,7 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 	}
 
 	rows := runProbesPlain(ctx, probes)
-	// LATEST FIRMWARE: one release lookup for the whole table, "?" when
-	// the vendor has no image provider or the feed is unreachable.
+	// One release lookup for the whole table.
 	firmware := firmwareCells(ctx, log, hosts, rows)
 
 	if jsonOut {
@@ -185,8 +177,7 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 	return nil
 }
 
-// runProbesPlain runs every probe concurrently and returns the rows in
-// the order the devices were selected, so output is deterministic.
+// runProbesPlain returns rows in selection order, so output is deterministic.
 func runProbesPlain(ctx context.Context, probes []tui.StatusProbe) []tui.StatusRow {
 	rows := make([]tui.StatusRow, len(probes))
 	runBounded(len(probes), func(i int) {
@@ -195,9 +186,8 @@ func runProbesPlain(ctx context.Context, probes []tui.StatusProbe) []tui.StatusR
 	return rows
 }
 
-// statusProbe builds the probe for one host: reach it, read its status,
-// and compare its running config against the rendered one. Failures land
-// in the row rather than aborting the command.
+// statusProbe builds one host's probe. Failures land in the row rather than
+// aborting the command.
 func statusProbe(o *Options, net *model.Network, h *model.Host, rendered string, renderErr error, secrets SecretSource) func(context.Context) tui.StatusRow {
 	log := o.Logger()
 
@@ -243,9 +233,8 @@ func consistencyCell(
 	if renderErr != nil {
 		return "render error: " + renderErr.Error(), tui.StateError
 	}
-	// Same comparison `diff` and `deploy` use — see compare.go. Using a
-	// plain line diff here made VyOS rows report hundreds of phantom
-	// changes on devices the other two commands called clean.
+	// Same comparison `diff` and `deploy` use (compare.go); a plain line diff
+	// reports hundreds of phantom changes on VyOS rows they call clean.
 	diff, err := compareConfig(ctx, reader, h, net, rendered, secrets, DiffOptions{})
 	if err != nil {
 		return "error: " + err.Error(), tui.StateError
@@ -256,8 +245,8 @@ func consistencyCell(
 	return diff.Summary, tui.StateDrift
 }
 
-// errorRow is a device that could not be probed: dashes across, with the
-// reason in STATUS, exactly like the Python table.
+// errorRow is a device that could not be probed: dashes across, reason in
+// STATUS, as the Python table does.
 func errorRow(device, endpoint, reason string) tui.StatusRow {
 	return tui.StatusRow{
 		Device:     device,

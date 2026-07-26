@@ -20,10 +20,9 @@ func deref(n *yaml.Node) *yaml.Node {
 	return n
 }
 
-// mapEntries flattens a mapping node into ordered key/value pairs,
-// resolving `<<` merge keys the way PyYAML does: merged entries come
-// first and an explicit key of the same name overrides the merged value
-// while keeping the merged key's position.
+// mapEntries flattens a mapping into ordered key/value pairs, resolving `<<`
+// as PyYAML does: merged entries come first, and an explicit key overrides the
+// merged value while keeping the merged key's position.
 func mapEntries(n *yaml.Node) []entry {
 	n = deref(n)
 	if n == nil || n.Kind != yaml.MappingNode {
@@ -50,12 +49,9 @@ func mapEntries(n *yaml.Node) []entry {
 		val := deref(n.Content[i+1])
 		sources := []*yaml.Node{val}
 		if val != nil && val.Kind == yaml.SequenceNode {
-			// `<<: [*a, *b]`: the EARLIER alias wins. PyYAML's
-			// flatten_mapping reverses the sequence before extending the
-			// merge list (submerge.reverse()), so *b's keys are inserted
-			// first and *a's later assignment overwrites them while the
-			// key order stays *b-first. Walking the sequence backwards
-			// with an overwrite-in-place add reproduces that exactly.
+			// `<<: [*a, *b]`: the EARLIER alias wins and key order stays
+			// *b-first, because PyYAML's flatten_mapping reverses the
+			// sequence; walking backwards with overwrite-in-place matches.
 			sources = make([]*yaml.Node, 0, len(val.Content))
 			for i := len(val.Content) - 1; i >= 0; i-- {
 				sources = append(sources, val.Content[i])
@@ -93,16 +89,9 @@ func nodeString(n *yaml.Node) string {
 	return n.Value
 }
 
-// pyyamlBools is PyYAML's YAML 1.1 bool resolver table. PyYAML's
-// implicit resolver regex is
-//
-//	^(?:yes|Yes|YES|no|No|NO|true|True|TRUE|false|False|FALSE
-//	  |on|On|ON|off|Off|OFF)$
-//
-// so a PLAIN (unquoted) `yes`/`on` is the boolean True and `no`/`off`
-// is False. Note that bare `y`/`n` are deliberately absent: PyYAML does
-// not resolve them, so they stay strings (and a non-empty string is
-// truthy in Python, i.e. `y` AND `n` are both true).
+// pyyamlBools is PyYAML's YAML 1.1 bool resolver table: plain `yes`/`on` is
+// True, `no`/`off` False. Bare `y`/`n` are deliberately absent — PyYAML leaves
+// them strings, and a non-empty string is truthy, making BOTH true.
 var pyyamlBools = map[string]bool{
 	"yes": true, "Yes": true, "YES": true,
 	"no": false, "No": false, "NO": false,
@@ -112,18 +101,10 @@ var pyyamlBools = map[string]bool{
 	"off": false, "Off": false, "OFF": false,
 }
 
-// nodeBool reports whether a YAML value is true the way Python decides it.
-//
-// Every boolean-ish field barf reads (dhcp, dhcpv6, ipv6_autoconf,
-// management, enabled, cloud_init, mtu_ignore, merge_paths, ipsec) is
-// read in Python as `meta.get("field", default)` and then used in a
-// plain `if` — no bool() cast anywhere. So the rule is: resolve the
-// scalar the way PyYAML would, then apply Python truthiness. That makes
-// `management: yes` true (YAML 1.1 bool), `enabled: "no"` true (a
-// quoted, therefore non-empty, string), and `mtu: 0` false.
-//
-// go-yaml is a YAML 1.2 parser and resolves `yes`/`on` to !!str, so the
-// resolution has to be redone here rather than read off n.Tag.
+// nodeBool resolves the scalar as PyYAML (YAML 1.1) would, then applies Python
+// truthiness — barf's boolean-ish fields are all `meta.get(...)` in a plain
+// `if`. So `management: yes` is true, `enabled: "no"` too (non-empty string),
+// `mtu: 0` false. go-yaml is 1.2 and resolves `yes` to !!str, hence redoing it.
 func nodeBool(n *yaml.Node) bool {
 	n = deref(n)
 	if n == nil {
@@ -138,8 +119,8 @@ func nodeBool(n *yaml.Node) bool {
 		return false
 	}
 
-	// Quoted and block scalars are strings in PyYAML too, never bools:
-	// any non-empty string is truthy. This is the `enabled: "no"` case.
+	// Quoted and block scalars are strings in PyYAML too, so any non-empty
+	// one is truthy (the `enabled: "no"` case).
 	const quoted = yaml.SingleQuotedStyle | yaml.DoubleQuotedStyle |
 		yaml.LiteralStyle | yaml.FoldedStyle
 	if n.Style&quoted != 0 || (n.Style&yaml.TaggedStyle != 0 && n.Tag == "!!str") {
@@ -198,12 +179,9 @@ func seqEntries(n *yaml.Node) []*yaml.Node {
 	return out
 }
 
-// nodeAny decodes a node into plain Go values (map[string]any, []any,
-// scalars) for the Raw / Wireguard / RA passthrough fields.
-//
-// A decode failure is returned, never swallowed: Host.Raw exists so a
-// partial port never silently drops configuration, and a nil value from
-// a failed decode would do exactly that.
+// nodeAny decodes a node into plain Go values for the Raw / Wireguard / RA
+// passthrough fields. A decode failure is returned, never swallowed: Host.Raw
+// exists so a partial port never silently drops configuration.
 func nodeAny(n *yaml.Node) (any, error) {
 	n = deref(n)
 	if n == nil {

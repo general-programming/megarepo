@@ -2,22 +2,16 @@ package sshx
 
 import "fmt"
 
-// Oneshot vbash scripts for `barf device update`.
-//
-// Each stage of the updater is a single self-contained script executed in
-// one SSH exec, so we never dribble commands at a device one by one. The
-// scripts print "<STAGE>-OK" / "<STAGE>-FAIL" markers that the caller
-// checks IN ADDITION TO the exit code (see ScriptOK).
+// Oneshot vbash scripts for `barf device update`, a byte-for-byte port of
+// barf/util/vyos_scripts.py (these run as root on production routers, so a
+// text diff is a blast-radius diff). Each stage is one self-contained script
+// run in a single SSH exec, printing "<STAGE>-OK"/"<STAGE>-FAIL" markers the
+// caller checks IN ADDITION TO the exit code (see ScriptOK).
 //
 // Trap: sourcing `script-template` replaces the `exit` builtin with the
-// config-mode `exit` command, so a plain `exit 1` after it silently falls
-// through and the script keeps running. The template is therefore only
-// sourced where config-mode commands are needed, and every real script
-// exit after that point uses `builtin exit`.
-//
-// Ports projects/barf/barf/util/vyos_scripts.py. The script text is kept
-// byte-for-byte identical to the Python original: these run as root on
-// production routers, and a diff here is a diff in blast radius.
+// config-mode `exit`, so a plain `exit 1` after it falls through. The
+// template is sourced only where config-mode commands are needed, and every
+// exit past that point uses `builtin exit`.
 
 // Op-mode commands via the wrapper work regardless of shell context.
 const scriptHeader = `#!/bin/vbash
@@ -27,8 +21,7 @@ set -o pipefail
 
 const configTemplate = "source /opt/vyatta/etc/functions/script-template"
 
-// Stage markers. Each names both a "<MARKER>-OK" and a "<MARKER>-FAIL"
-// line in the corresponding script.
+// Stage markers, each naming a "<MARKER>-OK"/"<MARKER>-FAIL" line pair.
 const (
 	MarkerPrecheck = "PRECHECK"
 	MarkerInstall  = "INSTALL"
@@ -37,20 +30,12 @@ const (
 )
 
 // PrecheckScript refuses to touch a device with a full disk or unsaved
-// config.
+// config; checkDir defaults to "/".
 //
-// The installer downloads the ISO into the invoking user's home directory
-// and copies the squashfs to /boot -- both on the root filesystem, so
-// that is where the headroom must be (NOT /tmp, which is a small tmpfs
-// the installer never touches). `add system image` has its own 2GiB floor
-// on `/`, but failing here leaves the device untouched instead of dying
-// mid-install while prompts are being blind-fed newlines.
-//
-// Note: this catches committed-but-unsaved changes. Uncommitted edits
-// live only inside another user's config session and are not visible from
-// here.
-//
-// checkDir defaults to "/" when empty.
+// Headroom is checked on the root filesystem, where the installer puts the
+// ISO and squashfs -- NOT /tmp, a small tmpfs it never touches. Failing here
+// leaves the device untouched rather than dying mid-install with prompts
+// being blind-fed newlines. Only committed-but-unsaved changes are visible.
 func PrecheckScript(requiredMB int, checkDir string) string {
 	if checkDir == "" {
 		checkDir = "/"
@@ -80,19 +65,12 @@ builtin exit 0
 }
 
 // InstallScript installs the image from its mirror URL and makes it the
-// default boot image.
-//
-// The device downloads imageURL itself and fetches "<imageURL>.minisig"
-// alongside it, verifying the signature against its bundled release key
-// before installing. When the mirror has no signature, the installer's
-// continue-without-verification prompt gets a bare newline like every
-// other prompt, taking whatever the installer's default is rather than
-// blindly answering yes.
-//
-// Idempotence lives in the caller: a directory in /boot alone does not
-// prove the image is the default boot image, so the caller checks
-// `show system image` via the API and only runs this script when a real
-// install is needed.
+// default boot image. The device fetches imageURL and "<imageURL>.minisig"
+// itself, verifying against its bundled release key; unsigned, the
+// continue-without-verification prompt gets a bare newline like every other
+// prompt, taking the installer's default rather than answering yes.
+// Idempotence lives in the caller: a directory in /boot does not prove the
+// image is the default boot image.
 func InstallScript(imageURL, version string) string {
 	return scriptHeader + fmt.Sprintf(`
 # A previously interrupted install leaves /mnt/installation mounted and
@@ -120,14 +98,10 @@ fi
 `, imageURL, version, version, version, version)
 }
 
-// DrainAndRebootScript gracefully drains BGP, then reboots into the
-// staged image.
-//
-// The BGP shutdown is committed but deliberately NOT saved: the device
-// boots into the new image with peering enabled again automatically,
-// which doubles as rollback if the reboot goes sideways.
-//
-// drainWait is in seconds.
+// DrainAndRebootScript gracefully drains BGP, then reboots into the staged
+// image; drainWait is in seconds. The BGP shutdown is committed but
+// deliberately NOT saved, so the device boots with peering enabled again --
+// rollback if the reboot goes sideways.
 func DrainAndRebootScript(version string, drainWait int, drainBGP bool) string {
 	drain := ""
 	if drainBGP {

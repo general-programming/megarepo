@@ -69,10 +69,9 @@ func TestTextInterpretsOpModeData(t *testing.T) {
 	}
 }
 
-// The three copies this package replaced disagreed about the response
-// body cap: 16 MiB in lifecycle against 64 MiB in device, so a large
-// /retrieve truncated on the lifecycle path only and surfaced as a
-// confusing "malformed vyos api response". Pin the surviving limit.
+// Regression: the copies this package replaced capped the response body at
+// 16 MiB (lifecycle) vs 64 MiB (device), so a large /retrieve truncated on one
+// path as "malformed vyos api response". Pin the surviving limit.
 func TestMaxResponseBytesIsTheLargerOldLimit(t *testing.T) {
 	if MaxResponseBytes != 64<<20 {
 		t.Fatalf("MaxResponseBytes = %d, want 64 MiB", MaxResponseBytes)
@@ -121,7 +120,7 @@ func TestPostSendsFormEncodedPost(t *testing.T) {
 	}
 }
 
-// The API key travels in the request body; it must never reach an error
+// The API key travels in the request body and must never reach an error
 // message, which is what gets logged on a fleet-wide run.
 func TestErrorsDoNotLeakTheAPIKey(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

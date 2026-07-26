@@ -12,56 +12,26 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// This file is the ONLY write path to an Arista device, and it is
-// deliberately separate from eos.go.
+// The ONLY write path to an Arista device, kept separate from eos.go so
+// neither guard can be loosened by editing the other. It is scoped to the
+// managed slice — the `admin` user, its ssh-keys, the enable password, the
+// eAPI block — so eosWriteCommandAllowed admits only those shapes plus `no
+// shutdown`: a deploy cannot carry `no ip routing` or `write erase`.
 //
-// The read transport (EOSReader) stays read-only by construction: its one
-// request primitive rejects anything that is not `enable` or `show ...`
-// (eosCommandAllowed), and nothing here relaxes that. A caller holding a
-// Reader still cannot write; writing requires constructing an EOSWriter,
-// which requires Options.AllowWrites, which a caller has to set by name.
-//
-// The write surface is itself scoped. EOS is adopted one config slice at
-// a time — the `admin` user, its ssh-keys, the enable password, the eAPI
-// block — and the promise of that slice is that deploying it cannot
-// disturb anything else on the device. So this writer does not accept
-// arbitrary config: eosWriteCommandAllowed admits only the managed
-// shapes, and in particular admits `no shutdown` (which the eAPI block
-// needs) while rejecting every other negation. A deploy physically
-// cannot carry a `no ip routing` or a `write erase`.
-//
-// Port of EosHost.push_rendered_config in
-// projects/barf/barf/vendors/arista.py.
+// Port of EosHost.push_rendered_config.
 
-// -- shared write surface --------------------------------------------
-//
-// Writer, Op and ErrWritesNotAllowed are the cross-vendor write surface,
-// declared here and used by both writers; device/writer.go (VyOS) reuses
-// them rather than redeclaring them. Options.AllowWrites, the other half
-// of the surface, lives in device.go.
-
-// Op is one configuration operation to apply to a device. The two
-// vendors' native shapes differ enough that Op carries both, and each
-// writer reads only its own fields:
-//
-//   - EOS: Command, one config-mode line. The managed slice is expressed
-//     as positive config lines only, so there is no verb: a *deletion* is
-//     precisely what the EOS writer must never send. (EOS's own
-//     `no shutdown` is a setting, not a removal.)
-//   - VyOS: Verb (OpSet/OpDelete) plus Path, the `set ...` path tuple the
-//     /configure API takes.
+// Op is one configuration operation; it and Writer are the cross-vendor write
+// surface, each writer reading only its own fields. EOS has no verb because a
+// deletion is exactly what the EOS writer must never send (`no shutdown` is a
+// setting, not a removal).
 type Op struct {
-	// Command is the EOS config-mode statement to apply.
-	Command string
+	Command string // EOS config-mode statement
 
-	// Verb is the VyOS operation: OpSet or OpDelete.
-	Verb string
-	// Path is the VyOS config path the verb applies to.
-	Path []string
+	Verb string   // VyOS: OpSet or OpDelete
+	Path []string // VyOS config path the verb applies to
 }
 
-// EOSOps turns managed config lines (render.EOSManagedCommands output)
-// into Ops for an EOSWriter.
+// EOSOps turns managed config lines (render.EOSManagedCommands) into Ops.
 func EOSOps(commands []string) []Op {
 	ops := make([]Op, 0, len(commands))
 	for _, command := range commands {
@@ -70,19 +40,13 @@ func EOSOps(commands []string) []Op {
 	return ops
 }
 
-// Writer applies configuration to a device. Constructing one always
-// requires an explicit opt-in; see Options.AllowWrites.
+// Writer applies configuration; constructing one requires Options.AllowWrites.
 type Writer interface {
-	// Configure applies ops. Implementations must be idempotent:
-	// re-applying identical state is a no-op on the device.
+	// Configure applies ops. Implementations must be idempotent.
 	Configure(ctx context.Context, ops []Op) error
 	// SaveConfig persists the running config across a reboot.
 	SaveConfig(ctx context.Context) error
 }
-
-// The refusal errors live in errors.go.
-
-// -- EOS writer -------------------------------------------------------
 
 // EOSWriter applies the managed EOS slice over eAPI.
 type EOSWriter struct {
@@ -96,12 +60,9 @@ type EOSWriter struct {
 
 var _ Writer = (*EOSWriter)(nil)
 
-// NewEOSWriter returns a write-capable eAPI client for h.
-//
-// It fails unless opts.AllowWrites is set. That check is here, at
-// construction, on purpose: a caller that has an *EOSWriter at all has
-// already said in one named place that this run may change devices, so no
-// deeper code has to remember to ask.
+// NewEOSWriter returns a write-capable eAPI client for h, failing unless
+// opts.AllowWrites is set — at construction, so holding an *EOSWriter already
+// means one named place allowed this run to write.
 func NewEOSWriter(h *model.Host, opts Options) (*EOSWriter, error) {
 	if h == nil {
 		return nil, fmt.Errorf("device: nil host")
@@ -124,38 +85,26 @@ func (w *EOSWriter) credentials() (admin, enable string, err error) {
 	return w.creds.get(w.opts.Secrets, w.host.Hostname)
 }
 
-// eosWriteCommandAllowed reports whether cmd is inside the EOS managed
-// scope and may therefore be sent in config mode.
-//
-// This is an allowlist of *shapes*, not a denylist of dangerous verbs: an
-// unrecognised command is refused. Growing the managed scope means adding
-// a shape here deliberately, which is exactly the review the scope
-// promise deserves.
+// eosWriteCommandAllowed is an allowlist of *shapes*, not a denylist of verbs:
+// an unrecognised command is refused, so growing the managed scope means
+// deliberately adding a shape here.
 func eosWriteCommandAllowed(cmd string) bool {
 	trimmed := strings.TrimSpace(cmd)
 	if trimmed == "" {
 		return false
 	}
-	// Every arm below is a prefix test, and a prefix test says nothing
-	// about what follows on a *later line*. TrimSpace strips the ends,
-	// not the interior, so `"username admin ssh-key ssh-ed25519 AAAA\nno
-	// ip routing"` passed the username arm and then shipped a second,
-	// entirely unreviewed command to the device — eAPI runs a multi-line
-	// string as multiple config lines. This is reachable in practice: a
-	// two-line authorized_keys blob pasted into one YAML value. A
-	// semicolon is refused on the same principle.
-	//
-	// One op is one command. A caller with two commands passes two ops,
-	// and each is then checked on its own.
+	// Every arm below is a prefix test and eAPI runs a multi-line string as
+	// multiple config lines, so "username admin ssh-key ...\nno ip routing"
+	// would pass the username arm and ship an unreviewed second command —
+	// reachable from a two-line authorized_keys blob in one YAML value.
+	// Semicolons are refused on the same principle.
 	if strings.ContainsAny(trimmed, "\n\r;") {
 		return false
 	}
 	switch {
-	// The managed user and its ssh-keys. Only ManagedUsername: barf does
-	// not own the other accounts on the box.
+	// The managed user and its ssh-keys; barf owns no other account.
 	case strings.HasPrefix(trimmed, "username "+ManagedUsername+" "):
 		return true
-	// The enable password.
 	case strings.HasPrefix(trimmed, "enable password "), strings.HasPrefix(trimmed, "enable secret "):
 		return true
 	// The eAPI block and its sub-modes.
@@ -165,24 +114,17 @@ func eosWriteCommandAllowed(cmd string) bool {
 		return true
 	case strings.HasPrefix(trimmed, "vrf ") && len(strings.Fields(trimmed)) == 2:
 		return true
-	// The only negation the slice needs, and the only one permitted.
-	// Bare `shutdown` is deliberately NOT here: inside `management api
-	// http-commands` it turns eAPI off, which is the transport barf is
-	// speaking over — the write would succeed and lock barf out of the
-	// device for good. Nothing in the managed slice ever needs to
-	// disable eAPI, so the shape is simply not admitted.
+	// The only negation permitted. Bare `shutdown` is deliberately absent:
+	// inside `management api http-commands` it turns off eAPI, so the write
+	// would succeed and lock barf out of the device for good.
 	case trimmed == "no shutdown":
 		return true
 	}
 	return false
 }
 
-// Configure applies ops in config mode.
-//
-// Idempotent by nature of EOS: re-sending an identical managed line
-// changes nothing. Only the managed lines are ever sent — this never
-// emits a `no ...` for config outside the slice, so an unmanaged part of
-// the device cannot be disturbed by a deploy.
+// Configure applies ops in config mode. Idempotent, and only managed lines are
+// ever sent, so a deploy cannot disturb an unmanaged part of the device.
 func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 	if len(ops) == 0 {
 		return nil
@@ -190,10 +132,8 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 	commands := make([]string, 0, len(ops)+2)
 	commands = append(commands, "configure")
 	for _, op := range ops {
-		// A VyOS-shaped op (verb + path) is not an EOS command; refuse it
-		// rather than guess at a translation. In particular OpDelete has
-		// no meaning inside the EOS slice, and admitting it would be the
-		// one way a deploy could remove config.
+		// A VyOS-shaped op is not an EOS command; refuse rather than guess.
+		// OpDelete would be the one way a deploy could remove config.
 		if op.Verb != "" || len(op.Path) > 0 {
 			return &UnmanagedCommandError{Command: op.Verb + " " + strings.Join(op.Path, " ")}
 		}
@@ -204,8 +144,7 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 	}
 	commands = append(commands, "end")
 
-	// A commit gets a commit's budget, not a read's: see the timeout
-	// constants in device.go.
+	// A commit gets a commit's budget, not a read's.
 	ctx, cancel := w.opts.withOpTimeout(ctx, TimeoutConfigure)
 	defer cancel()
 
@@ -213,8 +152,8 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 	return err
 }
 
-// SaveConfig writes the running config to startup, so the managed slice
-// survives a reload. Not a config-mode command; sent on its own.
+// SaveConfig writes running to startup so the slice survives a reload; not a
+// config-mode command, so it is sent on its own.
 func (w *EOSWriter) SaveConfig(ctx context.Context) error {
 	ctx, cancel := w.opts.withOpTimeout(ctx, TimeoutSave)
 	defer cancel()
@@ -223,9 +162,7 @@ func (w *EOSWriter) SaveConfig(ctx context.Context) error {
 	return err
 }
 
-// run is the writer's single request primitive, deliberately separate
-// from EOSReader.runShow so that neither guard can be loosened by editing
-// the other.
+// run is the writer's single request primitive, separate from runShow.
 func (w *EOSWriter) run(ctx context.Context, cmds ...string) ([]json.RawMessage, error) {
 	admin, enable, err := w.credentials()
 	if err != nil {

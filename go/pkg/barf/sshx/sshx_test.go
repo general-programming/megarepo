@@ -16,9 +16,8 @@ import (
 )
 
 func TestScriptOK(t *testing.T) {
-	// The whole point of ScriptOK: VyOS's script-template hijacks `exit`,
-	// so rc alone is a lie. Each case below is a real shape a device can
-	// produce.
+	// VyOS's script-template hijacks `exit`, so rc alone is a lie; each
+	// case is a real shape a device can produce.
 	cases := []struct {
 		name   string
 		rc     int
@@ -29,10 +28,9 @@ func TestScriptOK(t *testing.T) {
 		{"nonzero exit", 1, "PRECHECK-OK\n", false},
 		{"no marker at all", 0, "doing things\n", false},
 		{
-			// The load-bearing case: the script hit a failure, called
-			// `exit 1` after sourcing script-template (which is now the
-			// config-mode exit, not the builtin), fell through, and
-			// printed its OK line anyway with rc 0.
+			// Load-bearing: `exit 1` after sourcing script-template is
+			// config-mode exit, not the builtin, so the script fell
+			// through and printed its OK line anyway with rc 0.
 			name:   "FAIL then OK with rc 0",
 			rc:     0,
 			output: "PRECHECK-FAIL: unsaved config\nsome noise\nPRECHECK-OK\n",
@@ -53,8 +51,8 @@ func TestScriptOK(t *testing.T) {
 func TestDialUsesPasswordAfterKeysFail(t *testing.T) {
 	server := newTestServer(t, "hunter2", nil)
 
-	// A real (rejected) key makes the first, key-only attempt happen, so
-	// the fallback path is genuinely exercised rather than skipped.
+	// A real (rejected) key makes the key-only attempt happen, so the
+	// fallback path is genuinely exercised.
 	home := t.TempDir()
 	writeTestKey(t, filepath.Join(home, "id_ed25519"))
 
@@ -77,9 +75,8 @@ func TestDialUsesPasswordAfterKeysFail(t *testing.T) {
 }
 
 func TestDialExplicitUsernameNeverUsesThePassword(t *testing.T) {
-	// BaseHost.SSH_USERNAME means "keys only": with no usable key and no
-	// password fallback, the dial must fail rather than quietly trying
-	// the shared account's password.
+	// BaseHost.SSH_USERNAME means "keys only": with no usable key the dial
+	// must fail rather than quietly trying the shared account's password.
 	server := newTestServer(t, "hunter2", nil)
 	host, port := server.addr()
 	no := false
@@ -194,8 +191,8 @@ func TestRunScriptUploadsAndChecksMarkers(t *testing.T) {
 }
 
 func TestRunScriptRejectsFailMarkerDespiteCleanExit(t *testing.T) {
-	// The exact production hazard: rc 0, OK line present, FAIL line
-	// present. A router that reports this has NOT passed.
+	// The production hazard: rc 0 with both OK and FAIL lines. A router
+	// reporting this has NOT passed.
 	server := newTestServer(t, "pw", func(command, _ string) (string, string, int) {
 		if strings.HasPrefix(command, "vbash ") {
 			return "PRECHECK-FAIL: committed but unsaved configuration changes:\n" +
@@ -262,9 +259,8 @@ func TestRunTimesOut(t *testing.T) {
 		<-release
 		return "", "", 0
 	})
-	// Registered after the server so it runs BEFORE the server's own
-	// cleanup (t.Cleanup is LIFO); otherwise the server would wait for a
-	// handler that is waiting for this channel.
+	// Registered after the server so it runs first (t.Cleanup is LIFO);
+	// otherwise the server waits on a handler waiting for this channel.
 	t.Cleanup(func() { close(release) })
 	client := dialTest(t, server, "pw")
 
@@ -285,8 +281,7 @@ func TestRejectsBadScriptNames(t *testing.T) {
 	}
 }
 
-// TestConcurrentRuns exercises several sessions on one connection at
-// once; `go test -race` is the point of it.
+// Several sessions on one connection; `go test -race` is the point.
 func TestConcurrentRuns(t *testing.T) {
 	server := newTestServer(t, "pw", func(command, _ string) (string, string, int) {
 		return command + "\n", "", 0

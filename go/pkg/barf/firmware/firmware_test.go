@@ -14,9 +14,8 @@ import (
 	"time"
 )
 
-// Real fleet values, captured from the live VyOS nightly-build release
-// feed. Every version assertion below is pinned to these so a refactor
-// cannot quietly change what LATEST FIRMWARE reports.
+// Real values captured from the live VyOS nightly-build release feed; every
+// version assertion below is pinned to them.
 const (
 	fleetRunning = "2026.07.11-0033-rolling"
 	fleetLatest  = "2026.07.21-1151-rolling"
@@ -34,8 +33,7 @@ func TestIsCurrentMatchesPythonContainment(t *testing.T) {
 	}{
 		{"fleet behind", fleetLatest, fleetRunning, false},
 		{"fleet current", fleetLatest, fleetLatest, true},
-		// Python's check is `latest in version`, so a device that
-		// decorates the tag still counts as current.
+		// Python's check is `latest in version`, so a decorated tag counts.
 		{"decorated", fleetLatest, "VyOS " + fleetLatest + " (amd64)", true},
 		{"empty version", fleetLatest, "", false},
 		{"unknown latest", "", fleetRunning, false},
@@ -61,7 +59,6 @@ func TestCompareVersionsOnRealFleetValues(t *testing.T) {
 	if got := CompareVersions(fleetLatest, fleetLatest); got != 0 {
 		t.Fatalf("equal versions should compare 0, got %d", got)
 	}
-	// Ordering must hold across every field of the fixed-width format.
 	ordered := []string{
 		"2025.12.31-2359-rolling",
 		"2026.01.01-0000-rolling",
@@ -76,8 +73,7 @@ func TestCompareVersionsOnRealFleetValues(t *testing.T) {
 	}
 }
 
-// releaseFixture is the shape of the live GitHub release, trimmed to the
-// fields the provider reads.
+// releaseFixture: the live GitHub release, trimmed to the fields read.
 func releaseFixture() map[string]any {
 	return map[string]any{
 		"tag_name": fleetLatest,
@@ -145,7 +141,6 @@ func TestVyOSProviderReadsRelease(t *testing.T) {
 		t.Fatalf("the fleet's %s must not read as current against %s", fleetRunning, fleetLatest)
 	}
 
-	// The feed is fetched once per process, not once per question.
 	if n := calls.Load(); n != 1 {
 		t.Fatalf("release feed fetched %d times, want 1", n)
 	}
@@ -258,7 +253,6 @@ func TestRegistry(t *testing.T) {
 
 func TestCheckerCells(t *testing.T) {
 	srv, _ := releaseServer(t, releaseFixture(), http.StatusOK)
-	// Point the registry's vyos entry at the fixture for this test only.
 	restore := providers["vyos"]
 	providers["vyos"] = &VyOS{ReleaseURL: srv.URL}
 	t.Cleanup(func() { providers["vyos"] = restore })
@@ -280,7 +274,6 @@ func TestCheckerCells(t *testing.T) {
 	}
 }
 
-// recordingLogger captures warnings without ever seeing a secret.
 type recordingLogger struct{ msgs []string }
 
 func (r *recordingLogger) Warn(msg string, args ...any) { r.msgs = append(r.msgs, msg) }
@@ -300,7 +293,7 @@ func TestCheckerDegradesWhenMirrorFeedUnreachable(t *testing.T) {
 	if len(log.msgs) != 1 {
 		t.Fatalf("expected one warning, got %v", log.msgs)
 	}
-	// A nil Checker must be usable too: callers may skip priming.
+	// A nil Checker must work too: callers may skip priming.
 	var nilChecker *Checker
 	if got := nilChecker.Cell("vyos", fleetRunning); got != Unknown {
 		t.Fatalf("nil Checker cell = %q", got)
@@ -358,7 +351,7 @@ func TestMirrorPublicURLAndPrefixDefault(t *testing.T) {
 	}
 }
 
-// fakeS3 is an in-memory bucket that checks every request is signed.
+// fakeS3 is an in-memory bucket that rejects unsigned requests.
 type fakeS3 struct {
 	t       *testing.T
 	objects map[string][]byte
@@ -446,8 +439,7 @@ func TestMirrorPublishSignatureFirst(t *testing.T) {
 	if url != "https://files.owo.me/firmware/"+fleetImage {
 		t.Fatalf("Publish URL = %q", url)
 	}
-	// VyOS fetches <url>.minisig during install, so the image must never
-	// become visible before its signature.
+	// VyOS fetches <url>.minisig during install, so the signature must land first.
 	if len(s3.puts) != 2 || s3.puts[0] != "firmware/"+fleetSig || s3.puts[1] != "firmware/"+fleetImage {
 		t.Fatalf("upload order = %v, want signature then image", s3.puts)
 	}
@@ -488,8 +480,7 @@ func TestMirrorRejectsIncompleteCredentials(t *testing.T) {
 	}
 }
 
-// fakeSecrets is a stand-in for the Vault client. No live Vault is ever
-// contacted by these tests.
+// fakeSecrets stands in for the Vault client.
 type fakeSecrets struct{ data map[string]map[string]any }
 
 func (f fakeSecrets) ReadSecret(_ context.Context, mount, path string) (map[string]any, error) {
@@ -536,8 +527,7 @@ func TestSigV4CanonicalURI(t *testing.T) {
 }
 
 func TestSigV4Structure(t *testing.T) {
-	// The signature itself is exercised end-to-end by the fakeS3 tests;
-	// this pins the header shape, the scope, and determinism.
+	// fakeS3 covers signing end-to-end; this pins header shape, scope, determinism.
 	req, err := http.NewRequest(http.MethodGet, "https://example.amazonaws.com/", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -552,15 +542,12 @@ func TestSigV4Structure(t *testing.T) {
 		t.Fatalf("signV4: %v", err)
 	}
 	auth := req.Header.Get("Authorization")
-	// Credential scope is <key>/<date>/<region>/<service>/aws4_request and
-	// exactly host + the two x-amz headers are signed.
 	const want = "AWS4-HMAC-SHA256 Credential=AKIDEXAMPLE/20150830/us-east-1/service/aws4_request, " +
 		"SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature="
 	if !strings.HasPrefix(auth, want) {
 		t.Fatalf("Authorization = %q, want prefix %q", auth, want)
 	}
-	// Signing is deterministic for a fixed clock: the same request signs
-	// identically, and a different secret does not.
+	// Deterministic for a fixed clock; a different secret must differ.
 	req2, _ := http.NewRequest(http.MethodGet, "https://example.amazonaws.com/", nil)
 	req2.Host = "example.amazonaws.com"
 	if err := signV4(req2, creds, "us-east-1", "service", hexSHA256(nil), when); err != nil {

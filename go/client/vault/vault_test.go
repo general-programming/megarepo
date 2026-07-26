@@ -14,8 +14,8 @@ import (
 	"testing"
 )
 
-// fakeVault serves KV v2 reads out of an in-memory map keyed by
-// "<mount>/<path>", counting requests so cache behaviour is observable.
+// fakeVault serves KV v2 reads from a map keyed "<mount>/<path>", counting
+// requests so cache behaviour is observable.
 type fakeVault struct {
 	data  map[string]map[string]any
 	calls atomic.Int64
@@ -78,7 +78,6 @@ func TestGetDefaultMount(t *testing.T) {
 	fv := fixture()
 	c := newTestClient(t, fv)
 
-	// Empty mount falls back to "secret".
 	got, err := c.Get(context.Background(), "", "infra/netbox", "api_key")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -199,7 +198,6 @@ func TestReadIsCached(t *testing.T) {
 			t.Fatalf("Get: %v", err)
 		}
 	}
-	// A second key on the same path must also come from the cache.
 	if _, err := c.Get(ctx, MountClusterSecrets, "host-sea1-core-1", "admin-password"); err != nil {
 		t.Fatalf("Get: %v", err)
 	}

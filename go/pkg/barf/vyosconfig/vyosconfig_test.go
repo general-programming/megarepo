@@ -122,11 +122,8 @@ func TestParseSetCommandsUnbalancedQuoteFallsBackToPlainSplit(t *testing.T) {
 }
 
 // Regression: ParseSetCommands split on "\n" where Python splits with
-// splitlines(). Rendered config that arrives with CRLF endings left a
-// stray "\r" on every line — which TrimSpace happened to hide here, but
-// a form feed or a lone CR was not a boundary at all, so two `set` lines
-// fused into one and the second was silently lost from the candidate
-// config. Pin the helper's behaviour where the parser actually uses it.
+// splitlines(). A form feed or lone CR was not a boundary at all, so two
+// `set` lines fused and the second was silently lost from the candidate.
 func TestParseSetCommandsSplitsPythonLineBoundaries(t *testing.T) {
 	want := []Path{
 		path("system", "host-name", "spine-1"),
@@ -198,9 +195,8 @@ func TestPathsFromAPIJSON(t *testing.T) {
 	}
 }
 
-// TestAPIJSONMatchesEquivalentSetCommands is the load-bearing property:
-// the two representations of the same config must flatten to the same
-// path set, or every diff would be full of noise.
+// Both representations of the same config must flatten to the same path
+// set, or every diff would be full of noise.
 func TestAPIJSONMatchesEquivalentSetCommands(t *testing.T) {
 	var data any
 	raw := `{"interfaces": {"wireguard": {"wg1": {
@@ -258,8 +254,7 @@ func TestDiffPaths(t *testing.T) {
 			wantSummary: "+1 -1",
 		},
 		{
-			// Nothing is exempt from ownership: a path only on the device
-			// (not ignored) is deleted, not kept.
+			// A path only on the device (not ignored) is deleted, not kept.
 			name:        "unrendered device path is removed",
 			running:     NewSet(path("service", "ssh", "port", "22")),
 			candidate:   NewSet(),
@@ -343,8 +338,8 @@ func TestDiffPaths(t *testing.T) {
 	}
 }
 
-// TestDiffPathsDoesNotMutateInputs guards the deploy path: the caller
-// keeps using `running` to compute minimal deletes after diffing.
+// The deploy path keeps using `running` to compute minimal deletes after
+// diffing, so DiffPaths must not mutate it.
 func TestDiffPathsDoesNotMutateInputs(t *testing.T) {
 	running := NewSet(path("a", "b"), path("c", "d"))
 	candidate := NewSet(path("a", "b"))
@@ -440,8 +435,8 @@ func TestFormatDiff(t *testing.T) {
 	}
 }
 
-// TestFormatDiffOrdersRemovalsFirst pins the printed order: deletes are
-// applied before sets on the device, and the diff must read the same way.
+// Deletes are applied before sets on the device; the diff must read the
+// same way.
 func TestFormatDiffOrdersRemovalsFirst(t *testing.T) {
 	diff := ConfigDiff{
 		Added:   []Path{path("a", "1")},
@@ -508,8 +503,7 @@ func TestSummarizeDiff(t *testing.T) {
 	}
 }
 
-// TestMinimalDeletePaths is the safety-critical one: these results become
-// `delete` ops against a live router.
+// Safety-critical: these results become `delete` ops against a live router.
 func TestMinimalDeletePaths(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -614,9 +608,8 @@ func TestMinimalDeletePaths(t *testing.T) {
 	}
 }
 
-// TestMinimalDeletePathsNeverDeletesSurvivingConfig is the invariant the
-// per-case table exists to protect: no chosen delete path may be a prefix
-// of a running path that is staying.
+// The invariant behind the table above: no chosen delete path may be a
+// prefix of a running path that is staying.
 func TestMinimalDeletePathsNeverDeletesSurvivingConfig(t *testing.T) {
 	running := NewSet(
 		path("interfaces", "ethernet", "eth0", "hw-id", "aa:bb"),
@@ -634,8 +627,7 @@ func TestMinimalDeletePathsNeverDeletesSurvivingConfig(t *testing.T) {
 	diff := DiffPaths(running, candidate, IgnoredPaths)
 	deletes := MinimalDeletePaths(diff.Removed, running)
 
-	// Every path that survives (candidate-rendered or ignored) must not
-	// sit under any delete.
+	// No surviving path (candidate-rendered or ignored) sits under a delete.
 	survivors := []Path{
 		path("interfaces", "ethernet", "eth0", "hw-id", "aa:bb"), // ignored
 		path("interfaces", "ethernet", "eth1", "mtu", "1500"),
@@ -649,7 +641,7 @@ func TestMinimalDeletePathsNeverDeletesSurvivingConfig(t *testing.T) {
 		}
 	}
 
-	// And every removed path must actually be covered by some delete.
+	// ...and every removed path is covered by some delete.
 	for _, removed := range diff.Removed {
 		covered := false
 		for _, del := range deletes {
@@ -664,9 +656,8 @@ func TestMinimalDeletePathsNeverDeletesSurvivingConfig(t *testing.T) {
 	}
 }
 
-// TestIgnoredPathsNeverCollapseIntoDeletes: hw-id stays in running, so a
-// whole-interface (or wider) delete cannot swallow it — the collapse
-// anchors at the mtu node, below the ignored sibling.
+// hw-id stays in running, so a whole-interface delete cannot swallow it:
+// the collapse anchors at the mtu node, below the ignored sibling.
 func TestIgnoredPathsNeverCollapseIntoDeletes(t *testing.T) {
 	running := NewSet(
 		path("interfaces", "ethernet", "eth0", "hw-id", "aa:bb"),
@@ -707,11 +698,10 @@ func TestVerifyCryptHash(t *testing.T) {
 const checksum86 = "svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJu" +
 	"esI68u4OTLiBFdcbYEdFCoEOfaS35inz1"
 
-// Regression: wellFormedSHA512Crypt used to check only the `$` arity and
-// the checksum length, so three shapes passlib calls unknown came back as
-// CryptMismatch — and a mismatch tells ReconcileHashedPasswords to rewrite
-// a live router's password it cannot reason about. Each case below was
-// checked against passlib, which returns None (unknown) for all of them.
+// Regression: wellFormedSHA512Crypt checked only the `$` arity and checksum
+// length, so shapes passlib calls unknown came back as CryptMismatch — which
+// tells ReconcileHashedPasswords to rewrite a live router's password it
+// cannot reason about. passlib returns None (unknown) for every case below.
 func TestVerifyCryptHashTreatsUnparseableHashesAsUnknown(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -741,9 +731,9 @@ func TestVerifyCryptHashAcceptsPasslibRange(t *testing.T) {
 	if got := VerifyCryptHash("Hello world!", specHash); got != CryptMatch {
 		t.Fatalf("the spec vector no longer verifies: %v", got)
 	}
-	// Shapes inside passlib's range. They will not match this password,
-	// but they must be *verifiable* (a decision), not unknown. Rounds are
-	// kept small on purpose: these cases really are hashed.
+	// Shapes inside passlib's range: they will not match this password but
+	// must be verifiable, not unknown. Rounds stay small — these are really
+	// hashed.
 	for _, hashed := range []string{
 		"$6$rounds=1000$saltstring$" + checksum86,
 		"$6$rounds=5000$saltstring$" + checksum86,
@@ -754,20 +744,16 @@ func TestVerifyCryptHashAcceptsPasslibRange(t *testing.T) {
 			t.Errorf("VerifyCryptHash(_, %q) = CryptUnknown; passlib accepts this shape", hashed)
 		}
 	}
-	// The maximum passlib allows is accepted by the validator itself —
-	// asserted without hashing, since computing 999,999,999 rounds is
-	// exactly the work this test must not do.
+	// passlib's max is accepted by the validator, asserted without hashing:
+	// computing 999,999,999 rounds is the work this test must not do.
 	if !wellFormedSHA512Crypt("$6$rounds=999999999$saltstring$" + checksum86) {
 		t.Error("rounds=999999999 rejected; it is passlib's max_rounds")
 	}
 }
 
-// Regression: an absurd `rounds=` used to be waved through to the crypt
-// library, which then actually did the work — minutes of CPU, inside a
-// deploy's diff, with no timeout in sight. The range check now happens
-// before crypt is touched, so the hashing is never started. The
-// hair-trigger deadline is the point: refusal must be instant, not
-// merely eventual.
+// Regression: an absurd `rounds=` was waved through to crypt, which then did
+// the work — minutes of CPU inside a deploy's diff. The deadline is the
+// point: refusal must be instant, not merely eventual.
 func TestVerifyCryptHashDoesNotComputeAbsurdRounds(t *testing.T) {
 	for _, hashed := range []string{
 		"$6$rounds=1000000000$saltstring$" + checksum86,
@@ -816,8 +802,7 @@ func TestReconcileHashedPasswords(t *testing.T) {
 		// both sides share the node; a mismatch is a plain -old +new.
 		assertPaths(t, diff.Removed, append(loginPrefix.Clone(), "plaintext-password", specHash))
 
-		// Both sides redact: neither the new password nor the old hash
-		// may appear in the printed diff.
+		// Neither the new password nor the old hash may reach the diff.
 		text := FormatDiff(diff, true)
 		if strings.Contains(text, "new password") || strings.Contains(text, specHash) {
 			t.Fatalf("secret leaked into diff: %q", text)
@@ -886,8 +871,8 @@ func TestReconcileHashedPasswords(t *testing.T) {
 	})
 }
 
-// TestEndToEndVyOSDiff walks a rendered config against a device JSON tree
-// the way the deploy path does, exercising every stage together.
+// Walks a rendered config against a device JSON tree the way the deploy
+// path does, exercising every stage together.
 func TestEndToEndVyOSDiff(t *testing.T) {
 	rendered := strings.Join([]string{
 		"# barf-generated",

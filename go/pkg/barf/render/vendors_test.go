@@ -13,19 +13,11 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// The testdata/ corpus is Python output, not Go output.
-//
-// projects/barf/tests/golden/ only covers hosts that exist in
-// network.yml, and the fleet has no edgeos, cisco, dnos6 or dnos9 host
-// today -- so the vendors ported alongside them have no golden and no
-// parity contract. These fixtures fill that gap: each was produced by
-// driving the Python implementation (barf.util.render.render_host_config
-// and the Jinja templates it dispatches to) with the same deterministic
-// fakes the Python golden harness uses, then captured verbatim. Nothing
-// under projects/barf was modified to make them; the edgeos ones come
-// from loading network.yml with one host's `type` flipped to edgeos in
-// a temporary copy, which is exactly what these tests reproduce by
-// flipping DeviceType in memory.
+// The testdata/ corpus is captured Python output, not Go output: the fleet has
+// no edgeos, cisco, dnos6 or dnos9 host, so those vendors have no golden. Each
+// fixture came from driving barf.util.render.render_host_config with the
+// Python golden harness's deterministic fakes; the edgeos ones from flipping a
+// host's `type` to edgeos, which these tests reproduce in memory.
 
 func testdataDir(t *testing.T) string {
 	t.Helper()
@@ -46,8 +38,7 @@ func readFixture(t *testing.T, parts ...string) string {
 	return string(data)
 }
 
-// TestEdgeOSParity renders each fleet VyOS host as if it were EdgeOS and
-// diffs against the captured Python render of the same substitution.
+// Renders each fleet VyOS host as EdgeOS and diffs the captured Python render.
 func TestEdgeOSParity(t *testing.T) {
 	network := loadFleet(t)
 	dir := filepath.Join(testdataDir(t), "edgeos")
@@ -67,7 +58,6 @@ func TestEdgeOSParity(t *testing.T) {
 			if !ok {
 				t.Fatalf("fixture %s has no host in network.yml", name)
 			}
-			// Same substitution the fixture was captured under.
 			asEdgeOS := *host
 			asEdgeOS.DeviceType = "edgeos"
 
@@ -83,10 +73,9 @@ func TestEdgeOSParity(t *testing.T) {
 	}
 }
 
-// netboxSwitch is the NetBox-shaped device the IOS fixtures were
-// captured from: a 3750X-alike with one port of every shape the
-// templates branch on (access, trunk with a native vlan, trunk without,
-// a LAG, and an SVI in a VRF).
+// The NetBox-shaped device the IOS fixtures were captured from: one port of
+// every shape the templates branch on (access, trunk with/without native vlan,
+// a LAG, an SVI in a VRF).
 func netboxSwitch(deviceType string) *render.IOSDevice {
 	address := func(text string) []model.Address {
 		prefix := netip.MustParsePrefix(text)
@@ -127,8 +116,6 @@ func netboxSwitch(deviceType string) *render.IOSDevice {
 	return device
 }
 
-// TestIOSFamilyParity diffs the Cisco and Dell renders against their
-// captured Python output.
 func TestIOSFamilyParity(t *testing.T) {
 	global := loadFleet(t).Global
 
@@ -155,8 +142,7 @@ func TestIOSFamilyParity(t *testing.T) {
 	}
 }
 
-// TestDNOS9MatchesDNOS6 pins the aliasing: network_devices/dnos9.j2
-// includes common/dnos6.j2, so the two vendors emit the same config.
+// network_devices/dnos9.j2 includes common/dnos6.j2, so output is identical.
 func TestDNOS9MatchesDNOS6(t *testing.T) {
 	global := loadFleet(t).Global
 	six, err := render.RenderDNOS(netboxSwitch("dnos6"), global, fakeSecrets{})
@@ -172,8 +158,7 @@ func TestDNOS9MatchesDNOS6(t *testing.T) {
 	}
 }
 
-// TestExternalIsNotRendered guards the marker-type semantics: an
-// external host is a fabric link's far end that barf does not manage.
+// An external host is a link's far end that barf does not manage.
 func TestExternalIsNotRendered(t *testing.T) {
 	if vendor.Templatable("external") {
 		t.Error("external should not be templatable")
@@ -199,9 +184,7 @@ func TestExternalIsNotRendered(t *testing.T) {
 	}
 }
 
-// TestRolesOutsideTheTemplateMatrix checks that a (role, devicetype)
-// pair Python has no template for fails here too, rather than silently
-// emitting a half-config.
+// A (role, devicetype) pair Python has no template for must fail here too.
 func TestRolesOutsideTheTemplateMatrix(t *testing.T) {
 	network := loadFleet(t)
 	host, ok := network.Host("fmt2-vpn-spine-1")
@@ -231,8 +214,7 @@ func TestRolesOutsideTheTemplateMatrix(t *testing.T) {
 	}
 }
 
-// TestAliasesResolve pins the NetBox platform-slug spellings from
-// VENDOR_MAP onto the same renderers.
+// NetBox platform-slug spellings from VENDOR_MAP hit the same renderers.
 func TestAliasesResolve(t *testing.T) {
 	for alias, canonical := range map[string]string{
 		"cisco-ios": "cisco", "dnos-6": "dnos6", "dnos-9": "dnos9",
@@ -249,9 +231,8 @@ func TestAliasesResolve(t *testing.T) {
 	}
 }
 
-// TestIOSVLANsAreOrdered pins the one deliberate divergence from
-// Python: BaseHost.vlans builds a set, so its stanza order varies with
-// the interpreter's hash seed. Byte parity needs a stable order.
+// Deliberate divergence: BaseHost.vlans is a set, so Python's stanza order
+// varies with the hash seed; byte parity needs a stable order.
 func TestIOSVLANsAreOrdered(t *testing.T) {
 	interfaces := []render.IOSInterface{
 		{UntaggedVLAN: &model.VLAN{VID: 99, Name: "native"}},
@@ -277,8 +258,7 @@ func TestIOSVLANsAreOrdered(t *testing.T) {
 	}
 }
 
-// TestEdgeOSTunnelNamesTruncate pins the legacy template's interface
-// naming, which keeps only the last three digits of the link port.
+// The legacy template keeps only the last three digits of the link port.
 func TestEdgeOSTunnelNamesTruncate(t *testing.T) {
 	network := loadFleet(t)
 	host, ok := network.Host("fmt2-vpn-spine-1")

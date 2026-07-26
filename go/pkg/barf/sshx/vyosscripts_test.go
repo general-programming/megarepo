@@ -5,12 +5,10 @@ import (
 	"testing"
 )
 
-// Golden copies of the oneshot scripts. These were diffed byte-for-byte
-// against the Python originals in projects/barf/barf/util/vyos_scripts.py
-// (the only intentional difference is one comment naming the Go API
-// instead of DeviceSSH.run_detached). These scripts run as root on
-// production routers: a diff here is a diff in blast radius, so it is
-// pinned rather than described.
+// Golden copies of the oneshot scripts, diffed byte-for-byte against
+// projects/barf/barf/util/vyos_scripts.py (only intentional difference:
+// one comment naming the Go API instead of DeviceSSH.run_detached). They
+// run as root on production routers, so they are pinned, not described.
 
 func TestPrecheckScriptGolden(t *testing.T) {
 	want := "#!/bin/vbash\nOP=/opt/vyatta/bin/vyatta-op-cmd-wrapper\nset -o pipefail\n\n# Disk check first, in plain bash, where `exit` still works normally.\nfree_kb=\"$(df --output=avail / | tail -1 | tr -d ' ')\"\nif [ \"$free_kb\" -lt 2097152 ]; then\n    echo \"PRECHECK-FAIL: less than 2048MB free in /\"\n    exit 1\nfi\n\nsource /opt/vyatta/etc/functions/script-template\nconfigure\ndiff=\"$(compare saved)\"\nexit\n\nif ! echo \"$diff\" | grep -q \"No changes\"; then\n    echo \"PRECHECK-FAIL: committed but unsaved configuration changes:\"\n    echo \"$diff\"\n    builtin exit 1\nfi\n\necho \"PRECHECK-OK\"\nbuiltin exit 0\n"

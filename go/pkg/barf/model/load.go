@@ -8,8 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// deviceTypes mirrors the Python VENDOR_MAP: network.yml `type:` values
-// barf knows how to model. Aliases map onto their canonical name.
+// deviceTypes mirrors Python's VENDOR_MAP; aliases map onto their canonical name.
 var deviceTypes = map[string]string{
 	"vyos":      "vyos",
 	"edgeos":    "edgeos",
@@ -25,9 +24,8 @@ var deviceTypes = map[string]string{
 	"mikrotik":  "mikrotik",
 }
 
-// hostKeys are the network.yml host keys Load translates into typed
-// fields; everything else lands in Host.Raw so a partial port never
-// silently drops configuration.
+// hostKeys are the host keys Load translates into typed fields; everything
+// else lands in Host.Raw so a partial port never drops configuration.
 var hostKeys = map[string]bool{
 	"type": true, "role": true, "site": true, "id": true, "asn": true,
 	"address": true, "ip6_address": true, "interfaces": true,
@@ -37,11 +35,9 @@ var hostKeys = map[string]bool{
 	"firewall": true,
 }
 
-// Load parses a network.yml file into hosts, links, and global metadata.
-//
-// It reproduces barf.util.network.load_network: profile anchors are
-// merged into hosts, hosts inherit global nameservers, and links with no
-// pinned port derive one from the two hosts' ids.
+// Load parses a network.yml file, reproducing barf.util.network.load_network:
+// profile anchors are merged into hosts, hosts inherit global nameservers, and
+// links with no pinned port derive one from the two hosts' ids.
 func Load(path string) (*Network, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -260,8 +256,8 @@ func parseInterfaces(hostname string, node *yaml.Node) ([]Interface, error) {
 			}
 		}
 
-		// A single `address` and/or a list of `addresses`, any mix of
-		// families; the merged list keeps network.yml order.
+		// `address` and/or `addresses`, any mix of families; the merged
+		// list keeps network.yml order.
 		raw := []string{nodeString(lookup(fields, "address"))}
 		raw = append(raw, nodeStrings(lookup(fields, "addresses"))...)
 		seen := map[string]bool{}
@@ -444,9 +440,9 @@ func parseFirewall(node *yaml.Node) FirewallGroups {
 	return out
 }
 
-// parseLinks expands the nested links: {uplink_host: {peer_host: spec}}
-// mapping. The INNER key is the uplink and becomes side A, keeping the
-// historical spine-first ordering that decides numbered-link addressing.
+// parseLinks expands the nested links: {uplink_host: {peer_host: spec}} map.
+// The INNER key is the uplink and becomes side A, keeping the historical
+// spine-first ordering that decides numbered-link addressing.
 func parseLinks(node *yaml.Node, network *Network) ([]Link, error) {
 	hostNamed := func(name, context string) (*Host, error) {
 		host, ok := network.Host(name)
@@ -502,8 +498,8 @@ func parseLinks(node *yaml.Node, network *Network) ([]Link, error) {
 	return links, nil
 }
 
-// derivedPort is 51000 + min(id)*64 + max(id): collision-free by
-// construction, stable forever, and both sides agree.
+// derivedPort is 51000 + min(id)*64 + max(id): collision-free, stable, and
+// both sides agree.
 func derivedPort(sideA, sideB *Host) (int, error) {
 	for _, host := range []*Host{sideA, sideB} {
 		if host.ID == 0 {

@@ -1,19 +1,9 @@
-// Package vyosconfig parses and diffs VyOS configuration as path sets.
-//
-// It is a direct port of projects/barf/barf/util/vyos_config.py. Both the
-// rendered templates (flat `set ...` command lists) and the HTTPS API's
-// `/retrieve` JSON tree are normalized into one canonical representation:
-// a set of path tuples, one per `set` command. Diffing is then plain set
-// arithmetic, done entirely on this machine — no config session is ever
-// opened on the device.
-//
-// Ownership is total: the rendered config is the full truth, and any
-// device path the candidate does not render becomes a real deletion. The
-// only exception is the "ignored" path prefixes a vendor declares (see
-// IgnoredPaths), which are dropped from the diff entirely — pure hardware
-// facts like `hw-id` that are neither intent nor deletable.
-//
-// This package computes; it never talks to a device.
+// Package vyosconfig parses and diffs VyOS configuration as path sets, a
+// port of barf/util/vyos_config.py. Rendered templates and the API's
+// `/retrieve` JSON tree both normalize to one set of path tuples, so diffing
+// is local set arithmetic; nothing here talks to a device. Ownership is
+// total: any device path the candidate does not render is a real deletion,
+// the sole exception being IgnoredPaths.
 package vyosconfig
 
 import (
@@ -29,17 +19,14 @@ import (
 // Path is one config path: the tokens of a `set` command, minus the verb.
 type Path []string
 
-// Key is Path's map key. Components never contain NUL, so the encoding is
-// injective, and byte-ordering it matches Python's element-wise tuple
-// ordering (NUL sorts below every other byte).
+// Key is Path's map key. Components never contain NUL, so it is injective
+// and byte-ordering matches Python's element-wise tuple order.
 func (p Path) Key() string { return strings.Join(p, "\x00") }
 
-// Clone returns an independent copy, so callers cannot alias a Set's
-// internals.
+// Clone returns an independent copy, so callers cannot alias a Set.
 func (p Path) Clone() Path { return slices.Clone(p) }
 
-// String renders the path as the argument list of a `set` command, with
-// Python `shlex.quote` semantics.
+// String renders the path as a `set` command's arguments, shlex-quoted.
 func (p Path) String() string {
 	parts := make([]string, len(p))
 	for i, component := range p {
@@ -56,8 +43,8 @@ func (p Path) HasPrefix(prefix Path) bool {
 	return slices.Equal(p[:len(prefix)], prefix)
 }
 
-// Set is an unordered set of config paths — the canonical form both a
-// rendered config and a device's JSON config tree collapse to.
+// Set is an unordered set of config paths, the canonical form both sides of
+// a diff collapse to.
 type Set map[string]Path
 
 // NewSet builds a Set from paths.
@@ -101,8 +88,8 @@ func sortPaths(paths []Path) {
 	slices.SortFunc(paths, func(a, b Path) int { return slices.Compare(a, b) })
 }
 
-// SecretNodes are the path components whose immediate child value is a
-// secret. The value is still diffed, only the display is redacted.
+// SecretNodes are components whose immediate child value is a secret. The
+// value is still diffed; only the display is redacted.
 var SecretNodes = map[string]bool{
 	"private-key":        true,
 	"secret":             true,
@@ -116,18 +103,13 @@ var SecretNodes = map[string]bool{
 // Redacted is the placeholder substituted for secret values.
 const Redacted = "<redacted>"
 
-// IgnoredPaths is the VyOS vendor's ignored prefix list, mirroring
-// `VyOSHost.IGNORED_PATHS`. A "*" component matches any single path
-// element. hw-id is a recorded hardware fact, not intent — MAC addresses
-// change when VMs are reprovisioned — so it is dropped from diffs
-// entirely: never deleted, never listed, never counted.
+// IgnoredPaths mirrors `VyOSHost.IGNORED_PATHS`; "*" matches any single
+// element. hw-id is a hardware fact, not intent, so it is never deleted,
+// listed or counted.
 var IgnoredPaths = []Path{{"interfaces", "ethernet", "*", "hw-id"}}
 
-// ParseSetCommands parses rendered config text into a set of paths.
-//
-// Only `set ...` lines are considered; blanks, comments, and
-// `delete`/op-mode lines are ignored. Values are shlex-tokenized so the
-// templates' inconsistent quoting normalizes to the same path.
+// ParseSetCommands parses rendered config text into paths. Only `set ...`
+// lines count; shlex tokenization normalizes the templates' quoting.
 func ParseSetCommands(text string) Set {
 	paths := Set{}
 	for _, raw := range pytext.SplitLines(text) {
@@ -144,8 +126,7 @@ func ParseSetCommands(text string) Set {
 			tokens = strings.Fields(line)
 		}
 		if len(tokens) < 2 {
-			// "set" with no arguments yields the empty path, exactly as
-			// Python's tuple(tokens[1:]) does.
+			// A bare "set" yields the empty path, as tuple(tokens[1:]) does.
 			paths.Add(Path{})
 			continue
 		}
@@ -154,12 +135,8 @@ func ParseSetCommands(text string) Set {
 	return paths
 }
 
-// PathsFromAPIJSON flattens the `/retrieve` showConfig JSON tree into
-// paths.
-//
-// Leaves come back as a string (single value), a list of strings
-// (multi-value node), or an empty object (valueless node); each becomes
-// the same path its `set` command would produce.
+// PathsFromAPIJSON flattens the `/retrieve` showConfig JSON tree into paths.
+// Leaves are a string, a list (multi-value) or an empty object (valueless).
 func PathsFromAPIJSON(data any) Set {
 	paths := Set{}
 	var walk func(node any, prefix Path)
@@ -187,8 +164,8 @@ func PathsFromAPIJSON(data any) Set {
 	return paths
 }
 
-// scalarString is Python's str() for the scalar types encoding/json can
-// produce. VyOS only ever sends strings here; the rest are defensive.
+// scalarString is Python's str() for encoding/json's scalar types. VyOS
+// only ever sends strings; the rest are defensive.
 func scalarString(v any) string {
 	switch n := v.(type) {
 	case string:
@@ -209,23 +186,19 @@ func scalarString(v any) string {
 	}
 }
 
-// ConfigDiff is the result of diffing a running config against a
-// candidate.
+// ConfigDiff is the result of diffing a running config against a candidate.
 type ConfigDiff struct {
-	// Added are the paths the deploy would create.
 	Added []Path
-	// Removed are the device paths the deploy deletes: stale config barf
-	// did not render and does not ignore.
+	// Removed are device paths the deploy deletes: stale config barf neither
+	// rendered nor ignores.
 	Removed []Path
 }
 
 // HasChanges reports whether deploying would change the device.
 func (d ConfigDiff) HasChanges() bool { return len(d.Added) > 0 || len(d.Removed) > 0 }
 
-// isIgnored reports whether path falls under an ignored prefix. A "*"
-// component in a prefix matches any single path component, e.g.
-// ("interfaces","ethernet","*","hw-id") ignores the hw-id of every
-// ethernet interface.
+// isIgnored reports whether path falls under an ignored prefix ("*" matches
+// any single component).
 func isIgnored(path Path, ignored []Path) bool {
 	for _, prefix := range ignored {
 		if len(path) < len(prefix) {
@@ -245,13 +218,9 @@ func isIgnored(path Path, ignored []Path) bool {
 	return false
 }
 
-// DiffPaths diffs two path sets; the candidate owns everything not
-// ignored.
-//
-// Ownership is total: every device path the candidate does not render is
-// a real deletion (Removed). Paths under an ignored prefix are the sole
-// exception — dropped from the diff entirely, never deleted, never
-// listed, never counted. Supports "*" wildcard components.
+// DiffPaths diffs two path sets. Ownership is total: every device path the
+// candidate does not render is a real deletion. Paths under an ignored
+// prefix are the sole exception, dropped from the diff entirely.
 func DiffPaths(running, candidate Set, ignored []Path) ConfigDiff {
 	added := []Path{}
 	for key, p := range candidate {
@@ -277,14 +246,10 @@ func DiffPaths(running, candidate Set, ignored []Path) ConfigDiff {
 	return ConfigDiff{Added: added, Removed: removed}
 }
 
-// MinimalDeletePaths collapses removed leaf paths into the fewest delete
-// commands.
-//
-// A prefix is deleted wholly when every running path beneath it is being
-// removed (deleting the node also clears empty parents that per-leaf
-// deletes would leave behind). This decides what is deleted from a live
-// router: a prefix is only ever chosen when the entire running subtree
-// under it is in the removal set.
+// MinimalDeletePaths collapses removed leaves into the fewest delete
+// commands, deciding what a live router loses: a prefix is chosen only when
+// the whole running subtree under it is being removed (which also clears
+// empty parents).
 func MinimalDeletePaths(removed []Path, running Set) []Path {
 	removedSet := NewSet(removed...)
 
@@ -294,9 +259,8 @@ func MinimalDeletePaths(removed []Path, running Set) []Path {
 		for i := 1; i < len(path); i++ {
 			prefix := path[:i]
 
-			// Every running path under prefix must be going away, and
-			// there must be at least one (an empty subtree means the
-			// prefix names nothing the device has).
+			// Every running path under prefix must be going away, and there
+			// must be at least one: an empty subtree names nothing.
 			subtreeEmpty := true
 			whollyRemoved := true
 			for _, r := range running {
@@ -319,8 +283,7 @@ func MinimalDeletePaths(removed []Path, running Set) []Path {
 	return deletes.Sorted()
 }
 
-// RedactPath returns a copy of path with its value hidden when it sits
-// under a secret node.
+// RedactPath copies path, hiding its value when it sits under a SecretNode.
 func RedactPath(path Path) Path {
 	if len(path) > 1 && SecretNodes[path[len(path)-2]] {
 		out := path.Clone()
@@ -337,9 +300,8 @@ func formatPath(path Path, redact bool) string {
 	return path.String()
 }
 
-// FormatDiff renders a ConfigDiff as +/- `set` lines. With redact set,
-// secret values (private keys, PSKs, passwords) are replaced by a
-// placeholder in the output — the diff itself is unaffected.
+// FormatDiff renders a ConfigDiff as +/- `set` lines. redact replaces
+// secret values in the output only; the diff itself is unaffected.
 func FormatDiff(diff ConfigDiff, redact bool) string {
 	lines := make([]string, 0, len(diff.Removed)+len(diff.Added))
 	for _, path := range diff.Removed {

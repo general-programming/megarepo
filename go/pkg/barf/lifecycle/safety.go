@@ -8,20 +8,14 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// maxProbes is device.MaxProbes, matching the Python
-// ThreadPoolExecutor(max_workers=8) that backs safe_to_reboot.
 const maxProbes = device.MaxProbes
 
-// AliveProbe reports whether a fleet member is answering. It is the Go
-// shape of Python's `host.version() is not None`: any failure, and any
-// placeholder version from a half-booted device, counts as not alive.
-//
-// Implementations must be safe to call from several goroutines at once.
+// AliveProbe reports whether a fleet member is answering: any failure, and any
+// placeholder version from a half-booted device, counts as not alive. Must be
+// concurrency-safe.
 type AliveProbe func(ctx context.Context, h *model.Host) bool
 
-// Redundancy is what SafeToReboot found: which other fleet members are
-// alive right now. It is reported in the dry-run plan so a human can see
-// what the gate was decided on.
+// Redundancy is what SafeToReboot saw, reported in the dry-run plan.
 type Redundancy struct {
 	Target        string
 	TargetIsSpine bool
@@ -29,28 +23,18 @@ type Redundancy struct {
 	// answered, in fleet order.
 	AliveSpines []string
 	AliveLeaves []string
-	// Unreachable are the other hosts that did not answer.
 	Unreachable []string
 }
 
-// SafeToReboot reports whether rebooting target leaves the fleet
-// redundant.
+// SafeToReboot reports whether rebooting target leaves the fleet redundant.
+// It probes every OTHER fleet member in parallel (never the target, whose own
+// liveness says nothing about redundancy) and refuses when:
 //
-// It probes every OTHER fleet member in parallel (never the target: the
-// target's own liveness says nothing about redundancy) and refuses when:
+//   - the target is a spine and no other spine is online; or
+//   - no other leaf is alive at all — unconditional in the Python original,
+//     spine or leaf: no live leaf means nothing carries traffic.
 //
-//   - the target is a spine and no other spine is online — the reboot
-//     would leave the fabric with no spine; or
-//   - no other leaf is alive at all. This second check is unconditional
-//     in the Python original, spine or leaf, and is reproduced as-is: a
-//     fleet with no live leaf has nothing left to carry traffic, so
-//     rebooting anything is a site outage.
-//
-// A refusal is returned as *RedundancyError. It is a hard error:
-// confirming the update does not override it, only Options.ForceUnsafe
-// does — see Updater.Execute.
-//
-// Ports BaseHost.safe_to_reboot.
+// A refusal is a hard *RedundancyError: only Options.ForceUnsafe overrides it.
 func SafeToReboot(ctx context.Context, target *model.Host, fleet []*model.Host, probe AliveProbe) (Redundancy, error) {
 	others := make([]*model.Host, 0, len(fleet))
 	for _, h := range fleet {
@@ -72,8 +56,8 @@ func SafeToReboot(ctx context.Context, target *model.Host, fleet []*model.Host, 
 			if ctx.Err() != nil {
 				return
 			}
-			// Each goroutine writes only its own slot, so the slice needs
-			// no lock; the WaitGroup is the happens-before edge.
+			// Each goroutine writes only its own slot; the WaitGroup is the
+			// happens-before edge.
 			alive[i] = probe(ctx, h)
 		}(i, h)
 	}

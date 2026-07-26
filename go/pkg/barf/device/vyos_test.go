@@ -264,12 +264,10 @@ func TestParseSystemImages(t *testing.T) {
 	}
 }
 
-// Regression: `json.Unmarshal("null", &map)` succeeds and leaves a nil
-// map, so a /retrieve that answered `{"success":true,"data":null}` was
-// accepted as a valid — and empty — running config. The running set then
-// collapsed to nothing and the operator was shown a full-reconfigure diff
-// for what was really a failed read. Python refuses it outright:
-// vyos_api.py `if not isinstance(data, dict): raise`.
+// Regression: `json.Unmarshal("null", &map)` leaves a nil map, so a
+// /retrieve answering `{"success":true,"data":null}` read as a valid but
+// empty running config and showed a full-reconfigure diff for a failed
+// read. Python refuses it: vyos_api.py `if not isinstance(data, dict)`.
 func TestVyOSRetrieveConfigRejectsNonObjectPayload(t *testing.T) {
 	for _, payload := range []string{`null`, `[]`, `"text"`, `42`, `true`} {
 		t.Run(payload, func(t *testing.T) {
@@ -297,8 +295,7 @@ func TestVyOSRetrieveConfigRejectsNonObjectPayload(t *testing.T) {
 	}
 }
 
-// RunningConfig must fail for the same reason: it is RetrieveConfig's
-// only caller here and must not print `{}` for a failed read.
+// RunningConfig must fail the same way, not print `{}` for a failed read.
 func TestVyOSRunningConfigRejectsNullPayload(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -315,11 +312,9 @@ func TestVyOSRunningConfigRejectsNullPayload(t *testing.T) {
 	}
 }
 
-// Regression: strings.Split(_, "\n") leaves CRLF's "\r" on the end of
-// every line. Most parsers TrimSpace it away afterwards, but the version
-// *fallback* returns its line verbatim — so a device answering with CRLF
-// yielded "1.4.2\r" where Python's splitlines() yields "1.4.2", and that
-// value goes straight into the fleet table and version comparisons.
+// Regression: strings.Split(_, "\n") leaves CRLF's "\r" behind, and the
+// version *fallback* returns its line verbatim — so a CRLF device yielded
+// "1.4.2\r" into the fleet table and version comparisons.
 func TestParseVyOSHandlesPythonLineBoundaries(t *testing.T) {
 	if got := ParseVyOSVersion("VyOS 1.4.2\r\nsomething else\r\n"); got != "1.4.2" {
 		t.Errorf("CRLF fallback = %q, want %q", got, "1.4.2")

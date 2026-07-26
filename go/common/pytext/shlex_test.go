@@ -67,8 +67,7 @@ func TestShellQuote(t *testing.T) {
 		{"a(b)", "'a(b)'"},
 		{"it's", `'it'"'"'s'`},
 		{"$6$salt$hash", "'$6$salt$hash'"},
-		// sshx interpolates the result into a remote shell command line,
-		// so these must not survive unquoted.
+		// sshx interpolates this into a remote shell command line.
 		{"$(reboot)", "'$(reboot)'"},
 		{"/tmp/barf-install.sh", "/tmp/barf-install.sh"},
 		{"näive", "'näive'"}, // re.ASCII: non-ASCII word chars are unsafe
@@ -82,8 +81,8 @@ func TestShellQuote(t *testing.T) {
 	}
 }
 
-// TestShellRoundTrip: anything quoted must split back to itself, which is
-// what keeps FormatDiff output re-parseable by ParseSetCommands.
+// Quoting must round-trip, which keeps FormatDiff output re-parseable by
+// ParseSetCommands.
 func TestShellRoundTrip(t *testing.T) {
 	for _, s := range []string{"plain", "a b", "it's", "$6$salt$hash", `a"b`, `a\b`, ""} {
 		got, err := ShellSplit(ShellQuote(s))

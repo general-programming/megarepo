@@ -10,32 +10,24 @@ import (
 	"time"
 )
 
-// AWS SigV4 request signing, enough for the two S3 calls this package
-// makes (HeadObject and PutObject).
-//
-// This is deliberately hand-rolled rather than pulled in from
-// aws-sdk-go-v2: the Python mirror only ever calls head_object and
-// upload_file against one bucket, neither response needs XML parsing
-// (HEAD answers in Content-Length, PUT in the status code), and the
-// signer below is smaller than the dependency graph the SDK would add
-// to this repo's single go.mod. If the mirror ever grows listing,
-// multipart, or presigning, switching to the SDK is the right call.
+// AWS SigV4 signing, enough for this package's two S3 calls (HeadObject and
+// PutObject). Hand-rolled rather than adding aws-sdk-go-v2 to the repo's
+// single go.mod: neither response needs XML parsing. Switch to the SDK if the
+// mirror grows listing, multipart, or presigning.
 
-// unsignedPayload lets a large image body be streamed without hashing
-// it first. R2 and S3 both accept it over HTTPS.
+// unsignedPayload streams a large image body without hashing it first; R2 and
+// S3 both accept it over HTTPS.
 const unsignedPayload = "UNSIGNED-PAYLOAD"
 
-// Credentials are the S3 API credentials for the mirror bucket. In
-// production they come from Vault (secret/r2-firmware).
+// Credentials are the mirror bucket's S3 API credentials, from Vault in
+// production (secret/r2-firmware).
 type Credentials struct {
 	AccessKeyID     string
 	SecretAccessKey string
-	// SessionToken is optional; R2 tokens do not use one.
-	SessionToken string
+	SessionToken    string // optional; R2 tokens do not use one
 }
 
 // signV4 signs req in place with the SigV4 Authorization header.
-//
 // payloadHash is the hex sha256 of the body, or unsignedPayload.
 func signV4(req *http.Request, creds Credentials, region, service, payloadHash string, now time.Time) error {
 	if creds.AccessKeyID == "" || creds.SecretAccessKey == "" {
@@ -86,10 +78,9 @@ func signV4(req *http.Request, creds Credentials, region, service, payloadHash s
 	return nil
 }
 
-// canonicalizeHeaders returns the signed-header list and the canonical
-// header block. Only host and the x-amz-* headers are signed, which is
-// the minimum S3 requires and keeps transport-added headers out of the
-// signature.
+// canonicalizeHeaders returns the signed-header list and canonical block.
+// Only host and x-amz-* are signed: S3's minimum, and it keeps
+// transport-added headers out of the signature.
 func canonicalizeHeaders(req *http.Request) (signed, canonical string) {
 	names := []string{"host"}
 	values := map[string]string{"host": req.Host}
@@ -113,8 +104,8 @@ func canonicalizeHeaders(req *http.Request) (signed, canonical string) {
 	return strings.Join(names, ";"), b.String()
 }
 
-// canonicalURI escapes an already-escaped path the way SigV4 wants:
-// every segment RFC3986-escaped, slashes preserved.
+// canonicalURI re-escapes a path as SigV4 wants: every segment
+// RFC3986-escaped, slashes preserved.
 func canonicalURI(escapedPath string) string {
 	if escapedPath == "" {
 		return "/"
@@ -142,7 +133,7 @@ func escapeSegment(s string) string {
 }
 
 // unescapeSegment reverses percent-encoding without touching '+', which
-// url.PathUnescape also leaves alone but which QueryUnescape would eat.
+// QueryUnescape would eat.
 func unescapeSegment(s string) string {
 	if !strings.Contains(s, "%") {
 		return s
@@ -172,8 +163,7 @@ func hexSHA256(data []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// sortStrings is a tiny insertion sort; the header list is never more
-// than a handful of entries.
+// sortStrings is a tiny insertion sort; the header list is a handful of entries.
 func sortStrings(s []string) {
 	for i := 1; i < len(s); i++ {
 		for j := i; j > 0 && s[j] < s[j-1]; j-- {

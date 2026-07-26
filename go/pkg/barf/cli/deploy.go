@@ -10,33 +10,19 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// `barf deploy` is the ONLY command in this package that can change a
-// device, and every default it has points away from doing so:
-//
-//   - Nothing is changed until the operator says so, per device, and the
-//     writer is not even constructed before then.
-//   - On a terminal the change is printed and then confirmed with a
-//     [y/N] prompt; answering y applies it in this same invocation.
-//     --yes skips the prompt, for scripting on a terminal.
-//   - --plain / no TTY never prompts, so an unattended run cannot hang on
-//     a question no one will answer — which is exactly why --yes is
-//     mandatory there, and why without it the run is a dry run that
-//     prints the operations and exits.
-//   - A devicetype with no write implementation is refused before
-//     anything runs, rather than half-deploying the fleet.
-//   - Output is redacted unless --show-secrets.
-//
-// See confirm.go for the full matrix, which `barf device update` shares.
+// `barf deploy` writes to devices only after a per-device confirmation, and
+// the writer is not constructed before then. A devicetype with no write
+// implementation is refused before anything runs rather than half-deploying
+// the fleet, and output is redacted unless --show-secrets. See confirm.go for
+// the TTY/--yes matrix, which `barf device update` shares.
 
 // DeployOptions are `barf deploy`'s own flags.
 type DeployOptions struct {
-	// Yes skips the per-device confirmation prompt. With no terminal to
-	// prompt on it is what enables writing at all.
-	Yes bool
-	// ShowSecrets disables redaction of secret values in the output.
+	// Yes skips the per-device prompt; with no terminal it is what enables
+	// writing at all.
+	Yes         bool
 	ShowSecrets bool
-	// SkipSave skips persisting the config to boot after a successful
-	// commit. The config stays applied but would not survive a reboot.
+	// SkipSave leaves the config applied but not surviving a reboot.
 	SkipSave bool
 
 	// In is where confirmations are read from; nil means os.Stdin.
@@ -93,9 +79,7 @@ func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOpt
 		return fmt.Errorf("no templatable devices selected")
 	}
 
-	// Refuse the whole run rather than deploying part of the fleet and
-	// erroring on the rest. A devicetype without a write implementation
-	// is a gap in barf, not a per-device failure.
+	// Refuse the whole run rather than deploying part of the fleet.
 	if err := checkDeployable(hosts); err != nil {
 		return err
 	}
@@ -105,8 +89,7 @@ func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOpt
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
 
-	// Render serially: templating can mint secrets, and that must not
-	// race. (Same reason status and diff do it this way.)
+	// Render serially: templating can mint secrets, and that must not race.
 	rendered := make(map[string]string, len(hosts))
 	renderErrs := make(map[string]error, len(hosts))
 	for _, h := range hosts {
@@ -124,7 +107,6 @@ func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOpt
 	return applyDeployPlans(ctx, o, plans, opts)
 }
 
-// checkDeployable rejects any selected devicetype with no writer.
 func checkDeployable(hosts []*model.Host) error {
 	missing := map[string]bool{}
 	for _, h := range hosts {
@@ -170,8 +152,7 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 
 	plan := deployPlan{host: h}
 	if err := ctx.Err(); err != nil {
-		// Cancelled between admission and here: do not start a fresh
-		// device read.
+		// Cancelled between admission and here: no fresh device read.
 		plan.err = err
 		return plan
 	}
@@ -208,8 +189,8 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 		plan.diff = vyos.configDiff(diffOpts)
 		plan.ops = vyos.ops()
 	default:
-		// checkDeployable already rejected devicetypes with no writer, so
-		// reaching here means a writer exists but no planner does.
+		// checkDeployable rejected writerless devicetypes, so reaching here
+		// means a writer exists but no planner does.
 		plan.err = fmt.Errorf("no deploy planner for devicetype %q", h.DeviceType)
 	}
 	return plan
@@ -225,9 +206,7 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 	for _, plan := range plans {
 		name := plan.host.Hostname
 
-		// An interrupted run stops here rather than carrying on down the
-		// fleet: the operator asked it to stop, and the remaining devices
-		// have not been written to yet.
+		// An interrupted run stops here; the rest are unwritten.
 		if err := ctx.Err(); err != nil {
 			failed = true
 			rows = append(rows, []string{name, "cancelled"})
@@ -287,9 +266,8 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 	return nil
 }
 
-// pushPlan is the one function in this package that writes to a device.
-// It constructs the writer at the last possible moment, after the plan
-// has been printed and confirmed.
+// pushPlan is the one function in this package that writes to a device. The
+// writer is built at the last possible moment, after the plan is confirmed.
 func pushPlan(ctx context.Context, plan deployPlan, opts DeployOptions) error {
 	if len(plan.ops) == 0 {
 		return nil

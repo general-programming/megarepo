@@ -15,8 +15,7 @@ import (
 
 // -- fakes ------------------------------------------------------------
 
-// fakeAPI is a device that records every call. Anything that would
-// change a real device is recorded in writes.
+// fakeAPI records every call; writes holds anything that would change a device.
 type fakeAPI struct {
 	mu       sync.Mutex
 	versions []string // consumed in order; the last one repeats
@@ -78,9 +77,8 @@ func (f *fakeSSH) RunScript(_ context.Context, req sshx.ScriptRequest) (sshx.Res
 	if !set {
 		ok = true
 	}
-	// Deliberately return rc 0 even when the stage failed: that is the
-	// exact VyOS behaviour ScriptOK exists for, and the updater must be
-	// driven by the marker verdict, not the status.
+	// VyOS returns rc 0 even when a stage failed, so the updater must trust
+	// the marker verdict rather than the exit status.
 	return sshx.Result{ExitStatus: 0}, ok, nil
 }
 
@@ -141,8 +139,7 @@ func (p *fakeProvider) downloadCount() int {
 	return p.downloads
 }
 
-// newUpdater wires a target that is one release behind, in a redundant
-// fleet, with everything succeeding.
+// newUpdater: target one release behind, redundant fleet, everything succeeds.
 func newUpdater(t *testing.T, opts Options) (*Updater, *fakeAPI, *fakeSSH, *fakeProvider) {
 	t.Helper()
 
@@ -208,7 +205,6 @@ func TestBuildPlanReadsOnly(t *testing.T) {
 		t.Fatal("planning downloaded the image")
 	}
 
-	// And the plan is a readable list of what WOULD happen.
 	joined := strings.Join(plan.Steps, "\n")
 	for _, want := range []string{"INSTALL image", "SHUT DOWN BGP", "REBOOT the device"} {
 		if !strings.Contains(joined, want) {
@@ -231,9 +227,8 @@ func TestBuildPlanDetectsAlreadyCurrent(t *testing.T) {
 }
 
 func TestBuildPlanDetectsAStaleImage(t *testing.T) {
-	// The target version is on disk but is NOT default boot: an
-	// interrupted install. It has to be deleted and reinstalled, or the
-	// reboot lands on the old image.
+	// On disk but not default boot = interrupted install; it must be deleted
+	// and reinstalled or the reboot lands on the old image.
 	updater, _, _, _ := newUpdater(t, Options{})
 	updater.API.(*fakeAPI).images = []SystemImage{
 		{Name: "2026.05.01-0100-rolling", DefaultBoot: true, Running: true},
@@ -269,8 +264,7 @@ func TestBuildPlanSkipsInstallWhenAlreadyStaged(t *testing.T) {
 }
 
 func TestBuildPlanRecordsARedundancyRefusalInsteadOfRaising(t *testing.T) {
-	// The dry run has to be able to PRINT the refusal, so BuildPlan
-	// records it rather than failing.
+	// A dry run must be able to print the refusal, so BuildPlan records it.
 	updater, _, _, _ := newUpdater(t, Options{})
 	updater.Probe = aliveSet() // nothing else is alive
 
@@ -312,8 +306,7 @@ func TestExecuteRefusesWithoutAllowWrites(t *testing.T) {
 }
 
 func TestAllowWritesAloneCannotOverrideARedundancyRefusal(t *testing.T) {
-	// The single most important assertion in this package: --yes is NOT
-	// enough to reboot the last live spine.
+	// --yes is not enough to reboot the last live spine.
 	updater, api, ssh, provider := newUpdater(t, Options{AllowWrites: true})
 	updater.Probe = aliveSet()
 
@@ -408,8 +401,7 @@ func TestExecuteDeletesTheStaleImageOnlyAfterThePrecheck(t *testing.T) {
 		{Name: "2026.05.01-0100-rolling", DefaultBoot: true, Running: true},
 		{Name: "2026.06.30-0048-rolling"},
 	}
-	// The precheck fails: the stale image must survive, because a failed
-	// precheck has to leave the device exactly as it was.
+	// A failed precheck must leave the device exactly as it was.
 	ssh.scriptOK[sshx.MarkerPrecheck] = false
 
 	plan, err := updater.BuildPlan(context.Background())
@@ -454,8 +446,7 @@ func TestFailedInstallNeverReboots(t *testing.T) {
 
 func TestDetachedFailureMarkerAborts(t *testing.T) {
 	updater, _, ssh, _ := newUpdater(t, Options{AllowWrites: true})
-	// The device is still reachable after the drain wait AND its log has
-	// a FAIL line: the script bailed and no reboot is coming.
+	// Still reachable after the drain wait plus a FAIL line: no reboot coming.
 	ssh.logLine = "DRAIN-FAIL: commit failed (another config session open?)\n"
 
 	plan, _ := updater.BuildPlan(context.Background())
@@ -479,8 +470,7 @@ func TestExecuteWarnsWhenBGPStaysAdminDown(t *testing.T) {
 	}
 }
 
-// TestRequireRoutingMakesTheWarningFatal: a caller with more devices to
-// reboot must not treat "BGP is still admin-down" as advisory.
+// With more devices to reboot, "BGP is still admin-down" must not be advisory.
 func TestRequireRoutingMakesTheWarningFatal(t *testing.T) {
 	var out bytes.Buffer
 	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true, RequireRouting: true, Out: &out})
@@ -496,8 +486,7 @@ func TestRequireRoutingMakesTheWarningFatal(t *testing.T) {
 	if notRecovered.Hostname != "sea1-leaf-0" {
 		t.Fatalf("the error does not name the device: %+v", notRecovered)
 	}
-	// The device DID update; that has to survive into the report, or the
-	// operator is told a reboot that happened did not.
+	// The device did update; the report must still say so.
 	if !strings.Contains(result, "updated to 2026.06.30-0048-rolling") {
 		t.Fatalf("result = %q, want it to still say the device updated", result)
 	}
@@ -506,8 +495,7 @@ func TestRequireRoutingMakesTheWarningFatal(t *testing.T) {
 	}
 }
 
-// TestRequireRoutingIsOffByDefault pins the single-device behaviour:
-// still just a warning, as the Python original does.
+// Single-device behaviour: still just a warning, as in the Python original.
 func TestRequireRoutingIsOffByDefault(t *testing.T) {
 	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true})
 	api.warning = "BGP still administratively down after reboot"
@@ -518,9 +506,7 @@ func TestRequireRoutingIsOffByDefault(t *testing.T) {
 	}
 }
 
-// TestInjectedSleepReplacesTheDrainWait: the drain wait goes through
-// Updater.Sleep when one is set, so a caller (or a suite) can drive an
-// update without really waiting.
+// The drain wait goes through Updater.Sleep when one is set.
 func TestInjectedSleepReplacesTheDrainWait(t *testing.T) {
 	updater, _, _, _ := newUpdater(t, Options{AllowWrites: true})
 	var waited []time.Duration

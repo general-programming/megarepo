@@ -9,9 +9,8 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// TestDeterministicSHA512 pins the salt derivation and the passlib
-// output format: the golden hashes in tests/golden/ were produced by
-// Python's passlib with rounds=5000 and a 16-hex-char salt.
+// The goldens' hashes came from Python passlib with rounds=5000 and a
+// 16-hex-char salt; pin salt derivation and output format.
 func TestDeterministicSHA512(t *testing.T) {
 	tests := []struct {
 		password string
@@ -43,8 +42,7 @@ func TestDeterministicSHA512(t *testing.T) {
 	}
 }
 
-// TestEOSRejectsTooManySSHKeys covers the one-primary-one-secondary
-// limit EOS models per user.
+// EOS models one primary and one secondary key per user.
 func TestEOSRejectsTooManySSHKeys(t *testing.T) {
 	host := &model.Host{Hostname: "sw-1", DeviceType: "eos", Role: "core"}
 	network := &model.Network{
@@ -60,7 +58,6 @@ func TestEOSRejectsTooManySSHKeys(t *testing.T) {
 	}
 }
 
-// TestEOSOmitsVRFWhenUnset: a host without eapi_vrf gets no `vrf` stanza.
 func TestEOSOmitsVRFWhenUnset(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "sw-1", DeviceType: "eos", Role: "core"}},
@@ -77,8 +74,7 @@ func TestEOSOmitsVRFWhenUnset(t *testing.T) {
 	}
 }
 
-// TestUnknownDeviceTypeIsReported: an unported vendor fails loudly
-// rather than rendering something plausible-but-wrong.
+// An unported vendor must fail loudly, not render something plausible.
 func TestUnknownDeviceTypeIsReported(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "x", DeviceType: "junos", Role: "vpn"}},
@@ -88,8 +84,7 @@ func TestUnknownDeviceTypeIsReported(t *testing.T) {
 	}
 }
 
-// TestVyOSRejectsNonVPNRole: only the vpn role is ported for vyos, so a
-// core-role vyos host must not silently render a vpn config.
+// Only the vpn role is ported for vyos; a core-role host must not render one.
 func TestVyOSRejectsNonVPNRole(t *testing.T) {
 	network := &model.Network{
 		Hosts: []model.Host{{Hostname: "x", DeviceType: "vyos", Role: "core"}},
@@ -100,9 +95,8 @@ func TestVyOSRejectsNonVPNRole(t *testing.T) {
 	}
 }
 
-// noVaultSecrets implements only the frozen SecretSource, so renders
-// needing a Vault attribute must fail loudly instead of emitting an
-// empty key.
+// Implements only the frozen SecretSource: renders needing a Vault attribute
+// must fail rather than emit an empty key.
 type noVaultSecrets struct{}
 
 func (noVaultSecrets) HostSecret(hostname, key string) (string, error) {

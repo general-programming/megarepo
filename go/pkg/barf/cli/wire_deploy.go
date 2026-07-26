@@ -9,22 +9,12 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// The write-side wiring, kept separate from wire.go so the read surface
-// and the write surface can be reasoned about (and deleted) apart.
+// The write-side wiring, kept separate from wire.go so the read and write
+// surfaces can be reasoned about (and deleted) apart.
 
-// init registers a cli-level writer factory for exactly the vendors
-// whose row in the vendor table has a non-nil NewWriter.
-//
-// The loop is the point. There used to be a hand-written
-// `registerWriter("vyos", wireVyOSWriter)` here — a fourth registry
-// keyed by devicetype, in a fourth package, that a maintainer had to
-// remember. Now "which vendors can be deployed to" is asked once, of the
-// same table that answers "which vendors can be rendered/probed/scoped",
-// and the answer cannot disagree with the constructor it names.
-//
-// writerFactories stays a package var: deploy_test.go swaps it for fakes
-// and for the empty map (the "this build cannot deploy anything" case),
-// and that seam is untouched.
+// init registers a writer factory for exactly the vendor table rows with a
+// non-nil NewWriter. Derived, not hand-listed, so "which vendors can be
+// deployed to" cannot disagree with the constructor it names.
 func init() {
 	for _, v := range vendor.All() {
 		if v.NewWriter == nil {
@@ -34,14 +24,9 @@ func init() {
 	}
 }
 
-// wireWriter builds the writer for h from the vendor table.
-//
-// This is still the ONE place in barf that sets Options.AllowWrites.
-// Everything upstream — the deploy command's --yes, its per-device
-// confirmation, the dry-run default — gates whether this function is
-// reached at all; this line is what lets the transport act once it is.
-// vendor.NewWriter only chooses the constructor; the constructor still
-// refuses if this flag is not set.
+// wireWriter builds the writer for h from the vendor table. This is the ONE
+// place in barf that sets Options.AllowWrites; everything upstream gates
+// whether it is reached at all, and the constructor still refuses without it.
 func wireWriter(h *model.Host, address string, s SecretSource) (DeviceWriter, error) {
 	opts := device.Options{
 		Endpoint: address,
@@ -49,11 +34,9 @@ func wireWriter(h *model.Host, address string, s SecretSource) (DeviceWriter, er
 		InsecureSkipVerify: true,
 		// The explicit opt-in. A writer cannot be built without it.
 		AllowWrites: true,
-		// Timeout is deliberately left zero: the transport then gives
-		// each operation its own budget (120s for a commit, 60s for a
-		// save), matching vyos_api.py. One client-wide value sized for a
-		// read used to abort a slow commit mid-flight while the router
-		// applied it anyway.
+		// Zero so the transport gives each operation its own budget (120s
+		// commit, 60s save) as vyos_api.py does: one client-wide value sized
+		// for a read aborts a slow commit while the router applies it anyway.
 	}
 	if src, ok := s.(*vaultSource); ok {
 		opts.Secrets = src
@@ -82,12 +65,9 @@ func (a writerAdapter) Configure(ctx context.Context, ops []ConfigOp) error {
 	return nil
 }
 
-// unsavedConfigError says out loud what a bare "deploy failed" hides: a
-// /configure that errors on this side is not proof the commit did not
-// land. The HTTP request can be aborted (timeout, reset, proxy hiccup)
-// after the router has already applied and committed the ops, and the
-// deploy then skips SaveConfig — leaving the device running config that
-// will not survive a reboot. The operator has to be told to go look.
+// unsavedConfigError says what a bare "deploy failed" hides: a /configure
+// erroring on this side is not proof the commit did not land, and the deploy
+// then skips SaveConfig, leaving config that will not survive a reboot.
 type unsavedConfigError struct {
 	host string
 	err  error

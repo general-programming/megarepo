@@ -39,9 +39,8 @@ func TestPlanVyOSAcceptsBothRunningShapes(t *testing.T) {
 	}
 }
 
-// TestPlanVyOSIsAPathSetDiff is the point of the whole file: a value
-// change is one removal plus one addition on the *path*, not a pair of
-// unrelated lines, and quoting differences are not drift.
+// A value change is one removal plus one addition on the *path*, and
+// quoting differences are not drift.
 func TestPlanVyOSIsAPathSetDiff(t *testing.T) {
 	// The rendered side quotes the description; the device does not.
 	rendered := strings.Join([]string{
@@ -78,7 +77,7 @@ func TestPlanVyOSIsAPathSetDiff(t *testing.T) {
 	}
 }
 
-// TestVyOSPlanOpsOrderAndCollapse pins what a deploy would send.
+// Pins what a deploy would send.
 func TestVyOSPlanOpsOrderAndCollapse(t *testing.T) {
 	rendered := "set system host-name r1\n"
 	running := `{
@@ -117,8 +116,7 @@ func TestVyOSPlanOpsEmptyWhenClean(t *testing.T) {
 	}
 }
 
-// TestDiffUsesTheVyOSPathDiff: `barf diff` and `barf deploy` must agree,
-// so diff goes through the same planner.
+// `barf diff` and `barf deploy` must agree, so both use the same planner.
 func TestDiffUsesTheVyOSPathDiff(t *testing.T) {
 	h := newHarness(t)
 	h.reachable["10.0.0.1"] = true
@@ -132,8 +130,8 @@ func TestDiffUsesTheVyOSPathDiff(t *testing.T) {
 	if !strings.Contains(out, "+ set system host-name sea1-vpn-0") {
 		t.Errorf("addition missing:\n%s", out)
 	}
-	// Ownership is total: the stale value is shown as a real deletion,
-	// without needing --show-device-only.
+	// Ownership is total: the stale value is a real deletion, without
+	// needing --show-device-only.
 	if !strings.Contains(out, "- set system host-name wrong") {
 		t.Errorf("removal missing:\n%s", out)
 	}

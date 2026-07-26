@@ -21,9 +21,8 @@ type fakeSecrets struct {
 	err    error
 }
 
-// Fixture credentials for the in-process httptest servers below. Named
-// (not inline literals) so secret scanners do not read them as real
-// credentials — nothing here ever reaches a device.
+// Fixture credentials for the httptest servers below. Named rather than
+// inline so secret scanners do not read them as real credentials.
 const (
 	testFixtureAdminPassword  = "fixture-admin-not-a-real-password"
 	testFixtureEnablePassword = "fixture-enable-not-a-real-password"
@@ -319,10 +318,10 @@ func TestHumanizeUptime(t *testing.T) {
 
 func TestParseShowUptime(t *testing.T) {
 	cases := []struct{ in, want string }{
-		// Single-space ", load" is the form Python's split matches.
+		// Python's split only matches the single-space ", load" form.
 		{" 09:41:02 up 12 days,  3:07,  1 user, load average: 0.10, 0.20, 0.30\n", "12 days,  3:07,  1 user"},
-		// Double-space "  load" does not match, exactly as in Python:
-		// the whole tail survives (minus trailing comma/space/newline).
+		// Double-space "  load" does not match, so the whole tail survives
+		// (minus trailing comma/space/newline) — as in Python.
 		{"22:01:33 up 3 min,  1 user,  load average: 1.00, 0.50, 0.20", "3 min,  1 user,  load average: 1.00, 0.50, 0.20"},
 		{"weird output\n", "weird output"},
 	}
@@ -344,11 +343,6 @@ func TestEOSModelFallback(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
-
-// The devicetype dispatch that used to be tested here (TestNewDispatch,
-// against device.New) moved with New itself to ../vendor, where it is
-// TestNewReaderDispatch. It still asserts the same three things: eos ->
-// *EOSReader, vyos -> *VyOSReader, everything else -> ErrUnsupported.
 
 func TestInsecureSkipVerifyIsOptIn(t *testing.T) {
 	if client := (Options{}).httpClient(); transportSkipsVerify(t, client) {

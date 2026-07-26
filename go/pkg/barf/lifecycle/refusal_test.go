@@ -9,12 +9,8 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// A refusal raised inside package device must satisfy errors.Is against
-// this package's sentinel, and vice versa. Before the two were unified
-// this was false in both directions: lifecycle had its own errors.New,
-// device had a struct with no Unwrap, and a caller asking "was the
-// device touched?" got a different answer depending on which package
-// happened to refuse first.
+// Regression: device and lifecycle refusals were separate types with no
+// Unwrap, so errors.Is failed in both directions.
 func TestRefusalsMatchAcrossPackages(t *testing.T) {
 	host := &model.Host{Hostname: "rtr-1", DeviceType: "vyos"}
 
@@ -40,8 +36,7 @@ func TestRefusalsMatchAcrossPackages(t *testing.T) {
 		t.Errorf("errors.As to *device.WritesNotAllowedError failed: %v", deviceErr)
 	}
 
-	// lifecycle-side refusal, including once wrapped with %w as the API
-	// client does.
+	// lifecycle-side refusal, wrapped with %w as the API client does.
 	lifecycleErr := fmt.Errorf("rtr-1: /image: %w", ErrWritesNotAllowed)
 	if !errors.Is(lifecycleErr, device.ErrWritesNotAllowed) {
 		t.Errorf("errors.Is(lifecycleErr, device.ErrWritesNotAllowed) = false: %v", lifecycleErr)
@@ -52,8 +47,7 @@ func TestRefusalsMatchAcrossPackages(t *testing.T) {
 }
 
 // A guard trip (read transport asked to write) is a refusal too, but a
-// distinct one: it signals a wiring bug rather than a dry run, and no
-// option enables it. IsRefusal covers both; the sentinels stay distinct.
+// distinct sentinel: it means a wiring bug, not a dry run.
 func TestWriteAttemptIsARefusalButNotADryRun(t *testing.T) {
 	attempt := &device.WriteAttemptError{What: "VyOS configure request"}
 
@@ -68,8 +62,7 @@ func TestWriteAttemptIsARefusalButNotADryRun(t *testing.T) {
 	}
 }
 
-// An ordinary failure must not look like a refusal: that distinction is
-// what tells an operator whether a retry is safe.
+// The refusal/failure distinction tells an operator whether a retry is safe.
 func TestOrdinaryErrorIsNotARefusal(t *testing.T) {
 	if device.IsRefusal(errors.New("connection reset by peer")) {
 		t.Error("IsRefusal(ordinary error) = true")

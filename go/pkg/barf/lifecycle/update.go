@@ -15,33 +15,21 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 )
 
-// The collaborators below are declared as local interfaces on purpose:
-// the firmware mirror and image providers live in a package another
-// worker owns, and Go interfaces are structural, so this package compiles
-// and tests without importing it.
-
-// ImageProvider is the upstream image source for a device type. Mirrors
-// barf.util.images.ImageProvider.
+// ImageProvider is the upstream image source for a device type.
 type ImageProvider interface {
-	// LatestVersion is the newest upstream release tag.
 	LatestVersion(ctx context.Context) (string, error)
-	// IsCurrent reports whether a running version is already the latest.
 	IsCurrent(version string) bool
-	// Download fetches the image locally, returning its path and size.
 	Download(ctx context.Context) (path string, size int64, err error)
-	// DownloadSignature fetches the detached .minisig, or returns "" when
-	// upstream ships none.
+	// DownloadSignature returns "" when upstream ships no detached .minisig.
 	DownloadSignature(ctx context.Context) (string, error)
 }
 
-// Mirror publishes an image (and its signature) somewhere the devices can
-// download it from. Mirrors barf.util.firmware.FirmwareMirror.
+// Mirror publishes an image and its signature where devices can fetch it.
 type Mirror interface {
 	Publish(ctx context.Context, image, signature string) (string, error)
 }
 
-// DeviceAPI is the target device's HTTPS API surface. *APIClient
-// implements it.
+// DeviceAPI is the target device's HTTPS API surface; *APIClient implements it.
 type DeviceAPI interface {
 	Version(ctx context.Context) (string, error)
 	SystemImages(ctx context.Context) ([]SystemImage, error)
@@ -58,13 +46,11 @@ type SSHSession interface {
 	Close() error
 }
 
-// SSHDialer opens a session to the target. The updater dials twice: once
-// for the install + drain launch, and once afterwards to look for a
-// failure marker in the detached log.
+// SSHDialer opens a session to the target; the updater dials twice, for the
+// install+drain launch and then for the detached log's failure marker.
 type SSHDialer func(ctx context.Context) (SSHSession, error)
 
-// sleep is the delay primitive; tests replace it so the suite never
-// actually waits.
+// sleep is the delay primitive; tests replace it so the suite never waits.
 var sleep = func(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
@@ -81,31 +67,20 @@ var sleep = func(ctx context.Context, d time.Duration) error {
 
 // Updater performs at most ONE device update.
 type Updater struct {
-	// Host is the device to update.
 	Host *model.Host
-	// Fleet is every device the redundancy check may consider (the
-	// Python side passes all VyOS hosts).
-	Fleet []*model.Host
-	// API talks to Host's HTTPS API.
-	API DeviceAPI
-	// Provider supplies the image; Mirror publishes it.
+	// Fleet is every device the redundancy check may consider.
+	Fleet    []*model.Host
+	API      DeviceAPI
 	Provider ImageProvider
 	Mirror   Mirror
-	// Probe answers "is this other fleet member alive?".
-	Probe AliveProbe
-	// SSH opens sessions to Host.
-	SSH SSHDialer
-	// DrainWait is how long to wait after the BGP shutdown before
-	// rebooting. 0 means DefaultDrainWait.
+	Probe    AliveProbe
+	SSH      SSHDialer
+	// DrainWait pauses between BGP shutdown and reboot; 0 means the default.
 	DrainWait time.Duration
-	// Wait tunes the post-reboot liveness poll.
-	Wait WaitOptions
-	// Sleep is the delay primitive used for the drain wait. nil means a
-	// real, context-interruptible sleep. It is injected by tests (in this
-	// package and in cli) so a suite never actually waits out a drain.
+	Wait      WaitOptions
+	// Sleep replaces the real, context-interruptible drain sleep in tests.
 	Sleep func(ctx context.Context, d time.Duration) error
-	// Opts holds the write opt-in and the unsafe override.
-	Opts Options
+	Opts  Options
 
 	mu       sync.Mutex
 	executed bool
@@ -121,43 +96,35 @@ func (u *Updater) drainWait() time.Duration {
 	return DefaultDrainWait
 }
 
-// Plan is everything BuildPlan learned, and everything Execute would do.
-// Building it touches the fleet with reads only.
+// Plan is what BuildPlan learned and what Execute would do; building it
+// touches the fleet with reads only.
 type Plan struct {
 	Hostname       string
 	CurrentVersion string
 	TargetVersion  string
 	// AlreadyCurrent means there is no newer image: nothing to do.
 	AlreadyCurrent bool
-	// InstallNeeded is false when the target image is already installed
-	// AND already the default boot image, so only the reboot is left.
+	// InstallNeeded is false when the target is already installed AND already
+	// default boot, leaving only the reboot.
 	InstallNeeded bool
-	// StaleImage means the target version is installed but is NOT the
-	// default boot image (an interrupted install): it gets deleted and
-	// reinstalled, or the reboot would land on the old image.
+	// StaleImage means the target is installed but NOT default boot (an
+	// interrupted install): reinstalled, or the reboot lands on the old image.
 	StaleImage bool
 	// DrainBGP mirrors `bool(self.asn)`.
 	DrainBGP  bool
 	DrainWait time.Duration
 
-	// Redundancy is what the fleet probe saw; RedundancyErr is non-nil
-	// when the gate refuses.
 	Redundancy    Redundancy
 	RedundancyErr error
 
-	// Steps is the human-readable plan, in order.
 	Steps []string
 }
 
 // Safe reports whether the redundancy gate passed.
 func (p *Plan) Safe() bool { return p.RedundancyErr == nil }
 
-// BuildPlan gathers everything needed to decide, and to print, an update.
-//
-// It performs READS ONLY: the running version, the upstream release, the
-// installed image list, and a parallel liveness probe of the rest of the
-// fleet. It never downloads the image, never opens an SSH session and
-// never changes anything. `barf device update` without --yes stops here.
+// BuildPlan gathers what is needed to decide, and print, an update. READS
+// ONLY: no download, no SSH, no change; `update` without --yes stops here.
 func (u *Updater) BuildPlan(ctx context.Context) (*Plan, error) {
 	if u.Host == nil {
 		return nil, errors.New("lifecycle: no host to update")
@@ -194,7 +161,6 @@ func (u *Updater) BuildPlan(ctx context.Context) (*Plan, error) {
 		return plan, nil
 	}
 
-	// Which install work is left, from `show system image`.
 	plan.InstallNeeded = true
 	images, err := u.API.SystemImages(ctx)
 	if err != nil {
@@ -212,8 +178,7 @@ func (u *Updater) BuildPlan(ctx context.Context) (*Plan, error) {
 		break
 	}
 
-	// The redundancy gate. Failing it is recorded, not raised: the dry
-	// run must be able to print the refusal.
+	// Recorded, not raised: the dry run must be able to print the refusal.
 	plan.Redundancy, plan.RedundancyErr = SafeToReboot(ctx, u.Host, u.Fleet, u.Probe)
 
 	plan.Steps = planSteps(plan)
@@ -252,18 +217,17 @@ func planSteps(p *Plan) []string {
 	return steps
 }
 
-// Execute performs the update. THIS CHANGES A PRODUCTION DEVICE.
-//
-// Every gate is checked here, before anything is downloaded or dialed:
+// Execute performs the update. THIS CHANGES A PRODUCTION DEVICE. Every gate
+// is checked before anything is downloaded or dialed:
 //
 //	Opts.AllowWrites  — without it nothing happens at all (dry run).
-//	Opts.ForceUnsafe  — required, separately, when the redundancy gate
-//	                    refused. Confirming the update does not imply it.
+//	Opts.ForceUnsafe  — required separately when the redundancy gate refused;
+//	                    confirming the update does not imply it.
 //	one reboot only   — a second Execute on this Updater is refused.
 //
-// Opts.RequireRouting additionally makes the post-reboot routing check
-// fatal rather than advisory, so a caller with more devices to go stops
-// instead of rebooting into a fleet that has not recovered.
+// Opts.RequireRouting additionally makes the post-reboot routing check fatal,
+// so a caller with devices left stops instead of rebooting into an unrecovered
+// fleet.
 func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 	if plan == nil {
 		return "", errors.New("lifecycle: Execute needs a Plan from BuildPlan")
@@ -295,9 +259,7 @@ func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 			joinOrNone(plan.Redundancy.AliveSpines), joinOrNone(plan.Redundancy.AliveLeaves))
 	}
 
-	// Mirror the image. Local/bucket work, not a device write, but it is
-	// deliberately after the gates so a refused update never spends the
-	// bandwidth.
+	// Not a device write, but after the gates so a refusal costs no bandwidth.
 	imagePath, size, err := u.Provider.Download(ctx)
 	if err != nil {
 		return "", fmt.Errorf("%s: downloading image: %w", plan.Hostname, err)
@@ -333,9 +295,7 @@ func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 	if warning := u.API.VerifyRouting(ctx, u.Host.ASN != 0); warning != "" {
 		fmt.Fprintf(out, "%swarning: %s\n", prefix, warning)
 		if u.Opts.RequireRouting {
-			// The device IS updated -- that is reported alongside the
-			// error so a summary can say so -- but the fleet is not
-			// healthy, so the caller must not move on to the next device.
+			// The device IS updated, but the fleet is not healthy.
 			return "updated to " + version + ", but routing did not recover",
 				&RoutingNotRecoveredError{Hostname: plan.Hostname, Detail: warning}
 		}
@@ -344,7 +304,6 @@ func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 	return "updated to " + version, nil
 }
 
-// pause waits d, through the injected Sleep when there is one.
 func (u *Updater) pause(ctx context.Context, d time.Duration) error {
 	if u.Sleep != nil {
 		return u.Sleep(ctx, d)
@@ -360,17 +319,15 @@ func (u *Updater) waitOptions() WaitOptions {
 	return opts
 }
 
-// installAndReboot is the device-changing core: precheck, install, then
-// the detached drain+reboot. Ports VyOSHost.update_host.
+// installAndReboot is the device-changing core: precheck, install, then the
+// detached drain+reboot.
 func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, size int64, version string) error {
 	out := u.Opts.out()
 	prefix := "[" + plan.Hostname + "] "
 
-	// The installer downloads the ISO into the invoking user's home
-	// directory and copies the squashfs to /boot -- both on the root
-	// filesystem. It refuses to run below 2GiB free on / itself, so demand
-	// that floor (or 2x the image for oversized ones) so we fail cleanly
-	// at precheck instead of mid-install.
+	// The installer puts the ISO in the user's home and the squashfs in /boot,
+	// both on /, and refuses below 2GiB free. Demand that floor (or 2x the
+	// image) so we fail at precheck, not mid-install.
 	requiredMB := 2048
 	if doubled := int(math.Ceil(float64(size) * 2 / (1 << 20))); doubled > requiredMB {
 		requiredMB = doubled
@@ -380,8 +337,7 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	if err != nil {
 		return &DeviceUnreachableError{Hostname: plan.Hostname, Detail: "ssh: " + err.Error()}
 	}
-	// Closed explicitly before the post-drain probe below; the defer is
-	// the failure path.
+	// Closed explicitly before the post-drain probe; this defer is failure-only.
 	defer func() { _ = conn.Close() }()
 
 	if plan.InstallNeeded {
@@ -401,11 +357,9 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 		}
 
 		if plan.StaleImage {
-			// A directory in /boot alone (interrupted install, or an image
-			// that lost default boot) must not skip the installer, or the
-			// reboot would land on the old default image. Deleted only
-			// after the precheck so a failed precheck leaves the device
-			// untouched.
+			// A /boot directory alone must not skip the installer, or the reboot
+			// lands on the old default image. Deleted after the precheck, so a
+			// failed precheck leaves it untouched.
 			fmt.Fprintf(out, "%sdeleting stale image %s\n", prefix, version)
 			if err := u.API.DeleteImage(ctx, version); err != nil {
 				return fmt.Errorf("%s: deleting stale image %s: %w", plan.Hostname, version, err)
@@ -437,10 +391,9 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	}
 	_ = conn.Close()
 
-	// We reach the device over the same BGP paths the drain tears down,
-	// so the script runs detached and we verify by absence: wait out the
-	// drain, and only if the device is still reachable afterwards look
-	// for a failure marker in its log.
+	// We reach the device over the same BGP paths the drain tears down, so the
+	// script runs detached and success is verified by absence: look for a
+	// failure marker only if it is somehow still reachable.
 	if err := u.pause(ctx, drainWait+5*time.Second); err != nil {
 		return err
 	}
@@ -450,13 +403,8 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	return nil
 }
 
-// detachedRebootFailure returns a failure line from the detached
-// drain+reboot log, if any.
-//
-// Being unable to connect is the expected success case (the drain severed
-// our path, or the device is already rebooting); a device that still
-// answers with a FAIL marker in its log means the script bailed and no
-// reboot is coming.
+// detachedRebootFailure returns a failure line from the detached log. Not
+// connecting is the expected success case; a FAIL marker means no reboot.
 func (u *Updater) detachedRebootFailure(ctx context.Context, logPath string) string {
 	conn, err := u.SSH(ctx)
 	if err != nil {
@@ -476,8 +424,7 @@ func (u *Updater) detachedRebootFailure(ctx context.Context, logPath string) str
 	return ""
 }
 
-// VersionFromURL derives an image version from its mirror URL, as the
-// Python update_host does when no version is passed.
+// VersionFromURL derives an image version from its mirror URL.
 func VersionFromURL(rawURL string) string {
 	name := rawURL
 	if i := strings.IndexAny(name, "?#"); i >= 0 {
