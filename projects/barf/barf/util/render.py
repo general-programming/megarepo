@@ -49,6 +49,12 @@ def render_host_config(
         global_meta: The network.yml ``global_meta`` block.
         secrets: The Vault secret fetcher passed through to templates.
     """
+    # Scoped vendors (EOS) own named config slices instead of a whole
+    # role template; they render straight from host + global metadata.
+    render_managed = getattr(host, "render_managed_config", None)
+    if render_managed is not None:
+        return render_managed(global_meta)
+
     ctx = build_context(host, links, global_meta, secrets)
 
     if renders_with_blocks(host):

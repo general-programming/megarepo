@@ -58,6 +58,9 @@ def load_network(filename: str) -> Tuple[List[BaseHost], List[WGNetworkLink], di
         host = hostclass.from_meta(hostname=hostname, meta=meta)
         if host.site and host.site not in global_meta["sites"]:
             raise ValueError(f"hosts: {host.hostname!r} has unknown site {host.site!r}")
+        # Scoped vendors (EOS) need global metadata (ssh keys) at
+        # diff/deploy time, where the BaseHost interface doesn't carry it.
+        host.global_meta = global_meta
         hosts.append(host)
 
     def host_named(name: str, context: str) -> BaseHost:

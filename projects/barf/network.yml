@@ -61,6 +61,16 @@ profiles:
       - set protocols bgp peer-group internal address-family ipv4-unicast
       - set protocols bgp peer-group internal remote-as 4280805526
 hosts:
+  # Arista adoption, slice 1 (admin user / ssh keys / enable password
+  # only — see barf/vendors/arista.py). Requires the one-time eAPI
+  # bootstrap in docs/network/arista-adoption.md before deploys work.
+  fmt2-cor-r-140752-1:
+    type: eos
+    role: core
+    site: fmt2
+    address: 10.65.67.1/24
+  # TODO: fmt2 100G router — not in NetBox yet; add with its hostname
+  # and management address once identified, same shape as above.
   fmt2-vpn-spine-1:
     id: 1
     address: 79.110.170.6

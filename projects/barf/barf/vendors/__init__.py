@@ -917,7 +917,9 @@ class BaseHost:
             role=meta["role"],
             address=meta.get("address", None),
             ip6_address=meta.get("ip6_address", None),
-            asn=meta["asn"],
+            # Fabric hosts always carry an ASN; scoped-management hosts
+            # (EOS slice 1) have no BGP modeling yet.
+            asn=meta.get("asn"),
             nameservers=meta.get("nameservers", []),
             extra_config=meta.get("extra_config", []),
             networks=meta.get("networks", []),
