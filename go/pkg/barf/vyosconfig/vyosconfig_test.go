@@ -698,7 +698,7 @@ func TestVerifyCryptHash(t *testing.T) {
 const checksum86 = "svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJu" +
 	"esI68u4OTLiBFdcbYEdFCoEOfaS35inz1"
 
-// Regression: wellFormedSHA512Crypt checked only the `$` arity and checksum
+// Regression: WellFormedSHA512Crypt checked only the `$` arity and checksum
 // length, so shapes passlib calls unknown came back as CryptMismatch — which
 // tells ReconcileHashedPasswords to rewrite a live router's password it
 // cannot reason about. passlib returns None (unknown) for every case below.
@@ -746,7 +746,7 @@ func TestVerifyCryptHashAcceptsPasslibRange(t *testing.T) {
 	}
 	// passlib's max is accepted by the validator, asserted without hashing:
 	// computing 999,999,999 rounds is the work this test must not do.
-	if !wellFormedSHA512Crypt("$6$rounds=999999999$saltstring$" + checksum86) {
+	if !WellFormedSHA512Crypt("$6$rounds=999999999$saltstring$" + checksum86) {
 		t.Error("rounds=999999999 rejected; it is passlib's max_rounds")
 	}
 }
