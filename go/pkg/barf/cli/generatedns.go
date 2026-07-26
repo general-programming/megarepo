@@ -266,9 +266,12 @@ func keaReservations(res []reservation) ([]keaHost4, []keaHost6) {
 }
 
 // dnsJSON is `generate dns --json`, in the shape Python emitted.
+// DHCPReservations is only populated by --with-dhcp; omitted otherwise, so
+// the plain `--json` shape is unchanged.
 type dnsJSON struct {
-	Addresses  []dnsAddressJSON `json:"addresses"`
-	PTRRecords []dnsPTRJSON     `json:"ptr_records"`
+	Addresses        []dnsAddressJSON `json:"addresses"`
+	PTRRecords       []dnsPTRJSON     `json:"ptr_records"`
+	DHCPReservations []reservation    `json:"dhcp_reservations,omitempty"`
 }
 
 type dnsAddressJSON struct {
@@ -426,20 +429,31 @@ func runGenerateDNS(ctx context.Context, o *Options, domain, output string, with
 		return fmt.Errorf("NetBox returned no usable DNS records; refusing to render")
 	}
 
-	if jsonOut {
-		return o.writeJSON(output, dnsJSONFromLines(lines), "  ")
-	}
-
-	body := lines
+	// Fetched before the --json branch: --with-dhcp --json used to silently
+	// drop the DHCP reservations because the JSON return happened first.
+	var dhcpReservations []reservation
 	if withDHCP {
 		dhcp, err := client.FetchDHCP(ctx)
 		if err != nil {
 			return err
 		}
-		body = append([]string{dnsmasqHeader}, lines...)
-		for _, r := range reservations(dhcp.AllInterfaces(), func(hostname, reason string) {
+		dhcpReservations = reservations(dhcp.AllInterfaces(), func(hostname, reason string) {
 			log.Warn("skipping netbox record", "host", hostname, "reason", reason)
-		}) {
+		})
+	}
+
+	if jsonOut {
+		out := dnsJSONFromLines(lines)
+		if withDHCP {
+			out.DHCPReservations = dhcpReservations
+		}
+		return o.writeJSON(output, out, "  ")
+	}
+
+	body := lines
+	if withDHCP {
+		body = append([]string{dnsmasqHeader}, lines...)
+		for _, r := range dhcpReservations {
 			body = append(body, r.DnsmasqLine())
 		}
 	}
