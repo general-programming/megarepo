@@ -61,6 +61,7 @@ def test_wait_for_device_alive_times_out(monkeypatch):
 
 class FakeStatusHost:
     devicetype = "vyos"
+    REPORTS_STATUS = True
 
     def __init__(
         self,

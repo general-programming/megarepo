@@ -62,6 +62,7 @@ def deterministic_sha512(password: str, salt_seed: str) -> str:
 class EosHost(BaseHost):
     DEVICETYPE = "eos"
     TEMPLATABLE = True
+    REPORTS_STATUS = True
     # Scoped management only: the generic NAPALM whole-config merge path
     # must never run against these devices.
     NAPALM_DRIVER = None
@@ -143,6 +144,34 @@ class EosHost(BaseHost):
     def render_managed_config(self, global_meta: dict) -> str:
         """Managed-slice render; picked up by ``render_host_config``."""
         return "\n".join(self.managed_commands(global_meta)) + "\n"
+
+    # -- status -------------------------------------------------------
+
+    def _show_version(self) -> Dict[str, Any]:
+        return self._eapi_node().enable(["show version"])[0]["result"]
+
+    def human_version(self) -> str:
+        return self._show_version()["version"]
+
+    def uptime(self) -> str:
+        seconds = self._show_version().get("uptime")
+        if seconds is None:
+            # Pre-4.27 EOS omits uptime from `show version` json.
+            output = self._eapi_node().enable(["show uptime"], encoding="text")[
+                0
+            ]["result"]["output"]
+            if " up " in output:
+                return output.split(" up ", 1)[1].split(", load")[0].strip(", \n")
+            return output.strip()
+
+        minutes, _ = divmod(int(seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        days, hours = divmod(hours, 24)
+        if days:
+            return f"{days}d {hours}h"
+        if hours:
+            return f"{hours}h {minutes}m"
+        return f"{minutes}m"
 
     # -- device access ------------------------------------------------
 

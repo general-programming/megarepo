@@ -30,16 +30,18 @@ def device():
 @device.command("status")
 @click.argument("filename", default="network.yml", type=click.Path(exists=True))
 def device_status(filename: str) -> None:
-    """Show endpoint, uptime, firmware, and config drift for VyOS devices."""
+    """Show endpoint, uptime, firmware, and config drift for managed devices."""
     hosts, links, global_meta = load_network(filename)
 
     # Fail fast on Vault problems in the main thread, and prime the shared
     # secret cache so the probes below never touch Vault themselves.
     VaultSecrets().vyos_api_password
 
-    vyos_hosts = [host for host in hosts if host.devicetype == "vyos"]
+    status_hosts = [host for host in hosts if host.REPORTS_STATUS]
+    vyos_hosts = [host for host in status_hosts if host.devicetype == "vyos"]
 
     # Prime the release fetch once here; cached_property is not thread-safe.
+    # Only VyOS has an image provider today; other vendors show "?".
     provider = PROVIDERS["vyos"]
     try:
         latest = provider.latest_version
@@ -54,7 +56,7 @@ def device_status(filename: str) -> None:
     secrets = VaultSecrets()
     rendered: dict[str, str] = {}
     render_errors: dict[str, str] = {}
-    for host in vyos_hosts:
+    for host in status_hosts:
         try:
             rendered[host.hostname] = render_host_config(
                 host, links, global_meta, secrets
@@ -62,8 +64,8 @@ def device_status(filename: str) -> None:
         except Exception as e:  # noqa: BLE001 - report per-device in the table
             render_errors[host.hostname] = str(e)
 
-    def firmware_cell(version: str) -> str:
-        if latest is None:
+    def firmware_cell(host: BaseHost, version: str) -> str:
+        if host.devicetype != "vyos" or latest is None:
             return "?"
         if provider.is_current(version):
             return "yes"
@@ -104,14 +106,14 @@ def device_status(filename: str) -> None:
             address,
             uptime,
             version,
-            firmware_cell(version),
+            firmware_cell(host, version),
             config_cell(host),
             "ok",
         ]
 
     rows = []
     with concurrent.futures.ThreadPoolExecutor(max_workers=8) as pool:
-        for row in pool.map(fetch, vyos_hosts):
+        for row in pool.map(fetch, status_hosts):
             rows.append(row)
 
     print_table(

@@ -53,6 +53,7 @@ def _script_ok(rc: int, output: str, marker: str) -> bool:
 
 class VyOSHost(BaseHost):
     DEVICETYPE = "vyos"
+    REPORTS_STATUS = True
 
     # Ownership is total: barf owns the whole config tree, and deploys
     # delete any device config we did not render. (The vyos factory

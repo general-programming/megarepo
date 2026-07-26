@@ -382,6 +382,9 @@ class DeployDiff:
 class BaseHost:
     DEVICETYPE = "base"
     TEMPLATABLE = True
+    # Whether `barf device status` can report on this vendor (it needs
+    # working human_version/uptime plus diff support).
+    REPORTS_STATUS = False
     # NAPALM driver name for vendors that support config diff/deploy
     # over the generic NAPALM path; None disables both.
     NAPALM_DRIVER: Optional[str] = None
