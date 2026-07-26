@@ -2,8 +2,8 @@
 
 libdhcp_run_script.so invokes this as `webhook_adapter.py <hook-point>` with
 lease details in LEASES{4,6}_AT<n>_* environment variables. Posts the same
-JSON body as the dnsmasq webhook (nix/modules/dhcp/webhook.py) so the
-receiving Cloudflare Worker needs no changes.
+JSON body the retired dnsmasq dhcp-script webhook did, so the receiving
+Cloudflare Worker needs no changes.
 
 DHCP must never block on this: hard 2s timeout, every failure exits 0.
 """

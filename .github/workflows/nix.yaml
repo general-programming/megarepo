@@ -6,10 +6,17 @@ on:
     branches: [main]
     paths:
       - "nix/**"
+      # nix/pkgs/barf.nix builds these; a Go change can break the fleet.
+      - "go/**"
+      - "go.mod"
+      - "go.sum"
       - ".github/workflows/nix.yaml"
   pull_request:
     paths:
       - "nix/**"
+      - "go/**"
+      - "go.mod"
+      - "go.sum"
       - ".github/workflows/nix.yaml"
 
 concurrency:

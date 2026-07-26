@@ -13,8 +13,8 @@ import (
 	"github.com/general-programming/megarepo/go/client/netbox"
 )
 
-// iface mirrors the fixture helper in nix/modules/dns/tests/test_refresh_dns.py,
-// pinning Go and Python to the same cases.
+// iface mirrors the fixture helper the Python refresh_dns.py suite used, whose
+// cases these tests inherited when they replaced it.
 func iface(mac string, addresses []string, name string, vm string, primaryIP4 string) netbox.Interface {
 	out := netbox.Interface{Name: name}
 	if mac != "" {

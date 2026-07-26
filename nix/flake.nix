@@ -55,6 +55,18 @@
         base = import ./machines/base.nix;
       };
 
+      # `nix build ./nix#barf` — also what the dns and kea modules install.
+      packages = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: rec {
+        barf = nixpkgs.legacyPackages.${system}.callPackage ./pkgs/barf.nix { };
+        default = barf;
+      });
+
+      # `nix flake check` only evaluates packages; as a check it gets built, so
+      # CI catches a Go change that breaks the fleet before comin deploys it.
+      checks = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
+        inherit (self.packages.${system}) barf;
+      });
+
       # Per-host installer ISOs carrying the host's network config and SSH
       # keys, so the live environment comes up reachable at the host's
       # address for nixos-anywhere. Build/upload via `just make-installer`.

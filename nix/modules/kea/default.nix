@@ -21,9 +21,7 @@ let
   hosts4 = "${hostsDir}/hosts4.json";
   hosts6 = "${hostsDir}/hosts6.json";
 
-  refreshScript = pkgs.writers.writePython3Bin "netbox-kea" { } (
-    builtins.readFile ./refresh_kea.py
-  );
+  barf = pkgs.callPackage ../../pkgs/barf.nix { };
 
   webhookScript = pkgs.writers.writePython3Bin "kea-dhcp-webhook" { } (
     builtins.readFile ./webhook_adapter.py
@@ -242,7 +240,7 @@ in
       path = [ pkgs.diffutils ];
       script = ''
         mkdir -p ${hostsDir}
-        ${refreshScript}/bin/netbox-kea \
+        ${lib.getExe barf} generate dhcp --format kea \
           --output4 ${hosts4}.new --output6 ${hosts6}.new
 
         changed=0

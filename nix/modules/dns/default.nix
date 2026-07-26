@@ -25,10 +25,7 @@ let
         ++ (builtins.map (ptr: "ptr-record=${ptr}") netbox_ptrs)
     ) + "\n");
 
-    refreshScript = pkgs.writeScriptBin "netbox-dnsmasq" ''
-        #!${pkgs.python3}/bin/python3
-        ${builtins.readFile ./refresh_dns.py}
-    '';
+    barf = pkgs.callPackage ../../pkgs/barf.nix { };
 in
 {
     imports = [
@@ -139,7 +136,10 @@ in
                     new=$(mktemp)
                     trap 'rm -f "$new"' EXIT
 
-                    ${refreshScript}/bin/netbox-dnsmasq --output "$new"
+                    # DNS records only: Kea serves DHCP, and dnsmasq ignores
+                    # dhcp-host without a dhcp-range (it has none here), so
+                    # reservations in this file would be dead weight.
+                    ${lib.getExe barf} generate dns --output "$new"
                     dnsmasq --test --conf-file="$new"
 
                     if ! cmp -s "$new" ${generatedConf}; then

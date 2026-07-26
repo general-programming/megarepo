@@ -16,9 +16,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// Ports `barf generate dns` / `barf generate dhcp`. Where the old Python barf
-// and the production renderers (refresh_dns.py, refresh_kea.py) disagree,
-// production wins.
+// `barf generate dns` / `barf generate dhcp`. These began as ports of the
+// NixOS renderers refresh_dns.py and refresh_kea.py, whose output they had to
+// match byte-for-byte; they have since replaced them on the core machines.
 
 // defaultDNSDomain is overridden by DNS_DOMAIN, matching refresh_dns.py.
 const defaultDNSDomain = "generalprogramming.org"
@@ -394,9 +394,11 @@ func newGenerateDNSCmd(o *Options) *cobra.Command {
 		Use:   "dns",
 		Short: "Render dnsmasq DNS records from NetBox",
 		Long: "dns emits an address=/ptr-record= line per NetBox device and virtual\n" +
-			"machine, plus ipmi.<host> records for out-of-band interfaces. With\n" +
-			"--with-dhcp it renders the whole dnsmasq include that\n" +
-			"nix/modules/dns/refresh_dns.py writes today, DHCP reservations and all.",
+			"machine, plus ipmi.<host> records for out-of-band interfaces. This is\n" +
+			"what the core machines' dnsmasq include is refreshed from.\n\n" +
+			"--with-dhcp appends dhcp-host reservations. Kea serves DHCP now and\n" +
+			"dnsmasq ignores dhcp-host without a dhcp-range, so that is only useful\n" +
+			"for a dnsmasq that actually hands out leases.",
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			return runGenerateDNS(cmd.Context(), o, domain, output, withDHCP, jsonOut)
