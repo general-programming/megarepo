@@ -1,7 +1,9 @@
 global_meta:
   search_domain: generalprogramming.org
+  # 10.255.1.9 = fmt2-core (NixOS) on vlan1000; replaced fmt2-core-0's
+  # 10.255.1.8 ahead of that host's retirement.
   nameservers:
-    - 10.255.1.8
+    - 10.255.1.9
     - 1.1.1.1
   snmp_public: genprogllc
   snmp_contact: support@generalprogramming.org
