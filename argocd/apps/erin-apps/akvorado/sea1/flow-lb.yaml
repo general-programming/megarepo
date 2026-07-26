@@ -4,15 +4,17 @@
 # the fabric into a single bogus exporter. It also keeps flow UDP off flannel's
 # VXLAN (cf. the tx-checksum workaround in infrastructure/talos/sea1/).
 #
-# The VIP is pinned because device configs hardcode it, via the metallb.io
-# annotation rather than the deprecated spec.loadBalancerIP.
+# The VIP is pinned because device configs hardcode it, via the MetalLB
+# annotation rather than the deprecated spec.loadBalancerIP. The prefix must be
+# metallb.universe.tf: the deployed v0.14.5 ignores metallb.io/* on Services
+# (that alias only exists from v0.14.9).
 apiVersion: v1
 kind: Service
 metadata:
   name: akvorado-flows
   annotations:
-    metallb.io/address-pool: sea1-pool
-    metallb.io/loadBalancerIPs: 10.3.3.1
+    metallb.universe.tf/address-pool: sea1-pool
+    metallb.universe.tf/loadBalancerIPs: 10.3.3.1
 spec:
   type: LoadBalancer
   externalTrafficPolicy: Local
