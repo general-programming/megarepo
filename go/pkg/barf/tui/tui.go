@@ -18,6 +18,7 @@ const (
 	StateOK                      // answered, config matches
 	StateDrift                   // answered, config differs
 	StateError                   // could not be probed
+	StateNotRun                  // the viewer quit before this one ran at all
 )
 
 // String is the plain-text spelling of a state, used in tests and logs.
@@ -31,6 +32,8 @@ func (s RowState) String() string {
 		return "drift"
 	case StateError:
 		return "error"
+	case StateNotRun:
+		return "not run"
 	}
 	return "unknown"
 }
@@ -55,7 +58,7 @@ func styleFor(s RowState) lipgloss.Style {
 		return styleOK
 	case StateDrift:
 		return styleDrift
-	case StateError:
+	case StateError, StateNotRun:
 		return styleError
 	default:
 		return stylePending
