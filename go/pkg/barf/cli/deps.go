@@ -62,6 +62,15 @@ var (
 	reportsStatus func(deviceType string) bool = notWiredPredicate
 
 	isTemplatable func(deviceType string) bool = notWiredPredicate
+
+	// mintHostSecret is barf's one opt-in Vault WRITE path: `barf secrets
+	// mint` (secrets.go) is the only caller. Every other command's
+	// SecretSource (newSecrets) is read-only on purpose (see wireSecrets);
+	// this seam exists so that stays true even though something still has
+	// to create a brand new host's or WG link's first secret.
+	mintHostSecret func(hostname, key string) (string, error) = func(string, string) (string, error) {
+		return "", errNotWired
+	}
 )
 
 // notWiredPredicate is errNotWired for the boolean seams: an unwired binary
