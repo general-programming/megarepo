@@ -23,7 +23,10 @@ func (MikroTik) Render(h *model.Host, n *model.Network, s SecretSource) (string,
 		// Not a gap: Python has no mikrotik template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
-	ctx := newRenderCtx(h, n, s)
+	ctx, err := newRenderCtx(h, n, s)
+	if err != nil {
+		return "", err
+	}
 
 	// No IPsec branch: such a link would render as WireGuard (spurious
 	// keypairs) then vanish from the diff via ownership scoping. Fail fast.
@@ -169,6 +172,13 @@ func mikrotikBridges(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
+// truthy reads a value decoded out of the `ra:` passthrough map (plain
+// map[string]any, not walked through model's yaml.Node-based nodeBool) with
+// PyYAML/Python boolean semantics, not Go's. yaml.v3 is YAML 1.2 and leaves
+// YAML 1.1 words like `no`/`off` as plain strings rather than resolving them
+// to bool, so a naive "any non-empty string is true" reading took
+// `advertise_dns: no` as true — the opposite of what network.yml said and of
+// what Python's PyYAML-backed loader did.
 func truthy(value any) bool {
 	switch typed := value.(type) {
 	case nil:
@@ -176,7 +186,15 @@ func truthy(value any) bool {
 	case bool:
 		return typed
 	case string:
-		return typed != "" && typed != "false"
+		switch strings.ToLower(strings.TrimSpace(typed)) {
+		case "", "no", "off", "false", "n", "0":
+			return false
+		case "yes", "on", "true", "y", "1":
+			return true
+		default:
+			// Python truthiness for any other non-empty string: true.
+			return true
+		}
 	case int:
 		return typed != 0
 	default:
@@ -263,7 +281,11 @@ func mikrotikFirewallGroups(c *renderCtx) ([]string, error) {
 			version int
 			path    string
 		}{{4, "/ip"}, {6, "/ipv6"}} {
-			for _, member := range group.MembersV(family.version) {
+			members, err := group.MembersV(family.version)
+			if err != nil {
+				return nil, err
+			}
+			for _, member := range members {
 				line := fmt.Sprintf("%s/firewall/address-list add list=%s address=%s",
 					family.path, group.Name, member.Address)
 				if member.Comment != "" {
@@ -358,9 +380,13 @@ func mikrotikFabricWireGuard(c *renderCtx) ([]string, error) {
 					" comment=\"barf: %s unnumbered BGP\"", interfaceName, peer.Hostname),
 			)
 		} else {
+			ourIP, err := link.GetIP(c.host.Hostname, true)
+			if err != nil {
+				return nil, err
+			}
 			lines = append(lines, fmt.Sprintf(
 				"/ip/address add address=%s interface=%s comment=\"barf: %s link\"",
-				link.GetIP(c.host.Hostname, true), interfaceName, peer.Hostname))
+				ourIP, interfaceName, peer.Hostname))
 		}
 	}
 	return append(lines, ""), nil
@@ -448,12 +474,20 @@ func mikrotikFabricBGP(c *renderCtx) ([]string, error) {
 					" comment=\"barf: %s\"",
 				peer.Hostname, instance, interfaceName, peer.ASN, policy, peer.Hostname))
 		} else {
+			peerIP, err := link.GetIP(peer.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
+			ourIP, err := link.GetIP(c.host.Hostname, false)
+			if err != nil {
+				return nil, err
+			}
 			lines = append(lines, fmt.Sprintf(
 				"/routing/bgp/connection add name=%s templates=genprog-fabric%s"+
 					" remote.address=%s remote.as=%d local.address=%s local.role=ebgp%s"+
 					" comment=\"barf: %s\"",
-				peer.Hostname, instance, link.GetIP(peer.Hostname, false), peer.ASN,
-				link.GetIP(c.host.Hostname, false), policy, peer.Hostname))
+				peer.Hostname, instance, peerIP, peer.ASN,
+				ourIP, policy, peer.Hostname))
 		}
 	}
 	return append(lines, ""), nil

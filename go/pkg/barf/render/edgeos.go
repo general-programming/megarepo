@@ -33,7 +33,10 @@ func (EdgeOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, e
 	if h.Role != "vpn" {
 		return "", noTemplateError(h)
 	}
-	ctx := newRenderCtx(h, n, s)
+	ctx, err := newRenderCtx(h, n, s)
+	if err != nil {
+		return "", err
+	}
 
 	blocks := []func(*renderCtx) ([]string, error){
 		// common/vyos.j2, via the blocks extracted from it.
@@ -104,9 +107,13 @@ func edgeosFabric(c *renderCtx) ([]string, error) {
 
 		name := edgeosTunnelName(link.Port)
 		iface := "set interfaces wireguard " + name
+		ourIP, err := link.GetIP(c.host.Hostname, false)
+		if err != nil {
+			return nil, err
+		}
 		lines = append(lines,
 			fmt.Sprintf("%s description 'wg link (%s -> %s)'", iface, link.A, link.B),
-			fmt.Sprintf("%s address %s/31", iface, pythonNone(link.GetIP(c.host.Hostname, false))),
+			fmt.Sprintf("%s address %s/31", iface, pythonNone(ourIP)),
 			fmt.Sprintf("%s private-key '%s'", iface, keys.Private),
 			fmt.Sprintf("%s listen-port %d", iface, link.Port),
 			iface+" route-allowed-ips false",
@@ -122,8 +129,12 @@ func edgeosFabric(c *renderCtx) ([]string, error) {
 			)
 		}
 
+		peerIP, err := link.GetIP(peer.Hostname, false)
+		if err != nil {
+			return nil, err
+		}
 		neighbor := fmt.Sprintf("set protocols bgp %s neighbor %s", asn,
-			pythonNone(link.GetIP(peer.Hostname, false)))
+			pythonNone(peerIP))
 		peerGroup := "leaf"
 		if peer.IsSpine() {
 			peerGroup = "spine"
