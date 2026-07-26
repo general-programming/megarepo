@@ -91,8 +91,10 @@ let
 
   # The kea daemons run as a DynamicUser; the refresh service runs as root.
   # Keep the reservation files world-readable (MAC/IP inventory, not
-  # secret) so both sides can always read them.
-  seedHosts = ''
+  # secret) so both sides can always read them. Must run as root (systemd
+  # "+" ExecStartPre prefix): the files are root-owned, so an unprivileged
+  # preStart can neither chmod nor replace them.
+  seedScript = pkgs.writeShellScript "kea-seed-netbox-hosts" ''
     mkdir -p ${hostsDir}
     chmod 0755 ${hostsDir}
     [ -s ${hosts4} ] || echo "[]" > ${hosts4}
@@ -206,13 +208,13 @@ in
     # runs hook scripts from a supported directory (compared by exact
     # dirname), so point it at the webhook script's bin dir.
     systemd.services.kea-dhcp4-server = {
-      preStart = seedHosts;
+      serviceConfig.ExecStartPre = [ "+${seedScript}" ];
       environment = lib.mkIf cfg.webhook.enable {
         KEA_HOOK_SCRIPTS_PATH = "${webhookScript}/bin";
       };
     };
     systemd.services.kea-dhcp6-server = lib.mkIf cfg.dhcp6.enable {
-      preStart = seedHosts;
+      serviceConfig.ExecStartPre = [ "+${seedScript}" ];
       environment = lib.mkIf cfg.webhook.enable {
         KEA_HOOK_SCRIPTS_PATH = "${webhookScript}/bin";
       };
