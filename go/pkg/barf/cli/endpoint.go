@@ -25,54 +25,19 @@ var dialContext = func(ctx context.Context, network, address string) (net.Conn, 
 }
 
 // endpointCandidates are the addresses to try, most specific first: FQDN,
-// management interface, the host's own addresses, then the rest. From
-// BaseHost._endpoint_candidates.
+// management interface, the host's own addresses, then the rest, global
+// ones first. Delegates to device.EndpointCandidates rather than
+// hand-rolling a second ranking: a hand-rolled netip.Addr.IsPrivate /
+// IsLoopback / IsLinkLocalUnicast check (the previous implementation here)
+// misranks CGNAT (100.64.0.0/10), 6to4, 198.18.0.0/15 and multicast as
+// globally routable — device/probe.go's own comment already flags this
+// ("must be model.IsGlobal") next to the constructor that gets it right but
+// had no caller. It also falls back to device.DefaultDomain for the FQDN
+// candidate when searchDomain is empty, matching BaseHost._endpoint_candidates
+// (Python never drops the FQDN candidate just because global_meta has no
+// search_domain).
 func endpointCandidates(h *model.Host, searchDomain string) []string {
-	var candidates []string
-	add := func(s string) {
-		if s == "" {
-			return
-		}
-		for _, existing := range candidates {
-			if existing == s {
-				return
-			}
-		}
-		candidates = append(candidates, s)
-	}
-
-	if searchDomain != "" {
-		add(h.Hostname + "." + searchDomain)
-	}
-	for _, iface := range h.Interfaces {
-		if !iface.Management {
-			continue
-		}
-		for _, a := range iface.Addresses {
-			add(a.IP.String())
-		}
-	}
-	for _, a := range []*model.Address{h.Address, h.IP6Address} {
-		if a != nil {
-			add(a.IP.String())
-		}
-	}
-	// Globally routable before private: the fleet's management path is
-	// frequently only reachable globally.
-	var global, local []string
-	for _, iface := range h.Interfaces {
-		for _, a := range iface.Addresses {
-			if a.IP.IsPrivate() || a.IP.IsLoopback() || a.IP.IsLinkLocalUnicast() {
-				local = append(local, a.IP.String())
-				continue
-			}
-			global = append(global, a.IP.String())
-		}
-	}
-	for _, s := range append(global, local...) {
-		add(s)
-	}
-	return candidates
+	return device.EndpointCandidates(h, searchDomain)
 }
 
 // probeEndpoint returns the first candidate answering on the management API
