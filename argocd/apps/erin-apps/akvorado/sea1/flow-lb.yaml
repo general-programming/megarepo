@@ -5,9 +5,10 @@
 # VXLAN (cf. the tx-checksum workaround in infrastructure/talos/sea1/).
 #
 # The VIP is pinned because device configs hardcode it, via the MetalLB
-# annotation rather than the deprecated spec.loadBalancerIP. The prefix must be
-# metallb.universe.tf: the deployed v0.14.5 ignores metallb.io/* on Services
-# (that alias only exists from v0.14.9).
+# annotation rather than the deprecated spec.loadBalancerIP. As of the MetalLB
+# v0.16.1 upgrade either prefix works -- metallb.io/* is the preferred one and
+# metallb.universe.tf/* is kept for backwards compatibility (it now logs a
+# deprecation event, and a future release may drop it).
 apiVersion: v1
 kind: Service
 metadata:
