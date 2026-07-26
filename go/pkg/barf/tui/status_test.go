@@ -5,8 +5,25 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
+
+// keyPress builds the tea.KeyPressMsg a real terminal produces for name, as
+// ultraviolet's key table decodes it: a printable key carries Text, while esc
+// and ctrl combos carry only a Code (plus Mod) and get their spelling from
+// Keystroke. Hand-rolling these wrong is the easy way to make the quit-path
+// tests pass against a model that would never quit in practice.
+func keyPress(name string) tea.KeyPressMsg {
+	switch name {
+	case "q":
+		return tea.KeyPressMsg{Code: 'q', Text: "q"}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
+	case "ctrl+c":
+		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
+	}
+	panic("unknown key " + name)
+}
 
 func probes(names ...string) []StatusProbe {
 	out := make([]StatusProbe, len(names))
@@ -34,7 +51,7 @@ func TestStatusModelStartsEveryRowPending(t *testing.T) {
 		}
 	}
 	// Every host must be on screen before anything answers.
-	view := m.View()
+	view := m.View().Content
 	for _, name := range []string{"a", "b", "c"} {
 		if !strings.Contains(view, name) {
 			t.Errorf("initial view is missing %q:\n%s", name, view)
@@ -64,8 +81,8 @@ func TestStatusModelFillsRowsAsProbesAnswer(t *testing.T) {
 	if m.Rows()[0].State != StatePending {
 		t.Error("row 0 stopped being pending without answering")
 	}
-	if !strings.Contains(m.View(), "1/2 devices reported") {
-		t.Errorf("progress header missing:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "1/2 devices reported") {
+		t.Errorf("progress header missing:\n%s", m.View().Content)
 	}
 }
 
@@ -88,12 +105,24 @@ func TestStatusModelQuitsWhenAllProbesAnswer(t *testing.T) {
 
 func TestStatusModelQuitKey(t *testing.T) {
 	m := NewStatusModel(context.Background(), probes("a", "b"))
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("q")})
+	_, cmd := m.Update(keyPress("q"))
 	if cmd == nil {
 		t.Fatal("q did not quit")
 	}
 	if msg := cmd(); msg != tea.Quit() {
 		t.Errorf("q produced %T, want tea.Quit", msg)
+	}
+}
+
+// The quit tests are only as good as the messages they feed in: if keyPress
+// built something the model's `switch msg.String()` would never match, they
+// would pass against a model that never quits. Pin the spellings.
+func TestKeyPressHelperMatchesTheRealSpellings(t *testing.T) {
+	for _, name := range []string{"q", "esc", "ctrl+c"} {
+		if got := keyPress(name).String(); got != name {
+			t.Errorf("keyPress(%q).String() = %q; the quit tests are not exercising %q",
+				name, got, name)
+		}
 	}
 }
 
@@ -111,7 +140,7 @@ func TestStatusViewColoursByState(t *testing.T) {
 	m := NewStatusModel(context.Background(), probes("a"))
 	m.rows[0] = StatusRow{Device: "a", Status: "error: boom", State: StateError}
 	m.pending = 0
-	if !strings.Contains(m.View(), "error: boom") {
-		t.Errorf("error row missing from view:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "error: boom") {
+		t.Errorf("error row missing from view:\n%s", m.View().Content)
 	}
 }
