@@ -140,20 +140,38 @@ def dhcp_lines(interfaces: Iterable[dict]) -> Iterator[str]:
 
         primary_ip = strip_prefix(owner.get("primary_ip4"))
 
+        # dnsmasq rejects multiple reservations per MAC; first interface
+        # with a usable address wins.
+        if mac.lower() in seen_macs:
+            continue
+
+        ipv4 = ""
+        ipv6 = ""
         for address in interface.get("ip_addresses") or []:
             ip_address = strip_prefix(address)
-            # dnsmasq matches DHCPv6 reservations on DUID, not MAC; v4 only.
-            if not ip_address or ":" in ip_address:
+            if not ip_address:
                 continue
+            if ":" in ip_address:
+                ipv6 = ipv6 or ip_address
+            else:
+                ipv4 = ipv4 or ip_address
 
-            # dnsmasq rejects multiple v4 reservations per MAC.
-            if mac.lower() in seen_macs:
-                continue
-            seen_macs.add(mac.lower())
+        if not ipv4 and not ipv6:
+            continue
+        seen_macs.add(mac.lower())
 
-            is_primary = bool(primary_ip) and ip_address == primary_ip
-            hostname = dhcp_hostname(owner["name"], interface["name"], is_primary)
-            yield f"dhcp-host={mac},{ip_address},{hostname}"
+        is_primary = bool(primary_ip) and ipv4 == primary_ip
+        hostname = dhcp_hostname(owner["name"], interface["name"], is_primary)
+        # dnsmasq (>= 2.81) matches DHCPv6 clients by MAC on directly
+        # attached subnets, so both families key on the MAC; v6 addresses
+        # take the bracketed form: dhcp-host=MAC,v4,[v6],hostname.
+        parts = [mac]
+        if ipv4:
+            parts.append(ipv4)
+        if ipv6:
+            parts.append(f"[{ipv6}]")
+        parts.append(hostname)
+        yield "dhcp-host=" + ",".join(parts)
 
 
 def render(dns_data: dict, dhcp_data: dict, domain: str) -> str:
