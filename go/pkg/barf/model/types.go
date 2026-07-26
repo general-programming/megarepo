@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/netip"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -182,17 +183,35 @@ type FirewallAddressMember struct {
 	Comment string
 }
 
-// Version reports the IP family (4 or 6) of the member address.
-func (m FirewallAddressMember) Version() int {
+// Version reports the IP family (4 or 6) of the member address, erroring on
+// anything ipaddress.ip_network(strict=False).version would reject: an
+// unparseable address ("10.0.0./24"), or a prefix length outside the
+// family's bit width ("10.0.0.0/33"). The previous behaviour defaulted both
+// to 4, which would file a v6 address (or garbage) into the v4 group
+// instead of failing the render.
+func (m FirewallAddressMember) Version() (int, error) {
 	addr := m.Address
+	prefixLen := -1
 	if i := strings.IndexByte(addr, '/'); i >= 0 {
+		var err error
+		prefixLen, err = strconv.Atoi(addr[i+1:])
+		if err != nil {
+			return 0, fmt.Errorf("firewall address %q: invalid prefix length", m.Address)
+		}
 		addr = addr[:i]
 	}
 	ip, err := netip.ParseAddr(addr)
-	if err != nil || ip.Is4() {
-		return 4
+	if err != nil {
+		return 0, fmt.Errorf("firewall address %q: %w", m.Address, err)
 	}
-	return 6
+	if prefixLen != -1 && (prefixLen < 0 || prefixLen > ip.BitLen()) {
+		return 0, fmt.Errorf("firewall address %q: prefix length %d out of range for a %d-bit address",
+			m.Address, prefixLen, ip.BitLen())
+	}
+	if ip.Is4() {
+		return 4, nil
+	}
+	return 6, nil
 }
 
 // FirewallAddressGroup is a named set of addresses (v4 and/or v6).
@@ -201,15 +220,21 @@ type FirewallAddressGroup struct {
 	Members []FirewallAddressMember
 }
 
-// MembersV returns the group's members belonging to IP version v.
-func (g FirewallAddressGroup) MembersV(v int) []FirewallAddressMember {
+// MembersV returns the group's members belonging to IP version v, erroring
+// on the first member whose address is invalid rather than silently sorting
+// it into a family it may not belong to.
+func (g FirewallAddressGroup) MembersV(v int) ([]FirewallAddressMember, error) {
 	var out []FirewallAddressMember
 	for _, m := range g.Members {
-		if m.Version() == v {
+		version, err := m.Version()
+		if err != nil {
+			return nil, fmt.Errorf("firewall group %q: %w", g.Name, err)
+		}
+		if version == v {
 			out = append(out, m)
 		}
 	}
-	return out
+	return out, nil
 }
 
 // FirewallInterfaceGroup is a named set of interfaces, optionally including
@@ -368,30 +393,38 @@ func (l Link) Other(hostname string) string {
 	return l.A
 }
 
-// GetIP returns hostname's address on this link (empty when unnumbered):
-// side A takes the first usable address, side B the next one.
-func (l Link) GetIP(hostname string, withNetmask bool) string {
+// GetIP returns hostname's address on this link ("", nil when unnumbered):
+// side A takes the first usable address, side B the next one. l.Network with
+// host bits set (e.g. "172.31.255.21/31", whose network address is .20) is
+// an error, not a silent correction: Python's get_ip constructs
+// ipaddress.IPv4Network/IPv6Network with the default strict=True, which
+// raises on exactly this rather than masking it down to a different address
+// than network.yml named.
+func (l Link) GetIP(hostname string, withNetmask bool) (string, error) {
 	if l.Network == "" {
-		return ""
+		return "", nil
 	}
 	prefix, err := netip.ParsePrefix(l.Network)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("link %s-%s: invalid network %q: %w", l.A, l.B, l.Network, err)
+	}
+	if prefix.Masked().Addr() != prefix.Addr() {
+		return "", fmt.Errorf("link %s-%s: network %q has host bits set", l.A, l.B, l.Network)
 	}
 	first := firstHost(prefix)
 	if !first.IsValid() {
-		return ""
+		return "", fmt.Errorf("link %s-%s: network %q has no usable host address", l.A, l.B, l.Network)
 	}
 	addr := first
 	if hostname == l.B {
 		addr = first.Next()
 	} else if hostname != l.A {
-		return ""
+		return "", nil
 	}
 	if withNetmask {
-		return fmt.Sprintf("%s/%d", addr.String(), prefix.Bits())
+		return fmt.Sprintf("%s/%d", addr.String(), prefix.Bits()), nil
 	}
-	return addr.String()
+	return addr.String(), nil
 }
 
 // firstHost mirrors next(ipaddress.ip_network(...).hosts()): /31 and /32
