@@ -1,10 +1,49 @@
 package cli
 
 import (
+	"context"
 	"testing"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
+
+// spyPrefetchSecrets is a SecretSource that also satisfies
+// prefetch.Prefetcher, recording every call so prefetchLinkKeys' wiring can
+// be checked without a real Vault.
+type spyPrefetchSecrets struct {
+	warmed [][]string
+}
+
+func (spyPrefetchSecrets) HostSecret(hostname, key string) (string, error) { return "", nil }
+
+func (s *spyPrefetchSecrets) PrefetchHostSecrets(_ context.Context, paths ...string) {
+	s.warmed = append(s.warmed, append([]string(nil), paths...))
+}
+
+// Regression: prefetch.LinkKeyPaths/LinkKeysFor and vault.Client.Prefetch
+// had zero production callers, so a fleet render paid two serial cold Vault
+// reads per WireGuard link instead of warming them concurrently.
+func TestPrefetchLinkKeysWarmsWhenSecretsSupportIt(t *testing.T) {
+	hosts := testHosts()
+	links := []model.Link{{A: "sea1-vpn-0", B: "fmt2-core", Network: "172.31.255.0/31", Pinned: true, Port: 51000}}
+	secrets := &spyPrefetchSecrets{}
+
+	prefetchLinkKeys(context.Background(), secrets, allHosts(hosts), links)
+
+	if len(secrets.warmed) != 1 || len(secrets.warmed[0]) == 0 {
+		t.Fatalf("PrefetchHostSecrets not called with the link's key paths: %v", secrets.warmed)
+	}
+}
+
+// A SecretSource that does not support prefetch.Prefetcher (test fakes; a
+// backend with nothing to batch) must be silently skipped, not panic.
+func TestPrefetchLinkKeysSkipsUnsupportedSecretSource(t *testing.T) {
+	hosts := testHosts()
+	links := []model.Link{{A: "sea1-vpn-0", B: "fmt2-core", Network: "172.31.255.0/31", Pinned: true, Port: 51000}}
+
+	prefetchLinkKeys(context.Background(), fakeSecrets{}, allHosts(hosts), links)
+	// No panic, nothing to assert: fakeSecrets has no PrefetchHostSecrets.
+}
 
 func testHosts() []model.Host {
 	return []model.Host{
@@ -30,7 +69,8 @@ func TestResolveTargets(t *testing.T) {
 		want    []string
 		wantErr string
 	}{
-		{"no targets means all", nil, []string{"sea1-vpn-0", "fmt2-core", "ext-peer"}, ""},
+		{"no targets is an error", nil, nil, `no hosts given; pass one or more hostnames, or "all"`},
+		{"no targets is an error (empty slice)", []string{}, nil, `no hosts given; pass one or more hostnames, or "all"`},
 		{"all", []string{"all"}, []string{"sea1-vpn-0", "fmt2-core", "ext-peer"}, ""},
 		{"named", []string{"fmt2-core"}, []string{"fmt2-core"}, ""},
 		{"order preserved", []string{"ext-peer", "sea1-vpn-0"}, []string{"ext-peer", "sea1-vpn-0"}, ""},
