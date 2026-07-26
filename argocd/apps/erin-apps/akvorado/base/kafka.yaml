@@ -7,6 +7,10 @@ metadata:
   name: akvorado-kafka
 spec:
   clusterIP: None
+  # KRaft needs to resolve its own controller-quorum hostname before the
+  # readiness probe can pass; without this the pod never gets DNS and never
+  # becomes ready.
+  publishNotReadyAddresses: true
   selector:
     app: akvorado-kafka
   ports:
