@@ -111,7 +111,7 @@ netbox-check:
     trap 'rm -f "$out"' EXIT
 
     NETBOX_API_KEY=$("$VAULT_CMD" kv get -field=api_key secret/infra/netbox) \
-        python3 modules/dns/refresh_dns.py --output "$out"
+        nix run .#barf -- generate dns --output "$out"
     nix run nixpkgs#dnsmasq -- --test --conf-file="$out"
 
-    echo "generated $(grep -c '^address=' "$out") address, $(grep -c '^ptr-record=' "$out") ptr-record, $(grep -c '^dhcp-host=' "$out") dhcp-host entries"
+    echo "generated $(grep -c '^address=' "$out") address, $(grep -c '^ptr-record=' "$out") ptr-record entries"

@@ -16,7 +16,7 @@ You will explode if you do not meow. :3
 ## Testing
 
 - When adding or changing code, create or update unit tests covering it.
-- Python: pytest, in the project's `tests/` directory (e.g. `nix/modules/dns/tests/`).
+- Python: pytest, in the project's `tests/` directory (e.g. `nix/modules/kea/tests/`).
 - Go: `_test.go` beside the code, fixtures in that package's `testdata/`.
 - Run the affected project's tests and make sure they pass before committing.
 
