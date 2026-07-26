@@ -302,6 +302,49 @@ func TestGenerateDNSJSON(t *testing.T) {
 	}
 }
 
+// Regression: `--json` returned before `--with-dhcp`'s FetchDHCP call, so
+// `generate dns --with-dhcp --json` silently dropped the DHCP reservations
+// instead of including or refusing them.
+func TestGenerateDNSJSONWithDHCPIncludesReservations(t *testing.T) {
+	h := newHarness(t)
+	dns, dhcp := sampleData()
+	useFakeNetbox(t, fakeNetboxServer(t, dns, dhcp))
+
+	if err := h.run(t, "generate", "dns", "--domain", "example.org", "--json", "--with-dhcp"); err != nil {
+		t.Fatal(err)
+	}
+	var report dnsJSON
+	if err := json.Unmarshal(h.out.Bytes(), &report); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, h.out.String())
+	}
+	if len(report.Addresses) != 3 || len(report.PTRRecords) != 2 {
+		t.Errorf("dns fields regressed: %+v", report)
+	}
+	if len(report.DHCPReservations) != 1 {
+		t.Fatalf("dhcp_reservations = %+v, want exactly the one reservation sampleData carries", report.DHCPReservations)
+	}
+	got := report.DHCPReservations[0]
+	if got.MAC != "BC:24:11:6A:62:B3" || got.Hostname != "sea1-k8s-0" ||
+		got.IPv4 != "10.3.2.10" || got.IPv6 != "2602:fa6d:10:ffff::110" {
+		t.Errorf("reservation = %+v", got)
+	}
+}
+
+// Without --with-dhcp, --json's shape must stay exactly as before: no
+// dhcp_reservations key at all (omitempty), not an empty array.
+func TestGenerateDNSJSONWithoutDHCPOmitsReservationsKey(t *testing.T) {
+	h := newHarness(t)
+	dns, dhcp := sampleData()
+	useFakeNetbox(t, fakeNetboxServer(t, dns, dhcp))
+
+	if err := h.run(t, "generate", "dns", "--domain", "example.org", "--json"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(h.out.String(), "dhcp_reservations") {
+		t.Errorf("dhcp_reservations present without --with-dhcp:\n%s", h.out.String())
+	}
+}
+
 func TestGenerateDNSRefusesEmptyNetbox(t *testing.T) {
 	h := newHarness(t)
 	useFakeNetbox(t, fakeNetboxServer(t, netbox.DNSResult{}, netbox.DHCPResult{}))
