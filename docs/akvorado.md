@@ -9,7 +9,7 @@ which does SNMP counters — Akvorado does per-flow traffic analysis.
 Akvorado 2.0 split the old monolithic inlet into two services:
 
 ```
-devices ──UDP 2055/6343──▶ inlet ──▶ Kafka ──▶ outlet ──▶ ClickHouse ──▶ console
+devices ──UDP 2055/4739/6343──▶ inlet ──▶ Kafka ──▶ outlet ──▶ ClickHouse ──▶ console
                                                   │
                                                   ├── SNMP poll ──▶ devices
                                                   └── BMP :10179 ◀── routers
@@ -95,12 +95,17 @@ We add an **L2** overlay for SEA1, which needs no router-side config:
 Inlet service:
 
 ```yaml
-type: LoadBalancer
-loadBalancerIP: 10.3.3.1
-externalTrafficPolicy: Local
-ports:
-  - 2055/UDP   # NetFlow v9 / IPFIX
-  - 6343/UDP   # sFlow
+metadata:
+  annotations:
+    metallb.universe.tf/address-pool: sea1-pool
+    metallb.universe.tf/loadBalancerIPs: 10.3.3.1
+spec:
+  type: LoadBalancer
+  externalTrafficPolicy: Local
+  ports:
+    - 2055/UDP   # NetFlow v9
+    - 4739/UDP   # IPFIX
+    - 6343/UDP   # sFlow
 ```
 
 With `Local`, MetalLB only announces from nodes actually running an inlet pod,
