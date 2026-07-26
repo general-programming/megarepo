@@ -18,6 +18,17 @@ spec:
         prometheus.io/port: '2000'
         reloader.stakater.com/auto: "true"
     spec:
+      # sea1-k8s-103-0 is off-site behind a ~1500-MTU path; the v6 VXLAN
+      # blackholes large TCP segments, so keep the tunnel off that node.
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values:
+                      - sea1-k8s-103-0
       # Prefer spreading the 2 tunnel replicas across nodes for ingress HA, but
       # never block scheduling — a running tunnel matters more than perfect spread.
       topologySpreadConstraints:

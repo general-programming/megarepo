@@ -9,4 +9,16 @@ spec:
       valuesObject:
         service:
           type: ClusterIP
+        # sea1-k8s-103-0 is off-site behind a ~1500-MTU path; the v6 VXLAN
+        # blackholes large TCP segments to it, so keep ingress off that node
+        # until the path MTU / MSS clamp is sorted.
+        affinity:
+          nodeAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+              nodeSelectorTerms:
+                - matchExpressions:
+                    - key: kubernetes.io/hostname
+                      operator: NotIn
+                      values:
+                        - sea1-k8s-103-0
 ---
