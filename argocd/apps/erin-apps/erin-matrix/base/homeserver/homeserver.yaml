@@ -34,24 +34,11 @@ password_config:
   enabled: false
 ip_range_whitelist: []
 allow_public_rooms_over_federation: true
-experimental_features:
-  msc3861:
-    enabled: true
+matrix_authentication_service:
+  enabled: true
 
-    # Synapse will call `{issuer}/.well-known/openid-configuration` to get the OIDC configuration
-    issuer: https://matrix-auth.owo.me/
+  # Internal URL where Synapse can reach MAS (must expose the discovery and oauth resources)
+  endpoint: http://mas:8080/
 
-    # Matches the `client_id` in the auth service config
-    client_id: 01JCT3FBVE6N98HQKGZJA2GV5X
-
-    # Matches the `client_auth_method` in the auth service config
-    client_auth_method: client_secret_basic
-
-    # Matches the `client_secret` in the auth service config
-    client_secret: "SECRET_CLIENT_SECRET"
-
-    # Matches the `matrix.secret` in the auth service config
-    admin_token: "SECRET_ADMIN_SECRET"
-
-    # URL to advertise to clients where users can self-manage their account
-    account_management_url: https://matrix-auth.owo.me/account
+  # Matches the `matrix.secret` in the auth service config
+  secret: "SECRET_ADMIN_SECRET"
