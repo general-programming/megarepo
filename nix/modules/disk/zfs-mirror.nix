@@ -1,4 +1,8 @@
 {
+  # 26.11 default; pools stay importable without -f as long as the hostid
+  # matches the last importer, which is always this same machine.
+  boot.zfs.forceImportRoot = false;
+
   disko.devices = {
     disk = {
       disk0 = {

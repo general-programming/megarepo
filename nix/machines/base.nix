@@ -100,7 +100,7 @@
   # All overlays.
   nixpkgs.overlays = [
     (final: prev: {
-      disko = inputs.disko.packages.${pkgs.system}.default;
+      disko = inputs.disko.packages.${pkgs.stdenv.hostPlatform.system}.default;
     })
   ];
 
