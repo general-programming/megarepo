@@ -19,12 +19,17 @@ buildGoModule {
       ../../go
       ../../go.mod
       ../../go.sum
+      ../../vendor
     ];
   };
 
-  # Bump alongside go.mod/go.sum: `nix build ./nix#barf` prints the new hash
-  # on mismatch.
-  vendorHash = "sha256-hSGkTIPE4sjnlvNsvUgjgCCqKMUX5zeHMByh5EvZKdE=";
+  # null, not a hash: deps come from the checked-in vendor/, so there is no
+  # fixed-output derivation to re-hash on every bump — and no network fetch at
+  # build time, which matters because comin builds on the machines and Lix FOD
+  # fetches need /dev/net/tun (absent in the LXC builder).
+  # Renovate re-vendors via postUpdateOptions; if a bump ever lands without it,
+  # the build fails with "inconsistent vendoring" and `go mod vendor` fixes it.
+  vendorHash = null;
 
   subPackages = [ "go/cmd/barf" ];
 

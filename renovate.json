@@ -10,6 +10,10 @@
   "nix": {
     "enabled": true
   },
+  "postUpdateOptions": [
+    "gomodTidy",
+    "gomodVendor"
+  ],
   "prHourlyLimit": 10,
   "customManagers": [
     {
