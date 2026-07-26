@@ -23,8 +23,9 @@ import (
 // defaultDNSDomain is overridden by DNS_DOMAIN, matching refresh_dns.py.
 const defaultDNSDomain = "generalprogramming.org"
 
-// dnsmasqHeader is byte-identical to refresh_dns.py's first line.
-const dnsmasqHeader = "# Generated from NetBox by netbox-dnsmasq. Do not edit."
+// dnsmasqHeader was byte-identical to refresh_dns.py's first line until that
+// script was retired; it now names the tool an operator can actually run.
+const dnsmasqHeader = "# Generated from NetBox by `barf generate dns`. Do not edit."
 
 // netboxSource is declared locally, like deps.go's seams, so tests can fake it.
 type netboxSource interface {
@@ -452,9 +453,11 @@ func runGenerateDNS(ctx context.Context, o *Options, domain, output string, with
 		return o.writeJSON(output, out, "  ")
 	}
 
-	body := lines
+	// The header marks the file as generated wherever it lands, so it is not
+	// conditional on --with-dhcp: the refresh unit installs this output as
+	// dnsmasq's netbox.conf either way.
+	body := append([]string{dnsmasqHeader}, lines...)
 	if withDHCP {
-		body = append([]string{dnsmasqHeader}, lines...)
 		for _, r := range dhcpReservations {
 			body = append(body, r.DnsmasqLine())
 		}

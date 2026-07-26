@@ -251,7 +251,10 @@ func TestGenerateDNSCommand(t *testing.T) {
 	if err := h.run(t, "generate", "dns", "--domain", "example.org"); err != nil {
 		t.Fatal(err)
 	}
+	// The header is unconditional: this output is installed as dnsmasq's
+	// netbox.conf with or without --with-dhcp.
 	want := strings.Join([]string{
+		dnsmasqHeader,
 		"address=/sea1-core.example.org/2602:fa6d:10::6",
 		"address=/sea1-core.example.org/10.3.2.6",
 		"ptr-record=6.2.3.10.in-addr.arpa,sea1-core.example.org",
