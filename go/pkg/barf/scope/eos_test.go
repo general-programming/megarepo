@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/GehirnInc/crypt/sha512_crypt"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
@@ -420,6 +421,32 @@ func TestEOSHashMatches(t *testing.T) {
 		if EOSHashMatches(testAdminPassword, bad) {
 			t.Errorf("hash %q counted as a match", bad)
 		}
+	}
+}
+
+// Regression: EOSHashMatches passed device-reported hashes straight to
+// sha512_crypt.Verify with no bound, so a hostile or corrupted
+// `$6$rounds=999999999$...` reported by a compromised/misbehaving device
+// would burn minutes of CPU per probe. It must be rejected fast, as an
+// unverifiable (never a match) hash, matching Python passlib's
+// ValueError -> False.
+func TestEOSHashMatchesRejectsAbsurdRoundsQuickly(t *testing.T) {
+	// A well-shaped but out-of-bounds hash: valid `$6$rounds=N$salt$checksum`
+	// shape so it clears the cheap prefix/arity checks, forcing the rounds
+	// bound itself to be what stops it. One rounds count past passlib's own
+	// max (999999999, sha512CryptMaxRounds) — not the max itself, which is a
+	// legitimate, if slow, value the shape check must still accept (see
+	// vyosconfig's TestVerifyCryptHashAcceptsPasslibRange, which asserts that
+	// case without hashing for exactly this reason).
+	checksum86 := strings.Repeat("a", 86)
+	absurd := "$6$rounds=1000000000$saltstring$" + checksum86
+
+	start := time.Now()
+	if EOSHashMatches(testAdminPassword, absurd) {
+		t.Error("an absurd-rounds hash reported a match")
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("EOSHashMatches took %s; it must reject out-of-bounds rounds before hashing", elapsed)
 	}
 }
 

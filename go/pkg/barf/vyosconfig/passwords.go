@@ -27,7 +27,7 @@ const (
 func VerifyCryptHash(password, hashed string) CryptResult {
 	// Must run first: it keeps an absurd `rounds=` out of the hash function,
 	// which would spin for minutes.
-	if !strings.HasPrefix(hashed, "$6$") || !wellFormedSHA512Crypt(hashed) {
+	if !strings.HasPrefix(hashed, "$6$") || !WellFormedSHA512Crypt(hashed) {
 		return CryptUnknown
 	}
 	err := sha512_crypt.New().Verify(hashed, []byte(password))
@@ -50,7 +50,7 @@ const (
 	sha512CryptMaxRounds   = 999999999
 )
 
-// wellFormedSHA512Crypt reports whether hashed is
+// WellFormedSHA512Crypt reports whether hashed is
 // `$6$[rounds=N$]<salt>$<86-char checksum>` *and* inside passlib's ranges.
 //
 // Replicates a guard passlib gives Python for free: it raises ValueError on
@@ -58,7 +58,7 @@ const (
 // against a truncated hash and reports a mismatch, making barf rewrite an
 // unparseable hash. The ranges also keep `$6$rounds=100000000$...`, which is
 // well-shaped, from burning minutes of CPU.
-func wellFormedSHA512Crypt(hashed string) bool {
+func WellFormedSHA512Crypt(hashed string) bool {
 	parts := strings.Split(hashed, "$")
 	// ["", "6", salt, checksum] or ["", "6", "rounds=N", salt, checksum].
 	switch len(parts) {

@@ -12,6 +12,7 @@ import (
 	"github.com/general-programming/megarepo/go/common/pytext"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
+	"github.com/general-programming/megarepo/go/pkg/barf/vyosconfig"
 )
 
 // ManagedUsername is the one account barf owns on EOS devices.
@@ -199,8 +200,16 @@ func isTrue(v *bool) bool { return v != nil && *v }
 // EOSHashMatches reports whether password is the secret behind a device's
 // sha512-crypt hash. Salts differ, so verifying rather than comparing hash
 // text is what stops barf rewriting an adopted device's credentials.
+//
+// deviceHash is device-reported and so untrusted: a hostile or corrupted
+// `$6$rounds=999999999$...` would otherwise reach sha512_crypt.Verify
+// directly, which does the work — minutes of CPU per probe. Sharing
+// vyosconfig.WellFormedSHA512Crypt keeps this bound identical to the VyOS
+// side rather than a second copy that could drift out of range. A malformed
+// or out-of-bounds hash reports no match, matching Python passlib's
+// ValueError -> False for verify(), so it shows as drift rather than hanging.
 func EOSHashMatches(password, deviceHash string) bool {
-	if deviceHash == "" || !strings.HasPrefix(deviceHash, "$6$") {
+	if deviceHash == "" || !strings.HasPrefix(deviceHash, "$6$") || !vyosconfig.WellFormedSHA512Crypt(deviceHash) {
 		return false
 	}
 	return sha512_crypt.New().Verify(deviceHash, []byte(password)) == nil
