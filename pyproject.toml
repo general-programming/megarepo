@@ -1,26 +1,17 @@
 [tool.uv.workspace]
-members = ["projects/barf", "scripts"]
+members = ["scripts"]
 
 [tool.ty.src]
-include = ["projects/barf"]
+include = ["nix", "scripts"]
 # Not ty-clean yet; drop these from the exclude list as they get fixed.
-# Tests are excluded because their duck-typed fakes (SimpleNamespace
-# hosts etc.) are intentional.
-exclude = [
-    "projects/barf/barf/cli/generate.py",
-    "projects/barf/barf/model/wireguard.py",
-    "projects/barf/barf/util/netbox.py",
-    "projects/barf/tests",
-]
+# scripts/twilio imports a `create_twilio` that common.py does not define.
+exclude = ["scripts/twilio"]
 
 [tool.ruff]
 line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "I"]
-
-[tool.ruff.lint.isort]
-known-first-party = ["barf"]
 
 [tool.ruff.format]
 quote-style = "double"

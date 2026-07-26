@@ -1,7 +1,9 @@
 # barf-go: package contract
 
-Go port of `projects/barf` (Python). This document holds the invariants
-that are not expressible in the code itself.
+barf renders and deploys network device configs from
+`projects/barf/network.yml`. It began as a port of the Python `projects/barf`,
+which has since been deleted — `git log` before this commit is the only copy.
+This document holds the invariants that are not expressible in the code itself.
 
 Module root: `github.com/general-programming/megarepo`
 Go: 1.25 (toolchain 1.26 available)
@@ -19,8 +21,8 @@ Go: 1.25 (toolchain 1.26 available)
    - Each write surface has its own closed allowlist of endpoints and
      command shapes (see below). Readers permit read-only verbs only
      (`show ...`, config *retrieve*).
-2. **Do not modify `projects/barf` (the Python implementation).** It stays
-   authoritative. Read it freely as the reference.
+2. **`projects/barf/network.yml` is the fleet's source of truth.** It is all
+   that remains of `projects/barf`; barf reads it and never rewrites it.
 3. Secrets never get logged or written to disk. Vault values are used in
    memory only.
 
@@ -80,17 +82,28 @@ seams. `render.SecretSource` (`HostSecret(hostname, key)`, mirroring Python
 `BaseHost.secret()`) lives in `render` so that `render` has no dependency
 on `vault`; `cli` wires the concrete Vault implementation in.
 
-## Golden parity — the acceptance test for `render`
+## Render snapshots — the acceptance test for `render`
 
-`projects/barf/tests/golden/*.conf` are byte-exact renders produced by the
-Python implementation with deterministic fake secrets:
+`go/pkg/barf/render/testdata/` holds byte-exact renders with deterministic
+fake secrets:
 
 - host secrets render as `SECRET-host-<hostname>-<key>`
 - `VaultSecrets` attribute lookups render as `VAULT-<key>`
 - wireguard keys render as `PUB-...`/`PRIV-...`
 
-A Go render of the same host with the same fake `SecretSource` must match
-its golden byte-for-byte.
+`golden/` covers every renderable host in `network.yml` — adding a host fails
+the suite until its render has been reviewed once, and a snapshot whose host
+disappeared fails too. `edgeos/` and `ios/` cover vendors the fleet has no
+host for. The corpus was captured from the Python implementation and has been
+authoritative from Go since it was deleted; it is a drift detector, not a
+correctness oracle.
+
+Changing a rendered config is expected to fail these. Regenerate and read the
+diff — that diff is the review of what would reach a device:
+
+```sh
+go test ./go/pkg/barf/render -update && git diff go/pkg/barf/render/testdata
+```
 
 ## Verification
 

@@ -1,7 +1,7 @@
 # Arista EOS adoption — slice 1 bootstrap
 
 barf now manages Arista devices one config slice at a time
-(`projects/barf/barf/vendors/arista.py`). Slice 1 owns exactly three
+(`go/pkg/barf/scope/eos.go`, `go/pkg/barf/device/eos_writer.go`). Slice 1 owns exactly three
 things: the `admin` user (privilege 15, network-admin, sha512 secret), its
 SSH key(s) from `global_meta.ssh_keys`, and the `enable` password. barf
 talks eAPI (HTTPS JSON-RPC) as that same `admin` user, so each device
@@ -33,8 +33,8 @@ Devices in scope today:
 Let barf create them (it auto-mints missing secrets on first render):
 
 ```sh
-cd ~/src/megarepo/projects/barf
-uv run barf config generate fmt2-cor-r-140752-1
+cd ~/src/megarepo
+go run ./go/cmd/barf generate fmt2-cor-r-140752-1
 vault kv get -mount=cluster-secrets host-fmt2-cor-r-140752-1
 ```
 
@@ -121,15 +121,15 @@ running.
 ## Step 3 — verify from the devbox
 
 ```sh
-cd ~/src/megarepo/projects/barf
-uv run barf config diff fmt2-cor-r-140752-1
+cd ~/src/megarepo
+go run ./go/cmd/barf diff fmt2-cor-r-140752-1
 ```
 
 Expected: `no changes` — the provider verifies the Vault passwords
 against the device's hashes (salt differences don't count as drift), and
 the ssh key matches `global_meta.ssh_keys`. If you bootstrapped with
 different values, the diff shows exactly which managed line will change;
-`uv run barf config deploy fmt2-cor-r-140752-1` applies it and saves.
+`go run ./go/cmd/barf deploy fmt2-cor-r-140752-1` applies it and saves.
 
 ## Guarantees / limits of slice 1
 

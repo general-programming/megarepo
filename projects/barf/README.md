@@ -1,5 +1,11 @@
 # barf
 
+> This directory is now just `network.yml`, the fleet's source of truth.
+> The implementation lives in `go/pkg/barf` (run it with
+> `go run ./go/cmd/barf` from the repo root); see
+> `go/pkg/barf/CONTRACT.md`. The original Python lived here until it was
+> replaced by the Go port — `git log` has it.
+
 barf, a horrible set of scripts that generate network switch and virtual router configs for our mesh
 
 it used to have a meaning but scope creep led to it absorbing some scripts and starting to take over responsbilites for generating configs from Netbox in general
@@ -48,5 +54,5 @@ interface description will be set as is alongside the cable information if conne
 * reproducable configurations for routers!
 * consistent switch configurations too!
 * dhcp + dns config generation from a single source of truth - Netbox
-* config pushing via cli with napalm + netmiko magic! \o/
+* config pushing via cli, over each vendor's own api! \o/
 * less manual changes of TACACS and other volatile settings so that erin cannot isolate FMT2 and SEA69 from the network again

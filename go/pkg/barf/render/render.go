@@ -1,7 +1,7 @@
 // Package render turns a parsed network.yml host into device config text.
-// Port of the Python render path (barf/util/render.py, barf/configs/),
-// emitting the exact strings Python emits; the goldens in
-// projects/barf/tests/golden/ are the byte-for-byte parity contract.
+// Originally a port of the Python render path (barf/util/render.py,
+// barf/configs/); the snapshots in render/testdata/ pin the exact bytes it
+// emits, so any change to a device's config shows up as a diff first.
 //
 // Nothing here talks to a device or to Vault: secrets arrive through the
 // SecretSource interfaces below.

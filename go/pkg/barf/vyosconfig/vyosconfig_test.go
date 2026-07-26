@@ -8,8 +8,8 @@ import (
 	"time"
 )
 
-// The cases below are ported one-for-one from
-// projects/barf/tests/test_vyos_config.py, which stays authoritative.
+// The cases below were ported one-for-one from the Python
+// tests/test_vyos_config.py, which they now replace.
 
 // specHash is a real sha512-crypt vector from Ulrich Drepper's SHA-crypt
 // spec: crypt("Hello world!", "$6$saltstring").

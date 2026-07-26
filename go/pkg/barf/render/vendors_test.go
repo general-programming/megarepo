@@ -4,7 +4,6 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 
@@ -13,33 +12,13 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// The testdata/ corpus is captured Python output, not Go output: the fleet has
-// no edgeos, cisco, dnos6 or dnos9 host, so those vendors have no golden. Each
-// fixture came from driving barf.util.render.render_host_config with the
-// Python golden harness's deterministic fakes; the edgeos ones from flipping a
-// host's `type` to edgeos, which these tests reproduce in memory.
+// The fleet has no edgeos, cisco, dnos6 or dnos9 host, so those vendors get no
+// snapshot from TestGoldenSnapshots. These cover them instead: edgeos by
+// flipping a host's `type` in memory, the IOS family off a synthetic NetBox
+// device.
 
-func testdataDir(t *testing.T) string {
-	t.Helper()
-	_, file, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate test source")
-	}
-	return filepath.Join(filepath.Dir(file), "testdata")
-}
-
-func readFixture(t *testing.T, parts ...string) string {
-	t.Helper()
-	path := filepath.Join(append([]string{testdataDir(t)}, parts...)...)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read fixture: %v", err)
-	}
-	return string(data)
-}
-
-// Renders each fleet VyOS host as EdgeOS and diffs the captured Python render.
-func TestEdgeOSParity(t *testing.T) {
+// Renders each snapshotted host as EdgeOS.
+func TestEdgeOSSnapshots(t *testing.T) {
 	network := loadFleet(t)
 	dir := filepath.Join(testdataDir(t), "edgeos")
 
@@ -65,10 +44,7 @@ func TestEdgeOSParity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
-			if want := readFixture(t, "edgeos", entry.Name()); got != want {
-				t.Errorf("edgeos render drifted from the Python capture:\n%s",
-					firstDiff(want, got))
-			}
+			checkSnapshot(t, got, "edgeos", entry.Name())
 		})
 	}
 }
@@ -116,7 +92,7 @@ func netboxSwitch(deviceType string) *render.IOSDevice {
 	return device
 }
 
-func TestIOSFamilyParity(t *testing.T) {
+func TestIOSFamilySnapshots(t *testing.T) {
 	global := loadFleet(t).Global
 
 	cases := []struct {
@@ -134,10 +110,7 @@ func TestIOSFamilyParity(t *testing.T) {
 			if err != nil {
 				t.Fatalf("render: %v", err)
 			}
-			if want := readFixture(t, "ios", tc.fixture); got != want {
-				t.Errorf("%s render drifted from the Python capture:\n%s",
-					tc.deviceType, firstDiff(want, got))
-			}
+			checkSnapshot(t, got, "ios", tc.fixture)
 		})
 	}
 }

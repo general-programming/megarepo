@@ -236,8 +236,8 @@ and is strictly additive — leave it out of the first cut.
 
 **Phase 4 — barf codegen (deferred, separate commit)**
 - Model flow export in `projects/barf/network.yml`, render per vendor (VyOS
-  `flow-accounting`, RouterOS `/ip traffic-flow`, Arista sFlow), with pytest
-  coverage under `projects/barf/tests/`. Out of scope for this change.
+  `flow-accounting`, RouterOS `/ip traffic-flow`, Arista sFlow), with test
+  coverage under `go/pkg/barf/render/`. Out of scope for this change.
 
 ## What was verified before merge
 
