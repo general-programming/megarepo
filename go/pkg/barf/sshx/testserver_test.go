@@ -42,6 +42,14 @@ type testServer struct {
 // public key. handler answers exec requests.
 func newTestServer(t *testing.T, password string, handler execHandler) *testServer {
 	t.Helper()
+	return newTestServerWith(t, password, handler, nil)
+}
+
+// newTestServerWith is newTestServer with a chance to adjust the server
+// config BEFORE it starts accepting. Mutating s.config afterwards races
+// the accept loop.
+func newTestServerWith(t *testing.T, password string, handler execHandler, configure func(*ssh.ServerConfig)) *testServer {
+	t.Helper()
 
 	_, private, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
@@ -65,6 +73,9 @@ func newTestServer(t *testing.T, password string, handler execHandler) *testServ
 		},
 	}
 	s.config.AddHostKey(signer)
+	if configure != nil {
+		configure(s.config)
+	}
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

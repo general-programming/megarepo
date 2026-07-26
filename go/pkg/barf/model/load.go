@@ -206,7 +206,11 @@ func parseHost(hostname string, node *yaml.Node, global GlobalMeta) (*Host, erro
 
 	for _, e := range entries {
 		if !hostKeys[e.key] {
-			host.Raw[e.key] = nodeAny(e.val)
+			value, err := nodeAny(e.val)
+			if err != nil {
+				return nil, fmt.Errorf("hosts: %s: %q: %w", hostname, e.key, err)
+			}
+			host.Raw[e.key] = value
 		}
 	}
 
@@ -228,8 +232,15 @@ func parseInterfaces(hostname string, node *yaml.Node) ([]Interface, error) {
 			Management:   nodeBool(lookup(fields, "management")),
 			Members:      nodeStrings(lookup(fields, "members")),
 			Enabled:      true,
-			Wireguard:    nodeAnyMap(lookup(fields, "wireguard")),
-			RA:           nodeAnyMap(lookup(fields, "ra")),
+		}
+		var err error
+		if iface.Wireguard, err = nodeAnyMap(lookup(fields, "wireguard")); err != nil {
+			return nil, fmt.Errorf("hosts: %s: interface %q: wireguard: %w",
+				hostname, iface.Name, err)
+		}
+		if iface.RA, err = nodeAnyMap(lookup(fields, "ra")); err != nil {
+			return nil, fmt.Errorf("hosts: %s: interface %q: ra: %w",
+				hostname, iface.Name, err)
 		}
 		if typeNode := lookup(fields, "type"); typeNode != nil {
 			iface.Type = nodeString(typeNode)

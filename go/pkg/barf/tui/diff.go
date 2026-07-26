@@ -48,6 +48,7 @@ type diffDoneMsg struct {
 // arrive.
 type DiffModel struct {
 	ctx      context.Context
+	cancel   context.CancelFunc
 	jobs     []DiffJob
 	outcomes []DiffOutcome
 	filled   []bool
@@ -56,9 +57,18 @@ type DiffModel struct {
 	spin     spinner.Model
 	ready    bool
 	quitting bool
+
+	// concurrency caps in-flight jobs, and so the goroutine count:
+	// tea.Batch runs one goroutine per command.
+	concurrency int
+	// next is the index of the first job not yet dispatched; Update-only.
+	next int
 }
 
 // NewDiffModel builds the diff viewer for the given jobs.
+//
+// The model derives a cancellable context from ctx; call Cancel (RunDiff
+// does) to release jobs that are still queued or in flight.
 func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	if ctx == nil {
 		ctx = context.Background()
@@ -67,14 +77,17 @@ func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	sp.Spinner = spinner.Dot
 	sp.Style = stylePending
 
+	jobCtx, cancel := context.WithCancel(ctx)
 	m := &DiffModel{
-		ctx:      ctx,
-		jobs:     jobs,
-		outcomes: make([]DiffOutcome, len(jobs)),
-		filled:   make([]bool, len(jobs)),
-		pending:  len(jobs),
-		vp:       viewport.New(80, 20),
-		spin:     sp,
+		ctx:         jobCtx,
+		cancel:      cancel,
+		jobs:        jobs,
+		outcomes:    make([]DiffOutcome, len(jobs)),
+		filled:      make([]bool, len(jobs)),
+		pending:     len(jobs),
+		vp:          viewport.New(80, 20),
+		spin:        sp,
+		concurrency: DefaultConcurrency,
 	}
 	for i, j := range jobs {
 		m.outcomes[i] = DiffOutcome{Device: j.Device}
@@ -83,14 +96,43 @@ func NewDiffModel(ctx context.Context, jobs []DiffJob) *DiffModel {
 	return m
 }
 
-// Init starts the spinner and every diff job concurrently.
+// SetConcurrency caps how many jobs run at once. Values below 1 are
+// ignored. Call it before Init.
+func (m *DiffModel) SetConcurrency(n int) {
+	if n > 0 {
+		m.concurrency = n
+	}
+}
+
+// Cancel releases the jobs' context. Safe to call more than once.
+func (m *DiffModel) Cancel() {
+	if m.cancel != nil {
+		m.cancel()
+	}
+}
+
+// Init starts the spinner and the first batch of diff jobs. Only
+// `concurrency` are launched; each completion dispatches the next, so a
+// 300-device run does not become 300 goroutines.
 func (m *DiffModel) Init() tea.Cmd {
-	cmds := make([]tea.Cmd, 0, len(m.jobs)+1)
+	cmds := make([]tea.Cmd, 0, m.concurrency+1)
 	cmds = append(cmds, m.spin.Tick)
-	for i := range m.jobs {
-		cmds = append(cmds, m.jobCmd(i))
+	for m.next < len(m.jobs) && m.next < m.concurrency {
+		cmds = append(cmds, m.jobCmd(m.next))
+		m.next++
 	}
 	return tea.Batch(cmds...)
+}
+
+// dispatchNext returns the command for the next undispatched job, or nil
+// when they have all been started.
+func (m *DiffModel) dispatchNext() tea.Cmd {
+	if m.next >= len(m.jobs) {
+		return nil
+	}
+	cmd := m.jobCmd(m.next)
+	m.next++
+	return cmd
 }
 
 func (m *DiffModel) jobCmd(i int) tea.Cmd {
@@ -120,6 +162,9 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "q", "esc", "ctrl+c":
 			m.quitting = true
+			// Cancel as well as quit, or `runDiff` would print its summary
+			// while queued jobs kept contacting devices.
+			m.Cancel()
 			return m, tea.Quit
 		}
 
@@ -132,7 +177,10 @@ func (m *DiffModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.outcomes[msg.index] = msg.outcome
 		}
 		m.vp.SetContent(m.body())
-		return m, nil
+		if m.pending <= 0 {
+			m.Cancel()
+		}
+		return m, m.dispatchNext()
 
 	case spinner.TickMsg:
 		var cmd tea.Cmd
@@ -207,6 +255,9 @@ func (m *DiffModel) Outcomes() []DiffOutcome { return m.outcomes }
 // RunDiff drives the diff viewer and returns the per-device outcomes.
 func RunDiff(ctx context.Context, jobs []DiffJob) ([]DiffOutcome, error) {
 	m := NewDiffModel(ctx, jobs)
+	// The program watches the PARENT context; the model's own context is
+	// what stops the jobs.
+	defer m.Cancel()
 	final, err := tea.NewProgram(m,
 		tea.WithContext(ctx),
 		tea.WithAltScreen(),

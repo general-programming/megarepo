@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The cases below are ported one-for-one from
@@ -117,6 +118,31 @@ func TestParseSetCommandsUnbalancedQuoteFallsBackToPlainSplit(t *testing.T) {
 	got := ParseSetCommands("set system host-name it's-broken")
 	if !got.Has(path("system", "host-name", "it's-broken")) {
 		t.Fatalf("fallback split missing: %v", got.Sorted())
+	}
+}
+
+// Regression: ParseSetCommands split on "\n" where Python splits with
+// splitlines(). Rendered config that arrives with CRLF endings left a
+// stray "\r" on every line — which TrimSpace happened to hide here, but
+// a form feed or a lone CR was not a boundary at all, so two `set` lines
+// fused into one and the second was silently lost from the candidate
+// config. Pin the helper's behaviour where the parser actually uses it.
+func TestParseSetCommandsSplitsPythonLineBoundaries(t *testing.T) {
+	want := []Path{
+		path("system", "host-name", "spine-1"),
+		path("system", "domain-name", "example.org"),
+	}
+	for _, sep := range []string{"\n", "\r\n", "\r", "\f", "\v", "\u0085", "\u2028"} {
+		text := "set system host-name spine-1" + sep + "set system domain-name example.org" + sep
+		got := ParseSetCommands(text)
+		for _, p := range want {
+			if !got.Has(p) {
+				t.Errorf("separator %q: missing %v (got %v)", sep, p, got.Sorted())
+			}
+		}
+		if len(got.Sorted()) != len(want) {
+			t.Errorf("separator %q: got %v, want exactly %v", sep, got.Sorted(), want)
+		}
 	}
 }
 
@@ -673,6 +699,93 @@ func TestVerifyCryptHash(t *testing.T) {
 				t.Fatalf("VerifyCryptHash(%q, %q) = %v, want %v", tc.password, tc.hashed, got, tc.want)
 			}
 		})
+	}
+}
+
+// checksum86 is a filler checksum of the length sha512-crypt uses, so the
+// tests below vary only the part they are about (salt or rounds).
+const checksum86 = "svn8UoSVapNtMuq1ukKS4tPQd8iKwSMHWjl/O817G3uBnIFNjnQJu" +
+	"esI68u4OTLiBFdcbYEdFCoEOfaS35inz1"
+
+// Regression: wellFormedSHA512Crypt used to check only the `$` arity and
+// the checksum length, so three shapes passlib calls unknown came back as
+// CryptMismatch — and a mismatch tells ReconcileHashedPasswords to rewrite
+// a live router's password it cannot reason about. Each case below was
+// checked against passlib, which returns None (unknown) for all of them.
+func TestVerifyCryptHashTreatsUnparseableHashesAsUnknown(t *testing.T) {
+	tests := []struct {
+		name   string
+		hashed string
+	}{
+		{"rounds below passlib's minimum", "$6$rounds=999$saltstring$" + checksum86},
+		{"rounds above passlib's maximum", "$6$rounds=1000000000$saltstring$" + checksum86},
+		{"rounds is not a number", "$6$rounds=abc$saltstring$" + checksum86},
+		{"rounds is empty", "$6$rounds=$saltstring$" + checksum86},
+		{"rounds is signed", "$6$rounds=+5000$saltstring$" + checksum86},
+		{"salt longer than 16 chars", "$6$" + strings.Repeat("a", 17) + "$" + checksum86},
+		{"salt outside the hash64 alphabet", "$6$sa!t$" + checksum86},
+		{"salt with a space", "$6$salt string$" + checksum86},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := VerifyCryptHash("Hello world!", tc.hashed); got != CryptUnknown {
+				t.Fatalf("VerifyCryptHash(_, %q) = %v, want CryptUnknown", tc.hashed, got)
+			}
+		})
+	}
+}
+
+// The shapes passlib does accept must keep working; the range checks must
+// not make a legitimate hash unverifiable.
+func TestVerifyCryptHashAcceptsPasslibRange(t *testing.T) {
+	if got := VerifyCryptHash("Hello world!", specHash); got != CryptMatch {
+		t.Fatalf("the spec vector no longer verifies: %v", got)
+	}
+	// Shapes inside passlib's range. They will not match this password,
+	// but they must be *verifiable* (a decision), not unknown. Rounds are
+	// kept small on purpose: these cases really are hashed.
+	for _, hashed := range []string{
+		"$6$rounds=1000$saltstring$" + checksum86,
+		"$6$rounds=5000$saltstring$" + checksum86,
+		"$6$" + strings.Repeat("a", 16) + "$" + checksum86,
+		"$6$./09AZaz$" + checksum86,
+	} {
+		if got := VerifyCryptHash("Hello world!", hashed); got == CryptUnknown {
+			t.Errorf("VerifyCryptHash(_, %q) = CryptUnknown; passlib accepts this shape", hashed)
+		}
+	}
+	// The maximum passlib allows is accepted by the validator itself —
+	// asserted without hashing, since computing 999,999,999 rounds is
+	// exactly the work this test must not do.
+	if !wellFormedSHA512Crypt("$6$rounds=999999999$saltstring$" + checksum86) {
+		t.Error("rounds=999999999 rejected; it is passlib's max_rounds")
+	}
+}
+
+// Regression: an absurd `rounds=` used to be waved through to the crypt
+// library, which then actually did the work — minutes of CPU, inside a
+// deploy's diff, with no timeout in sight. The range check now happens
+// before crypt is touched, so the hashing is never started. The
+// hair-trigger deadline is the point: refusal must be instant, not
+// merely eventual.
+func TestVerifyCryptHashDoesNotComputeAbsurdRounds(t *testing.T) {
+	for _, hashed := range []string{
+		"$6$rounds=1000000000$saltstring$" + checksum86,
+		"$6$rounds=99999999999$saltstring$" + checksum86,
+		"$6$rounds=18446744073709551616$saltstring$" + checksum86, // > uint64
+	} {
+		done := make(chan CryptResult, 1)
+		go func() {
+			done <- VerifyCryptHash("Hello world!", hashed)
+		}()
+		select {
+		case got := <-done:
+			if got != CryptUnknown {
+				t.Errorf("VerifyCryptHash(_, %q) = %v, want CryptUnknown", hashed, got)
+			}
+		case <-time.After(2 * time.Second):
+			t.Fatalf("VerifyCryptHash is computing %q instead of refusing it", hashed)
+		}
 	}
 }
 

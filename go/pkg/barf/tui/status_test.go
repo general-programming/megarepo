@@ -48,6 +48,9 @@ func TestStatusModelStartsEveryRowPending(t *testing.T) {
 
 func TestStatusModelFillsRowsAsProbesAnswer(t *testing.T) {
 	m := NewStatusModel(context.Background(), probes("a", "b"))
+	// Init dispatches the first batch; without it the model would still
+	// have probes queued and a completion would release the next one.
+	m.Init()
 
 	row := StatusRow{Device: "b", Endpoint: "10.0.0.2", Model: "vyos", Uptime: "5d",
 		Version: "1.5", Consistent: "yes", Status: "ok", State: StateOK}

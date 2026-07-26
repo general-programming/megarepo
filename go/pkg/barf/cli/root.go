@@ -10,10 +10,13 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	charmlog "github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
@@ -169,12 +172,46 @@ func NewRootCmd(o *Options) *cobra.Command {
 	return root
 }
 
+// notifyContext is signal.NotifyContext; a var so tests can observe the
+// stop function without sending real signals at the test binary.
+var notifyContext = signal.NotifyContext
+
+// signalContext returns a context cancelled by the first SIGINT/SIGTERM.
+//
+// The second signal must still kill barf outright. signal.NotifyContext
+// keeps swallowing signals until its stop function runs, so a user who
+// hits Ctrl-C twice because a cleanup is taking too long would otherwise
+// be stuck in an uninterruptible process. Restoring the default
+// disposition as soon as the context is cancelled means the first Ctrl-C
+// asks politely and the second one is fatal, the way every other CLI
+// behaves.
+func signalContext(parent context.Context) (context.Context, context.CancelFunc) {
+	ctx, stop := notifyContext(parent, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ctx.Done()
+		stop()
+	}()
+	return ctx, stop
+}
+
 // Execute runs the barf CLI and returns the process exit status.
+//
+// Every command is run with a signal-aware context, which is what makes
+// the ctx plumbing below it real: the interruptible sleeps, the cancel
+// checks in the redundancy probe and the endpoint probe, the bounded
+// worker pools and the Bubble Tea programs all hang off this.
 func Execute(args []string) int {
+	ctx, stop := signalContext(context.Background())
+	defer stop()
+	return ExecuteContext(ctx, args)
+}
+
+// ExecuteContext runs the barf CLI under a caller-supplied context.
+func ExecuteContext(ctx context.Context, args []string) int {
 	o := NewOptions()
 	root := NewRootCmd(o)
 	root.SetArgs(args)
-	if err := root.Execute(); err != nil {
+	if err := root.ExecuteContext(ctx); err != nil {
 		fmt.Fprintf(o.ErrOut, "barf: %v\n", err)
 		return 1
 	}

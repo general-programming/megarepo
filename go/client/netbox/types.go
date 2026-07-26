@@ -47,6 +47,12 @@ type NamedRef struct {
 
 // Interface is a device interface. Not every query populates every field;
 // unrequested fields stay at their zero value.
+//
+// Name is a plain string, so a NetBox null decodes to "" rather than
+// failing. That is deliberate — one bad row must not fail the whole
+// fetch — but it means every consumer has to treat "" as "absent" and
+// refuse to build a name out of it. Python gets an AttributeError on
+// None and aborts; barf skips and warns (see cli/generatedns.go).
 type Interface struct {
 	Name              string      `json:"name"`
 	Type              string      `json:"type,omitempty"`
@@ -156,8 +162,14 @@ var IPMIInterfaceNames = map[string]struct{}{
 }
 
 // IsIPMIInterface reports whether an interface name is an out-of-band
-// management interface.
+// management interface. An absent name (NetBox null, decoded to "") is
+// never one — matching it would attach a BMC record to an interface
+// nobody named.
 func IsIPMIInterface(name string) bool {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return false
+	}
 	_, ok := IPMIInterfaceNames[strings.ToLower(name)]
 	return ok
 }

@@ -35,7 +35,7 @@ func iface(mac string, addresses []string, name string, vm string, primaryIP4 st
 
 func dhcpLines(interfaces []netbox.Interface) []string {
 	out := []string{}
-	for _, r := range reservations(interfaces) {
+	for _, r := range reservations(interfaces, nil) {
 		out = append(out, r.DnsmasqLine())
 	}
 	return out
@@ -154,7 +154,7 @@ func TestDNSLines(t *testing.T) {
 	}
 
 	var warned []string
-	got := dnsLines(hosts, "example.org", func(h string) { warned = append(warned, h) })
+	got := dnsLines(hosts, "example.org", func(h, _ string) { warned = append(warned, h) })
 	assertLines(t, got, []string{
 		"address=/sea1-core.example.org/2602:fa6d:10::6",
 		"address=/sea1-core.example.org/10.3.2.6",
@@ -167,8 +167,14 @@ func TestDNSLines(t *testing.T) {
 	}
 }
 
+// reservationsNoWarn is reservations() for the cases that assert on the
+// output rather than on the skip warnings.
+func reservationsNoWarn(interfaces []netbox.Interface) []reservation {
+	return reservations(interfaces, nil)
+}
+
 func TestKeaReservations(t *testing.T) {
-	hosts4, hosts6 := keaReservations(reservations([]netbox.Interface{
+	hosts4, hosts6 := keaReservations(reservationsNoWarn([]netbox.Interface{
 		iface("BC:24:11:6A:62:B3", []string{"10.3.2.10/23", "2602:fa6d:10:ffff::110/64"},
 			"internal", "sea1-k8s-0", "10.3.2.10/23"),
 		iface("AA:BB:CC:DD:EE:02", []string{"2602:fa6d:10:ffff::120/64"}, "eth1", "sea1-k8s-1", ""),
@@ -386,5 +392,161 @@ func TestDNSDomainPrecedence(t *testing.T) {
 	t.Setenv("DNS_DOMAIN", "")
 	if got := dnsDomain(""); got != defaultDNSDomain {
 		t.Errorf("default = %q", got)
+	}
+}
+
+// TestUnnamedNetboxDeviceIsSkipped is the regression for a NetBox device
+// with a null `name`. Go decoded it to "", isNonStaticHost("") said
+// nothing, and the renderer emitted
+//
+//	address=/.generalprogramming.org/10.0.0.5
+//
+// a malformed dnsmasq record, with exit 0. Python raises instead, so the
+// last-good include survives. Neither is acceptable silently; barf now
+// skips the row and says why.
+func TestUnnamedNetboxDeviceIsSkipped(t *testing.T) {
+	hosts := []netbox.Host{
+		{Name: "", PrimaryIP4: &netbox.IPAddress{Address: "10.0.0.5/24"}},
+		{Name: "   ", PrimaryIP6: &netbox.IPAddress{Address: "2602:fa6d::5/64"}},
+		{Name: "sea1-core", PrimaryIP4: &netbox.IPAddress{Address: "10.3.2.6/23"}},
+	}
+
+	var warned []string
+	got := dnsLines(hosts, "example.org", func(h, reason string) {
+		warned = append(warned, h+": "+reason)
+	})
+
+	assertLines(t, got, []string{
+		"address=/sea1-core.example.org/10.3.2.6",
+		"ptr-record=6.2.3.10.in-addr.arpa,sea1-core.example.org",
+	})
+	for _, line := range got {
+		if strings.HasPrefix(line, "address=/.") {
+			t.Errorf("malformed record emitted for an unnamed device: %q", line)
+		}
+	}
+	if len(warned) != 2 {
+		t.Fatalf("warned = %v, want one entry per unnamed device", warned)
+	}
+	for _, w := range warned {
+		if !strings.Contains(w, "no name") {
+			t.Errorf("warning does not explain itself: %q", w)
+		}
+	}
+}
+
+// TestUnnamedSecondaryInterfaceIsSkipped is the same shape one level
+// down: a null interface name became a reservation hostname with a
+// dangling "-" suffix. The primary interface never uses the interface
+// name, so it is unaffected.
+func TestUnnamedSecondaryInterfaceIsSkipped(t *testing.T) {
+	var warned []string
+	res := reservations([]netbox.Interface{
+		// Secondary (its v4 is not the owner's primary): must skip.
+		iface("AA:BB:CC:DD:EE:01", []string{"10.0.0.9/24"}, "", "sea1-k8s-0", "10.0.0.1/24"),
+		// Primary: the interface name is never used, so a null name is
+		// harmless and the reservation still renders.
+		iface("AA:BB:CC:DD:EE:02", []string{"10.0.0.2/24"}, "", "sea1-k8s-1", "10.0.0.2/24"),
+	}, func(h, reason string) { warned = append(warned, h+": "+reason) })
+
+	if len(res) != 1 || res[0].Hostname != "sea1-k8s-1" {
+		t.Fatalf("reservations = %+v, want only the primary-interface one", res)
+	}
+	if len(warned) != 1 || !strings.Contains(warned[0], "sea1-k8s-0") {
+		t.Errorf("warned = %v, want one warning naming sea1-k8s-0", warned)
+	}
+	for _, r := range res {
+		if strings.HasSuffix(r.Hostname, "-") {
+			t.Errorf("reservation hostname has a dangling suffix: %q", r.Hostname)
+		}
+	}
+}
+
+// TestKeaFilesAreBytewiseIdenticalToPython pins the two ways Go's JSON
+// output drifted from `json.dump(hosts, f, indent=1)` in
+// nix/modules/kea/refresh_kea.py: a trailing newline Python does not
+// write, and Go's HTML escaping of & < > where Python escapes non-ASCII
+// instead. Either one makes a `cmp`-based "did reservations change?"
+// gate flap on every run.
+func TestKeaFilesAreBytewiseIdenticalToPython(t *testing.T) {
+	dir := t.TempDir()
+	path4 := filepath.Join(dir, "hosts4.json")
+	path6 := filepath.Join(dir, "hosts6.json")
+
+	h := newHarness(t)
+	dhcp := netbox.DHCPResult{VMInterfaces: []netbox.Interface{
+		iface("AA:BB:CC:DD:EE:01", []string{"10.0.0.2/24", "2602:fa6d::2/64"},
+			"eth0", "r&d-lab-caf\u00e9", "10.0.0.2/24"),
+	}}
+	useFakeNetbox(t, fakeNetboxServer(t, netbox.DNSResult{}, dhcp))
+
+	if err := h.run(t, "generate", "dhcp", "--format", "kea",
+		"--output4", path4, "--output6", path6); err != nil {
+		t.Fatal(err)
+	}
+
+	body4, err := os.ReadFile(path4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// json.dump writes no trailing newline.
+	if strings.HasSuffix(string(body4), "\n") {
+		t.Errorf("kea file ends in a newline; refresh_kea.py's json.dump does not:\n%q", body4)
+	}
+	// Python does not HTML-escape. (A reservation hostname is sanitized
+	// to [a-z0-9-] before it gets here, so pythonJSON carries the
+	// HTML-escaping half of this on its own -- see
+	// TestPythonJSONMatchesJSONDumps.)
+	if strings.ContainsAny(string(body4), "&<>") {
+		t.Errorf("unexpected raw HTML character in the fixture:\n%s", body4)
+	}
+	// Python's ensure_ascii=True escapes non-ASCII instead.
+	if strings.Contains(string(body4), "é") {
+		t.Errorf("non-ASCII emitted raw; Python's ensure_ascii=True escapes it:\n%s", body4)
+	}
+	if !strings.Contains(string(body4), `caf\u00e9`) {
+		t.Errorf("non-ASCII was not \\u-escaped:\n%s", body4)
+	}
+	// The exact bytes json.dump(..., indent=1) produces.
+	want4 := "[\n {\n  \"hw-address\": \"AA:BB:CC:DD:EE:01\",\n  \"ip-address\": \"10.0.0.2\"," +
+		"\n  \"hostname\": \"r-d-lab-caf\\u00e9\"\n }\n]"
+	if string(body4) != want4 {
+		t.Errorf("hosts4.json\n got %q\nwant %q", body4, want4)
+	}
+
+	body6, err := os.ReadFile(path6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.HasSuffix(string(body6), "\n") {
+		t.Errorf("hosts6.json ends in a newline:\n%q", body6)
+	}
+}
+
+// TestPythonJSONMatchesJSONDumps pins pythonJSON on its own.
+func TestPythonJSONMatchesJSONDumps(t *testing.T) {
+	cases := []struct {
+		name   string
+		value  any
+		indent string
+		want   string
+	}{
+		{"html characters stay literal", []string{"a&b", "<c>"}, " ",
+			"[\n \"a&b\",\n \"<c>\"\n]"},
+		{"non-ascii is \\u-escaped", []string{"café"}, " ", "[\n \"caf\\u00e9\"\n]"},
+		{"astral planes use surrogate pairs", []string{"\U0001F408"}, " ",
+			"[\n \"\\ud83d\\udc08\"\n]"},
+		{"empty array", []string{}, " ", "[]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := pythonJSON(tc.value, tc.indent)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got) != tc.want {
+				t.Errorf("pythonJSON\n got %q\nwant %q", got, tc.want)
+			}
+		})
 	}
 }

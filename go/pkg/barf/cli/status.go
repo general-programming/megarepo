@@ -15,6 +15,56 @@ import (
 // Python ThreadPoolExecutor(max_workers=8).
 const maxProbes = 8
 
+// runBounded calls fn(0..n-1) on at most maxProbes goroutines.
+//
+// Sizing the fan-out by the number of selected devices (one goroutine per
+// host, all parked on a semaphore) means a 300-device run spawns 300
+// goroutines that cannot be reclaimed until they are admitted. A fixed
+// pool bounds the goroutine count, not just the in-flight network calls.
+// Cancellation is handled by fn itself, which returns a filled-in
+// "cancelled" result rather than leaving a hole in the output.
+func runBounded(n int, fn func(i int)) {
+	workers := min(n, maxProbes)
+	if workers <= 0 {
+		return
+	}
+	indices := make(chan int)
+	var wg sync.WaitGroup
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range indices {
+				fn(i)
+			}
+		}()
+	}
+	for i := range n {
+		indices <- i
+	}
+	close(indices)
+	wg.Wait()
+}
+
+// acquire takes a semaphore slot, giving up if ctx is cancelled first.
+// A plain `sem <- struct{}{}` cannot be interrupted, so on Ctrl-C the
+// queued probes stay parked and keep contacting devices as slots free up
+// while the command is already printing its summary.
+func acquire(ctx context.Context, sem chan struct{}) bool {
+	select {
+	case sem <- struct{}{}:
+		if ctx.Err() != nil {
+			// Cancelled while we were being admitted: hand the slot back
+			// rather than holding it for a probe that will not run.
+			<-sem
+			return false
+		}
+		return true
+	case <-ctx.Done():
+		return false
+	}
+}
+
 func newStatusCmd(o *Options) *cobra.Command {
 	var jsonOut bool
 
@@ -90,7 +140,9 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 		probes[i] = tui.StatusProbe{
 			Device: host.Hostname,
 			Run: func(ctx context.Context) tui.StatusRow {
-				sem <- struct{}{}
+				if !acquire(ctx, sem) {
+					return errorRow(host.Hostname, "-", "cancelled")
+				}
 				defer func() { <-sem }()
 				return probe(ctx)
 			},
@@ -136,15 +188,9 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 // the order the devices were selected, so output is deterministic.
 func runProbesPlain(ctx context.Context, probes []tui.StatusProbe) []tui.StatusRow {
 	rows := make([]tui.StatusRow, len(probes))
-	var wg sync.WaitGroup
-	for i := range probes {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			rows[i] = probes[i].Run(ctx)
-		}(i)
-	}
-	wg.Wait()
+	runBounded(len(probes), func(i int) {
+		rows[i] = probes[i].Run(ctx)
+	})
 	return rows
 }
 

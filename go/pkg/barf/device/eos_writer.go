@@ -171,6 +171,20 @@ func eosWriteCommandAllowed(cmd string) bool {
 	if trimmed == "" {
 		return false
 	}
+	// Every arm below is a prefix test, and a prefix test says nothing
+	// about what follows on a *later line*. TrimSpace strips the ends,
+	// not the interior, so `"username admin ssh-key ssh-ed25519 AAAA\nno
+	// ip routing"` passed the username arm and then shipped a second,
+	// entirely unreviewed command to the device — eAPI runs a multi-line
+	// string as multiple config lines. This is reachable in practice: a
+	// two-line authorized_keys blob pasted into one YAML value. A
+	// semicolon is refused on the same principle.
+	//
+	// One op is one command. A caller with two commands passes two ops,
+	// and each is then checked on its own.
+	if strings.ContainsAny(trimmed, "\n\r;") {
+		return false
+	}
 	switch {
 	// The managed user and its ssh-keys. Only ManagedUsername: barf does
 	// not own the other accounts on the box.
@@ -187,7 +201,12 @@ func eosWriteCommandAllowed(cmd string) bool {
 	case strings.HasPrefix(trimmed, "vrf ") && len(strings.Fields(trimmed)) == 2:
 		return true
 	// The only negation the slice needs, and the only one permitted.
-	case trimmed == "no shutdown", trimmed == "shutdown":
+	// Bare `shutdown` is deliberately NOT here: inside `management api
+	// http-commands` it turns eAPI off, which is the transport barf is
+	// speaking over — the write would succeed and lock barf out of the
+	// device for good. Nothing in the managed slice ever needs to
+	// disable eAPI, so the shape is simply not admitted.
+	case trimmed == "no shutdown":
 		return true
 	}
 	return false
@@ -220,6 +239,11 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 	}
 	commands = append(commands, "end")
 
+	// A commit gets a commit's budget, not a read's: see the timeout
+	// constants in device.go.
+	ctx, cancel := w.opts.withOpTimeout(ctx, TimeoutConfigure)
+	defer cancel()
+
 	_, err := w.run(ctx, commands...)
 	return err
 }
@@ -227,6 +251,9 @@ func (w *EOSWriter) Configure(ctx context.Context, ops []Op) error {
 // SaveConfig writes the running config to startup, so the managed slice
 // survives a reload. Not a config-mode command; sent on its own.
 func (w *EOSWriter) SaveConfig(ctx context.Context) error {
+	ctx, cancel := w.opts.withOpTimeout(ctx, TimeoutSave)
+	defer cancel()
+
 	_, err := w.run(ctx, "copy running-config startup-config")
 	return err
 }

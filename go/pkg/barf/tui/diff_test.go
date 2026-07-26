@@ -66,6 +66,7 @@ func TestDiffModelNoChanges(t *testing.T) {
 
 func TestDiffModelStaysOpenUntilQuit(t *testing.T) {
 	m := NewDiffModel(context.Background(), diffJobs("a"))
+	m.Init() // dispatch the queue, so a completion has nothing left to start
 	// A finished job must not quit: the user still has to scroll.
 	_, cmd := m.Update(diffDoneMsg{index: 0, outcome: DiffOutcome{Device: "a"}})
 	if cmd != nil {

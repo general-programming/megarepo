@@ -188,6 +188,76 @@ func TestParseEOSAPISectionEndsAtUnindentedLine(t *testing.T) {
 	}
 }
 
+// Regression: block termination asked `isSpace(raw[0])` against three
+// ASCII bytes, where Python asks `line[0].isspace()` — a Unicode
+// question. Any other whitespace indent (form feed, NBSP, a vertical tab
+// from a pasted document) read as "un-indented", closed the
+// `management api http-commands` block on its very first line, and made
+// barf report the eAPI block absent on a device where it is present:
+// spurious drift, and a deploy that rewrites correct config.
+func TestParseEOSAPISectionAcceptsUnicodeIndents(t *testing.T) {
+	indents := map[string]string{
+		"space":              "   ",
+		"tab":                "\t",
+		"form feed":          "\f  ",
+		"vertical tab":       "\v  ",
+		"non-breaking space": "\u00a0  ",
+		"en quad":            "\u2000  ",
+		"ideographic space":  "\u3000  ",
+		"file separator":     "\x1c  ",
+	}
+	for name, indent := range indents {
+		t.Run(name, func(t *testing.T) {
+			text := strings.Join([]string{
+				"management api http-commands",
+				indent + "protocol https port 443",
+				indent + "no shutdown",
+				"interface Ethernet1",
+				"   no shutdown",
+			}, "\n")
+			state := ParseEOSManagedState(text, "")
+			if !isTrue(state.EAPIEnabled) {
+				t.Errorf("EAPIEnabled = %v, want true: the %s indent closed the block early",
+					state.EAPIEnabled, name)
+			}
+			if !isTrue(state.EAPIHTTPS) {
+				t.Errorf("EAPIHTTPS = %v, want true", state.EAPIHTTPS)
+			}
+		})
+	}
+}
+
+// Regression: strings.Split(_, "\n") is not Python's splitlines(). A
+// running-config captured with CRLF endings left "\r" on every line, and
+// a device answer containing a form feed was never split at all — either
+// way the scoped comparison sees different lines than the Python
+// implementation and reports drift that is not there.
+func TestParseEOSManagedStateHandlesPythonLineBoundaries(t *testing.T) {
+	crlf := strings.Join([]string{
+		"management api http-commands",
+		"   protocol https port 443",
+		"   no shutdown",
+		"username admin ssh-key ssh-ed25519 AAAAC3 someone@host",
+	}, "\r\n")
+	state := ParseEOSManagedState(crlf, "")
+	if !isTrue(state.EAPIEnabled) {
+		t.Errorf("EAPIEnabled = %v, want true across CRLF", state.EAPIEnabled)
+	}
+	if !isTrue(state.EAPIHTTPS) {
+		t.Errorf("EAPIHTTPS = %v, want true across CRLF", state.EAPIHTTPS)
+	}
+	if state.SSHKey != "ssh-ed25519 AAAAC3 someone@host" {
+		t.Errorf("SSHKey = %q; a stray \\r leaked into the parsed value", state.SSHKey)
+	}
+
+	// A form feed is a line boundary in Python and was none in Go, so
+	// everything after it used to vanish into one unmatched line.
+	ff := "management api http-commands\f   no shutdown\funtouched"
+	if got := ParseEOSManagedState(ff, ""); !isTrue(got.EAPIEnabled) {
+		t.Errorf("EAPIEnabled = %v, want true across a form feed", got.EAPIEnabled)
+	}
+}
+
 // The headline case: an adopted device whose hash carries a different
 // salt but the same password is IN SYNC, so a deploy never needlessly
 // rewrites its credentials.

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/tui"
@@ -70,7 +69,13 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 		jobs[i] = tui.DiffJob{
 			Device: host.Hostname,
 			Run: func(ctx context.Context) tui.DiffOutcome {
-				sem <- struct{}{}
+				if !acquire(ctx, sem) {
+					return tui.DiffOutcome{
+						Device:  host.Hostname,
+						Err:     ctx.Err(),
+						Summary: "cancelled",
+					}
+				}
 				defer func() { <-sem }()
 				return run(ctx)
 			},
@@ -114,19 +119,13 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 
 func runDiffJobsPlain(ctx context.Context, jobs []tui.DiffJob) []tui.DiffOutcome {
 	outcomes := make([]tui.DiffOutcome, len(jobs))
-	var wg sync.WaitGroup
-	for i := range jobs {
-		wg.Add(1)
-		go func(i int) {
-			defer wg.Done()
-			out := jobs[i].Run(ctx)
-			if out.Device == "" {
-				out.Device = jobs[i].Device
-			}
-			outcomes[i] = out
-		}(i)
-	}
-	wg.Wait()
+	runBounded(len(jobs), func(i int) {
+		out := jobs[i].Run(ctx)
+		if out.Device == "" {
+			out.Device = jobs[i].Device
+		}
+		outcomes[i] = out
+	})
 	return outcomes
 }
 

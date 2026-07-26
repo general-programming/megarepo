@@ -85,10 +85,32 @@ const DefaultDomain = "generalprogramming.org"
 // DefaultPort is the HTTPS API port both vendors answer on.
 const DefaultPort = 443
 
+// Per-operation timeouts, mirroring the Python defaults in
+// projects/barf/barf/util/vyos_api.py. They are per *operation*, not
+// per client, because a commit is not a read: `/configure` on a busy
+// router routinely takes tens of seconds, and bounding it with the
+// 10s read budget aborted the HTTP request while the device went on to
+// apply and commit the config anyway. The caller then saw "deploy
+// failed" and skipped the save, leaving a router running config that
+// would not survive a reboot.
+//
+// Python: vyos_api_show=10s, vyos_api_retrieve_config=30s,
+// vyos_api_configure=120s, vyos_api_config_save=60s.
+const (
+	// TimeoutShow bounds an operational `show` read.
+	TimeoutShow = 10 * time.Second
+	// TimeoutRetrieve bounds a running-config retrieval.
+	TimeoutRetrieve = 30 * time.Second
+	// TimeoutConfigure bounds one atomic commit.
+	TimeoutConfigure = 120 * time.Second
+	// TimeoutSave bounds persisting running config to boot config.
+	TimeoutSave = 60 * time.Second
+)
+
 // Options configures a Reader. The zero value is usable: it verifies TLS
 // (which fleet devices, running self-signed certs, will fail — set
-// InsecureSkipVerify explicitly for those), probes port 443 and uses a
-// 10s timeout.
+// InsecureSkipVerify explicitly for those), probes port 443 and gives
+// each operation its own timeout (see TimeoutShow and friends).
 type Options struct {
 	// Secrets resolves per-host credentials (EOS admin/enable password).
 	Secrets Secrets
@@ -108,12 +130,19 @@ type Options struct {
 	// DefaultDomain.
 	Domain string
 
-	// Timeout bounds a single request and each probe attempt. 0 means 10s.
+	// Timeout overrides the per-operation timeouts with one value for
+	// every request, read or write. 0 (the default) means each operation
+	// uses its own budget: TimeoutShow, TimeoutRetrieve,
+	// TimeoutConfigure, TimeoutSave.
+	//
+	// It is applied as a per-request context deadline rather than
+	// http.Client.Timeout so that a slow commit cannot be cut short by a
+	// budget sized for a read.
 	Timeout time.Duration
 
 	// HTTPClient overrides the constructed client (tests, custom
-	// transports). When set, InsecureSkipVerify and Timeout do not apply
-	// to it.
+	// transports). When set, InsecureSkipVerify does not apply to it;
+	// operation timeouts still do, since they are context deadlines.
 	HTTPClient *http.Client
 
 	// AllowWrites opts in to constructing a Writer (see writer.go). It
@@ -138,11 +167,23 @@ func (o Options) domain() string {
 	return DefaultDomain
 }
 
-func (o Options) timeout() time.Duration {
+// opTimeout is the budget for one operation: the explicit override when
+// Options.Timeout is set, otherwise the operation's own default.
+func (o Options) opTimeout(fallback time.Duration) time.Duration {
 	if o.Timeout != 0 {
 		return o.Timeout
 	}
-	return 10 * time.Second
+	if fallback <= 0 {
+		return TimeoutShow
+	}
+	return fallback
+}
+
+// withOpTimeout derives a context carrying the operation's budget. The
+// caller's own (shorter) deadline still wins — context.WithTimeout never
+// extends a deadline.
+func (o Options) withOpTimeout(ctx context.Context, fallback time.Duration) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, o.opTimeout(fallback))
 }
 
 func (o Options) httpClient() *http.Client {
@@ -155,7 +196,10 @@ func (o Options) httpClient() *http.Client {
 		// implementation uses ssl._create_unverified_context() here.
 		transport.TLSClientConfig = &tls.Config{InsecureSkipVerify: true} // #nosec G402 -- opt-in, see Options.InsecureSkipVerify
 	}
-	return &http.Client{Transport: transport, Timeout: o.timeout()}
+	// No client-wide Timeout: it would bound every request at one value,
+	// and a commit needs a different budget than a read. Each request
+	// primitive attaches its own context deadline instead.
+	return &http.Client{Transport: transport}
 }
 
 // New returns the Reader for h's DeviceType.
