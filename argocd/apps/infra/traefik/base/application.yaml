@@ -30,16 +30,17 @@ spec:
         ingressRoute:
           dashboard:
             enabled: false
-        logs:
-          access:
-            enabled: true
-            format: json
-            fields:
-              headers:
-                names:
-                  "User-Agent": "keep"
-                  "CF-Connecting-IP": "keep"
-                  "X-Forwarded-For": "keep"
+        # Chart >= 41 moved logs.access to top-level accessLog (values are
+        # schema-validated; the old key hard-fails manifest generation).
+        accessLog:
+          enabled: true
+          format: json
+          fields:
+            headers:
+              names:
+                "User-Agent": "keep"
+                "CF-Connecting-IP": "keep"
+                "X-Forwarded-For": "keep"
         experimental:
           plugins:
             cloudflarewarp:
