@@ -87,13 +87,53 @@ func TestDiffOutcomeState(t *testing.T) {
 		out  DiffOutcome
 		want RowState
 	}{
+		// A bare zero-value DiffOutcome — exactly what a "compared, no
+		// drift" job produces — must classify as a clean success. This is
+		// the regression guard for NotRun: it must never be inferred from a
+		// zero value, only set explicitly by Outcomes() backfilling a job
+		// that never completed.
 		{"clean", DiffOutcome{}, StateOK},
 		{"drift", DiffOutcome{Text: "+ set foo"}, StateDrift},
 		{"error", DiffOutcome{Err: errors.New("x")}, StateError},
+		{"not run", DiffOutcome{NotRun: true}, StateNotRun},
+		// NotRun wins even if Err/Text are somehow also set: the device was
+		// never actually compared, whatever else is sitting in the struct.
+		{"not run beats error", DiffOutcome{NotRun: true, Err: errors.New("x")}, StateNotRun},
 	}
 	for _, tc := range cases {
 		if got := tc.out.State(); got != tc.want {
 			t.Errorf("%s: state = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+// Quitting early must not leave the un-started devices looking like a clean
+// fleet: Outcomes() has to backfill them as NotRun, and the run has to be
+// able to tell they were never compared.
+func TestDiffModelQuitBackfillsUnrunDevicesAsNotRun(t *testing.T) {
+	m := NewDiffModel(context.Background(), diffJobs("a", "b", "c"))
+	// "a" finishes before the quit; "b" and "c" never do.
+	updated, _ := m.Update(diffDoneMsg{index: 0, outcome: DiffOutcome{Device: "a", Summary: "no changes"}})
+	m = updated.(*DiffModel)
+	updated, _ = m.Update(keyPress("q"))
+	m = updated.(*DiffModel)
+
+	outcomes := m.Outcomes()
+	if len(outcomes) != 3 {
+		t.Fatalf("outcomes = %d, want 3", len(outcomes))
+	}
+	if outcomes[0].State() != StateOK {
+		t.Errorf("a: state = %v, want StateOK (it did finish)", outcomes[0].State())
+	}
+	for _, i := range []int{1, 2} {
+		if !outcomes[i].NotRun {
+			t.Errorf("outcome %d (%s) not marked NotRun: %+v", i, outcomes[i].Device, outcomes[i])
+		}
+		if outcomes[i].State() != StateNotRun {
+			t.Errorf("outcome %d state = %v, want StateNotRun", i, outcomes[i].State())
+		}
+		if outcomes[i].Device == "" {
+			t.Errorf("outcome %d lost its device name", i)
 		}
 	}
 }

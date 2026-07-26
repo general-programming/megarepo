@@ -17,11 +17,19 @@ type DiffOutcome struct {
 	Text    string
 	Summary string
 	Err     error
+
+	// NotRun is set only by Outcomes() backfilling a job that never got a
+	// diffDoneMsg (the viewer was quit before it finished). It must never be
+	// set by a job's own Run: a zero-value DiffOutcome{} — e.g. "compared,
+	// no drift" — is a legitimate success and must stay StateOK.
+	NotRun bool
 }
 
 // State classifies an outcome for colouring and for the summary table.
 func (o DiffOutcome) State() RowState {
 	switch {
+	case o.NotRun:
+		return StateNotRun
 	case o.Err != nil:
 		return StateError
 	case strings.TrimSpace(o.Text) != "":
@@ -247,8 +255,28 @@ func (m *DiffModel) View() tea.View {
 	return v
 }
 
-// Outcomes is the current per-device result set, valid after exit.
-func (m *DiffModel) Outcomes() []DiffOutcome { return m.outcomes }
+// Outcomes is the current per-device result set, valid after exit. A device
+// whose job never completed (the viewer was quit, or the run was cancelled,
+// before its diffDoneMsg arrived) is backfilled as NotRun rather than left a
+// zero-value DiffOutcome, which State() would otherwise read as a clean,
+// successful compare.
+func (m *DiffModel) Outcomes() []DiffOutcome {
+	for i, filled := range m.filled {
+		if filled {
+			continue
+		}
+		device := m.outcomes[i].Device
+		if device == "" && i < len(m.jobs) {
+			device = m.jobs[i].Device
+		}
+		m.outcomes[i] = DiffOutcome{
+			Device:  device,
+			NotRun:  true,
+			Summary: "not run (quit before this device was compared)",
+		}
+	}
+	return m.outcomes
+}
 
 // RunDiff drives the diff viewer and returns the per-device outcomes.
 func RunDiff(ctx context.Context, jobs []DiffJob) ([]DiffOutcome, error) {
