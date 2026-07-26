@@ -52,3 +52,6 @@ devenv.local.yaml
 
 # pre-commit
 .pre-commit-config.yaml
+
+# Claude Code git worktrees
+.claude/worktrees/
