@@ -22,4 +22,13 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   sea1-nix-builder = {
     machineID = "85e731458ce145deb2ccd3288703af90";
   };
+  fmt2-vault-0 = {
+    machineID = "7f66954a5515488582054e6e96cd1dfc";
+  };
+  fmt2-vault-1 = {
+    machineID = "6cdfddea2a87402c855a5b7a73a58940";
+  };
+  fmt2-vault-2 = {
+    machineID = "ce407f7032bb4988969406fa2a0244ec";
+  };
 }

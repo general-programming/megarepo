@@ -1,5 +1,6 @@
 from barf.util.vyos_config import (
     minimal_delete_paths,
+    redact_path,
     reconcile_hashed_passwords,
     verify_crypt_hash,
     ConfigDiff,
@@ -371,3 +372,29 @@ class TestIgnoredPaths:
         assert minimal_delete_paths(diff.removed, running) == [
             ("interfaces", "ethernet", "eth0", "mtu")
         ]
+
+
+def test_api_key_is_redacted_by_shape():
+    """The fleet-wide HTTPS API key must not print in a diff.
+
+    Its parent node is the bare token `key`, which cannot go in
+    _SECRET_NODES without also hiding SSH public keys, so it is matched
+    by path shape instead.
+    """
+    path = ("service", "https", "api", "keys", "id", "vaultadmin", "key", "SEKRIT")
+    assert redact_path(path)[-1] == "<redacted>"
+    assert "SEKRIT" not in redact_path(path)
+
+
+def test_snmp_community_is_redacted_mid_path():
+    """The community is not the last component on its line."""
+    path = ("service", "snmp", "community", "genprogllc", "authorization", "ro")
+    got = redact_path(path)
+    assert got == ("service", "snmp", "community", "<redacted>", "authorization", "ro")
+
+
+def test_shape_redaction_leaves_public_keys_alone():
+    """Regression guard for the reason `key` is not a secret node."""
+    path = ("system", "login", "user", "erin", "authentication",
+            "public-keys", "erin", "key", "AAAAC3NzaC1lZDI1NTE5")
+    assert redact_path(path) == path

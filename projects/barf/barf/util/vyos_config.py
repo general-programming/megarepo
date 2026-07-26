@@ -36,7 +36,30 @@ _SECRET_NODES = {
     "encrypted-password",
 }
 
+# Path *shapes* whose following component is a secret, for values whose
+# parent node name is not itself a giveaway. "*" matches any single
+# component. Checked before _SECRET_NODES.
+#
+# `key` cannot go in _SECRET_NODES: SSH public keys are stored at
+# `... public-keys <name> key <pubkey>` and must stay visible (see
+# tests/test_vyos_config.py::test_public_key_not_redacted). The API key
+# is the same node name in a different shape, so it needs one of these.
+_SECRET_SHAPES = (
+    # The fleet-wide HTTPS API key; "*" is the key id (vaultadmin).
+    ("service", "https", "api", "keys", "id", "*", "key"),
+    # `set service snmp community <C> authorization 'ro'` — the secret is
+    # the component after the match, not the last one on the line.
+    ("service", "snmp", "community"),
+)
+
 _REDACTED = "<redacted>"
+
+
+def _matches_shape(path: Tuple[str, ...], shape: Tuple[str, ...]) -> bool:
+    """Whether path starts with shape and has a value component after it."""
+    if len(path) <= len(shape):
+        return False
+    return all(part == "*" or path[i] == part for i, part in enumerate(shape))
 
 
 def parse_set_commands(text: str) -> ConfigPaths:
@@ -226,8 +249,15 @@ def minimal_delete_paths(
 
 
 def redact_path(path) -> Tuple[str, ...]:
-    """A copy of ``path`` with its value hidden when under a secret node."""
+    """A copy of ``path`` with its secret value hidden.
+
+    Shapes are checked first (the value they hide is not always the last
+    component), then the node-name table.
+    """
     path = tuple(path)
+    for shape in _SECRET_SHAPES:
+        if _matches_shape(path, shape):
+            return path[: len(shape)] + (_REDACTED,) + path[len(shape) + 1 :]
     if len(path) > 1 and path[-2] in _SECRET_NODES:
         return path[:-1] + (_REDACTED,)
     return path
