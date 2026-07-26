@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -769,50 +770,46 @@ func TestDeviceUpdateSkipsCurrentDevicesWithoutRebooting(t *testing.T) {
 	}
 }
 
-// TestDeviceUpdateAllRefusesUnattendedFleetReboot is the judgment call:
-// --yes means "do not ask me", and "all" means "whatever is in the file
-// today". Together, unattended, that is a blast radius nobody signed off
-// on, so the hosts have to be named.
-func TestDeviceUpdateAllRefusesUnattendedFleetReboot(t *testing.T) {
+// TestDeviceUpdateAllRunsTheWholeFleet: "all" with --yes is allowed.
+// The protection is the mechanism — one device at a time, redundancy
+// re-checked before each, stop on first failure — not the spelling of
+// the selection. Pinning hostnames instead goes stale, and a device
+// quietly missed for a year is this fleet's real failure mode.
+func TestDeviceUpdateAllRunsTheWholeFleet(t *testing.T) {
 	d := fleetHarness(t)
 
-	err := d.run(t, "device", "update", "all", "--yes", "--image-url", imageURL)
-	if err == nil || !strings.Contains(err.Error(), `refusing "all" with --yes`) {
-		t.Fatalf("unexpected error: %v", err)
+	if err := d.run(t, "device", "update", "all", "--yes", "--image-url", imageURL); err != nil {
+		t.Fatalf("all --yes must be allowed: %v", err)
 	}
-	if len(d.rebootOrder()) != 0 {
-		t.Fatal("a refused run still rebooted something")
+	if got := len(d.rebootOrder()); got == 0 {
+		t.Fatal("all --yes rebooted nothing")
 	}
-	// It must say how to do the thing safely.
-	if !strings.Contains(err.Error(), "sea1-leaf-0") {
-		t.Fatalf("the refusal did not name the hosts: %v", err)
+	// It still says out loud what it is about to reboot, so an
+	// unattended run is legible in the log afterwards.
+	out := d.out.String()
+	if !strings.Contains(out, "unattended run over the whole fleet") {
+		t.Fatalf("the fleet selection was not announced:\n%s", out)
 	}
-
-	// Naming them explicitly is allowed.
-	d2 := fleetHarness(t)
-	if err := d2.run(t, "device", "update", "sea1-leaf-0", "sea1-leaf-1", "--yes",
-		"--image-url", imageURL); err != nil {
-		t.Fatalf("naming the hosts must be allowed: %v", err)
-	}
-	if got := d2.rebootOrder(); strings.Join(got, ",") != "sea1-leaf-0,sea1-leaf-1" {
-		t.Fatalf("reboots = %v", got)
+	if !strings.Contains(out, "sea1-leaf-0") {
+		t.Fatalf("the announcement did not name the hosts:\n%s", out)
 	}
 }
 
-// TestUpdateBlastRadiusRule pins the exact shape that is refused. "no
-// targets" is the same unbounded selection as "all", just spelled
-// differently, so it is refused too.
-func TestUpdateBlastRadiusRule(t *testing.T) {
+// TestFleetAnnouncementShape pins when the announcement is printed: only
+// for an unattended ("--yes") selection of the whole fleet. Naming hosts
+// explicitly, or confirming interactively, already says what is going
+// down.
+func TestFleetAnnouncementShape(t *testing.T) {
 	fleet := fleetNetwork()
 	many := []*model.Host{&fleet.Hosts[0], &fleet.Hosts[1]}
 	one := many[:1]
 
 	cases := []struct {
-		name    string
-		targets []string
-		hosts   []*model.Host
-		yes     bool
-		refuse  bool
+		name     string
+		targets  []string
+		hosts    []*model.Host
+		yes      bool
+		announce bool
 	}{
 		{"all with --yes", []string{"all"}, many, true, true},
 		{"no targets with --yes", nil, many, true, true},
@@ -822,9 +819,12 @@ func TestUpdateBlastRadiusRule(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkUpdateBlastRadius(tc.targets, tc.hosts, tc.yes)
-			if (err != nil) != tc.refuse {
-				t.Fatalf("refused = %v, want %v (err %v)", err != nil, tc.refuse, err)
+			var buf bytes.Buffer
+			o := &Options{Out: &buf}
+			announceFleetSelection(o, tc.targets, tc.hosts, tc.yes)
+			got := strings.Contains(buf.String(), "unattended run over the whole fleet")
+			if got != tc.announce {
+				t.Fatalf("announced = %v, want %v (%q)", got, tc.announce, buf.String())
 			}
 		})
 	}
