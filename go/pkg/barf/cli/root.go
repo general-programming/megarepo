@@ -157,6 +157,7 @@ func NewRootCmd(o *Options) *cobra.Command {
 		newValidateCmd(o),
 		newDeployCmd(o),
 		newDeviceCmd(o),
+		newSecretsCmd(o),
 	)
 	return root
 }

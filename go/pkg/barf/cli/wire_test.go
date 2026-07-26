@@ -1,16 +1,19 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/general-programming/megarepo/go/client/vault"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/prefetch"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
 )
 
@@ -84,6 +87,50 @@ func TestVaultSourceTacacsKey(t *testing.T) {
 		if _, err := v.TacacsKey(host); err == nil {
 			t.Errorf("TacacsKey(%q) succeeded; want an error", host)
 		}
+	}
+}
+
+// Regression: the prefetch package (LinkKeyPaths, LinkKeysFor) and
+// vault.Client.Prefetch had zero production callers, so WG-link secret reads
+// stayed two serial cold Vault GETs per link. vaultSource must satisfy
+// prefetch.Prefetcher (a compile-time assertion in wire.go pins this too)
+// and actually reach the same client HostSecret uses.
+func TestVaultSourceSatisfiesPrefetcher(t *testing.T) {
+	var reads atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		reads.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": map[string]any{
+				"data":     map[string]any{"private_key": "PRIV", "public_key": "PUB"},
+				"metadata": map[string]any{"version": 1},
+			},
+		})
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := vault.New(vault.Options{Address: srv.URL, Token: "test-token"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := &vaultSource{c: c}
+
+	var p prefetch.Prefetcher = v // compile-time: must satisfy the interface
+	p.PrefetchHostSecrets(context.Background(), "wg-51000-a", "wg-51000-b")
+
+	if reads.Load() == 0 {
+		t.Error("PrefetchHostSecrets reached no requests at all")
+	}
+
+	// The warmed paths must come from the SAME client a normal read uses,
+	// so a subsequent WireguardKeypair for one of them is cache-served
+	// (reads doesn't grow) rather than a cold miss.
+	before := reads.Load()
+	if _, err := v.WireguardKeypair("wg-51000-a"); err != nil {
+		t.Fatalf("WireguardKeypair after prefetch: %v", err)
+	}
+	if reads.Load() != before {
+		t.Errorf("reads grew from %d to %d; prefetch did not warm the read cache", before, reads.Load())
 	}
 }
 

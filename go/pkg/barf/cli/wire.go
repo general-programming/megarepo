@@ -9,6 +9,7 @@ import (
 	"github.com/general-programming/megarepo/go/client/vault"
 	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/prefetch"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
@@ -23,6 +24,21 @@ func init() {
 	newReader = wireReader
 	reportsStatus = wireReportsStatus
 	isTemplatable = wireTemplatable
+	mintHostSecret = wireMintHostSecret
+}
+
+// wireMintHostSecret is barf's one Vault WRITE path, deliberately built as
+// its own client rather than reusing newSecrets: every other command's
+// vaultSource is constructed without AllowMint, and that must stay true
+// regardless of what this does. Mirrors Python's BaseHost.secret: an
+// existing value comes back unwritten, a missing one is minted with a fresh
+// token (vault.GenerateToken, matching secrets.token_urlsafe(16)).
+func wireMintHostSecret(hostname, key string) (string, error) {
+	c, err := vault.New(vault.Options{AllowMint: true})
+	if err != nil {
+		return "", err
+	}
+	return c.MintHostSecret(context.Background(), hostname, key, vault.GenerateToken)
 }
 
 func wireRenderer(deviceType string) (Renderer, error) {
@@ -129,6 +145,15 @@ func (v *vaultSource) VaultSecret(key string) (string, error) {
 // GlobalSecret is device.GlobalSecrets; same lookup as VaultSecret.
 func (v *vaultSource) GlobalSecret(name string) (string, error) {
 	return v.VaultSecret(name)
+}
+
+// PrefetchHostSecrets is prefetch.Prefetcher, satisfied so generate/diff/
+// deploy can warm the WireGuard-keypair cache for the whole selection
+// concurrently instead of paying two serial cold Vault reads per link.
+var _ prefetch.Prefetcher = (*vaultSource)(nil)
+
+func (v *vaultSource) PrefetchHostSecrets(ctx context.Context, paths ...string) {
+	v.c.PrefetchHostSecrets(ctx, paths...)
 }
 
 // tacacsKeysPath holds one field per hostname under cluster-secrets.
