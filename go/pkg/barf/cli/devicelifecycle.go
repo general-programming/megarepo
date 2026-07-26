@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -26,15 +28,23 @@ import (
 // These are the only barf commands that can change a device, and the
 // rules they follow are:
 //
-//   - Dry run is the DEFAULT. Without --yes, `update` and `cleanup`
-//     print the full plan (what is running, what would be installed,
-//     what the redundancy check found, every step) and exit having
-//     changed nothing.
-//   - --yes enables the writes for THAT plan.
+//   - Nothing is changed until the operator says so. On a terminal
+//     `update` prints the full plan (what is running, what would be
+//     installed, what the redundancy check found, every step) and then
+//     asks [y/N] for THAT device; answering y performs it in the same
+//     invocation. --yes skips the prompt.
+//   - With no terminal there is no prompt, so --yes is required to
+//     change anything and without it the run is a dry run that prints
+//     the plan and exits. See confirm.go; `deploy` shares this matrix.
 //   - --force, separately, is the only way past a redundancy refusal.
-//     --yes never implies it.
-//   - `update` takes exactly one hostname. "all" is rejected, so one
-//     invocation can never reboot two devices.
+//     --yes never implies it, and --force applies per device.
+//   - `update` accepts several hostnames, or "all", but it updates them
+//     STRICTLY ONE AT A TIME, re-runs the redundancy check immediately
+//     before each one, and waits for each device to be genuinely healthy
+//     (answering, on the new image, routing recovered) before starting
+//     the next. The first failure stops the run.
+//   - "all" may not be combined with --yes: an unprompted, fleet-wide
+//     reboot has to be spelled out host by host.
 
 // sshPort is the port probed to find a device's SSH address. Python
 // probes it separately from the API port: sshd and the API can be bound
@@ -163,10 +173,19 @@ func (f *firmwareProvider) DownloadSignature(ctx context.Context) (string, error
 	return f.provider.Download(ctx, asset)
 }
 
-// apiBaseURLOverride redirects every device API request at a test server.
-// It is empty in production: the real path always builds
-// https://<probed address>:443 from the host being operated on.
-var apiBaseURLOverride string
+// apiBaseURLOverride redirects a device's API requests at a test server.
+// It is nil in production: the real path always builds
+// https://<probed address>:443 from the host being operated on. Tests
+// set it to a per-hostname router, so one httptest server can stand in
+// for a whole fleet and each fake device answers for itself.
+var apiBaseURLOverride func(hostname string) string
+
+func apiBaseURL(hostname string) string {
+	if apiBaseURLOverride == nil {
+		return ""
+	}
+	return apiBaseURLOverride(hostname)
+}
 
 // vaultSupertech reads the shared supertech account from Vault. The
 // password is held in memory only: it is never logged, printed or
@@ -222,9 +241,10 @@ func newDeviceCmd(o *Options) *cobra.Command {
 		Short: "Interact with live devices",
 		Long: "device groups the commands that talk to a running device.\n\n" +
 			"update and cleanup are the only barf commands that can change one.\n" +
-			"Both are dry-run by default: they print exactly what they would do\n" +
-			"and exit. --yes performs it; --force is required, separately, to\n" +
-			"override a redundancy refusal.",
+			"Both print exactly what they would do first: update then asks per\n" +
+			"device on a terminal, and is a dry run without --yes when there is\n" +
+			"no terminal to ask on. --force is required, separately, to override\n" +
+			"a redundancy refusal.",
 	}
 	cmd.AddCommand(
 		newDeviceSSHCmd(o),
@@ -348,34 +368,48 @@ type updateFlags struct {
 	force         bool
 	imageURL      string
 	targetVersion string
+
+	// in is where per-device confirmations are read from; nil means
+	// os.Stdin.
+	in io.Reader
 }
 
 func newDeviceUpdateCmd(o *Options) *cobra.Command {
 	var f updateFlags
 
 	cmd := &cobra.Command{
-		Use:   "update <host>",
-		Short: "Install the latest image on a device and reboot into it (DRY RUN by default)",
-		Long: "update installs a newer image on ONE device, drains its BGP sessions,\n" +
-			"reboots it, waits for it to come back and verifies routing recovered.\n\n" +
-			"Without --yes this is a dry run: it prints the running version, the\n" +
-			"target version, the fleet redundancy check and every step it would\n" +
-			"take, then exits having changed nothing.\n\n" +
+		Use:   "update <host...|all>",
+		Short: "Install the latest image on devices and reboot into it, one at a time",
+		Long: "update installs a newer image on each selected device, drains its BGP\n" +
+			"sessions, reboots it, waits for it to come back and verifies routing\n" +
+			"recovered.\n\n" +
+			"Several hostnames, or \"all\", may be given. Devices are updated\n" +
+			"STRICTLY ONE AT A TIME. The fleet redundancy check is re-run\n" +
+			"immediately before each device — rebooting leaf-2 changes what is\n" +
+			"safe for leaf-1 — and the next device is not started until the\n" +
+			"previous one is answering, running the new image and has recovered\n" +
+			"its routing. The first failure stops the run; the rest are reported\n" +
+			"as not attempted.\n\n" +
+			"On a terminal each device's plan is printed and confirmed with a\n" +
+			"[y/N] prompt; answering y performs it right there. --yes skips the\n" +
+			"prompt. With --plain, or no terminal, nothing is ever prompted, so\n" +
+			"--yes is required to change anything and without it the run is a DRY\n" +
+			"RUN that prints every plan and exits.\n\n" +
 			"The redundancy check refuses to reboot the last live spine or the last\n" +
 			"live leaf. That refusal is a hard error: --yes does not override it,\n" +
-			"only --force does.\n\n" +
-			"Exactly one hostname is accepted; \"all\" is rejected. One invocation\n" +
-			"never reboots more than one device.",
-		Args: cobra.ExactArgs(1),
+			"only --force does, and it is re-decided per device.\n\n" +
+			"\"all\" cannot be combined with --yes: an unprompted fleet-wide reboot\n" +
+			"has to be spelled out host by host.",
+		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runDeviceUpdate(cmd.Context(), o, args[0], f)
+			return runDeviceUpdate(cmd.Context(), o, args, f)
 		},
 	}
 	flags := cmd.Flags()
 	flags.DurationVar(&f.drainWait, "drain-wait", lifecycle.DefaultDrainWait,
 		"how long to wait after the BGP shutdown before rebooting")
 	flags.BoolVar(&f.yes, "yes", false,
-		"actually perform the update (without this, nothing is changed)")
+		"skip the per-device confirmation (required to change anything when there is no terminal)")
 	flags.BoolVar(&f.force, "force", false,
 		"override a redundancy refusal (rebooting the last live spine/leaf). Requires --yes")
 	flags.StringVar(&f.imageURL, "image-url", "",
@@ -385,107 +419,371 @@ func newDeviceUpdateCmd(o *Options) *cobra.Command {
 	return cmd
 }
 
-func runDeviceUpdate(ctx context.Context, o *Options, target string, f updateFlags) error {
+// Summary results, so the table wording is decided in one place.
+const (
+	resultAlreadyOK     = "already current"
+	resultSkipped       = "skipped (declined)"
+	resultWouldUpdate   = "would update (dry run)"
+	resultRefused       = "REFUSED: redundancy"
+	resultNotAttempted  = "not attempted (run stopped earlier)"
+	resultForcedUpdated = "updated (redundancy gate FORCED)"
+)
+
+// updateRun holds what a `device update` resolves ONCE for the whole
+// run. Everything that depends on the state of the fleet — the endpoint
+// probe, the running version, and above all the redundancy check — is
+// deliberately NOT in here: it is redone per device, because rebooting
+// one device changes the answer for the next.
+type updateRun struct {
+	o     *Options
+	net   *model.Network
+	flags updateFlags
+
+	key         string
+	provider    lifecycle.ImageProvider
+	mirror      lifecycle.Mirror
+	credentials sshx.CredentialSource
+
+	// requireRouting makes a post-reboot routing failure fatal instead of
+	// advisory. Set when this run has more than one device to get
+	// through: continuing to reboot a fleet whose last member has not
+	// recovered is how a maintenance window becomes an outage.
+	requireRouting bool
+}
+
+func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f updateFlags) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	if target == "all" {
-		return errors.New(`device update takes a single hostname: "all" is rejected so one run cannot reboot the whole fleet`)
+
+	// --force is an override of a hard safety refusal, never a thing you
+	// arrive at by pressing y at a prompt.
+	if f.force && !f.yes {
+		return errors.New("--force requires --yes: overriding the redundancy gate is not something " +
+			"a [y/N] prompt can authorise, it has to be stated on the command line")
 	}
 
-	net, hosts, err := o.loadTargets([]string{target})
+	net, selected, err := o.loadTargets(targets)
 	if err != nil {
 		return err
 	}
-	host := hosts[0]
-	if !strings.EqualFold(host.DeviceType, "vyos") {
-		return fmt.Errorf("%s: device update only supports vyos devices (this one is %q)",
-			host.Hostname, host.DeviceType)
+	hosts, err := updatableHosts(o, selected)
+	if err != nil {
+		return err
 	}
+
+	gate := newWriteGate(o, f.yes, f.in)
+	if err := checkUpdateBlastRadius(targets, hosts, f.yes); err != nil {
+		return err
+	}
+
+	// Reboot leaves before spines, as the Python original does: a spine's
+	// safety gate only means anything while the leaves under it are up,
+	// so the leaves go first and the gate stays honest.
+	sort.SliceStable(hosts, func(i, j int) bool {
+		return !hosts[i].IsSpine() && hosts[j].IsSpine()
+	})
 
 	key, err := newVyOSAPIKey()
 	if err != nil {
 		return fmt.Errorf("resolving the VyOS API key: %w", err)
 	}
-
-	address := probeEndpoint(ctx, host, net.Global.SearchDomain)
-	if address == "" {
-		return fmt.Errorf("%s: no reachable address", host.Hostname)
-	}
-
-	// The API client only gets its write opt-in when the run is confirmed.
-	// A dry run therefore cannot delete an image even if a caller asked.
-	api, err := lifecycle.NewAPIClient(host.Hostname, lifecycle.APIOptions{
-		Address:            address,
-		Key:                key,
-		InsecureSkipVerify: true,
-		BaseURL:            apiBaseURLOverride,
-		AllowWrites:        f.yes,
-	})
-	if err != nil {
-		return err
-	}
-
 	networkPath, err := o.networkPath()
 	if err != nil {
 		return err
 	}
-	provider, mirror, err := imageSource(host.DeviceType, networkPath, f)
+	provider, mirror, err := imageSource(hosts[0].DeviceType, networkPath, f)
 	if err != nil {
 		return err
 	}
-
 	credentials, err := newSupertechCredentials()
 	if err != nil {
 		return fmt.Errorf("resolving the shared SSH account: %w", err)
 	}
 
-	updater := &lifecycle.Updater{
-		Host:      host,
-		Fleet:     fleetFor(net, host),
-		API:       api,
-		Provider:  provider,
-		Mirror:    mirror,
-		Probe:     fleetProbe(net, key),
-		SSH:       sshDialer(ctx, host, net, credentials),
-		DrainWait: f.drainWait,
-		Opts: lifecycle.Options{
-			AllowWrites: f.yes,
-			ForceUnsafe: f.force && f.yes,
-			Out:         o.Out,
-		},
+	run := &updateRun{
+		o: o, net: net, flags: f,
+		key: key, provider: provider, mirror: mirror, credentials: credentials,
+		requireRouting: len(hosts) > 1,
+	}
+	return run.sequential(ctx, hosts, gate)
+}
+
+// updatableHosts narrows a selection to the devices update can handle.
+//
+// A single named device that is not supported is an error: the operator
+// asked for that device by name and got nothing. In a wider selection it
+// is a reported skip, so `all` does not fail on the EOS boxes.
+func updatableHosts(o *Options, selected []*model.Host) ([]*model.Host, error) {
+	isVyOS := func(h *model.Host) bool { return strings.EqualFold(h.DeviceType, "vyos") }
+
+	if len(selected) == 1 && !isVyOS(selected[0]) {
+		return nil, fmt.Errorf("%s: device update only supports vyos devices (this one is %q)",
+			selected[0].Hostname, selected[0].DeviceType)
+	}
+	for _, h := range selected {
+		if !isVyOS(h) {
+			o.printf("skip %s: device update only supports vyos devices (this one is %q)\n",
+				h.Hostname, h.DeviceType)
+		}
+	}
+	hosts := filterHosts(selected, isVyOS)
+	if len(hosts) == 0 {
+		return nil, errors.New("no updatable devices selected (vyos only)")
+	}
+	return hosts, nil
+}
+
+// checkUpdateBlastRadius refuses the one shape of this command whose
+// blast radius is both unbounded and unattended.
+//
+// --yes means "do not ask me". "all" means "whatever is in network.yml
+// today". Together they are a fleet-wide reboot that silently grows as
+// the fleet does: the invocation someone wrote when there were three
+// leaves reboots thirty a year later, and nobody re-read it. Naming the
+// hosts is a reviewable statement of exactly what is going down, and it
+// is the only extra cost this rule imposes — "all" on a terminal is
+// still fine, because every device is confirmed individually there.
+func checkUpdateBlastRadius(targets []string, hosts []*model.Host, yes bool) error {
+	if !yes || len(hosts) < 2 {
+		return nil
+	}
+	// No targets at all also means "all" (resolveTargets), so it is the
+	// same unbounded selection under a different spelling.
+	isAll := len(targets) == 0
+	for _, t := range targets {
+		if t == "all" {
+			isAll = true
+		}
+	}
+	if !isAll {
+		return nil
+	}
+	names := make([]string, 0, len(hosts))
+	for _, h := range hosts {
+		names = append(names, h.Hostname)
+	}
+	return fmt.Errorf("refusing \"all\" with --yes: that is an unattended reboot of %d devices.\n"+
+		"       Name them explicitly to say what is going down:\n"+
+		"         barf device update %s --yes\n"+
+		"       or drop --yes and confirm each one at the prompt.",
+		len(hosts), strings.Join(names, " "))
+}
+
+// sequential updates every host, one at a time, stopping on the first
+// failure.
+//
+// The ordering guarantee is the point of this function: nothing here is
+// concurrent, each device's plan (and therefore its redundancy check) is
+// built immediately before that device is touched, and the previous
+// device has already been confirmed answering, on the new image and
+// routing-healthy by the time the next one is planned.
+func (r *updateRun) sequential(ctx context.Context, hosts []*model.Host, gate writeGate) error {
+	o := r.o
+	rows := make([][]string, 0, len(hosts))
+	var anyChangeable bool
+	var failedHost string
+	var firstErr error
+
+	for i, host := range hosts {
+		if err := ctx.Err(); err != nil {
+			firstErr, failedHost = err, host.Hostname
+			rows = append(rows, []string{host.Hostname, "cancelled"})
+			rows = appendNotAttempted(rows, hosts[i+1:])
+			break
+		}
+
+		o.printf("\n=== %s (%d/%d) ===\n", host.Hostname, i+1, len(hosts))
+
+		result, err := r.one(ctx, host, gate, &anyChangeable)
+		if err != nil {
+			firstErr, failedHost = err, host.Hostname
+			o.printf("\n[%s] %v\n", host.Hostname, err)
+			rows = append(rows, []string{host.Hostname, "failed: " + firstLine(err.Error())})
+			if i+1 < len(hosts) {
+				o.printf("\nstopping: a failed update reduces redundancy for the rest of the fleet.\n")
+				rows = appendNotAttempted(rows, hosts[i+1:])
+			}
+			break
+		}
+		rows = append(rows, []string{host.Hostname, result})
 	}
 
-	plan, err := updater.BuildPlan(ctx)
-	if err != nil {
-		return err
+	o.printf("\n")
+	printTable(o.Out, []string{"DEVICE", "RESULT"}, rows)
+
+	if gate.dryRun && anyChangeable {
+		o.printf("\nDRY RUN: nothing was changed. Re-run with --yes to perform this update.\n")
 	}
-	printUpdatePlan(o, plan, f)
+	switch {
+	case firstErr == nil:
+		return nil
+	case len(hosts) == 1:
+		// One device: the device's own error IS the run's error.
+		return firstErr
+	default:
+		return fmt.Errorf("stopped at %s: %w", failedHost, firstErr)
+	}
+}
+
+// firstLine keeps a multi-line explanation out of a table cell.
+func firstLine(s string) string {
+	if i := strings.IndexByte(s, '\n'); i >= 0 {
+		return s[:i]
+	}
+	return s
+}
+
+func appendNotAttempted(rows [][]string, remaining []*model.Host) [][]string {
+	for _, h := range remaining {
+		rows = append(rows, []string{h.Hostname, resultNotAttempted})
+	}
+	return rows
+}
+
+// one plans and, if permitted, performs the update of a single device.
+// It returns the summary line for the device, or an error that stops the
+// whole run.
+func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, anyChangeable *bool) (string, error) {
+	o := r.o
+
+	// The planning updater's API client is constructed read-only, so the
+	// phase that decides whether to proceed is structurally incapable of
+	// changing the device. The redundancy check happens here, NOW, for
+	// this device: any check run before the previous reboot is stale.
+	planner, err := r.newUpdater(ctx, host, false)
+	if err != nil {
+		return "", err
+	}
+	plan, err := planner.BuildPlan(ctx)
+	if err != nil {
+		return "", err
+	}
+	printUpdatePlan(o, plan, gate)
 
 	if plan.AlreadyCurrent {
-		return nil
+		return resultAlreadyOK, nil
 	}
-	if !f.yes {
-		o.printf("\nDRY RUN: nothing was changed. Re-run with --yes to perform this update.\n")
+	*anyChangeable = true
+
+	if gate.dryRun {
 		if plan.RedundancyErr != nil {
-			o.printf("         --yes alone is NOT enough here: the redundancy check refuses.\n")
+			o.printf("\n         --yes alone is NOT enough here: the redundancy check refuses.\n")
+			return resultRefused + " (dry run)", nil
 		}
-		return nil
+		return resultWouldUpdate, nil
 	}
-	if plan.RedundancyErr != nil && !f.force {
-		return fmt.Errorf("%w\n"+
+
+	// A refusal is decided per device and is hard: only --force passes
+	// it, and --force already required --yes.
+	if plan.RedundancyErr != nil && !r.flags.force {
+		return "", fmt.Errorf("%w\n"+
 			"       This is a hard safety refusal and --yes does not override it.\n"+
 			"       Re-run with --force ONLY if you have confirmed out of band that\n"+
 			"       taking %s down right now will not black-hole traffic.",
 			plan.RedundancyErr, plan.Hostname)
 	}
+	forced := plan.RedundancyErr != nil
 
-	result, err := updater.Execute(ctx, plan)
+	if forced {
+		o.printf("\n!! --force: OVERRIDING the redundancy refusal for %s: %v\n",
+			plan.Hostname, plan.RedundancyErr)
+		o.printf("!! alive spines: %s; alive leaves: %s\n",
+			listOrNone(plan.Redundancy.AliveSpines), listOrNone(plan.Redundancy.AliveLeaves))
+	}
+
+	o.printf("\n")
+	ok, err := gate.allows(fmt.Sprintf("[%s] install %s, drain BGP, and REBOOT now?",
+		plan.Hostname, plan.TargetVersion))
 	if err != nil {
-		return err
+		return "", confirmError(err)
+	}
+	if !ok {
+		o.printf("skipped %s\n", plan.Hostname)
+		return resultSkipped, nil
+	}
+
+	// Only now is a write-enabled client built, and a fresh Updater with
+	// it: one Updater still reboots at most one device.
+	executor, err := r.newUpdater(ctx, host, true)
+	if err != nil {
+		return "", err
+	}
+	result, err := executor.Execute(ctx, plan)
+	if err != nil {
+		return "", err
 	}
 	o.printf("\n[%s] %s\n", plan.Hostname, result)
-	return nil
+	if forced {
+		return resultForcedUpdated, nil
+	}
+	return result, nil
+}
+
+// newFleetProbe builds the liveness probe backing one redundancy check.
+// It is a var, and called once per device rather than once per run, so
+// tests can count that the gate really is re-evaluated for every device.
+var newFleetProbe = fleetProbe
+
+// newSSHDialer opens sessions to the device being updated. A var so the
+// tests can drive a whole update without an SSH client existing.
+var newSSHDialer = sshDialer
+
+// updateTiming is how long an update waits: for the BGP drain to take
+// effect, and for the device to come back. Both zero values mean the
+// lifecycle defaults (a real 5s+ drain wait, a 15s/5s/15m reboot poll).
+// The tests shrink them so the suite never sits out a reboot.
+var updateTiming struct {
+	wait  lifecycle.WaitOptions
+	sleep func(ctx context.Context, d time.Duration) error
+}
+
+// newUpdater builds an Updater for one device.
+//
+// allowWrites drives BOTH the lifecycle write opt-in and the API
+// client's own: a planning updater cannot reach a write endpoint even
+// through a bug in a caller.
+func (r *updateRun) newUpdater(ctx context.Context, host *model.Host, allowWrites bool) (*lifecycle.Updater, error) {
+	address := probeEndpoint(ctx, host, r.net.Global.SearchDomain)
+	if address == "" {
+		return nil, fmt.Errorf("%s: no reachable address", host.Hostname)
+	}
+	api, err := lifecycle.NewAPIClient(host.Hostname, lifecycle.APIOptions{
+		Address:            address,
+		Key:                r.key,
+		InsecureSkipVerify: true,
+		BaseURL:            apiBaseURL(host.Hostname),
+		AllowWrites:        allowWrites,
+	})
+	if err != nil {
+		return nil, err
+	}
+	// Only the planning updater gets a probe: the redundancy gate is
+	// evaluated exactly once per device, in BuildPlan, and Execute acts
+	// on the verdict the plan recorded. Handing the write-enabled updater
+	// a probe would only invite a second, differently-timed opinion.
+	var probe lifecycle.AliveProbe
+	if !allowWrites {
+		probe = newFleetProbe(r.net, r.key)
+	}
+	return &lifecycle.Updater{
+		Host:      host,
+		Fleet:     fleetFor(r.net, host),
+		API:       api,
+		Provider:  r.provider,
+		Mirror:    r.mirror,
+		Probe:     probe,
+		SSH:       newSSHDialer(ctx, host, r.net, r.credentials),
+		DrainWait: r.flags.drainWait,
+		Wait:      updateTiming.wait,
+		Sleep:     updateTiming.sleep,
+		Opts: lifecycle.Options{
+			AllowWrites:    allowWrites,
+			ForceUnsafe:    allowWrites && r.flags.force,
+			RequireRouting: allowWrites && r.requireRouting,
+			Out:            r.o.Out,
+		},
+	}, nil
 }
 
 // imageSource resolves where the image comes from: an explicit
@@ -569,7 +867,7 @@ func fleetProbe(n *model.Network, key string) lifecycle.AliveProbe {
 			Address:            address,
 			Key:                key,
 			InsecureSkipVerify: true,
-			BaseURL:            apiBaseURLOverride,
+			BaseURL:            apiBaseURL(h.Hostname),
 			Timeout:            10 * time.Second,
 			// Explicitly read-only: the probe must never be able to write.
 			AllowWrites: false,
@@ -596,10 +894,13 @@ func sshDialer(_ context.Context, host *model.Host, n *model.Network, creds sshx
 	}
 }
 
-func printUpdatePlan(o *Options, plan *lifecycle.Plan, f updateFlags) {
-	mode := "DRY RUN (nothing will be changed)"
-	if f.yes {
-		mode = "LIVE RUN (--yes given: this device will be changed and rebooted)"
+func printUpdatePlan(o *Options, plan *lifecycle.Plan, gate writeGate) {
+	mode := "LIVE RUN (--yes given: this device will be changed and rebooted)"
+	switch {
+	case gate.dryRun:
+		mode = "DRY RUN (nothing will be changed)"
+	case gate.prompt:
+		mode = "LIVE RUN (you will be asked to confirm before this device is changed)"
 	}
 
 	o.printf("device:          %s\n", plan.Hostname)
@@ -711,7 +1012,7 @@ func cleanupHost(ctx context.Context, o *Options, host *model.Host, n *model.Net
 		Address:            address,
 		Key:                key,
 		InsecureSkipVerify: true,
-		BaseURL:            apiBaseURLOverride,
+		BaseURL:            apiBaseURL(host.Hostname),
 		AllowWrites:        yes,
 	})
 	if err != nil {

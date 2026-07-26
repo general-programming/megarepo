@@ -1,13 +1,10 @@
 package cli
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
 	"io"
-	"os"
-	"strings"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/spf13/cobra"
@@ -16,21 +13,25 @@ import (
 // `barf deploy` is the ONLY command in this package that can change a
 // device, and every default it has points away from doing so:
 //
-//   - Dry run is the default. Without --yes the command computes and
-//     prints the exact operations it would send, then exits. Nothing is
-//     written, and no writer is even constructed.
-//   - --yes is necessary but, on a terminal, not sufficient: each device
-//     is confirmed individually before it is touched.
+//   - Nothing is changed until the operator says so, per device, and the
+//     writer is not even constructed before then.
+//   - On a terminal the change is printed and then confirmed with a
+//     [y/N] prompt; answering y applies it in this same invocation.
+//     --yes skips the prompt, for scripting on a terminal.
 //   - --plain / no TTY never prompts, so an unattended run cannot hang on
 //     a question no one will answer — which is exactly why --yes is
-//     mandatory there.
+//     mandatory there, and why without it the run is a dry run that
+//     prints the operations and exits.
 //   - A devicetype with no write implementation is refused before
 //     anything runs, rather than half-deploying the fleet.
 //   - Output is redacted unless --show-secrets.
+//
+// See confirm.go for the full matrix, which `barf device update` shares.
 
 // DeployOptions are `barf deploy`'s own flags.
 type DeployOptions struct {
-	// Yes opts in to writing. Without it the command is a dry run.
+	// Yes skips the per-device confirmation prompt. With no terminal to
+	// prompt on it is what enables writing at all.
 	Yes bool
 	// ShowSecrets disables redaction of secret values in the output.
 	ShowSecrets bool
@@ -47,20 +48,23 @@ func newDeployCmd(o *Options) *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "deploy [hosts...]",
-		Short: "Apply rendered configs to devices (dry run unless --yes)",
+		Short: "Apply rendered configs to devices (asks first; dry run when not on a terminal)",
 		Long: "deploy renders each selected host, diffs it against the config the\n" +
 			"device is actually running, and applies the difference.\n" +
 			"\n" +
-			"It is a DRY RUN by default: without --yes it prints the exact\n" +
-			"operations it would send and exits without contacting a device for\n" +
-			"anything but the read it already did. With --yes on a terminal it\n" +
-			"asks for confirmation per device; with --plain or no terminal it\n" +
-			"applies without prompting, which is why --yes is required there too.",
+			"On a terminal it prints each device's change and asks [y/N] before\n" +
+			"applying it; answering y applies it right there, with no second\n" +
+			"invocation. --yes skips the prompt.\n" +
+			"\n" +
+			"With --plain, or no terminal, it never prompts: --yes is required to\n" +
+			"change anything, and without it the run is a DRY RUN that prints the\n" +
+			"exact operations it would send and exits.",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDeploy(cmd.Context(), o, args, opts)
 		},
 	}
-	cmd.Flags().BoolVar(&opts.Yes, "yes", false, "actually write to devices (without this, deploy is a dry run)")
+	cmd.Flags().BoolVar(&opts.Yes, "yes", false,
+		"skip the per-device confirmation (required to write anything when there is no terminal)")
 	cmd.Flags().BoolVar(&opts.ShowSecrets, "show-secrets", false, "do not redact secret values in the output")
 	cmd.Flags().BoolVar(&opts.SkipSave, "skip-save", false, "do not persist the config to boot after committing")
 	return cmd
@@ -213,8 +217,7 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 
 // applyDeployPlans prints every plan and, when permitted, applies it.
 func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts DeployOptions) error {
-	interactive := o.interactive()
-	confirm := newConfirmer(o, opts.In)
+	gate := newWriteGate(o, opts.Yes, opts.In)
 
 	rows := make([][]string, 0, len(plans))
 	var failed, changed bool
@@ -250,21 +253,18 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 		}
 		o.printf("\n")
 
-		if !opts.Yes {
-			rows = append(rows, []string{name, plan.diff.Summary + " (dry run)"})
-			continue
+		ok, err := gate.allows(fmt.Sprintf("apply %s to %s?", plan.diff.Summary, name))
+		if err != nil {
+			return confirmError(err)
 		}
-
-		if interactive {
-			ok, err := confirm(fmt.Sprintf("apply %s to %s?", plan.diff.Summary, name))
-			if err != nil {
-				return fmt.Errorf("reading confirmation: %w", err)
-			}
-			if !ok {
-				o.printf("skipped %s\n\n", name)
-				rows = append(rows, []string{name, plan.diff.Summary + " (skipped)"})
+		if !ok {
+			if gate.dryRun {
+				rows = append(rows, []string{name, plan.diff.Summary + " (dry run)"})
 				continue
 			}
+			o.printf("skipped %s\n\n", name)
+			rows = append(rows, []string{name, plan.diff.Summary + " (skipped)"})
+			continue
 		}
 
 		if err := pushPlan(ctx, plan, opts); err != nil {
@@ -278,7 +278,7 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 
 	printTable(o.Out, []string{"DEVICE", "DEPLOY"}, rows)
 
-	if !opts.Yes && changed {
+	if gate.dryRun && changed {
 		o.printf("\nDRY RUN: nothing was written. Re-run with --yes to apply.\n")
 	}
 	if failed {
@@ -309,28 +309,4 @@ func pushPlan(ctx context.Context, plan deployPlan, opts DeployOptions) error {
 		return nil
 	}
 	return writer.SaveConfig(ctx)
-}
-
-// newConfirmer returns a yes/no prompt reading from in (os.Stdin when
-// nil). It is only ever called in interactive mode; a plain or piped run
-// never reaches it.
-func newConfirmer(o *Options, in io.Reader) func(question string) (bool, error) {
-	if in == nil {
-		in = os.Stdin
-	}
-	reader := bufio.NewReader(in)
-	return func(question string) (bool, error) {
-		o.printf("%s [y/N] ", question)
-		line, err := reader.ReadString('\n')
-		if err != nil && line == "" {
-			if errors.Is(err, io.EOF) {
-				// No answer is not consent.
-				o.printf("\n")
-				return false, nil
-			}
-			return false, err
-		}
-		answer := strings.ToLower(strings.TrimSpace(line))
-		return answer == "y" || answer == "yes", nil
-	}
 }

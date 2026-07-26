@@ -232,8 +232,9 @@ func TestDeployRedaction(t *testing.T) {
 	}
 }
 
-// TestDeployInteractiveConfirmation: on a TTY, --yes still asks per
-// device, and "no" means no.
+// TestDeployInteractiveConfirmation: on a TTY WITHOUT --yes the prompt
+// is the confirmation — answering y applies in this same invocation, no
+// re-run with --yes required — and anything else means no.
 func TestDeployInteractiveConfirmation(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -255,11 +256,14 @@ func TestDeployInteractiveConfirmation(t *testing.T) {
 
 			o := h.options()
 			o.SetInteractive(true)
-			opts := DeployOptions{Yes: true, In: strings.NewReader(tc.answer)}
+			opts := DeployOptions{In: strings.NewReader(tc.answer)}
 			if err := runDeploy(context.Background(), o, []string{"sea1-vpn-0"}, opts); err != nil {
 				t.Fatal(err)
 			}
 
+			if !strings.Contains(h.out.String(), "[y/N]") {
+				t.Fatalf("no prompt was shown:\n%s", h.out.String())
+			}
 			wrote := len(w.configured) > 0
 			if wrote != tc.wantWrite {
 				t.Fatalf("wrote = %v, want %v (output: %s)", wrote, tc.wantWrite, h.out.String())
@@ -267,28 +271,78 @@ func TestDeployInteractiveConfirmation(t *testing.T) {
 			if !tc.wantWrite && !strings.Contains(h.out.String(), "skipped") {
 				t.Errorf("skip not reported:\n%s", h.out.String())
 			}
+			// A declined device is not a dry run: the operator answered.
+			if !tc.wantWrite && strings.Contains(h.out.String(), "DRY RUN") {
+				t.Errorf("a declined prompt was reported as a dry run:\n%s", h.out.String())
+			}
 		})
 	}
 }
 
-// TestDeployPlainNeverPrompts: with no TTY the confirmation reader is
-// never consulted, so an unattended run cannot hang.
-func TestDeployPlainNeverPrompts(t *testing.T) {
+// TestDeployInteractiveYesSkipsThePrompt: --yes on a TTY is the
+// scripting escape hatch, so stdin must not be read at all.
+func TestDeployInteractiveYesSkipsThePrompt(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
 
-	o := h.options() // forced non-interactive
-	// A reader that would fail loudly if it were read from.
+	o := h.options()
+	o.SetInteractive(true)
 	opts := DeployOptions{Yes: true, In: errReader{}}
 	if err := runDeploy(context.Background(), o, []string{"sea1-vpn-0"}, opts); err != nil {
 		t.Fatal(err)
 	}
 	if len(w.configured) != 1 {
-		t.Fatalf("plain --yes did not apply: %v", w.configured)
+		t.Fatalf("--yes on a TTY did not apply: %v", w.configured)
 	}
 	if strings.Contains(h.out.String(), "[y/N]") {
-		t.Fatalf("plain mode prompted:\n%s", h.out.String())
+		t.Fatalf("--yes still prompted:\n%s", h.out.String())
 	}
+}
+
+// TestDeployPlainNeverPrompts: with no TTY the confirmation reader is
+// never consulted, so an unattended run cannot hang — and without --yes
+// nothing is written at all.
+func TestDeployPlainNeverPrompts(t *testing.T) {
+	t.Run("with --yes it applies", func(t *testing.T) {
+		w := &fakeWriter{}
+		h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+		o := h.options() // forced non-interactive
+		// A reader that would fail loudly if it were read from.
+		opts := DeployOptions{Yes: true, In: errReader{}}
+		if err := runDeploy(context.Background(), o, []string{"sea1-vpn-0"}, opts); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.configured) != 1 {
+			t.Fatalf("plain --yes did not apply: %v", w.configured)
+		}
+		if strings.Contains(h.out.String(), "[y/N]") {
+			t.Fatalf("plain mode prompted:\n%s", h.out.String())
+		}
+	})
+
+	// The rule that must never be weakened: no terminal and no --yes
+	// changes nothing, and does not go looking for an answer on stdin.
+	t.Run("without --yes it is a dry run", func(t *testing.T) {
+		w := &fakeWriter{}
+		h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+		o := h.options()
+		opts := DeployOptions{In: errReader{}}
+		if err := runDeploy(context.Background(), o, []string{"sea1-vpn-0"}, opts); err != nil {
+			t.Fatal(err)
+		}
+		if len(w.configured) != 0 || w.saved != 0 {
+			t.Fatalf("a non-TTY run without --yes wrote: %v", w.configured)
+		}
+		out := h.out.String()
+		if strings.Contains(out, "[y/N]") {
+			t.Fatalf("plain mode prompted:\n%s", out)
+		}
+		if !strings.Contains(out, "DRY RUN: nothing was written") {
+			t.Fatalf("dry-run line missing:\n%s", out)
+		}
+	})
 }
 
 type errReader struct{}

@@ -479,6 +479,66 @@ func TestExecuteWarnsWhenBGPStaysAdminDown(t *testing.T) {
 	}
 }
 
+// TestRequireRoutingMakesTheWarningFatal: a caller with more devices to
+// reboot must not treat "BGP is still admin-down" as advisory.
+func TestRequireRoutingMakesTheWarningFatal(t *testing.T) {
+	var out bytes.Buffer
+	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true, RequireRouting: true, Out: &out})
+	api.warning = "BGP still administratively down after reboot; the shutdown may have been saved"
+
+	plan, _ := updater.BuildPlan(context.Background())
+	result, err := updater.Execute(context.Background(), plan)
+
+	var notRecovered *RoutingNotRecoveredError
+	if !errors.As(err, &notRecovered) {
+		t.Fatalf("expected a RoutingNotRecoveredError, got %v", err)
+	}
+	if notRecovered.Hostname != "sea1-leaf-0" {
+		t.Fatalf("the error does not name the device: %+v", notRecovered)
+	}
+	// The device DID update; that has to survive into the report, or the
+	// operator is told a reboot that happened did not.
+	if !strings.Contains(result, "updated to 2026.06.30-0048-rolling") {
+		t.Fatalf("result = %q, want it to still say the device updated", result)
+	}
+	if !strings.Contains(out.String(), "administratively down") {
+		t.Fatalf("the warning was not printed:\n%s", out.String())
+	}
+}
+
+// TestRequireRoutingIsOffByDefault pins the single-device behaviour:
+// still just a warning, as the Python original does.
+func TestRequireRoutingIsOffByDefault(t *testing.T) {
+	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true})
+	api.warning = "BGP still administratively down after reboot"
+
+	plan, _ := updater.BuildPlan(context.Background())
+	if _, err := updater.Execute(context.Background(), plan); err != nil {
+		t.Fatalf("without RequireRouting the warning must not fail the update: %v", err)
+	}
+}
+
+// TestInjectedSleepReplacesTheDrainWait: the drain wait goes through
+// Updater.Sleep when one is set, so a caller (or a suite) can drive an
+// update without really waiting.
+func TestInjectedSleepReplacesTheDrainWait(t *testing.T) {
+	updater, _, _, _ := newUpdater(t, Options{AllowWrites: true})
+	var waited []time.Duration
+	updater.DrainWait = 90 * time.Second
+	updater.Sleep = func(_ context.Context, d time.Duration) error {
+		waited = append(waited, d)
+		return nil
+	}
+
+	plan, _ := updater.BuildPlan(context.Background())
+	if _, err := updater.Execute(context.Background(), plan); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+	if len(waited) != 1 || waited[0] != 95*time.Second {
+		t.Fatalf("drain waits = %v, want one of 95s (drain + grace)", waited)
+	}
+}
+
 func TestExecuteFailsWhenTheDeviceComesBackOnTheOldImage(t *testing.T) {
 	updater, api, _, _ := newUpdater(t, Options{AllowWrites: true})
 	// It reboots but comes back on something unexpected.
