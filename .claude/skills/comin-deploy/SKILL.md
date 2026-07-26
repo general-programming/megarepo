@@ -59,11 +59,17 @@ comin suspend | comin resume   # pause/unpause build+deploy (fetch still runs)
 
 ## Troubleshooting
 
-- **Poller fetches but mirror stays stale** (metrics show fetch successes,
-  yet nothing deploys): inspect the bare mirror directly —
-  `git -C /var/lib/comin/repository log --oneline -1 refs/remotes/origin/main`.
-  A manual `git -C /var/lib/comin/repository fetch origin` followed by
-  `comin fetch` unwedges it.
+- **NEVER run CLI git write operations inside `/var/lib/comin/repository`.**
+  comin uses go-git; a CLI `git fetch` in its mirror desyncs go-git's ref
+  bookkeeping and every later comin pull fails with
+  `Pull from remote 'origin' failed: reference has changed concurrently`.
+  (Read-only inspection like `git log` is fine.)
+- **Poller fetches but nothing deploys / "reference has changed
+  concurrently"**: re-clone the mirror —
+  `systemctl stop comin && rm -rf /var/lib/comin/repository /root/.cache/nix/gitv3 && systemctl start comin && comin fetch`.
+  If eval then fails with `Cannot find Git revision ... in ref ...`, that's
+  the unborn-HEAD bug hitting the fresh clone (preStart ran before the
+  clone existed): `systemctl restart comin && comin fetch` fixes it.
 - **Wrong ref / unborn HEAD**: comin's mirror refspec only updates
   `refs/remotes/origin/*`; HEAD can be unborn and poison lix's fetchGit
   cache. gitops.nix has a preStart workaround (symlinks HEAD, drops

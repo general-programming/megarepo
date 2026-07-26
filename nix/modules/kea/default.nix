@@ -89,10 +89,15 @@ let
     }) "@NETBOX_HOSTS6@" hosts6
   );
 
+  # The kea daemons run as a DynamicUser; the refresh service runs as root.
+  # Keep the reservation files world-readable (MAC/IP inventory, not
+  # secret) so both sides can always read them.
   seedHosts = ''
     mkdir -p ${hostsDir}
+    chmod 0755 ${hostsDir}
     [ -s ${hosts4} ] || echo "[]" > ${hosts4}
     [ -s ${hosts6} ] || echo "[]" > ${hosts6}
+    chmod 0644 ${hosts4} ${hosts6}
   '';
 in
 {
@@ -197,9 +202,21 @@ in
     };
 
     # Seed empty reservation arrays so Kea can start before the first
-    # NetBox refresh has run.
-    systemd.services.kea-dhcp4-server.preStart = seedHosts;
-    systemd.services.kea-dhcp6-server.preStart = lib.mkIf cfg.dhcp6.enable seedHosts;
+    # NetBox refresh has run. KEA_HOOK_SCRIPTS_PATH: kea >= 2.7.9 only
+    # runs hook scripts from a supported directory (compared by exact
+    # dirname), so point it at the webhook script's bin dir.
+    systemd.services.kea-dhcp4-server = {
+      preStart = seedHosts;
+      environment = lib.mkIf cfg.webhook.enable {
+        KEA_HOOK_SCRIPTS_PATH = "${webhookScript}/bin";
+      };
+    };
+    systemd.services.kea-dhcp6-server = lib.mkIf cfg.dhcp6.enable {
+      preStart = seedHosts;
+      environment = lib.mkIf cfg.webhook.enable {
+        KEA_HOOK_SCRIPTS_PATH = "${webhookScript}/bin";
+      };
+    };
 
     systemd.services.kea-netbox-refresh = lib.mkIf cfg.refresh.enable {
       description = "Refresh Kea host reservations from NetBox";
@@ -219,12 +236,14 @@ in
         changed=0
         for f in ${hosts4} ${hosts6}; do
           if ! cmp -s "$f.new" "$f"; then
+            chmod 0644 "$f.new"
             mv "$f.new" "$f"
             changed=1
           else
             rm -f "$f.new"
           fi
         done
+        chmod 0755 ${hostsDir}
 
         if [ "$changed" = 1 ]; then
           systemctl try-restart kea-dhcp4-server.service ${
@@ -255,10 +274,10 @@ in
 
       kea-dhcp-webhook = lib.mkIf cfg.webhook.enable {
         destination = "/run/vault-agent/kea-dhcp-webhook.env";
-        # The run_script hook runs as the kea service user; the template
-        # perms option can't set group, so fix ownership after each render.
-        perms = "0640";
-        command = "chgrp kea /run/vault-agent/kea-dhcp-webhook.env";
+        # The hook runs as kea's DynamicUser, which has no static group to
+        # chgrp to at render time; the webhook URL is low-sensitivity, so
+        # world-readable is the pragmatic option.
+        perms = "0644";
         contents = ''
           {{- with secret "${cfg.webhook.vaultKvPath}" }}
           WEBHOOK_URL={{ .Data.data.url }}
