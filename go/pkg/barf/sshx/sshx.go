@@ -40,6 +40,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/general-programming/megarepo/go/common/pytext"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/agent"
 )
@@ -672,7 +673,7 @@ func (c *Client) uploadScript(ctx context.Context, name, content string) (string
 	}
 	remote := "/tmp/" + name
 
-	command := fmt.Sprintf("cat > %s && chmod 0755 %s", Quote(remote), Quote(remote))
+	command := fmt.Sprintf("cat > %s && chmod 0755 %s", pytext.ShellQuote(remote), pytext.ShellQuote(remote))
 	result, err := c.exec(ctx, command, DefaultRunTimeout, execOptions{stdin: content})
 	if err != nil {
 		return "", err
@@ -701,7 +702,7 @@ func (c *Client) RunScript(ctx context.Context, req ScriptRequest) (Result, bool
 	}
 
 	// A pty merges stderr into stdout and keeps sudo happy.
-	result, err := c.exec(ctx, "vbash "+Quote(remote), timeout, execOptions{
+	result, err := c.exec(ctx, "vbash "+pytext.ShellQuote(remote), timeout, execOptions{
 		pty:        true,
 		echo:       req.Echo,
 		echoPrefix: req.EchoPrefix,
@@ -730,7 +731,7 @@ func (c *Client) RunDetached(ctx context.Context, name, content string) (string,
 	logPath := remote + ".log"
 
 	command := fmt.Sprintf("nohup vbash %s > %s 2>&1 & echo DETACHED",
-		Quote(remote), Quote(logPath))
+		pytext.ShellQuote(remote), pytext.ShellQuote(logPath))
 	result, err := c.exec(ctx, command, 30*time.Second, execOptions{})
 	if err != nil {
 		return "", err
@@ -740,24 +741,4 @@ func (c *Client) RunDetached(ctx context.Context, name, content string) (string,
 			c.hostname, name, result.ExitStatus)
 	}
 	return logPath, nil
-}
-
-// Quote is shlex.quote: POSIX single-quoting for a shell word.
-func Quote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	safe := true
-	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
-			r == '@' || r == '%' || r == '+' || r == '=' || r == ':' ||
-			r == ',' || r == '.' || r == '/' || r == '-' || r == '_') {
-			safe = false
-			break
-		}
-	}
-	if safe {
-		return s
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }

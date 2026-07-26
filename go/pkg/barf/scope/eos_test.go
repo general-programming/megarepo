@@ -264,11 +264,11 @@ func TestParseEOSManagedStateHandlesPythonLineBoundaries(t *testing.T) {
 func TestEOSCompareInSyncDespiteDifferentSalt(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	result, err := EOS{}.Compare(context.Background(), Input{
-		Host:    testHost(),
-		Network: testNetwork(testSSHKey),
-		Secrets: defaultSecrets(),
-		Reader:  sections,
-		Redact:  true,
+		Host:        testHost(),
+		Network:     testNetwork(testSSHKey),
+		Secrets:     defaultSecrets(),
+		Reader:      sections,
+		ShowSecrets: false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -305,11 +305,11 @@ func TestEOSCompareReadsOnlyManagedSections(t *testing.T) {
 func TestEOSCompareWrongPasswordDrifts(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	result, err := EOS{}.Compare(context.Background(), Input{
-		Host:    testHost(),
-		Network: testNetwork(testSSHKey),
-		Secrets: fakeSecrets{admin: "a-different-password", enable: "another-one"},
-		Reader:  sections,
-		Redact:  true,
+		Host:        testHost(),
+		Network:     testNetwork(testSSHKey),
+		Secrets:     fakeSecrets{admin: "a-different-password", enable: "another-one"},
+		Reader:      sections,
+		ShowSecrets: false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -335,11 +335,11 @@ func TestEOSCompareWrongPasswordDrifts(t *testing.T) {
 func TestEOSCompareShowSecrets(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	result, err := EOS{}.Compare(context.Background(), Input{
-		Host:    testHost(),
-		Network: testNetwork(testSSHKey),
-		Secrets: fakeSecrets{admin: "wrong", enable: "wrong"},
-		Reader:  sections,
-		Redact:  false,
+		Host:        testHost(),
+		Network:     testNetwork(testSSHKey),
+		Secrets:     fakeSecrets{admin: "wrong", enable: "wrong"},
+		Reader:      sections,
+		ShowSecrets: true,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -355,11 +355,11 @@ func TestEOSCompareShowSecrets(t *testing.T) {
 func TestEOSCompareUnadoptedDevice(t *testing.T) {
 	sections := &fakeSections{text: "username erin privilege 15 secret sha512 $6$e$h\n"}
 	result, err := EOS{}.Compare(context.Background(), Input{
-		Host:    testHost(),
-		Network: testNetwork(testSSHKey, testSSHKey2),
-		Secrets: defaultSecrets(),
-		Reader:  sections,
-		Redact:  true,
+		Host:        testHost(),
+		Network:     testNetwork(testSSHKey, testSSHKey2),
+		Secrets:     defaultSecrets(),
+		Reader:      sections,
+		ShowSecrets: false,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -466,5 +466,47 @@ func TestCompareRejectsUnknownDeviceType(t *testing.T) {
 	_, err := Compare(context.Background(), Input{Host: &model.Host{Hostname: "h", DeviceType: "vyos"}})
 	if err == nil || !strings.Contains(err.Error(), "no scoped comparison") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The zero value of Input must redact. The field used to be `Redact
+// bool`, so an Input built without setting it printed crypt hashes in
+// cleartext; the polarity was flipped to ShowSecrets so that forgetting
+// the field fails safe.
+func TestEOSCompareZeroValueInputRedacts(t *testing.T) {
+	sections := &fakeSections{text: inSyncConfig(t)}
+	result, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: testNetwork(testSSHKey),
+		Secrets: fakeSecrets{admin: "wrong", enable: "wrong"},
+		Reader:  sections,
+		// ShowSecrets deliberately not set.
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.HasChanges {
+		t.Fatal("expected drift with the wrong secrets")
+	}
+	if strings.Contains(result.Text, "$6$") {
+		t.Errorf("zero-value Input leaked a hash:\n%s", result.Text)
+	}
+}
+
+// diff must refuse the same over-long key list generate refuses, rather
+// than reporting drift against a list that could never be produced.
+func TestEOSDriftRejectsOverLongSSHKeyList(t *testing.T) {
+	network := testNetwork(testSSHKey, testSSHKey2, "ssh-rsa AAAAthird third@host")
+	_, err := EOS{}.Compare(context.Background(), Input{
+		Host:    testHost(),
+		Network: network,
+		Secrets: defaultSecrets(),
+		Reader:  &fakeSections{text: inSyncConfig(t)},
+	})
+	if err == nil {
+		t.Fatal("expected a refusal for three ssh keys")
+	}
+	if !strings.Contains(err.Error(), "one primary and one secondary") {
+		t.Errorf("err = %v, want the EOS ssh-key limit error", err)
 	}
 }

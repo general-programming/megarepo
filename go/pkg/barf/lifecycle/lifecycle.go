@@ -28,15 +28,22 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/device"
 )
 
 // Options is the write opt-in for every operation in this package.
 //
-// NOTE: go/pkg/barf/device is (at the time of writing) gaining an
-// `Options.AllowWrites` field with the same meaning. If that lands, these
-// two should be de-duplicated onto one type — but they must stay
-// *separate booleans* from any read-side option, so that enabling a
-// device read can never enable a device write.
+// NOTE: device.Options now has its own `AllowWrites` with the same
+// meaning, and the two are deliberately NOT merged into one type. They
+// gate different things — this one gates reboot/drain/image-delete, that
+// one gates constructing a config Writer — and a caller that wants one
+// must not silently get the other. What did get unified is the error:
+// both refusals now satisfy errors.Is(err, ErrWritesNotAllowed).
+//
+// Whatever else changes here, these must stay *separate booleans* from
+// any read-side option, so that enabling a device read can never enable
+// a device write.
 type Options struct {
 	// AllowWrites permits operations that modify a device: image
 	// install, image delete, BGP drain, reboot. False (the zero value)
@@ -75,7 +82,16 @@ func (o Options) out() io.Writer {
 
 // ErrWritesNotAllowed is returned by every write path when
 // Options.AllowWrites is false. Nothing on the device was touched.
-var ErrWritesNotAllowed = errors.New("refusing to modify the device: writes are not enabled (dry run)")
+//
+// It IS device.ErrWritesNotAllowed, not a second sentinel that means the
+// same thing. It used to be its own errors.New, so a refusal raised in
+// package device — NewVyOSWriter without AllowWrites, say — did not
+// satisfy errors.Is(err, lifecycle.ErrWritesNotAllowed) even though it
+// was the identical condition. Callers deciding "was the device touched?"
+// got a different answer depending on which package refused first, which
+// is the one question this error exists to answer. Use
+// device.IsRefusal for the broader "any guard refused" check.
+var ErrWritesNotAllowed = device.ErrWritesNotAllowed
 
 // ErrAlreadyExecuted is returned when an Updater is asked to perform a
 // second device-changing run. One invocation reboots at most one device.

@@ -156,43 +156,6 @@ func TestVerifyRouting(t *testing.T) {
 	}
 }
 
-func TestParseSystemImages(t *testing.T) {
-	table := `Name                        Default boot    Running
---------------------------  --------------  ---------
-2026.06.30-0048-rolling     yes             yes
-2026.05.01-0100-rolling     no              no
-`
-	images := ParseSystemImages(table)
-	if len(images) != 2 {
-		t.Fatalf("got %d images: %+v", len(images), images)
-	}
-	if !images[0].DefaultBoot || !images[0].Running {
-		t.Fatalf("first image flags wrong: %+v", images[0])
-	}
-	if images[1].DefaultBoot || images[1].Running {
-		t.Fatalf("second image flags wrong: %+v", images[1])
-	}
-
-	legacy := "1: 2026.06.30 (default boot) (running image)\n2: 2026.05.01\n"
-	images = ParseSystemImages(legacy)
-	if len(images) != 2 || !images[0].DefaultBoot || !images[0].Running || images[1].DefaultBoot {
-		t.Fatalf("legacy parse wrong: %+v", images)
-	}
-}
-
-func TestParseVersion(t *testing.T) {
-	cases := map[string]string{
-		"Version:          VyOS 1.5-rolling\n": "1.5-rolling",
-		"":                                     "-",
-		"VyOS 1.4\n":                           "1.4",
-	}
-	for in, want := range cases {
-		if got := ParseVersion(in); got != want {
-			t.Fatalf("ParseVersion(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestAPIKeyIsNotLeakedInErrors(t *testing.T) {
 	server := newAPIServer(t)
 	_, err := server.client(t, false).Show(context.Background(), "version")

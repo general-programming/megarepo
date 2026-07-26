@@ -27,16 +27,14 @@ package device
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/vyoswire"
 )
 
 // -- shared write surface ---------------------------------------------
@@ -127,7 +125,7 @@ func NewVyOSWriter(h *model.Host, opts Options) (*VyOSWriter, error) {
 		return nil, fmt.Errorf("device: nil host")
 	}
 	if !opts.AllowWrites {
-		return nil, &ErrWritesNotAllowed{What: "a VyOS config writer for " + h.Hostname}
+		return nil, &WritesNotAllowedError{What: "a VyOS config writer for " + h.Hostname}
 	}
 	if !strings.EqualFold(h.DeviceType, "vyos") {
 		return nil, fmt.Errorf("device: %s: %w: NewVyOSWriter called for devicetype %q",
@@ -153,13 +151,17 @@ func (w *VyOSWriter) apiKey() (string, error) {
 }
 
 // request is the ONLY function in this file that performs a request. It
-// mirrors VyOSReader.request (form-POST of `data`+`key`, {success, data,
-// error} reply) but carries the writer's own, equally closed, endpoint
-// allowlist. It is separate on purpose: the read primitive's guard stays
-// untouched and unbypassable.
+// shares the wire mechanics with VyOSReader.request (form-POST of
+// `data`+`key`, {success, data, error} reply) via vyoswire, but carries
+// the writer's own, equally closed, endpoint allowlist.
+//
+// The two guards are separate on purpose and stayed separate when the
+// plumbing was deduplicated: vyoswire holds no allowlist at all, so the
+// read primitive's guard is still untouched and unbypassable, and this
+// one is still the only thing standing between a caller and /configure.
 func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload any) (string, error) {
 	if !vyosWriteRequestAllowed(endpoint, op) {
-		return "", &ErrWriteAttempt{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
+		return "", &WriteAttemptError{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
 	}
 
 	ctx, cancel := w.opts.withOpTimeout(ctx, vyosWriteTimeout(endpoint))
@@ -174,55 +176,12 @@ func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload a
 		return "", fmt.Errorf("%s: no reachable address: %w", w.host.Hostname, err)
 	}
 
-	data, err := json.Marshal(payload)
+	target := fmt.Sprintf("https://%s:%d/%s", HostForURL(address), w.opts.port(), endpoint)
+	data, err := vyoswire.Post(ctx, w.client, w.host.Hostname, target, key, payload)
 	if err != nil {
 		return "", err
 	}
-	form := url.Values{"data": {string(data)}, "key": {key}}
-
-	target := fmt.Sprintf("https://%s:%d/%s", hostForURL(address), w.opts.port(), endpoint)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(form.Encode()))
-	if err != nil {
-		return "", err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := w.client.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("%s: vyos api request failed: %w", w.host.Hostname, err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
-		return "", err
-	}
-
-	var decoded vyosResponse
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return "", fmt.Errorf("%s: malformed vyos api response (HTTP %d): %w",
-			w.host.Hostname, resp.StatusCode, err)
-	}
-	if !decoded.Success {
-		message := "unknown API error"
-		if decoded.Error != nil {
-			if s, ok := decoded.Error.(string); ok && s != "" {
-				message = s
-			} else {
-				message = fmt.Sprint(decoded.Error)
-			}
-		}
-		return "", fmt.Errorf("%s: vyos api: %s", w.host.Hostname, message)
-	}
-
-	if len(decoded.Data) == 0 {
-		return "", nil
-	}
-	var text string
-	if err := json.Unmarshal(decoded.Data, &text); err != nil {
-		return string(decoded.Data), nil
-	}
-	return text, nil
+	return vyoswire.Text(data), nil
 }
 
 // Configure applies ops via `/configure`, which commits them atomically:
@@ -238,7 +197,7 @@ func (w *VyOSWriter) Configure(ctx context.Context, ops []Op) error {
 	wire := make([]vyosWireOp, 0, len(ops))
 	for i, op := range ops {
 		if !vyosWriteOpAllowed(op.Verb) {
-			return &ErrWriteAttempt{What: fmt.Sprintf("VyOS configure op[%d] verb %q", i, op.Verb)}
+			return &WriteAttemptError{What: fmt.Sprintf("VyOS configure op[%d] verb %q", i, op.Verb)}
 		}
 		if len(op.Path) == 0 {
 			// A path-less delete would target the whole config root.

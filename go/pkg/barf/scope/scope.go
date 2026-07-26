@@ -63,9 +63,18 @@ type Input struct {
 	Secrets SecretSource
 	// Reader fetches the device's current managed-scope config.
 	Reader SectionReader
-	// Redact hides secret material in the rendered output. Callers pass
-	// false only for an explicit --show-secrets.
-	Redact bool
+	// ShowSecrets disables redaction of secret material in the rendered
+	// output. Only an explicit --show-secrets sets it.
+	//
+	// The polarity is deliberate and matches cli.DiffOptions.ShowSecrets
+	// exactly, so no caller has to negate anything on the way in. It used
+	// to be a `Redact bool` here against a `ShowSecrets bool` there, with
+	// a lone `!` bridging them in cli/scopeddiff.go — two opposite senses
+	// for one --show-secrets flag, where dropping the `!` would have
+	// leaked secrets silently and read as a simplification. It also means
+	// the zero value now redacts: an Input built without thinking about
+	// this field is safe, where `Redact: false` was not.
+	ShowSecrets bool
 }
 
 // Change is one out-of-sync managed item.
@@ -135,13 +144,13 @@ func redact(line string) string {
 
 // buildResult turns drift into the `- device / + desired` body and summary
 // that every scoped comparer returns.
-func buildResult(drift []Change, doRedact bool) Result {
+func buildResult(drift []Change, showSecrets bool) Result {
 	var b strings.Builder
 	for _, change := range drift {
 		if change.Device != "" {
-			b.WriteString("- " + maybeRedact(change.Device, doRedact) + "\n")
+			b.WriteString("- " + maybeRedactHash(change.Device, showSecrets) + "\n")
 		}
-		b.WriteString("+ " + maybeRedact(change.Desired, doRedact) + "\n")
+		b.WriteString("+ " + maybeRedactHash(change.Desired, showSecrets) + "\n")
 	}
 
 	summary := "no changes"
@@ -156,8 +165,12 @@ func buildResult(drift []Change, doRedact bool) Result {
 	}
 }
 
-func maybeRedact(line string, doRedact bool) string {
-	if !doRedact {
+// maybeRedactHash is named for what it hides. cli has its own
+// maybeRedact* for VyOS `set` lines that hides the value after a secret
+// keyword; the two redact genuinely different things and are not
+// interchangeable, so neither is called just "maybeRedact" any more.
+func maybeRedactHash(line string, showSecrets bool) string {
+	if showSecrets {
 		return line
 	}
 	return redact(line)

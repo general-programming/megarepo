@@ -1,11 +1,11 @@
-package vyosconfig
+package pytext
 
 import (
 	"slices"
 	"testing"
 )
 
-func TestShlexSplit(t *testing.T) {
+func TestShellSplit(t *testing.T) {
 	tests := []struct {
 		name    string
 		in      string
@@ -35,24 +35,24 @@ func TestShlexSplit(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := shlexSplit(tc.in)
+			got, err := ShellSplit(tc.in)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("shlexSplit(%q) = %v, want error", tc.in, got)
+					t.Fatalf("ShellSplit(%q) = %v, want error", tc.in, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("shlexSplit(%q): %v", tc.in, err)
+				t.Fatalf("ShellSplit(%q): %v", tc.in, err)
 			}
 			if !slices.Equal(got, tc.want) {
-				t.Fatalf("shlexSplit(%q) = %#v, want %#v", tc.in, got, tc.want)
+				t.Fatalf("ShellSplit(%q) = %#v, want %#v", tc.in, got, tc.want)
 			}
 		})
 	}
 }
 
-func TestShlexQuote(t *testing.T) {
+func TestShellQuote(t *testing.T) {
 	tests := []struct {
 		in   string
 		want string
@@ -67,22 +67,26 @@ func TestShlexQuote(t *testing.T) {
 		{"a(b)", "'a(b)'"},
 		{"it's", `'it'"'"'s'`},
 		{"$6$salt$hash", "'$6$salt$hash'"},
+		// sshx interpolates the result into a remote shell command line,
+		// so these must not survive unquoted.
+		{"$(reboot)", "'$(reboot)'"},
+		{"/tmp/barf-install.sh", "/tmp/barf-install.sh"},
 		{"näive", "'näive'"}, // re.ASCII: non-ASCII word chars are unsafe
 	}
 	for _, tc := range tests {
 		t.Run(tc.in, func(t *testing.T) {
-			if got := shlexQuote(tc.in); got != tc.want {
-				t.Fatalf("shlexQuote(%q) = %q, want %q", tc.in, got, tc.want)
+			if got := ShellQuote(tc.in); got != tc.want {
+				t.Fatalf("ShellQuote(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}
 }
 
-// TestShlexRoundTrip: anything quoted must split back to itself, which is
+// TestShellRoundTrip: anything quoted must split back to itself, which is
 // what keeps FormatDiff output re-parseable by ParseSetCommands.
-func TestShlexRoundTrip(t *testing.T) {
+func TestShellRoundTrip(t *testing.T) {
 	for _, s := range []string{"plain", "a b", "it's", "$6$salt$hash", `a"b`, `a\b`, ""} {
-		got, err := shlexSplit(shlexQuote(s))
+		got, err := ShellSplit(ShellQuote(s))
 		if err != nil {
 			t.Fatalf("round trip %q: %v", s, err)
 		}

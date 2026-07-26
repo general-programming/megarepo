@@ -22,6 +22,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/general-programming/megarepo/go/common/pytext"
 )
 
 // Path is one config path: the tokens of a `set` command, minus the verb.
@@ -41,7 +43,7 @@ func (p Path) Clone() Path { return slices.Clone(p) }
 func (p Path) String() string {
 	parts := make([]string, len(p))
 	for i, component := range p {
-		parts[i] = shlexQuote(component)
+		parts[i] = pytext.ShellQuote(component)
 	}
 	return strings.Join(parts, " ")
 }
@@ -128,7 +130,7 @@ var IgnoredPaths = []Path{{"interfaces", "ethernet", "*", "hw-id"}}
 // templates' inconsistent quoting normalizes to the same path.
 func ParseSetCommands(text string) Set {
 	paths := Set{}
-	for _, raw := range splitLines(text) {
+	for _, raw := range pytext.SplitLines(text) {
 		line := strings.TrimSpace(raw)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -136,7 +138,7 @@ func ParseSetCommands(text string) Set {
 		if !strings.HasPrefix(line, "set ") {
 			continue
 		}
-		tokens, err := shlexSplit(line)
+		tokens, err := pytext.ShellSplit(line)
 		if err != nil {
 			// Unbalanced quotes; keep the raw split rather than dying.
 			tokens = strings.Fields(line)

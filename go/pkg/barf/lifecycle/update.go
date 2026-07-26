@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/general-programming/megarepo/go/common/pytext"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 )
@@ -463,7 +464,7 @@ func (u *Updater) detachedRebootFailure(ctx context.Context, logPath string) str
 	}
 	defer func() { _ = conn.Close() }()
 
-	result, err := conn.Run(ctx, "cat "+sshx.Quote(logPath), 10*time.Second)
+	result, err := conn.Run(ctx, "cat "+pytext.ShellQuote(logPath), 10*time.Second)
 	if err != nil {
 		return ""
 	}

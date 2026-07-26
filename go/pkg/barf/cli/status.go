@@ -6,14 +6,15 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/general-programming/megarepo/go/pkg/barf/device"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/tui"
 	"github.com/spf13/cobra"
 )
 
-// maxProbes is how many devices are contacted at once, matching the
-// Python ThreadPoolExecutor(max_workers=8).
-const maxProbes = 8
+// maxProbes is device.MaxProbes: how many devices are contacted at once,
+// matching the Python ThreadPoolExecutor(max_workers=8).
+const maxProbes = device.MaxProbes
 
 // runBounded calls fn(0..n-1) on at most maxProbes goroutines.
 //

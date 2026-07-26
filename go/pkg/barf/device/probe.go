@@ -75,8 +75,14 @@ func EndpointCandidates(h *model.Host, domain string) []string {
 		}
 	}
 	// External (global) addresses first; stable, like Python's sort.
+	//
+	// model.IsGlobal, not a local copy: this package had its own
+	// hand-rolled version that disagreed with model's on 0.0.0.0/8 and on
+	// four IPv6 ranges (64:ff9b:1::/48, 100::/64, 2001::/23, 2002::/16),
+	// calling them globally routable when Python's ipaddress does not. A
+	// 6to4 or Teredo address would have been probed ahead of a real one.
 	sort.SliceStable(ifaceIPs, func(i, j int) bool {
-		return isGlobal(ifaceIPs[i]) && !isGlobal(ifaceIPs[j])
+		return model.IsGlobal(ifaceIPs[i]) && !model.IsGlobal(ifaceIPs[j])
 	})
 	for _, ip := range ifaceIPs {
 		candidates = append(candidates, ip.String())
@@ -92,44 +98,6 @@ func EndpointCandidates(h *model.Host, domain string) []string {
 		out = append(out, candidate)
 	}
 	return out
-}
-
-// isGlobal approximates Python's ipaddress is_global: publicly routable.
-func isGlobal(ip netip.Addr) bool {
-	if !ip.IsValid() || ip.IsUnspecified() || ip.IsLoopback() ||
-		ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsPrivate() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
-		return false
-	}
-	if ip.Is4() || ip.Is4In6() {
-		v4 := ip.As4()
-		switch {
-		case v4[0] == 100 && v4[1]&0xc0 == 64: // 100.64/10 CGNAT
-			return false
-		case v4[0] == 192 && v4[1] == 0 && v4[2] == 0: // 192.0.0/24
-			return false
-		case v4[0] == 192 && v4[1] == 0 && v4[2] == 2: // TEST-NET-1
-			return false
-		case v4[0] == 198 && v4[1]&0xfe == 18: // 198.18/15 benchmarking
-			return false
-		case v4[0] == 198 && v4[1] == 51 && v4[2] == 100: // TEST-NET-2
-			return false
-		case v4[0] == 203 && v4[1] == 0 && v4[2] == 113: // TEST-NET-3
-			return false
-		case v4[0] >= 240: // reserved / broadcast
-			return false
-		}
-		return true
-	}
-	// IPv6: ULA (fc00::/7) is not global; netip.IsPrivate covers it, but
-	// be explicit about the documentation range too.
-	if ip.Is6() {
-		b := ip.As16()
-		if b[0] == 0x20 && b[1] == 0x01 && b[2] == 0x0d && b[3] == 0xb8 { // 2001:db8::/32
-			return false
-		}
-	}
-	return true
 }
 
 // ProbeEndpoint returns the first candidate answering a TCP connect on
@@ -178,8 +146,14 @@ func (r *endpointResolver) resolve(ctx context.Context) (string, error) {
 	return r.value, r.err
 }
 
-// hostForURL wraps a bare IPv6 literal in brackets for use in a URL.
-func hostForURL(address string) string {
+// HostForURL wraps a bare IPv6 literal in brackets for use in a URL.
+//
+// Exported so barf/lifecycle can share it rather than keep its own copy.
+// It stays here rather than in go/common because its only consumers are
+// the barf transports that build device URLs; a five-line helper does not
+// earn a slot in a monorepo-wide package until something outside barf
+// needs it.
+func HostForURL(address string) string {
 	if ip, err := netip.ParseAddr(address); err == nil && ip.Is6() && !ip.Is4In6() {
 		return "[" + address + "]"
 	}

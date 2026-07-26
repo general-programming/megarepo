@@ -952,3 +952,29 @@ func TestDeviceCleanupSkipsNonVyOS(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// An image source with no known target version must never report a
+// device as already current: strings.Contains(v, "") is true, so the
+// inline substring test this replaced skipped upgrades silently.
+// imageSource refuses to build one, but the predicate guards itself.
+func TestStaticImageUnknownVersionIsNotCurrent(t *testing.T) {
+	unknown := staticImage{url: "https://example.invalid/i.iso"}
+	for _, version := range []string{"2026.07.21-1151-rolling", "1.4.2", ""} {
+		if unknown.IsCurrent(version) {
+			t.Errorf("staticImage{version:\"\"}.IsCurrent(%q) = true", version)
+		}
+	}
+}
+
+func TestStaticImageIsCurrentUsesContainment(t *testing.T) {
+	image := staticImage{version: "2026.07.21-1151-rolling"}
+	if !image.IsCurrent("VyOS 2026.07.21-1151-rolling (build x)") {
+		t.Error("containment match should report current")
+	}
+	if image.IsCurrent("2026.07.11-0033-rolling") {
+		t.Error("older version should not report current")
+	}
+	if image.IsCurrent("") {
+		t.Error("empty device version should not report current")
+	}
+}

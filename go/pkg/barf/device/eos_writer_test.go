@@ -72,7 +72,7 @@ func TestNewEOSWriterRequiresAllowWrites(t *testing.T) {
 	if w != nil {
 		t.Fatal("a writer value came back alongside the error")
 	}
-	var notAllowed *ErrWritesNotAllowed
+	var notAllowed *WritesNotAllowedError
 	if !errors.As(err, &notAllowed) {
 		t.Fatalf("err = %v, want ErrWritesNotAllowed", err)
 	}
@@ -96,7 +96,7 @@ func TestAllowWritesDoesNotLoosenTheReader(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err = r.runShow(context.Background(), "json", "configure")
-	var attempt *ErrWriteAttempt
+	var attempt *WriteAttemptError
 	if !errors.As(err, &attempt) {
 		t.Fatalf("err = %v, want ErrWriteAttempt even with AllowWrites set", err)
 	}
@@ -200,7 +200,7 @@ func TestConfigureRefusesCommandsOutsideTheManagedScope(t *testing.T) {
 			t.Fatal(err)
 		}
 		err = w.Configure(context.Background(), EOSOps([]string{cmd}))
-		var unmanaged *ErrUnmanagedCommand
+		var unmanaged *UnmanagedCommandError
 		if !errors.As(err, &unmanaged) {
 			t.Errorf("Configure(%q) err = %v, want ErrUnmanagedCommand", cmd, err)
 		}
@@ -396,7 +396,7 @@ func TestEOSWriterConfigureRejectsEmbeddedNewline(t *testing.T) {
 	err = w.Configure(context.Background(), EOSOps([]string{
 		"username admin ssh-key ssh-ed25519 AAAA x\nno ip routing",
 	}))
-	var unmanaged *ErrUnmanagedCommand
+	var unmanaged *UnmanagedCommandError
 	if !errors.As(err, &unmanaged) {
 		t.Fatalf("err = %v, want ErrUnmanagedCommand", err)
 	}

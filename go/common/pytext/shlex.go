@@ -1,4 +1,4 @@
-package vyosconfig
+package pytext
 
 import (
 	"errors"
@@ -11,12 +11,23 @@ import (
 // them back. Go has neither in its standard library, and the templates'
 // inconsistent quoting (`'aes256'` vs `aes256`) means the normalization
 // has to match Python's byte for byte or paths stop comparing equal.
+//
+// ShellQuote had a second, independently written implementation in
+// barf/sshx, where it built the `vbash`/`cat` command lines sent over
+// SSH. The two agreed on the safe-character set but only this one was
+// checked against CPython, so this is the copy that survived; sshx now
+// calls it. That matters more there than in vyosconfig: sshx interpolates
+// the result straight into a remote shell command, so the quoting is a
+// command-injection boundary, not just a formatting detail.
+//
+// Both entry points are differentially validated against CPython — see
+// shlex_test.go and the captured corpus in testdata/python_shlex.json.
 
-// errNoClosingQuote mirrors Python's ValueError("No closing quotation").
-var errNoClosingQuote = errors.New("no closing quotation")
+// ErrNoClosingQuote mirrors Python's ValueError("No closing quotation").
+var ErrNoClosingQuote = errors.New("no closing quotation")
 
-// errTrailingEscape mirrors Python's ValueError("No escaped character").
-var errTrailingEscape = errors.New("no escaped character")
+// ErrNoEscapedCharacter mirrors Python's ValueError("No escaped character").
+var ErrNoEscapedCharacter = errors.New("no escaped character")
 
 const (
 	shlexWhitespace = " \t\r\n"
@@ -26,9 +37,9 @@ const (
 	shlexEscape        = '\\'
 )
 
-// shlexSplit tokenizes s exactly as Python's `shlex.split(s)` does:
+// ShellSplit tokenizes s exactly as Python's `shlex.split(s)` does:
 // POSIX mode, whitespace splitting, comments disabled.
-func shlexSplit(s string) ([]string, error) {
+func ShellSplit(s string) ([]string, error) {
 	var (
 		tokens  []string
 		token   strings.Builder
@@ -98,17 +109,17 @@ func shlexSplit(s string) ([]string, error) {
 
 	switch state {
 	case '\'', '"':
-		return nil, errNoClosingQuote
+		return nil, ErrNoClosingQuote
 	case shlexEscape:
-		return nil, errTrailingEscape
+		return nil, ErrNoEscapedCharacter
 	}
 	flush()
 	return tokens, nil
 }
 
-// shlexQuote is Python's `shlex.quote`: return s unchanged when every
+// ShellQuote is Python's `shlex.quote`: return s unchanged when every
 // character is shell-safe, otherwise wrap it in single quotes.
-func shlexQuote(s string) string {
+func ShellQuote(s string) string {
 	if s == "" {
 		return "''"
 	}

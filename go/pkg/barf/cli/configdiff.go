@@ -197,18 +197,22 @@ func DiffConfigs(rendered, running string, opts DiffOptions) ConfigDiff {
 	var b strings.Builder
 	if opts.ShowDeviceOnly {
 		for _, line := range removed {
-			b.WriteString("- " + maybeRedact(line, opts) + "\n")
+			b.WriteString("- " + maybeRedactSecretValue(line, opts) + "\n")
 		}
 	}
 	for _, line := range added {
-		b.WriteString("+ " + maybeRedact(line, opts) + "\n")
+		b.WriteString("+ " + maybeRedactSecretValue(line, opts) + "\n")
 	}
 	d.Text = strings.TrimRight(b.String(), "\n")
 	d.Summary = summarizeDiff(d)
 	return d
 }
 
-func maybeRedact(line string, opts DiffOptions) string {
+// maybeRedactSecretValue is named for what it hides. scope has its own
+// maybeRedactHash for EOS managed lines that hides `$6$` crypt material;
+// the two redact genuinely different things and are not interchangeable,
+// so neither is called just "maybeRedact" any more.
+func maybeRedactSecretValue(line string, opts DiffOptions) string {
 	if opts.ShowSecrets {
 		return line
 	}

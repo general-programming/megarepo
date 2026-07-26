@@ -4,15 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
-	"net/url"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/general-programming/megarepo/go/common/pytext"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/vyoswire"
 )
 
 // VyOSAPIKeySecret is the shared-secret name holding the VyOS HTTPS API
@@ -92,18 +92,18 @@ func (r *VyOSReader) apiKey() (string, error) {
 	return r.key, r.keyErr
 }
 
-type vyosResponse struct {
-	Success bool            `json:"success"`
-	Data    json.RawMessage `json:"data"`
-	Error   any             `json:"error"`
-}
-
 // request is the ONLY function in the package that performs a VyOS API
-// request. It refuses any endpoint/op pair vyosRequestAllowed rejects, so
-// no caller can reach /configure, /config-file or /image through it.
+// read request. It refuses any endpoint/op pair vyosRequestAllowed
+// rejects, so no caller can reach /configure, /config-file or /image
+// through it.
+//
+// The guard below is this reader's own and is deliberately unrelated to
+// Options.AllowWrites: no option, and no amount of wiring, turns a
+// VyOSReader into something that can name a write endpoint. Only the
+// transport mechanics are shared (see vyoswire) — the allowlist is not.
 func (r *VyOSReader) request(ctx context.Context, endpoint, op string, payload any) (json.RawMessage, error) {
 	if !vyosRequestAllowed(endpoint, op) {
-		return nil, &ErrWriteAttempt{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
+		return nil, &WriteAttemptError{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
 	}
 
 	ctx, cancel := r.opts.withOpTimeout(ctx, vyosReadTimeout(endpoint))
@@ -118,47 +118,8 @@ func (r *VyOSReader) request(ctx context.Context, endpoint, op string, payload a
 		return nil, fmt.Errorf("%s: no reachable address: %w", r.host.Hostname, err)
 	}
 
-	data, err := json.Marshal(payload)
-	if err != nil {
-		return nil, err
-	}
-	form := url.Values{"data": {string(data)}, "key": {key}}
-
-	target := fmt.Sprintf("https://%s:%d/%s", hostForURL(address), r.opts.port(), endpoint)
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(form.Encode()))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := r.client.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("%s: vyos api request failed: %w", r.host.Hostname, err)
-	}
-	defer resp.Body.Close()
-
-	raw, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
-	if err != nil {
-		return nil, err
-	}
-
-	var decoded vyosResponse
-	if err := json.Unmarshal(raw, &decoded); err != nil {
-		return nil, fmt.Errorf("%s: malformed vyos api response (HTTP %d): %w",
-			r.host.Hostname, resp.StatusCode, err)
-	}
-	if !decoded.Success {
-		message := "unknown API error"
-		if decoded.Error != nil {
-			if s, ok := decoded.Error.(string); ok && s != "" {
-				message = s
-			} else {
-				message = fmt.Sprint(decoded.Error)
-			}
-		}
-		return nil, fmt.Errorf("%s: vyos api: %s", r.host.Hostname, message)
-	}
-	return decoded.Data, nil
+	target := fmt.Sprintf("https://%s:%d/%s", HostForURL(address), r.opts.port(), endpoint)
+	return vyoswire.Post(ctx, r.client, r.host.Hostname, target, key, payload)
 }
 
 // Show runs an operational `show` command, e.g. Show(ctx, "version") or
@@ -171,15 +132,9 @@ func (r *VyOSReader) Show(ctx context.Context, path ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(data) == 0 {
-		return "", nil
-	}
-	var text string
-	if err := json.Unmarshal(data, &text); err != nil {
-		// Non-string payloads are unexpected for op-mode; surface them raw.
-		return string(data), nil
-	}
-	return text, nil
+	// Non-string payloads are unexpected for op-mode; vyoswire.Text
+	// surfaces them raw rather than dropping them.
+	return vyoswire.Text(data), nil
 }
 
 // RetrieveConfig fetches (part of) the running config as a JSON tree via
@@ -229,7 +184,7 @@ func retrievePayloadDescription(data json.RawMessage) string {
 // "VyOS " prefix is stripped so the value lines up with upstream release
 // tags (e.g. "2026.06.30-0048-rolling").
 func ParseVyOSVersion(output string) string {
-	for _, line := range splitLines(output) {
+	for _, line := range pytext.SplitLines(output) {
 		if strings.HasPrefix(strings.ToLower(line), "version:") {
 			_, value, _ := strings.Cut(line, ":")
 			return strings.TrimPrefix(strings.TrimSpace(value), "VyOS ")
@@ -238,10 +193,10 @@ func ParseVyOSVersion(output string) string {
 	if strings.TrimSpace(output) == "" {
 		return "-"
 	}
-	// splitLines, not Split(_, "\n"): this branch returns the line
+	// pytext.SplitLines, not Split(_, "\n"): this branch returns the line
 	// verbatim, so a CRLF device answer would otherwise come back as
 	// "1.4.2\r" where Python's splitlines() gives "1.4.2".
-	first := splitLines(strings.TrimSpace(output))[0]
+	first := pytext.SplitLines(strings.TrimSpace(output))[0]
 	return strings.TrimPrefix(first, "VyOS ")
 }
 
@@ -250,7 +205,7 @@ func ParseVyOSVersion(output string) string {
 // repeat it.
 func ParseVyOSModel(output string) string {
 	var vendor, hardware string
-	for _, raw := range splitLines(output) {
+	for _, raw := range pytext.SplitLines(output) {
 		line := strings.TrimSpace(raw)
 		lower := strings.ToLower(line)
 		switch {
@@ -278,7 +233,7 @@ func ParseVyOSModel(output string) string {
 
 // ParseVyOSUptime pulls a human uptime out of `show system uptime`.
 func ParseVyOSUptime(output string) string {
-	for _, raw := range splitLines(output) {
+	for _, raw := range pytext.SplitLines(output) {
 		line := strings.TrimSpace(raw)
 		if line == "" {
 			continue
@@ -305,7 +260,7 @@ var vyosNumberedImage = regexp.MustCompile(`^\s*\d+:\s+(\S+)(.*)$`)
 // modern table format (Name / Default boot / Running columns) and the
 // legacy numbered list ("1: name (default boot) (running image)").
 func ParseSystemImages(output string) []SystemImage {
-	lines := splitLines(output)
+	lines := pytext.SplitLines(output)
 
 	for i, line := range lines {
 		if strings.HasPrefix(strings.TrimSpace(line), "Name") && strings.Contains(line, "Running") {

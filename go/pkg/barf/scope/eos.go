@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/GehirnInc/crypt/sha512_crypt"
+	"github.com/general-programming/megarepo/go/common/pytext"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
 )
@@ -16,8 +17,10 @@ import (
 // ManagedUsername is the one account barf owns on EOS devices.
 const ManagedUsername = "admin"
 
-// maxSSHKeys is all EOS models per user: one primary, one secondary.
-const maxSSHKeys = 2
+// maxSSHKeys is render.MaxSSHKeys: all EOS models support per user, one
+// primary and one secondary. Aliased rather than redeclared so the limit
+// and the validation that enforces it cannot drift apart.
+const maxSSHKeys = render.MaxSSHKeys
 
 // EOSSections are the `show running-config all section <name>` blocks the
 // managed scope lives in — and the only config barf ever reads from an
@@ -91,7 +94,7 @@ func (EOS) Compare(ctx context.Context, in Input) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
-	return buildResult(drift, in.Redact), nil
+	return buildResult(drift, in.ShowSecrets), nil
 }
 
 // -- parsing ----------------------------------------------------------
@@ -117,7 +120,7 @@ func ParseEOSManagedState(text, eapiVRF string) EOSManagedState {
 	state := EOSManagedState{}
 	parseEOSAPISection(text, eapiVRF, &state)
 
-	for _, raw := range splitLines(text) {
+	for _, raw := range pytext.SplitLines(text) {
 		line := strings.TrimSpace(raw)
 		if m := eosSSHKeySecondaryRe.FindStringSubmatch(line); m != nil {
 			state.SSHKeySecondary = strings.TrimSpace(m[1])
@@ -152,7 +155,7 @@ func parseEOSAPISection(text, eapiVRF string, state *EOSManagedState) {
 	inBlock := false
 	currentVRF := ""
 
-	for _, raw := range splitLines(text) {
+	for _, raw := range pytext.SplitLines(text) {
 		stripped := strings.TrimSpace(raw)
 		if strings.HasPrefix(stripped, "management api http-commands") {
 			inBlock = true
@@ -265,7 +268,13 @@ func EOSDrift(h *model.Host, global model.GlobalMeta, secrets SecretSource, stat
 			break
 		}
 	}
-	keys := eosSSHKeys(global)
+	// render.EOSSSHKeys, not a local copy: the drift report must be
+	// built from exactly the list `generate` would emit, including its
+	// refusal of an over-long one.
+	keys, err := render.EOSSSHKeys(h, global)
+	if err != nil {
+		return nil, err
+	}
 
 	var drift []Change
 
@@ -325,17 +334,4 @@ func EOSDrift(h *model.Host, global model.GlobalMeta, secrets SecretSource, stat
 	}
 
 	return drift, nil
-}
-
-// eosSSHKeys is the trimmed, non-empty ssh key list. An over-long list is
-// not rejected here: render.EOSManagedCommands already fails on it, and
-// EOSDrift calls that first.
-func eosSSHKeys(global model.GlobalMeta) []string {
-	var keys []string
-	for _, key := range global.SSHKeys {
-		if trimmed := strings.TrimSpace(key); trimmed != "" {
-			keys = append(keys, trimmed)
-		}
-	}
-	return keys
 }

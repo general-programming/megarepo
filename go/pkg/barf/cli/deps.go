@@ -69,16 +69,28 @@ var (
 
 	// reportsStatus reports whether `barf status` can probe a device
 	// type at all (it needs version/uptime plus config retrieval).
-	reportsStatus func(deviceType string) bool = func(deviceType string) bool {
-		switch deviceType {
-		case "vyos", "eos":
-			return true
-		}
-		return false
-	}
+	//
+	// Unwired it answers false for everything, which is this seam's
+	// version of errNotWired: nothing is selected, so nothing is
+	// contacted. It used to carry a full copy of wire.go's vendor switch,
+	// which init() then overwrote with the identical function — two
+	// places to update to add a vendor, and no signal if only one was.
+	reportsStatus func(deviceType string) bool = notWiredPredicate
 
 	// isTemplatable reports whether a device type can be rendered.
-	isTemplatable func(deviceType string) bool = func(deviceType string) bool {
-		return deviceType != "external"
-	}
+	//
+	// Unwired it answers false, for the same reason. Its old default
+	// (`deviceType != "external"`) was not merely a duplicate of
+	// wire.go's wireTemplatable but a *different answer*: wire.go asks
+	// the render registry whether a renderer actually exists, while this
+	// claimed everything except one hard-coded name was renderable. Since
+	// init() always replaced it the two never had to agree, so the
+	// fallback quietly encoded a rule nothing enforced.
+	isTemplatable func(deviceType string) bool = notWiredPredicate
 )
+
+// notWiredPredicate is the false-for-everything default shared by the
+// boolean seams above. They cannot return errNotWired the way the
+// constructor seams do, so they answer "no device type qualifies", which
+// makes an unwired binary select nothing rather than act on a guess.
+func notWiredPredicate(string) bool { return false }

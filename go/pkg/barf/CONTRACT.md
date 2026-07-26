@@ -10,10 +10,19 @@ Go: 1.25 (toolchain 1.26 available)
 
 ## Hard constraints (all packages)
 
-1. **Nothing may modify a network device.** No config push, no `configure`
-   session, no `copy running-config startup-config`, no NETCONF edit-config,
-   no eAPI `config()` calls. Read-only verbs only (`show ...`, config
-   *retrieve*). This is a read-surface port; deploy lands later.
+1. **Modifying a network device is always explicit, never implicit.**
+   This was originally "nothing may modify a device"; deploy has since
+   landed, so the rule is now structural rather than absolute:
+   - Every write path is gated on an explicit `AllowWrites` opt-in whose
+     zero value writes nothing.
+   - Write capability lives in named types (`device.VyOSWriter`,
+     `device.EOSWriter`, `lifecycle`), never in a reader. `device.New`
+     returns a `Reader` and can never return a writer.
+   - Each write surface has its own closed allowlist of endpoints and
+     command shapes. See "The write guards" below — those are the
+     load-bearing detail, and they must not be merged.
+
+   Readers remain read-only verbs only (`show ...`, config *retrieve*).
 2. **Do not modify `projects/barf` (the Python implementation).** It stays
    authoritative. Read it freely as the reference.
 3. **Do not run any `git` command.** Write files only; the orchestrator
@@ -36,6 +45,54 @@ Go: 1.25 (toolchain 1.26 available)
 | `barf/cli` | `go/barf/cli` | worker D |
 | `barf/tui` | `go/barf/tui` | worker D |
 | `barf/cmd/barf` | `go/barf/cmd/barf` | worker D |
+
+Rule 4 ("stay inside your own package directory") was a *coordination*
+rule for the parallel build, not a design rule. It is now retired: the
+packages are merged, and the local interfaces and re-implementations it
+produced are being folded back together.
+
+### Shared packages added during deduplication
+
+| package | holds | why there |
+|---|---|---|
+| `go/common/pytext` | `SplitLines`, `ShellSplit`, `ShellQuote` | Go equivalents of Python stdlib text primitives, differentially validated against CPython. Domain-free, so monorepo-wide is correct. A leaf package, NOT the `go/common` root: that root pulls in redis and zap, which barf must not inherit. |
+| `go/pkg/barf/vyoswire` | the VyOS form-POST wire protocol | Vendor-specific, so it stays inside barf. Codec and HTTP call only — it holds no allowlist (see below). |
+
+`go/common` is **monorepo-wide** and shared with non-barf Go tools. Only
+genuinely generic, domain-free utilities may go there. Network-automation
+or vendor-specific code gets deduplicated *within* `go/pkg/barf` instead;
+`vyoswire` is the worked example.
+
+## The write guards (do not merge these)
+
+Three independent, closed allowlists decide whether anything can change a
+device. They are separate on purpose and must stay separate:
+
+| guard | package | permits |
+|---|---|---|
+| `vyosRequestAllowed` | `device` (reader) | `show`, `retrieve` only |
+| `vyosWriteRequestAllowed` | `device` (writer) | `configure`, `config-file`+save only; reachable only via `NewVyOSWriter`, which requires `Options.AllowWrites` |
+| `apiEndpoint.write` | `lifecycle` | `/image` delete, gated on `APIOptions.AllowWrites` |
+
+`device.Options.AllowWrites` has no effect on the **read** guard, and no
+option turns a reader into something that can name a write endpoint.
+
+All three now share their transport plumbing via `vyoswire`, which is
+safe precisely because `vyoswire` has no allowlist of its own: it takes a
+fully-formed URL and posts to it. Each guard still runs in its own
+package, before it builds that URL. **Do not move a guard into
+`vyoswire`** — that would collapse three separate decisions into one
+switch, which is the property worth keeping.
+
+### Refusal errors
+
+`device.ErrWritesNotAllowed` and `device.ErrWriteAttempt` are sentinels;
+`WritesNotAllowedError`, `WriteAttemptError` and `UnmanagedCommandError`
+carry the detail and `Unwrap()` to them (the shape `client/vault` already
+used). `lifecycle.ErrWritesNotAllowed` **is** the device sentinel, so
+`errors.Is` works across both packages. `device.IsRefusal(err)` answers
+the safety-critical question — "was the device left untouched?" —
+regardless of which guard refused.
 
 ## Frozen types (`go/barf/model`) — worker A defines, everyone else imports
 

@@ -820,8 +820,18 @@ func (s staticImage) LatestVersion(context.Context) (string, error) { return s.v
 // IsCurrent mirrors the Python `self.latest_version in version`
 // substring test, which tolerates the device reporting extra build
 // detail around the release tag.
+//
+// It delegates to firmware.IsCurrent rather than re-running
+// strings.Contains, which is what it used to do. The inline version was
+// missing the empty-target guard: strings.Contains(version, "") is true,
+// so a staticImage with no version reported EVERY device as already
+// current and the updater silently skipped the upgrade it was asked to
+// perform. imageSource refuses to build one without a version, so that
+// was latent rather than live — but "unknown version" must never be able
+// to mean "current", and the guard belongs in the predicate rather than
+// in one of its callers.
 func (s staticImage) IsCurrent(version string) bool {
-	return version != "" && strings.Contains(version, s.version)
+	return firmware.IsCurrent(s.version, version)
 }
 
 func (s staticImage) Download(context.Context) (string, int64, error)   { return "", 0, nil }

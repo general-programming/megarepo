@@ -139,22 +139,3 @@ func TestProbeEndpointNoneAnswer(t *testing.T) {
 		t.Error("want error when nothing answers")
 	}
 }
-
-func TestIsGlobal(t *testing.T) {
-	global := []string{"23.150.40.5", "1.1.1.1", "2602:fd37::1", "2001:470:1::5"}
-	for _, s := range global {
-		if !isGlobal(netip.MustParseAddr(s)) {
-			t.Errorf("isGlobal(%s) = false", s)
-		}
-	}
-	local := []string{
-		"10.0.0.1", "192.168.1.1", "172.16.0.1", "127.0.0.1",
-		"169.254.1.1", "100.64.0.1", "192.0.2.1", "198.51.100.1",
-		"203.0.113.1", "198.18.0.1", "fd00::1", "fe80::1", "::1", "2001:db8::1",
-	}
-	for _, s := range local {
-		if isGlobal(netip.MustParseAddr(s)) {
-			t.Errorf("isGlobal(%s) = true", s)
-		}
-	}
-}
