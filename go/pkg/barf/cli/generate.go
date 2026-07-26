@@ -1,0 +1,99 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+)
+
+// renderHost renders one host with the renderer for its device type.
+func renderHost(h *model.Host, n *model.Network, s SecretSource) (string, error) {
+	r, err := newRenderer(h.DeviceType)
+	if err != nil {
+		return "", err
+	}
+	return r.Render(h, n, s)
+}
+
+func newGenerateCmd(o *Options) *cobra.Command {
+	var outputDir string
+
+	cmd := &cobra.Command{
+		Use:   "generate [hosts...]",
+		Short: "Render configs for the selected hosts into an output directory",
+		Long: "generate renders each selected host's config into\n" +
+			"<output>/<role>/<hostname>, plus a cloud-init twin under\n" +
+			"<output>/<role>/cloud_init/<hostname>. It touches no devices.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runGenerate(cmd.Context(), o, args, outputDir)
+		},
+	}
+	cmd.Flags().StringVarP(&outputDir, "output", "o", "output", "directory to write rendered configs into")
+	return cmd
+}
+
+func runGenerate(_ context.Context, o *Options, targets []string, outputDir string) error {
+	net, hosts, err := o.loadTargets(targets)
+	if err != nil {
+		return err
+	}
+	hosts = filterHosts(hosts, func(h *model.Host) bool { return isTemplatable(h.DeviceType) })
+	if len(hosts) == 0 {
+		return fmt.Errorf("no templatable devices selected")
+	}
+
+	secrets, err := newSecrets()
+	if err != nil {
+		return fmt.Errorf("secret backend unavailable: %w", err)
+	}
+
+	for _, h := range hosts {
+		text, err := renderHost(h, net, secrets)
+		if err != nil {
+			return fmt.Errorf("%s: %w", h.Hostname, err)
+		}
+		path, err := writeRenderedConfig(h, text, outputDir)
+		if err != nil {
+			return fmt.Errorf("%s: %w", h.Hostname, err)
+		}
+		o.printf("[%s] wrote %s\n", h.Hostname, path)
+	}
+	return nil
+}
+
+// writeRenderedConfig writes a rendered config and its cloud-init twin
+// under outputDir, returning the path of the main config file. Ported
+// from barf/util/render.py write_rendered_config.
+func writeRenderedConfig(h *model.Host, rendered, outputDir string) (string, error) {
+	roleDir := filepath.Join(outputDir, h.Role)
+	if err := os.MkdirAll(filepath.Join(roleDir, "cloud_init"), 0o755); err != nil {
+		return "", err
+	}
+
+	configPath := filepath.Join(roleDir, h.Hostname)
+	if err := os.WriteFile(configPath, []byte(rendered), 0o644); err != nil {
+		return "", err
+	}
+
+	var commands []string
+	for _, line := range strings.Split(rendered, "\n") {
+		if line != "" {
+			commands = append(commands, line)
+		}
+	}
+	body, err := yaml.Marshal(map[string]any{"vyos_config_commands": commands})
+	if err != nil {
+		return "", err
+	}
+	cloudInit := append([]byte("#cloud-config\n"), body...)
+	if err := os.WriteFile(filepath.Join(roleDir, "cloud_init", h.Hostname), cloudInit, 0o644); err != nil {
+		return "", err
+	}
+	return configPath, nil
+}
