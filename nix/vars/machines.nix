@@ -16,6 +16,11 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   fmt2-core = {
     machineID = "8b216aac9ac44002aacf262aacca1081";
   };
+  sea420-core = {
+    # Carried over from the Ubuntu CT so comin's machine-id scoping stays
+    # stable across the reprovision.
+    machineID = "ffdb6b1194364f13b6a27e25df5a1303";
+  };
   sea420-desktop = {
     machineID = "30b7aad6952aeda770f149286983149d";
   };

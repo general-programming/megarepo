@@ -44,6 +44,7 @@
         "proxmox" = self.lib.nixosSystem "proxmox";
         "sea1-core" = self.lib.nixosSystem "sea1-core";
         "fmt2-core" = self.lib.nixosSystem "fmt2-core";
+        "sea420-core" = self.lib.nixosSystem "sea420-core";
         "sea420-desktop" = self.lib.nixosSystem "sea420-desktop";
         "sea1-nix-builder" = self.lib.nixosSystem "sea1-nix-builder";
         "fmt2-vault-0" = self.lib.nixosSystem "fmt2-vault-0";
