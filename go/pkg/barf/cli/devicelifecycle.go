@@ -473,9 +473,7 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 	}
 
 	gate := newWriteGate(o, f.yes, f.in)
-	if err := checkUpdateBlastRadius(targets, hosts, f.yes); err != nil {
-		return err
-	}
+	announceFleetSelection(o, targets, hosts, f.yes)
 
 	// Reboot leaves before spines, as the Python original does: a spine's
 	// safety gate only means anything while the leaves under it are up,
@@ -534,22 +532,22 @@ func updatableHosts(o *Options, selected []*model.Host) ([]*model.Host, error) {
 	return hosts, nil
 }
 
-// checkUpdateBlastRadius refuses the one shape of this command whose
-// blast radius is both unbounded and unattended.
+// announceFleetSelection prints the resolved device list before an
+// unattended multi-device run.
 //
-// --yes means "do not ask me". "all" means "whatever is in network.yml
-// today". Together they are a fleet-wide reboot that silently grows as
-// the fleet does: the invocation someone wrote when there were three
-// leaves reboots thirty a year later, and nobody re-read it. Naming the
-// hosts is a reviewable statement of exactly what is going down, and it
-// is the only extra cost this rule imposes — "all" on a terminal is
-// still fine, because every device is confirmed individually there.
-func checkUpdateBlastRadius(targets []string, hosts []*model.Host, yes bool) error {
+// "all" with --yes is deliberately NOT refused. The protection that
+// matters is in the mechanism, not in the spelling of the selection:
+// devices are updated strictly one at a time, the redundancy gate is
+// re-evaluated immediately before each one, and the first failure stops
+// the run. Pinning a hostname list instead would go stale — a device
+// added next month would silently never be updated, and a device quietly
+// missed for a year is the failure mode this fleet actually suffers
+// from. What is worth keeping is visibility: say out loud what is about
+// to be rebooted, so it is in the log even when nobody was watching.
+func announceFleetSelection(o *Options, targets []string, hosts []*model.Host, yes bool) {
 	if !yes || len(hosts) < 2 {
-		return nil
+		return
 	}
-	// No targets at all also means "all" (resolveTargets), so it is the
-	// same unbounded selection under a different spelling.
 	isAll := len(targets) == 0
 	for _, t := range targets {
 		if t == "all" {
@@ -557,17 +555,14 @@ func checkUpdateBlastRadius(targets []string, hosts []*model.Host, yes bool) err
 		}
 	}
 	if !isAll {
-		return nil
+		return
 	}
 	names := make([]string, 0, len(hosts))
 	for _, h := range hosts {
 		names = append(names, h.Hostname)
 	}
-	return fmt.Errorf("refusing \"all\" with --yes: that is an unattended reboot of %d devices.\n"+
-		"       Name them explicitly to say what is going down:\n"+
-		"         barf device update %s --yes\n"+
-		"       or drop --yes and confirm each one at the prompt.",
-		len(hosts), strings.Join(names, " "))
+	o.printf("unattended run over the whole fleet: %d device(s) will be rebooted one at a time\n", len(hosts))
+	o.printf("  %s\n\n", strings.Join(names, " "))
 }
 
 // sequential updates every host, one at a time, stopping on the first
