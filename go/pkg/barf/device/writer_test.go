@@ -16,8 +16,7 @@ import (
 // Every test here talks to an httptest server. NOTHING in this file may
 // ever be pointed at a real device.
 
-// vyosWriteServer records the /configure and /config-file requests a
-// writer makes and answers them successfully.
+// vyosWriteServer records /configure and /config-file requests.
 type vyosWriteServer struct {
 	*httptest.Server
 	paths []string
@@ -50,8 +49,7 @@ func writeOptions(t *testing.T, s *vyosWriteServer) Options {
 	return opts
 }
 
-// TestNewVyOSWriterRequiresAllowWrites is the safety interlock: without
-// the explicit opt-in there is no writer to call.
+// The safety interlock: without the explicit opt-in there is no writer.
 func TestNewVyOSWriterRequiresAllowWrites(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	opts := testOptions(t, server.Server) // AllowWrites deliberately unset
@@ -103,9 +101,8 @@ func TestNewVyOSWriterRejections(t *testing.T) {
 	})
 }
 
-// TestVyOSConfigureWireFormat pins the exact request the Python
-// implementation sends: a POST of `data` (a bare JSON array of
-// {op, path}) plus `key`, to /configure.
+// Pins Python's request: POST /configure with `data` (a bare JSON array
+// of {op, path}) plus `key`.
 func TestVyOSConfigureWireFormat(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	writer, err := NewVyOSWriter(testHost("spine", "vyos"), writeOptions(t, server))
@@ -150,8 +147,7 @@ func TestVyOSConfigureWireFormat(t *testing.T) {
 	}
 }
 
-// TestVyOSConfigureEmptyIsNoWire: a deploy with nothing to do must not
-// open a commit on the device.
+// A deploy with nothing to do must not open a commit on the device.
 func TestVyOSConfigureEmptyIsNoWire(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	writer, _ := NewVyOSWriter(testHost("spine", "vyos"), writeOptions(t, server))
@@ -213,8 +209,7 @@ func TestVyOSSaveConfig(t *testing.T) {
 	}
 }
 
-// TestVyOSWriterEndpointAllowlist proves /image stays unreachable from
-// the writer too: image deletion is not ported.
+// /image stays unreachable from the writer: image deletion is not ported.
 func TestVyOSWriterEndpointAllowlist(t *testing.T) {
 	tests := []struct {
 		endpoint, op string
@@ -240,8 +235,7 @@ func TestVyOSWriterEndpointAllowlist(t *testing.T) {
 	}
 }
 
-// TestVyOSWriterRequestGuard: the writer's own primitive refuses an
-// endpoint outside its allowlist even when called internally.
+// The writer's own primitive refuses an off-allowlist endpoint.
 func TestVyOSWriterRequestGuard(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	writer, _ := NewVyOSWriter(testHost("spine", "vyos"), writeOptions(t, server))
@@ -256,8 +250,7 @@ func TestVyOSWriterRequestGuard(t *testing.T) {
 	}
 }
 
-// TestReaderStillCannotWrite: adding a writer must not have loosened the
-// read transport's guard.
+// Adding a writer must not loosen the read transport's guard.
 func TestReaderStillCannotWrite(t *testing.T) {
 	for _, tc := range []struct{ endpoint, op string }{
 		{"configure", "set"},
@@ -271,7 +264,6 @@ func TestReaderStillCannotWrite(t *testing.T) {
 	}
 
 	server := newVyOSWriteServer(t)
-	// Even with AllowWrites set, a Reader stays a Reader.
 	reader, err := NewVyOS(testHost("spine", "vyos"), writeOptions(t, server))
 	if err != nil {
 		t.Fatal(err)
@@ -304,10 +296,8 @@ func TestVyOSWriterSurfacesAPIErrors(t *testing.T) {
 	}
 }
 
-// deadlineRecorder observes the budget each outgoing request carries on
-// its context. It is a client-side probe on purpose: an HTTP server
-// context does not inherit the client's deadline, so the assertion has
-// to be made before the request leaves.
+// deadlineRecorder observes each outgoing request's context budget,
+// client-side because a server context does not inherit the deadline.
 type deadlineRecorder struct {
 	base http.RoundTripper
 	mu   sync.Mutex
@@ -335,8 +325,6 @@ func (d *deadlineRecorder) budget(path string) time.Duration {
 	return d.seen[path]
 }
 
-// recordingOptions returns opts with its client wrapped so every request's
-// context budget is captured.
 func recordingOptions(opts Options) (Options, *deadlineRecorder) {
 	recorder := newDeadlineRecorder(opts.HTTPClient.Transport)
 	client := *opts.HTTPClient
@@ -345,12 +333,10 @@ func recordingOptions(opts Options) (Options, *deadlineRecorder) {
 	return opts, recorder
 }
 
-// Regression: the writer used one client-wide http.Client.Timeout of 10s
-// for everything. Python gives /configure 120s and /config-file 60s
-// (vyos_api.py), and a real commit on a busy router regularly takes
-// longer than 10s — so barf aborted the request, reported a failed
-// deploy, and skipped SaveConfig, leaving the device running config that
-// would not survive a reboot. The commit itself had already landed.
+// Regression: one client-wide 10s http.Client.Timeout aborted commits
+// that had already landed, skipping SaveConfig and leaving config that
+// would not survive a reboot. Python's vyos_api.py gives /configure 120s
+// and /config-file 60s.
 func TestVyOSWriterGivesEachOperationItsOwnTimeout(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	opts, recorder := recordingOptions(writeOptions(t, server))
@@ -375,9 +361,8 @@ func TestVyOSWriterGivesEachOperationItsOwnTimeout(t *testing.T) {
 	}
 }
 
-// Reads keep the read budgets (10s show, 30s retrieve), and an explicit
-// Options.Timeout still overrides every operation — the escape hatch must
-// not have been lost along the way.
+// Reads keep their budgets (10s show, 30s retrieve); an explicit
+// Options.Timeout still overrides every operation.
 func TestVyOSReaderTimeoutsAndOverride(t *testing.T) {
 	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -421,8 +406,7 @@ func TestVyOSReaderTimeoutsAndOverride(t *testing.T) {
 	}
 }
 
-// A caller's own, shorter deadline must still win: an operation budget
-// may only bound a request, never extend one.
+// A caller's shorter deadline wins: a budget bounds, never extends.
 func TestOperationTimeoutNeverExtendsCallerDeadline(t *testing.T) {
 	server := newVyOSWriteServer(t)
 	opts, recorder := recordingOptions(writeOptions(t, server))

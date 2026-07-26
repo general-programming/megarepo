@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// WaitOptions tunes the post-reboot liveness poll. Zero values take the
-// Python defaults (15s initial wait, 5s interval, 900s timeout).
+// WaitOptions tunes the post-reboot liveness poll; zero values mean 15s
+// initial wait, 5s interval, 900s timeout.
 type WaitOptions struct {
 	InitialWait time.Duration
 	Interval    time.Duration
@@ -53,25 +53,18 @@ func (w WaitOptions) clock() func() time.Time {
 	return time.Now
 }
 
-// VersionFunc reports a device's running version. An error, or a
-// placeholder ("" / "-"), means "not alive yet".
+// VersionFunc reports a device's running version; an error or a placeholder
+// ("" / "-") means "not alive yet".
 type VersionFunc func(ctx context.Context) (string, error)
 
-// WaitForAlive blocks until a device answers, returning its version.
-//
-// Waits InitialWait up front, then polls every Interval. A rebooting
-// device can keep answering on the old image for a while, so changedFrom
-// carries its pre-reboot version: polls reporting that version keep
-// waiting instead of being taken as alive.
-//
-// Ports barf/cli/device.py wait_for_device_alive. This is a read loop; it
-// changes nothing.
+// WaitForAlive blocks until a device answers, returning its version. A
+// rebooting device can keep answering on the old image, so a poll reporting
+// changedFrom (its pre-reboot version) does not count as alive. Read-only.
 func WaitForAlive(ctx context.Context, hostname string, version VersionFunc, changedFrom string, opts WaitOptions) (string, error) {
 	out := opts.out()
 	now := opts.clock()
 
-	// ~2 minutes is what a VyOS leaf reboot measures in practice; the
-	// actual elapsed time is printed once the device answers.
+	// ~2 minutes is what a VyOS leaf reboot measures in practice.
 	fmt.Fprintf(out, "[%s] waiting for the device to come alive (a reboot typically takes ~2 minutes)", hostname)
 
 	started := now()
@@ -100,8 +93,7 @@ func WaitForAlive(ctx context.Context, hostname string, version VersionFunc, cha
 	return "", fmt.Errorf("%s did not come back within %s", hostname, opts.timeout())
 }
 
-// HumanDuration renders 95s as "1m35s" (and 45s as "45s"). Ports
-// _human_duration.
+// HumanDuration renders 95s as "1m35s" and 45s as "45s".
 func HumanDuration(d time.Duration) string {
 	seconds := int(d.Round(time.Second).Seconds())
 	if seconds < 0 {

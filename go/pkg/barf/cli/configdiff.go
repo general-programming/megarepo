@@ -8,31 +8,21 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vyosconfig"
 )
 
-// ConfigDiff is the difference between a rendered config and the config
-// a device is running. It mirrors the Python ConfigDiff dataclass.
+// ConfigDiff mirrors the Python ConfigDiff dataclass.
 type ConfigDiff struct {
-	// Added are lines the render has that the device does not.
-	Added []string
-	// Removed are lines the device has that the render does not.
+	Added   []string
 	Removed []string
 	// Text is the printable body, "- " then "+ " prefixed.
-	Text string
-	// HasChanges is whether deploying would change the device.
+	Text       string
 	HasChanges bool
 	// Summary is the one-line table cell, e.g. "+12 -2".
 	Summary string
 }
 
-// secretKeywords are the config keywords whose FOLLOWING value must
-// never be printed. Diff output is redacted by default (CONTRACT.md
-// rule 5).
-//
-// Matching is on the whole keyword, never on a substring: the old
-// substring test made `set service ssh disable-password-authentication`
-// look like a secret, and — much worse — made the presence of the word
-// anywhere in the line redact whatever token happened to be last. For
-// `snmp-server community <SECRET> ro` that blanked `ro` and printed the
-// community.
+// secretKeywords are the keywords whose FOLLOWING value must never be printed;
+// diff output is redacted by default (CONTRACT.md rule 5). Matching stays on
+// the whole keyword: substrings make `disable-password-authentication` look
+// like a secret, and blank `ro` in `snmp-server community <SECRET> ro`.
 var secretKeywords = map[string]bool{
 	"password":           true,
 	"passphrase":         true,
@@ -54,26 +44,16 @@ var secretKeywords = map[string]bool{
 
 const redacted = "<redacted>"
 
-// redactLine hides the VALUE that follows a secret keyword, in both the
-// `keyword value` spelling (IOS/VyOS `set`-style) and the `keyword=value`
-// spelling (a Mikrotik one-liner).
-//
-// It is deliberately key-aware rather than position-aware. A positional
-// rule gets both real vendors backwards: `snmp-server community <X> ro`
-// ends in `ro`, and `/interface/wireguard add private-key=<K>
-// comment="x"` ends in the comment. Whitespace is preserved so a diff
-// line still looks like the config it came from.
-//
-// Reachable today only for readers that are neither VyOS (which diffs as
-// a path set, see vyosdiff.go) nor scoped (scope.go) — but a Mikrotik or
-// linux reader landing here must not be the moment this is discovered.
+// redactLine hides the VALUE after a secret keyword, in both `keyword value`
+// (IOS/VyOS) and `keyword=value` (Mikrotik) spellings. Key-aware, not
+// position-aware: `snmp-server community <X> ro` ends in `ro`. Reachable only
+// for readers that are neither VyOS nor scoped.
 func redactLine(line string) string {
 	var b strings.Builder
 	b.Grow(len(line))
 
-	// `public-keys <name> key <pubkey>` is a PUBLIC key: the bare `key`
-	// node in that shape is not a secret and Python has a test pinning
-	// that it stays visible.
+	// In `public-keys <name> key <pubkey>` the bare `key` node is PUBLIC and
+	// must stay visible.
 	sawPublic := false
 	redactNext := false
 
@@ -122,15 +102,12 @@ func redactLine(line string) string {
 
 func isSpace(c byte) bool { return c == ' ' || c == '\t' }
 
-// normalizeKeyword strips the decoration a keyword can pick up in real
-// config text — quotes, a trailing colon — and lowercases it, so the
-// comparison against secretKeywords is on the bare word.
+// normalizeKeyword strips quotes and punctuation so the bare word is compared.
 func normalizeKeyword(token string) string {
 	return strings.ToLower(strings.Trim(token, `"'`+"`:,"))
 }
 
-// normalizeConfig splits a config into comparable lines: trailing
-// whitespace trimmed, blank lines and comments dropped.
+// normalizeConfig trims trailing whitespace and drops blanks and comments.
 func normalizeConfig(config string) []string {
 	var out []string
 	for _, raw := range strings.Split(config, "\n") {
@@ -149,18 +126,13 @@ func normalizeConfig(config string) []string {
 
 // DiffOptions tunes what the diff body shows.
 type DiffOptions struct {
-	// ShowDeviceOnly also prints config that only exists on the device.
 	ShowDeviceOnly bool
-	// ShowSecrets disables redaction of secret values.
-	ShowSecrets bool
+	ShowSecrets    bool
 }
 
-// DiffConfigs compares a rendered config against a device's running
-// config.
-//
-// The comparison is line-set based, matching the Python vyos_config
-// implementation: these configs are unordered sets of `set ...` style
-// statements, so a positional diff would report spurious moves.
+// DiffConfigs compares line SETS, as Python's vyos_config does: these configs
+// are unordered `set ...` statements, so a positional diff reports spurious
+// moves.
 func DiffConfigs(rendered, running string, opts DiffOptions) ConfigDiff {
 	want := normalizeConfig(rendered)
 	have := normalizeConfig(running)
@@ -208,10 +180,8 @@ func DiffConfigs(rendered, running string, opts DiffOptions) ConfigDiff {
 	return d
 }
 
-// maybeRedactSecretValue is named for what it hides. scope has its own
-// maybeRedactHash for EOS managed lines that hides `$6$` crypt material;
-// the two redact genuinely different things and are not interchangeable,
-// so neither is called just "maybeRedact" any more.
+// maybeRedactSecretValue hides secret VALUES. Not interchangeable with
+// scope's maybeRedactHash, which hides `$6$` crypt material on EOS lines.
 func maybeRedactSecretValue(line string, opts DiffOptions) string {
 	if opts.ShowSecrets {
 		return line
@@ -219,7 +189,6 @@ func maybeRedactSecretValue(line string, opts DiffOptions) string {
 	return redactLine(line)
 }
 
-// summarizeDiff is the one-line table cell, e.g. "+12 -2".
 func summarizeDiff(d ConfigDiff) string {
 	if !d.HasChanges {
 		return "no changes"
@@ -231,44 +200,27 @@ func summarizeDiff(d ConfigDiff) string {
 	return strings.Join(parts, " ")
 }
 
-// -- VyOS path redaction ----------------------------------------------
-
-// VyOS output is redacted by PATH SHAPE, not by node name.
-//
-// vyosconfig.RedactPath (and its Python original) decides on the parent
-// node alone: if path[-2] is in SecretNodes, hide path[-1]. Two real
-// fleet secrets slip through that test, and one of them cannot be fixed
-// by adding a name to the set:
+// VyOS output is redacted by PATH SHAPE, not node name. vyosconfig.RedactPath
+// decides on the parent alone (path[-2] in SecretNodes => hide path[-1]),
+// which no name set can fix for these two:
 //
 //	set service https api keys id vaultadmin key '<FLEET API KEY>'
 //	set system login user supertech authentication public-keys <n> key <PUBKEY>
 //
-// Both have `key` as the parent node. The first is the fleet-wide VyOS
-// API key and MUST be hidden; the second is an SSH *public* key and must
-// stay visible (Python has a test pinning that). Only the shape of the
-// path tells them apart. The SNMP community has the same problem from
-// the other side: its parent is `authorization`, and the secret is not
-// even the last component.
-//
-// So barf matches a table of path prefixes and hides the component that
-// follows the match, falling back to vyosconfig.RedactPath for the
-// node-name cases it already gets right.
-//
-// NOTE FOR RECONCILIATION: the shape table lives here rather than in
-// vyosconfig because that package is owned elsewhere. If it moves, the
-// natural home is an exported `SecretShapes []Path` consulted by
-// RedactPath, and this file should then just call RedactPath again.
+// Both have parent `key`; the first must be hidden, the second is an SSH
+// *public* key. The SNMP community fails the other way: parent `authorization`,
+// secret not last. So match path prefixes, hide the next component, and fall
+// back to vyosconfig.RedactPath for the node-name cases.
 var vyosSecretShapes = []vyosconfig.Path{
-	// The fleet-wide HTTPS API key. "*" is the key id (vaultadmin).
+	// "*" is the key id (vaultadmin).
 	{"service", "https", "api", "keys", "id", "*", "key"},
-	// The SNMP community string: `set service snmp community <C>
-	// authorization 'ro'` — the secret is component 3, not the last one.
+	// `set service snmp community <C> authorization 'ro'`: the secret is
+	// component 3, not the last one.
 	{"service", "snmp", "community"},
 }
 
-// matchesShape reports whether path starts with shape (where "*" matches
-// any single component) AND has at least one more component after it —
-// the value to hide.
+// matchesShape reports whether path starts with shape ("*" matches any one
+// component) AND has a further component after it: the value to hide.
 func matchesShape(path, shape vyosconfig.Path) bool {
 	if len(path) <= len(shape) {
 		return false
@@ -281,8 +233,7 @@ func matchesShape(path, shape vyosconfig.Path) bool {
 	return true
 }
 
-// redactVyOSPath hides the secret component of path, by shape first and
-// by vyosconfig's node-name table second.
+// redactVyOSPath hides path's secret component: shape first, node name second.
 func redactVyOSPath(path vyosconfig.Path) vyosconfig.Path {
 	for _, shape := range vyosSecretShapes {
 		if matchesShape(path, shape) {
@@ -294,9 +245,7 @@ func redactVyOSPath(path vyosconfig.Path) vyosconfig.Path {
 	return vyosconfig.RedactPath(path)
 }
 
-// redactVyOSDiff returns a copy of diff with every path redacted, so the
-// diff can be handed to vyosconfig.FormatDiff with redaction already
-// applied. Formatting and ordering stay that package's business.
+// redactVyOSDiff copies diff with every path redacted, for FormatDiff.
 func redactVyOSDiff(diff vyosconfig.ConfigDiff) vyosconfig.ConfigDiff {
 	out := vyosconfig.ConfigDiff{
 		Added:   make([]vyosconfig.Path, len(diff.Added)),

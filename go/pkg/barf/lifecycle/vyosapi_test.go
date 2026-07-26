@@ -11,8 +11,7 @@ import (
 	"testing"
 )
 
-// apiServer is a fake VyOS HTTPS API. Every test in this package talks to
-// it; nothing here ever contacts a real device.
+// apiServer is a fake VyOS HTTPS API; no test here contacts a real device.
 type apiServer struct {
 	*httptest.Server
 
@@ -95,8 +94,8 @@ func TestDeleteImageRefusedWithoutAllowWrites(t *testing.T) {
 	if !errors.Is(err, ErrWritesNotAllowed) {
 		t.Fatalf("expected ErrWritesNotAllowed, got %v", err)
 	}
-	// The critical assertion: the refusal happens before the request is
-	// built, so the device never hears about it at all.
+	// The refusal happens before the request is built, so the device never
+	// hears about it.
 	if got := server.recorded(); len(got) != 0 {
 		t.Fatalf("a refused write still reached the device: %+v", got)
 	}

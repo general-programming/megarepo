@@ -22,9 +22,8 @@ func (fakeSecrets) WireguardKeypair(p string) (render.Keypair, error) { return r
 
 // -- the table itself --------------------------------------------------
 
-// TestTableIsTheWholeTruth pins the set of devicetypes barf knows about.
-// It is deliberately a literal list: adding a vendor should require
-// saying so here, in a test, on purpose.
+// A deliberately literal list: adding a vendor must require saying so
+// here too.
 func TestTableIsTheWholeTruth(t *testing.T) {
 	want := []string{"cisco", "dnos6", "dnos9", "edgeos", "eos", "external", "linux", "mikrotik", "vyos"}
 	got := vendor.Types()
@@ -38,12 +37,7 @@ func TestTableIsTheWholeTruth(t *testing.T) {
 	}
 }
 
-// TestCapabilityMatrix is the whole point of the descriptor: every
-// capability of every vendor, checkable as data, in one assertion.
-//
-// Under the old layout this table did not exist anywhere; answering it
-// meant reading four registries in four packages and a hand-written
-// switch in a fifth place, and any of them could disagree.
+// Every capability of every vendor, checkable as data, in one assertion.
 func TestCapabilityMatrix(t *testing.T) {
 	for _, tc := range []struct {
 		deviceType                     string
@@ -76,8 +70,8 @@ func TestCapabilityMatrix(t *testing.T) {
 			if v.Scoped() != tc.scoped {
 				t.Errorf("Scoped = %v, want %v", v.Scoped(), tc.scoped)
 			}
-			// The package-level predicates must answer identically to the
-			// row's methods; they are what the CLI calls.
+			// The CLI calls the package-level predicates; they must agree
+			// with the row's methods.
 			if vendor.Templatable(tc.deviceType) != tc.renders ||
 				vendor.ReportsStatus(tc.deviceType) != tc.reads ||
 				vendor.Deployable(tc.deviceType) != tc.writes {
@@ -87,9 +81,8 @@ func TestCapabilityMatrix(t *testing.T) {
 	}
 }
 
-// TestUnknownDeviceTypeHasNoCapabilities: a devicetype with no row can
-// do nothing, rather than defaulting to "probably renderable" the way
-// render.Templatable's `!= "external"` used to.
+// A devicetype with no row can do nothing, rather than defaulting to
+// "probably renderable" the way render.Templatable's `!= "external"` did.
 func TestUnknownDeviceTypeHasNoCapabilities(t *testing.T) {
 	if _, ok := vendor.Get("junos"); ok {
 		t.Fatal("junos should not be in the table")
@@ -105,8 +98,7 @@ func TestUnknownDeviceTypeHasNoCapabilities(t *testing.T) {
 	}
 }
 
-// TestAliasesResolveToTheSameRow pins the NetBox platform-slug spellings
-// from Python's VENDOR_MAP.
+// Pins the NetBox platform-slug spellings from Python's VENDOR_MAP.
 func TestAliasesResolveToTheSameRow(t *testing.T) {
 	for alias, canonical := range map[string]string{
 		"cisco-ios": "cisco", "dnos-6": "dnos6", "dnos-9": "dnos9",
@@ -146,10 +138,9 @@ func TestTypesWhere(t *testing.T) {
 	}
 }
 
-// -- dispatch (moved here with the registries) --------------------------
+// -- dispatch -----------------------------------------------------------
 
-// TestNewReaderDispatch is the old device.TestNewDispatch: the vendor
-// table must hand back the right concrete transport, and refuse for a
+// The table must hand back the right concrete transport, and refuse for a
 // vendor barf cannot talk to.
 func TestNewReaderDispatch(t *testing.T) {
 	opts := device.Options{Secrets: fakeSecrets{}, GlobalSecrets: fakeSecrets{}}
@@ -175,7 +166,6 @@ func TestNewReaderDispatch(t *testing.T) {
 	}
 }
 
-// TestComparerDispatch is the old scope.TestRegistryDispatch.
 func TestComparerDispatch(t *testing.T) {
 	c, ok := vendor.Comparer("eos")
 	if !ok {
@@ -195,8 +185,7 @@ func TestComparerDispatch(t *testing.T) {
 	}
 }
 
-// TestRenderRejectsExternalAndUnknown keeps the two different refusals
-// render.Host used to make distinguishable: `external` is unmanaged on
+// The two refusals stay distinguishable: `external` is unmanaged on
 // purpose, `junos` is simply not ported.
 func TestRenderRejectsExternalAndUnknown(t *testing.T) {
 	_, err := vendor.Render(&model.Host{Hostname: "x", DeviceType: "external"}, &model.Network{}, fakeSecrets{})
@@ -211,11 +200,8 @@ func TestRenderRejectsExternalAndUnknown(t *testing.T) {
 
 // -- the write guard is unchanged --------------------------------------
 
-// TestNewWriterStillRequiresAllowWrites proves the descriptor did not
-// become a way around device's opt-in. Routing writer construction
-// through a table must not make a writer easier to obtain: without
-// AllowWrites the constructor still refuses, and the refusal is the
-// device package's, not a new one invented here.
+// Routing writer construction through the table must not become a way
+// around device's opt-in, and the refusal must stay device's own.
 func TestNewWriterStillRequiresAllowWrites(t *testing.T) {
 	h := &model.Host{Hostname: "r", DeviceType: "vyos"}
 	if _, err := vendor.NewWriter(h, device.Options{GlobalSecrets: fakeSecrets{}}); err == nil {
@@ -231,10 +217,8 @@ func TestNewWriterStillRequiresAllowWrites(t *testing.T) {
 	}
 }
 
-// TestNoWriterForNonDeployableVendors: a nil NewWriter is not a fallback
-// to some other vendor's writer, and not a panic. EOS is the live case —
-// device.NewEOSWriter exists and is tested, but no row names it, so
-// there is no path from here to changing an Arista switch.
+// A nil NewWriter must not fall back to another vendor's writer or panic.
+// EOS is the live case: device.NewEOSWriter exists but no row names it.
 func TestNoWriterForNonDeployableVendors(t *testing.T) {
 	for _, dt := range []string{"eos", "linux", "cisco", "external", "junos"} {
 		_, err := vendor.NewWriter(&model.Host{Hostname: "h", DeviceType: dt}, device.Options{AllowWrites: true})
@@ -246,18 +230,16 @@ func TestNoWriterForNonDeployableVendors(t *testing.T) {
 
 // -- the DNOS-class bug ------------------------------------------------
 
-// TestFakeSecretsIsComplete: a fake used to render must satisfy the same
-// composite the production adapter is asserted against. The DNOS outage
-// happened in the gap between a complete fake and an incomplete real
-// adapter, so the fakes are held to the real bar.
+// The DNOS outage happened in the gap between a complete fake and an
+// incomplete real adapter, so fakes are held to the production composite.
 var _ render.CompleteSecretSource = fakeSecrets{}
 
 func TestCheckSecretSourceNamesWhatIsMissing(t *testing.T) {
 	if err := render.CheckSecretSource(fakeSecrets{}); err != nil {
 		t.Errorf("complete source rejected: %v", err)
 	}
-	// hostOnly is the shape the production adapter had during the outage,
-	// minus more: it must be reported, not discovered on a device.
+	// hostOnly is roughly the adapter shape from the outage: an incomplete
+	// source must be reported here, not discovered on a device.
 	if err := render.CheckSecretSource(hostOnly{}); err == nil {
 		t.Fatal("an incomplete secret source passed the check")
 	} else {

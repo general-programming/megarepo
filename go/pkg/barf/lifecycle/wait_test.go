@@ -9,8 +9,7 @@ import (
 	"time"
 )
 
-// fakeClock advances by step on every read, so the timeout logic runs
-// without the test waiting for anything.
+// fakeClock advances by step on every read, so timeouts elapse instantly.
 type fakeClock struct {
 	now  time.Time
 	step time.Duration
@@ -31,8 +30,8 @@ func noSleep(t *testing.T) {
 func TestWaitForAliveIgnoresTheOldVersion(t *testing.T) {
 	noSleep(t)
 
-	// A rebooting device can keep answering on the old image for a
-	// while; those answers must not count as "it came back".
+	// A rebooting device keeps answering on the old image for a while; those
+	// answers must not count as "it came back".
 	answers := []string{"old", "old", "old", "new"}
 	i := 0
 	version := func(context.Context) (string, error) {

@@ -12,7 +12,6 @@ import (
 	"time"
 )
 
-// newTestClient wires a Client at a httptest server.
 func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
@@ -465,10 +464,8 @@ func TestIPAddressAndMACNilSafety(t *testing.T) {
 	}
 }
 
-// TestNullNamesDecodeToEmptyNotGarbage pins that a NetBox null `name`
-// (which NetBox permits on both devices and interfaces) decodes to ""
-// and never produces a record. The callers in cli/generatedns.go treat
-// "" as "absent"; this is the half of the contract that lives here.
+// NetBox permits null `name` on devices and interfaces; it must decode to "",
+// which cli/generatedns.go treats as "absent".
 func TestNullNamesDecodeToEmptyNotGarbage(t *testing.T) {
 	var host Host
 	if err := json.Unmarshal([]byte(`{

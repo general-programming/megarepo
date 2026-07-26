@@ -13,8 +13,8 @@ import (
 	"github.com/general-programming/megarepo/go/client/netbox"
 )
 
-// iface mirrors the fixture helper in nix/modules/dns/tests/test_refresh_dns.py
-// so the Go and Python implementations are pinned to the same cases.
+// iface mirrors the fixture helper in nix/modules/dns/tests/test_refresh_dns.py,
+// pinning Go and Python to the same cases.
 func iface(mac string, addresses []string, name string, vm string, primaryIP4 string) netbox.Interface {
 	out := netbox.Interface{Name: name}
 	if mac != "" {
@@ -128,8 +128,8 @@ func TestSecondaryInterfaceKeepsSuffix(t *testing.T) {
 }
 
 func TestDHCPHostnameSanitisation(t *testing.T) {
-	// Spaces become underscores in clean_hostname, then any non
-	// alphanumeric survivor becomes a dash.
+	// clean_hostname: spaces become underscores, then any non-alphanumeric
+	// survivor becomes a dash.
 	if got := dhcpHostname("Rack 3 / Switch", "Ethernet1/1", false); got != "rack-3---switch-ethernet1-1" {
 		t.Errorf("hostname = %q", got)
 	}
@@ -167,8 +167,6 @@ func TestDNSLines(t *testing.T) {
 	}
 }
 
-// reservationsNoWarn is reservations() for the cases that assert on the
-// output rather than on the skip warnings.
 func reservationsNoWarn(interfaces []netbox.Interface) []reservation {
 	return reservations(interfaces, nil)
 }
@@ -192,8 +190,8 @@ func TestKeaReservations(t *testing.T) {
 	}
 }
 
-// fakeNetboxServer serves the two GraphQL documents from a fixture, so
-// the command tests exercise the real client without a live NetBox.
+// fakeNetboxServer serves the two GraphQL documents from a fixture, so the
+// command tests exercise the real client without a live NetBox.
 func fakeNetboxServer(t *testing.T, dns netbox.DNSResult, dhcp netbox.DHCPResult) *httptest.Server {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -215,7 +213,6 @@ func fakeNetboxServer(t *testing.T, dns netbox.DNSResult, dhcp netbox.DHCPResult
 	return srv
 }
 
-// useFakeNetbox points the generate commands at srv for one test.
 func useFakeNetbox(t *testing.T, srv *httptest.Server) {
 	t.Helper()
 	old := newNetbox
@@ -395,15 +392,8 @@ func TestDNSDomainPrecedence(t *testing.T) {
 	}
 }
 
-// TestUnnamedNetboxDeviceIsSkipped is the regression for a NetBox device
-// with a null `name`. Go decoded it to "", isNonStaticHost("") said
-// nothing, and the renderer emitted
-//
-//	address=/.generalprogramming.org/10.0.0.5
-//
-// a malformed dnsmasq record, with exit 0. Python raises instead, so the
-// last-good include survives. Neither is acceptable silently; barf now
-// skips the row and says why.
+// Regression: a NetBox device with a null `name` decoded to "" and the
+// renderer emitted a malformed `address=/.domain/10.0.0.5` with exit 0.
 func TestUnnamedNetboxDeviceIsSkipped(t *testing.T) {
 	hosts := []netbox.Host{
 		{Name: "", PrimaryIP4: &netbox.IPAddress{Address: "10.0.0.5/24"}},
@@ -435,17 +425,14 @@ func TestUnnamedNetboxDeviceIsSkipped(t *testing.T) {
 	}
 }
 
-// TestUnnamedSecondaryInterfaceIsSkipped is the same shape one level
-// down: a null interface name became a reservation hostname with a
-// dangling "-" suffix. The primary interface never uses the interface
-// name, so it is unaffected.
+// Same shape one level down: a null interface name became a reservation
+// hostname with a dangling "-" suffix.
 func TestUnnamedSecondaryInterfaceIsSkipped(t *testing.T) {
 	var warned []string
 	res := reservations([]netbox.Interface{
 		// Secondary (its v4 is not the owner's primary): must skip.
 		iface("AA:BB:CC:DD:EE:01", []string{"10.0.0.9/24"}, "", "sea1-k8s-0", "10.0.0.1/24"),
-		// Primary: the interface name is never used, so a null name is
-		// harmless and the reservation still renders.
+		// Primary: the interface name is never used, so a null one is fine.
 		iface("AA:BB:CC:DD:EE:02", []string{"10.0.0.2/24"}, "", "sea1-k8s-1", "10.0.0.2/24"),
 	}, func(h, reason string) { warned = append(warned, h+": "+reason) })
 
@@ -462,12 +449,10 @@ func TestUnnamedSecondaryInterfaceIsSkipped(t *testing.T) {
 	}
 }
 
-// TestKeaFilesAreBytewiseIdenticalToPython pins the two ways Go's JSON
-// output drifted from `json.dump(hosts, f, indent=1)` in
-// nix/modules/kea/refresh_kea.py: a trailing newline Python does not
-// write, and Go's HTML escaping of & < > where Python escapes non-ASCII
-// instead. Either one makes a `cmp`-based "did reservations change?"
-// gate flap on every run.
+// Pins the two ways Go's JSON drifted from `json.dump(hosts, f, indent=1)`
+// in nix/modules/kea/refresh_kea.py: a trailing newline Python omits, and
+// HTML-escaping & < > where Python escapes non-ASCII instead. Either makes
+// a cmp-based "did reservations change?" gate flap every run.
 func TestKeaFilesAreBytewiseIdenticalToPython(t *testing.T) {
 	dir := t.TempDir()
 	path4 := filepath.Join(dir, "hosts4.json")
@@ -489,18 +474,14 @@ func TestKeaFilesAreBytewiseIdenticalToPython(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// json.dump writes no trailing newline.
 	if strings.HasSuffix(string(body4), "\n") {
 		t.Errorf("kea file ends in a newline; refresh_kea.py's json.dump does not:\n%q", body4)
 	}
-	// Python does not HTML-escape. (A reservation hostname is sanitized
-	// to [a-z0-9-] before it gets here, so pythonJSON carries the
-	// HTML-escaping half of this on its own -- see
-	// TestPythonJSONMatchesJSONDumps.)
+	// Python does not HTML-escape; hostnames are sanitized to [a-z0-9-]
+	// first, so TestPythonJSONMatchesJSONDumps covers escaping directly.
 	if strings.ContainsAny(string(body4), "&<>") {
 		t.Errorf("unexpected raw HTML character in the fixture:\n%s", body4)
 	}
-	// Python's ensure_ascii=True escapes non-ASCII instead.
 	if strings.Contains(string(body4), "é") {
 		t.Errorf("non-ASCII emitted raw; Python's ensure_ascii=True escapes it:\n%s", body4)
 	}
@@ -523,7 +504,6 @@ func TestKeaFilesAreBytewiseIdenticalToPython(t *testing.T) {
 	}
 }
 
-// TestPythonJSONMatchesJSONDumps pins pythonJSON on its own.
 func TestPythonJSONMatchesJSONDumps(t *testing.T) {
 	cases := []struct {
 		name   string

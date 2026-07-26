@@ -8,14 +8,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// Regression tests for finding 6 (fan-out sized by input length) and the
-// TUI half of finding 2 (q/ctrl+c only quit, they never cancelled).
-//
-// These push messages through Update directly rather than running a
-// program: Update is the only thing allowed to mutate a model, and these
-// tests must not introduce a second writer.
+// Regression tests for fan-out sized by input length, and for q/ctrl+c
+// quitting without cancelling. Messages go through Update directly rather
+// than a running program, so there is only ever one writer of the model.
 
-// countingProbes returns probes that record how many have been started.
 func countingProbes(n int, started *atomic.Int64, block <-chan struct{}) []StatusProbe {
 	out := make([]StatusProbe, n)
 	for i := range n {
@@ -49,8 +45,7 @@ func itoa(n int) string {
 	return string(buf)
 }
 
-// batchLen counts the commands in a tea.Cmd, which is how many goroutines
-// Bubble Tea will start for it.
+// batchLen counts commands in a tea.Cmd = goroutines Bubble Tea will start.
 func batchLen(t *testing.T, cmd tea.Cmd) int {
 	t.Helper()
 	if cmd == nil {
@@ -64,17 +59,15 @@ func batchLen(t *testing.T, cmd tea.Cmd) int {
 	return len(batch)
 }
 
-// TestStatusInitDoesNotFanOutByFleetSize is the reproduction: Init used
-// to append one command per probe, and tea.Batch runs one goroutine per
-// command, so 300 devices meant 301 goroutines — none of which could be
-// reclaimed while parked on the caller's semaphore.
+// Regression: Init appended one command per probe and tea.Batch runs a
+// goroutine per command, so 300 devices meant 301 goroutines all parked on
+// the caller's semaphore.
 func TestStatusInitDoesNotFanOutByFleetSize(t *testing.T) {
 	const devices = 300
 	var started atomic.Int64
 	m := NewStatusModel(t.Context(), countingProbes(devices, &started, nil))
 	t.Cleanup(m.Cancel)
 
-	// spinner tick + at most DefaultConcurrency probes.
 	if got, want := batchLen(t, m.Init()), DefaultConcurrency+1; got > want {
 		t.Fatalf("Init batched %d commands for %d devices, want at most %d", got, devices, want)
 	}
@@ -83,8 +76,7 @@ func TestStatusInitDoesNotFanOutByFleetSize(t *testing.T) {
 	}
 }
 
-// TestStatusDispatchesTheRestAsProbesAnswer: bounding the fan-out must
-// not drop devices. Every probe still runs, one released per completion.
+// Bounding the fan-out must not drop devices: one released per completion.
 func TestStatusDispatchesTheRestAsProbesAnswer(t *testing.T) {
 	const devices = 20
 	var started atomic.Int64
@@ -116,9 +108,8 @@ func TestStatusDispatchesTheRestAsProbesAnswer(t *testing.T) {
 	}
 }
 
-// TestStatusQuitCancelsTheProbes reproduces the other half: `q` used to
-// return tea.Quit and nothing else, so probes that were queued or in
-// flight kept contacting devices while the command printed its summary.
+// Regression: `q` returned only tea.Quit, so queued and in-flight probes kept
+// contacting devices while the summary printed.
 func TestStatusQuitCancelsTheProbes(t *testing.T) {
 	for _, key := range []string{"q", "esc", "ctrl+c"} {
 		t.Run(key, func(t *testing.T) {
@@ -143,9 +134,8 @@ func TestStatusQuitCancelsTheProbes(t *testing.T) {
 	}
 }
 
-// TestStatusCancelIsIndependentOfTheParent: cancelling the model's
-// context must not look like the parent being cancelled, or the Bubble
-// Tea program would report ErrProgramKilled instead of a clean quit.
+// Cancelling the model's context must not cancel the parent, or Bubble Tea
+// reports ErrProgramKilled instead of a clean quit.
 func TestStatusCancelDoesNotTouchTheParent(t *testing.T) {
 	parent, cancel := context.WithCancel(context.Background())
 	defer cancel()

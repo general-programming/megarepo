@@ -9,42 +9,29 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// The IOS-family vendors (Cisco IOS, Dell DNOS6/DNOS9, and the Arista
-// eos.j2 that arista.py's managed slice replaced) share three template
-// fragments: common/shared_ios_vlans.j2, shared_ios_interfaces.j2 and
-// shared_ios_snmp.j2. This file is the port of those three plus the
-// device projection they read from.
+// Port of common/shared_ios_{vlans,interfaces,snmp}.j2, shared by Cisco IOS,
+// Dell DNOS6/9 and the replaced Arista eos.j2, plus their device projection.
 //
-// Unlike every other renderer these hosts do NOT come from network.yml:
-// they are the `managed_netdevice`-tagged devices in NetBox, assembled
-// by BaseHost.from_netbox_meta with role "network_devices". IOSDevice is
-// that projection, kept as its own type because model.Host (frozen by
-// ../CONTRACT.md, and owned by another worker) has nowhere to put the
-// NetBox-only per-interface facts: 802.1q mode, LAG membership, and VRF.
-//
-// Whoever wires the NetBox client in should build an IOSDevice directly.
-// Rendering a model.Host still works (IOSDeviceFromHost projects one),
-// it just cannot know those three fields.
+// These hosts do NOT come from network.yml: they are `managed_netdevice`
+// NetBox devices. IOSDevice is a separate type because model.Host is frozen
+// by ../CONTRACT.md and cannot hold the NetBox-only per-interface facts
+// (802.1q mode, LAG membership, VRF), which IOSDeviceFromHost cannot fill.
 
-// iosDomainName is hardcoded in common/shared_ios_common.j2 rather than
-// read from global_meta.search_domain. Kept literal for parity.
+// iosDomainName is hardcoded in common/shared_ios_common.j2 rather than read
+// from global_meta.search_domain. Kept literal for parity.
 const iosDomainName = "generalprogramming.org"
 
 // IOSInterface is one interface as the shared IOS fragments see it.
 type IOSInterface struct {
 	Name string
-	// Type is the NetBox interface type: "LAG" and "VIRTUAL" are the
-	// two the templates branch on; anything else is a physical port.
+	// Type is the NetBox interface type; only "LAG" and "VIRTUAL" branch.
 	Type string
-	// Mode is the NetBox 802.1q mode: "ACCESS", "TAGGED", "TAGGED_ALL",
-	// or empty for a routed/unmoded interface.
+	// Mode is the NetBox 802.1q mode: ACCESS, TAGGED, TAGGED_ALL, or empty.
 	Mode        string
 	Description string
-	// VRF is the VRF name, empty when the interface is in the default one.
-	VRF string
+	VRF         string
 	// LagID is the parent LAG's NetBox name, empty when not a member.
-	LagID string
-	// Enabled decides `no shutdown` vs `shutdown`.
+	LagID        string
 	Enabled      bool
 	Addresses    []model.Address
 	UntaggedVLAN *model.VLAN
@@ -60,13 +47,13 @@ func (i *IOSInterface) IsVLAN() bool { return i.Type == "VIRTUAL" }
 // IsAccess reports whether the interface is an access port.
 func (i *IOSInterface) IsAccess() bool { return i.Mode == "ACCESS" }
 
-// IsTrunk reports whether the interface is a trunk.
+// IsTrunk reports whether the interface is a trunk port.
 func (i *IOSInterface) IsTrunk() bool {
 	return i.Mode == "TAGGED" || i.Mode == "TAGGED_ALL"
 }
 
-// CiscoName is HostInterface.cisco_name: a LAG's bare NetBox name is a
-// number, which IOS spells as a Port-Channel.
+// CiscoName is HostInterface.cisco_name: a LAG's name is a bare number, which
+// IOS spells as a Port-Channel.
 func (i *IOSInterface) CiscoName() string {
 	if i.IsLAG() {
 		return "Port-Channel" + i.Name
@@ -74,8 +61,7 @@ func (i *IOSInterface) CiscoName() string {
 	return i.Name
 }
 
-// V4 returns the interface's first IPv4 address, if any. The templates
-// only ever render an IPv4 `ip address`.
+// V4 returns the interface's first IPv4 address; templates only render IPv4.
 func (i *IOSInterface) V4() *model.Address {
 	for n := range i.Addresses {
 		if i.Addresses[n].IP.Is4() {
@@ -90,30 +76,20 @@ type IOSDevice struct {
 	Hostname   string
 	DeviceType string
 	Interfaces []IOSInterface
-	// VLANs are the device's VLANs, already filtered and ordered (see
-	// IOSVLANs). One `vlan <vid>` stanza is rendered per entry.
+	// VLANs are already filtered and ordered by IOSVLANs; one stanza each.
 	VLANs []model.VLAN
 	// DefaultRoute is config_context["default-route"], empty when unset.
 	DefaultRoute string
-	// SNMPLocation is the per-device location override; NetBox-sourced
-	// hosts never set one, so it is normally empty.
+	// SNMPLocation is the per-device override; NetBox hosts never set one.
 	SNMPLocation string
-	// TacacsServers is BaseHost.tacacs_servers. Python hardcodes this
-	// to an empty list ("HACK: TACACS is broken, lol" -- the Consul SRV
-	// lookup below it is unreachable), so every TACACS block gated on
-	// it renders as nothing. Modeled anyway: the DNOS templates emit
-	// the tacacs-server KEY unconditionally, so the feature is not
-	// dead, only its server list.
+	// TacacsServers is BaseHost.tacacs_servers, hardcoded empty upstream
+	// ("HACK: TACACS is broken, lol"), so every gated TACACS block renders as
+	// nothing. Modeled anyway: DNOS emits the tacacs-server KEY unconditionally.
 	TacacsServers []string
 }
 
-// IOSDeviceFromHost projects a network.yml host into the IOS view.
-//
-// The NetBox-only per-interface facts (802.1q mode, LAG parent, VRF)
-// have no network.yml spelling and come out empty, so a host routed
-// through here renders every port as unmoded. This exists so
-// render.Host works end to end for a `network_devices` host; the real
-// input for these vendors is a NetBox-built IOSDevice.
+// IOSDeviceFromHost projects a network.yml host into the IOS view; the
+// NetBox-only facts have no network.yml spelling, so ports render unmoded.
 func IOSDeviceFromHost(h *model.Host) *IOSDevice {
 	device := &IOSDevice{
 		Hostname:     h.Hostname,
@@ -136,15 +112,10 @@ func IOSDeviceFromHost(h *model.Host) *IOSDevice {
 	return device
 }
 
-// IOSVLANs is BaseHost.vlans: every VLAN any interface references,
-// deduplicated. known is the NetBox VLAN map the device is allowed to
-// declare (BaseHost.vlan_map), keyed by VID; a nil map accepts every
-// referenced VLAN, which is what a network.yml host gets.
-//
-// Python builds this from a set and so emits the stanzas in an order
-// that varies run to run (PYTHONHASHSEED). This orders them by VID
-// instead: the goldens are a byte-parity contract, and a renderer whose
-// output depends on the interpreter's hash seed cannot honour one.
+// IOSVLANs is BaseHost.vlans: every VLAN any interface references, deduped;
+// known is BaseHost.vlan_map keyed by VID, nil admits all. Python builds it
+// from a set, so stanza order varies with PYTHONHASHSEED; ordering by VID
+// instead is what makes the goldens stable.
 func IOSVLANs(interfaces []IOSInterface, known map[int]model.VLAN) []model.VLAN {
 	seen := map[int]model.VLAN{}
 	admit := func(vlan model.VLAN) {
@@ -205,8 +176,8 @@ func iosInterfaceStanzas(d *IOSDevice) []string {
 					fmt.Sprintf("    switchport access vlan %d", iface.UntaggedVLAN.VID))
 			}
 		case iface.IsTrunk():
-			// The template's native-vlan clause is inline, so the
-			// separating space is emitted whether or not it fills in.
+			// The native-vlan clause is inline, so the separating space is
+			// emitted whether or not it fills in.
 			native := ""
 			if iface.UntaggedVLAN != nil {
 				native = fmt.Sprintf("native vlan %d", iface.UntaggedVLAN.VID)
@@ -217,8 +188,7 @@ func iosInterfaceStanzas(d *IOSDevice) []string {
 		if iface.VRF != "" {
 			lines = append(lines, "    vrf "+iface.VRF)
 		}
-		// EOS needs every non-SVI port put into switching mode
-		// explicitly; IOS and DNOS default to it.
+		// EOS needs every non-SVI port switched explicitly; IOS/DNOS default to it.
 		if d.DeviceType == "eos" && !iface.IsVLAN() {
 			lines = append(lines, "    switchport")
 		}

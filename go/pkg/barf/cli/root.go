@@ -1,15 +1,8 @@
 // Package cli is the barf command surface: a cobra tree over the model,
-// render and device packages. Every command is read-only except `deploy`
-// and `device update`/`device cleanup`, and those change nothing until
-// the operator confirms: on a terminal they ask per device, and with no
-// terminal they need --yes and are otherwise a dry run. See confirm.go
-// for the shared matrix and deploy.go / devicelifecycle.go for the rest
-// of the interlocks.
-//
-// All commands are dual-mode. On a TTY they run a Bubble Tea interface
-// (see barf/tui); with no TTY, or with --plain or --json, they emit
-// deterministic, ANSI-free, pipe-safe text so CI and a future GitOps
-// reconcile loop can consume them.
+// render and device packages. Every command is read-only except `deploy` and
+// `device update`/`device cleanup`, which change nothing until the operator
+// confirms; see confirm.go for the matrix. All commands are dual-mode: Bubble
+// Tea on a TTY, deterministic ANSI-free text otherwise or under --plain/--json.
 package cli
 
 import (
@@ -33,16 +26,13 @@ const defaultNetworkRelPath = "projects/barf/network.yml"
 type Options struct {
 	// NetworkPath is --network; empty means "discover it".
 	NetworkPath string
-	// Plain forces plain output even on a TTY.
-	Plain bool
-	// Verbose turns on debug logging.
-	Verbose bool
+	Plain       bool
+	Verbose     bool
 
 	Out    io.Writer
 	ErrOut io.Writer
 
-	// forceInteractive overrides TTY detection in tests. nil means
-	// "detect".
+	// forceInteractive overrides TTY detection in tests; nil means detect.
 	forceInteractive *bool
 
 	log *charmlog.Logger
@@ -53,9 +43,8 @@ func NewOptions() *Options {
 	return &Options{Out: os.Stdout, ErrOut: os.Stderr}
 }
 
-// interactive reports whether a Bubble Tea interface should be used:
-// only when stdout is a real terminal and the user did not ask for
-// machine-readable output.
+// interactive is true only when stdout is a real terminal and the user did
+// not ask for machine-readable output.
 func (o *Options) interactive() bool {
 	if o.forceInteractive != nil {
 		return *o.forceInteractive
@@ -70,12 +59,10 @@ func (o *Options) interactive() bool {
 	return term.IsTerminal(int(f.Fd()))
 }
 
-// SetInteractive pins interactivity, bypassing TTY detection. Tests use
-// it to exercise both modes without a pty.
+// SetInteractive pins interactivity, so tests exercise both modes without a pty.
 func (o *Options) SetInteractive(v bool) { o.forceInteractive = &v }
 
-// Logger is the command logger. It writes to stderr so it never
-// pollutes a piped stdout.
+// Logger writes to stderr so it never pollutes a piped stdout.
 func (o *Options) Logger() *charmlog.Logger {
 	if o.log == nil {
 		o.log = charmlog.NewWithOptions(o.ErrOut, charmlog.Options{
@@ -91,15 +78,12 @@ func (o *Options) Logger() *charmlog.Logger {
 	return o.log
 }
 
-// printf writes to the command's stdout.
 func (o *Options) printf(format string, args ...any) {
 	fmt.Fprintf(o.Out, format, args...)
 }
 
-// networkPath is the network.yml to load: --network when given,
-// otherwise projects/barf/network.yml found by walking up from the
-// working directory (so barf works from anywhere in the megarepo),
-// falling back to ./network.yml.
+// networkPath resolves --network, else projects/barf/network.yml found by
+// walking up from the working directory, else ./network.yml.
 func (o *Options) networkPath() (string, error) {
 	if o.NetworkPath != "" {
 		return o.NetworkPath, nil
@@ -177,19 +161,13 @@ func NewRootCmd(o *Options) *cobra.Command {
 	return root
 }
 
-// notifyContext is signal.NotifyContext; a var so tests can observe the
-// stop function without sending real signals at the test binary.
+// notifyContext is signal.NotifyContext; a var so tests can observe stop
+// without sending real signals at the test binary.
 var notifyContext = signal.NotifyContext
 
-// signalContext returns a context cancelled by the first SIGINT/SIGTERM.
-//
-// The second signal must still kill barf outright. signal.NotifyContext
-// keeps swallowing signals until its stop function runs, so a user who
-// hits Ctrl-C twice because a cleanup is taking too long would otherwise
-// be stuck in an uninterruptible process. Restoring the default
-// disposition as soon as the context is cancelled means the first Ctrl-C
-// asks politely and the second one is fatal, the way every other CLI
-// behaves.
+// signalContext returns a context cancelled by the first SIGINT/SIGTERM, then
+// immediately restores the default disposition: NotifyContext otherwise keeps
+// swallowing signals, leaving a second Ctrl-C unable to kill a slow cleanup.
 func signalContext(parent context.Context) (context.Context, context.CancelFunc) {
 	ctx, stop := notifyContext(parent, os.Interrupt, syscall.SIGTERM)
 	go func() {
@@ -199,12 +177,8 @@ func signalContext(parent context.Context) (context.Context, context.CancelFunc)
 	return ctx, stop
 }
 
-// Execute runs the barf CLI and returns the process exit status.
-//
-// Every command is run with a signal-aware context, which is what makes
-// the ctx plumbing below it real: the interruptible sleeps, the cancel
-// checks in the redundancy probe and the endpoint probe, the bounded
-// worker pools and the Bubble Tea programs all hang off this.
+// Execute runs the barf CLI and returns the process exit status. The
+// signal-aware context it builds is what every cancel check below it hangs off.
 func Execute(args []string) int {
 	ctx, stop := signalContext(context.Background())
 	defer stop()

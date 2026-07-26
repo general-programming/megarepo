@@ -6,20 +6,13 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// DNOS6 renders a Dell Networking OS 6 switch in the `network_devices`
-// role: projects/barf/barf/templates/network_devices/dnos6.j2, which is
-// `{% include 'common/dnos6.j2' %}`.
+// DNOS6 renders a Dell Networking OS 6 switch in the `network_devices` role
+// (network_devices/dnos6.j2, i.e. common/dnos6.j2).
 type DNOS6 struct{}
 
-// DNOS9 renders a Dell Networking OS 9 switch.
-//
-// It is the SAME config as DNOS6: network_devices/dnos9.j2 also
-// includes common/dnos6.j2, and nothing in that template branches on
-// devicetype. The separate common/dnos9.j2 (a DNOS9-native `tacacs+`
-// AAA block) is dead -- no template includes it, and it references an
-// undefined `tsecrets.acacs_host`, a typo for `secrets.tacacs_host`
-// that would render empty. Ported as the alias Python actually is,
-// rather than as the file's name suggests.
+// DNOS9 renders a Dell Networking OS 9 switch: the SAME config as DNOS6,
+// since dnos9.j2 also includes common/dnos6.j2. The separate common/dnos9.j2
+// is dead code referencing an undefined `tsecrets.acacs_host`.
 type DNOS9 struct{}
 
 // Render returns the full DNOS6 config text for h.
@@ -38,9 +31,8 @@ func (DNOS9) Render(h *model.Host, n *model.Network, s SecretSource) (string, er
 	return RenderDNOS(IOSDeviceFromHost(h), n.Global, s)
 }
 
-// RenderDNOS renders a NetBox-sourced Dell switch (common/dnos6.j2).
-// This is the real entry point for both Dell vendors: see ios.go on why
-// these devices are an IOSDevice rather than a model.Host.
+// RenderDNOS renders a NetBox-sourced Dell switch (common/dnos6.j2), the real
+// entry point for both Dell vendors; see ios.go on why it takes an IOSDevice.
 func RenderDNOS(d *IOSDevice, global model.GlobalMeta, s SecretSource) (string, error) {
 	adminPassword, err := s.HostSecret(d.Hostname, "admin-password")
 	if err != nil {

@@ -15,28 +15,24 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vyoswire"
 )
 
-// VyOSAPIKeySecret is the shared-secret name holding the VyOS HTTPS API
-// key. Mirrors Python `VaultSecrets().vyos_api_password`, whose attribute
-// name is dashed into this path.
+// VyOSAPIKeySecret holds the VyOS HTTPS API key (`vyos_api_password`).
 const VyOSAPIKeySecret = "vyos-api-password"
 
-// The only two VyOS API endpoints this package may talk to, and the only
-// ops each accepts. `/configure`, `/config-file` (save) and `/image`
-// (delete) are writes and are deliberately absent — vyos_api_configure,
-// vyos_api_config_save and vyos_api_image_delete are NOT ported.
+// The only endpoints a reader may talk to, and the only ops each accepts;
+// /configure and /config-file live in writer.go, /image is not ported.
 var vyosAllowedRequests = map[string]map[string]bool{
 	"show":     {"show": true},
 	"retrieve": {"showConfig": true},
 }
 
-// vyosRequestAllowed is the write guard for the VyOS transport: an
-// endpoint/op pair not in vyosAllowedRequests never reaches the wire.
+// vyosRequestAllowed is the write guard: a pair not in vyosAllowedRequests
+// never reaches the wire.
 func vyosRequestAllowed(endpoint, op string) bool {
 	return vyosAllowedRequests[endpoint][op]
 }
 
-// vyosReadTimeout is the per-endpoint budget for a read, matching the
-// Python defaults (vyos_api_show=10s, vyos_api_retrieve_config=30s).
+// vyosReadTimeout is the per-endpoint read budget (Python: show=10s,
+// retrieve_config=30s).
 func vyosReadTimeout(endpoint string) time.Duration {
 	if endpoint == "retrieve" {
 		return TimeoutRetrieve
@@ -44,13 +40,8 @@ func vyosReadTimeout(endpoint string) time.Duration {
 	return TimeoutShow
 }
 
-// VyOSReader reads a VyOS device over its HTTPS API.
-//
-// Transport is a hand-rolled form-POST because that is the whole
-// protocol: `data` (a JSON op) plus `key`, with a
-// {success, data, error} JSON reply. There is no Go client library for
-// it, and writing the two read calls directly keeps the endpoint set
-// closed.
+// VyOSReader reads a VyOS device over its HTTPS API with a hand-rolled
+// form-POST: that is the whole protocol, and it keeps the endpoint set closed.
 type VyOSReader struct {
 	host     *model.Host
 	opts     Options
@@ -68,7 +59,7 @@ type VyOSReader struct {
 
 var _ Reader = (*VyOSReader)(nil)
 
-// NewVyOS returns a read-only HTTPS-API reader for h.
+// NewVyOS returns a read-only VyOS reader for h.
 func NewVyOS(h *model.Host, opts Options) (*VyOSReader, error) {
 	if h == nil {
 		return nil, fmt.Errorf("device: nil host")
@@ -92,15 +83,9 @@ func (r *VyOSReader) apiKey() (string, error) {
 	return r.key, r.keyErr
 }
 
-// request is the ONLY function in the package that performs a VyOS API
-// read request. It refuses any endpoint/op pair vyosRequestAllowed
-// rejects, so no caller can reach /configure, /config-file or /image
-// through it.
-//
-// The guard below is this reader's own and is deliberately unrelated to
-// Options.AllowWrites: no option, and no amount of wiring, turns a
-// VyOSReader into something that can name a write endpoint. Only the
-// transport mechanics are shared (see vyoswire) — the allowlist is not.
+// request is the ONLY function performing a VyOS read request, and it refuses
+// whatever vyosRequestAllowed rejects. That guard is unrelated to
+// Options.AllowWrites, and vyoswire shares the mechanics, not the allowlist.
 func (r *VyOSReader) request(ctx context.Context, endpoint, op string, payload any) (json.RawMessage, error) {
 	if !vyosRequestAllowed(endpoint, op) {
 		return nil, &WriteAttemptError{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
@@ -122,8 +107,7 @@ func (r *VyOSReader) request(ctx context.Context, endpoint, op string, payload a
 	return vyoswire.Post(ctx, r.client, r.host.Hostname, target, key, payload)
 }
 
-// Show runs an operational `show` command, e.g. Show(ctx, "version") or
-// Show(ctx, "system", "uptime"). Ports vyos_api_show.
+// Show runs an operational `show` command. Ports vyos_api_show.
 func (r *VyOSReader) Show(ctx context.Context, path ...string) (string, error) {
 	if path == nil {
 		path = []string{}
@@ -132,14 +116,11 @@ func (r *VyOSReader) Show(ctx context.Context, path ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Non-string payloads are unexpected for op-mode; vyoswire.Text
-	// surfaces them raw rather than dropping them.
+	// vyoswire.Text surfaces a non-string payload raw rather than dropping it.
 	return vyoswire.Text(data), nil
 }
 
-// RetrieveConfig fetches (part of) the running config as a JSON tree via
-// `/retrieve` — a read-only op ("showConfig"). Ports
-// vyos_api_retrieve_config.
+// RetrieveConfig fetches the running config as a JSON tree via `/retrieve`.
 func (r *VyOSReader) RetrieveConfig(ctx context.Context, path ...string) (map[string]any, error) {
 	if path == nil {
 		path = []string{}
@@ -152,12 +133,9 @@ func (r *VyOSReader) RetrieveConfig(ctx context.Context, path ...string) (map[st
 	if err := json.Unmarshal(data, &tree); err != nil {
 		return nil, fmt.Errorf("%s: unexpected /retrieve payload: %w", r.host.Hostname, err)
 	}
-	// A JSON `null` (or an absent data field) unmarshals into a nil map
-	// without error, and a nil map is indistinguishable from an empty
-	// config downstream: the running set collapses to nothing and the
-	// operator is shown a full-reconfigure diff for what was really a
-	// failed read. Python refuses it explicitly —
-	// vyos_api.py: `if not isinstance(data, dict): raise`.
+	// A JSON `null` unmarshals into a nil map without error, and a nil map
+	// looks like an empty config downstream: a failed read would print a
+	// full-reconfigure diff. Python refuses it too (`isinstance(data, dict)`).
 	if tree == nil {
 		return nil, fmt.Errorf("%s: unexpected /retrieve payload: %s is not a config tree",
 			r.host.Hostname, retrievePayloadDescription(data))
@@ -165,8 +143,7 @@ func (r *VyOSReader) RetrieveConfig(ctx context.Context, path ...string) (map[st
 	return tree, nil
 }
 
-// retrievePayloadDescription names what came back instead of an object,
-// without echoing a whole config into an error message.
+// retrievePayloadDescription names what came back instead of an object.
 func retrievePayloadDescription(data json.RawMessage) string {
 	trimmed := strings.TrimSpace(string(data))
 	if trimmed == "" {
@@ -178,11 +155,8 @@ func retrievePayloadDescription(data json.RawMessage) string {
 	return trimmed
 }
 
-// -- parsing ----------------------------------------------------------
-
-// ParseVyOSVersion pulls the version out of `show version` output. The
-// "VyOS " prefix is stripped so the value lines up with upstream release
-// tags (e.g. "2026.06.30-0048-rolling").
+// ParseVyOSVersion pulls the version out of `show version`, stripping the
+// "VyOS " prefix so it matches upstream release tags.
 func ParseVyOSVersion(output string) string {
 	for _, line := range pytext.SplitLines(output) {
 		if strings.HasPrefix(strings.ToLower(line), "version:") {
@@ -194,15 +168,13 @@ func ParseVyOSVersion(output string) string {
 		return "-"
 	}
 	// pytext.SplitLines, not Split(_, "\n"): this branch returns the line
-	// verbatim, so a CRLF device answer would otherwise come back as
-	// "1.4.2\r" where Python's splitlines() gives "1.4.2".
+	// verbatim, so a CRLF answer must give "1.4.2", not "1.4.2\r".
 	first := pytext.SplitLines(strings.TrimSpace(output))[0]
 	return strings.TrimPrefix(first, "VyOS ")
 }
 
-// ParseVyOSModel pulls the SMBIOS hardware model out of `show version`
-// output. The vendor is prefixed only when the model does not already
-// repeat it.
+// ParseVyOSModel pulls the SMBIOS model out of `show version`, prefixing the
+// vendor only when the model does not repeat it.
 func ParseVyOSModel(output string) string {
 	var vendor, hardware string
 	for _, raw := range pytext.SplitLines(output) {
@@ -247,7 +219,7 @@ func ParseVyOSUptime(output string) string {
 	return "-"
 }
 
-// SystemImage is one installed VyOS system image.
+// SystemImage is one entry from `show system image`.
 type SystemImage struct {
 	Name        string
 	DefaultBoot bool
@@ -256,9 +228,8 @@ type SystemImage struct {
 
 var vyosNumberedImage = regexp.MustCompile(`^\s*\d+:\s+(\S+)(.*)$`)
 
-// ParseSystemImages parses `show system image` output. Handles both the
-// modern table format (Name / Default boot / Running columns) and the
-// legacy numbered list ("1: name (default boot) (running image)").
+// ParseSystemImages parses `show system image` in both the modern table and
+// the legacy numbered-list format.
 func ParseSystemImages(output string) []SystemImage {
 	lines := pytext.SplitLines(output)
 
@@ -301,8 +272,7 @@ func ParseSystemImages(output string) []SystemImage {
 	return images
 }
 
-// columnYes reports whether row[start:end] starts with "yes", tolerating
-// rows shorter than the header.
+// columnYes handles rows shorter than the header.
 func columnYes(row string, start, end int) bool {
 	if start >= len(row) {
 		return false
@@ -313,10 +283,7 @@ func columnYes(row string, start, end int) bool {
 	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(row[start:end])), "yes")
 }
 
-// -- Reader -----------------------------------------------------------
-
-// versionOutput fetches `show version` once per reader, so version and
-// model together cost one round trip (as the Python side caches).
+// versionOutput fetches `show version` once, so version+model cost one trip.
 func (r *VyOSReader) versionOutput(ctx context.Context) (string, error) {
 	r.versionOnce.Do(func() {
 		r.versionOut, r.versionErr = r.Show(ctx, "version")
@@ -324,7 +291,7 @@ func (r *VyOSReader) versionOutput(ctx context.Context) (string, error) {
 	return r.versionOut, r.versionErr
 }
 
-// Version is the running VyOS version.
+// Version is the running VyOS version string.
 func (r *VyOSReader) Version(ctx context.Context) (string, error) {
 	output, err := r.versionOutput(ctx)
 	if err != nil {
@@ -342,7 +309,7 @@ func (r *VyOSReader) Model(ctx context.Context) (string, error) {
 	return ParseVyOSModel(output), nil
 }
 
-// Uptime is the device's human-readable uptime.
+// Uptime is the device uptime as VyOS reports it.
 func (r *VyOSReader) Uptime(ctx context.Context) (string, error) {
 	output, err := r.Show(ctx, "system", "uptime")
 	if err != nil {
@@ -351,8 +318,7 @@ func (r *VyOSReader) Uptime(ctx context.Context) (string, error) {
 	return ParseVyOSUptime(output), nil
 }
 
-// SystemImages lists the installed system images (read-only; image
-// deletion is deliberately not ported).
+// SystemImages lists the installed images; deletion is not ported here.
 func (r *VyOSReader) SystemImages(ctx context.Context) ([]SystemImage, error) {
 	output, err := r.Show(ctx, "system", "image")
 	if err != nil {
@@ -361,8 +327,7 @@ func (r *VyOSReader) SystemImages(ctx context.Context) ([]SystemImage, error) {
 	return ParseSystemImages(output), nil
 }
 
-// Status reports version, uptime and model; two round trips (version is
-// cached and shared by version+model, uptime is its own show).
+// Status reports version, uptime and model in two round trips.
 func (r *VyOSReader) Status(ctx context.Context) (Status, error) {
 	version, err := r.versionOutput(ctx)
 	if err != nil {
@@ -379,10 +344,8 @@ func (r *VyOSReader) Status(ctx context.Context) (Status, error) {
 	}, nil
 }
 
-// RunningConfig returns the running config as the device's own JSON tree,
-// pretty-printed. VyOS has no text `show running-config` over the API;
-// `/retrieve` is the vendor-native dump. Callers that want `set` command
-// paths should use RetrieveConfig and flatten the tree themselves.
+// RunningConfig returns the config as the device's own pretty-printed JSON
+// tree: VyOS has no text `show running-config` over the API.
 func (r *VyOSReader) RunningConfig(ctx context.Context) (string, error) {
 	tree, err := r.RetrieveConfig(ctx)
 	if err != nil {

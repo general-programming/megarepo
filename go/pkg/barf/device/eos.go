@@ -13,46 +13,30 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// ManagedUsername is the account barf authenticates as on EOS devices;
-// the Python side manages this same user (arista.MANAGED_USERNAME).
+// ManagedUsername is the account barf authenticates as on EOS devices.
 const ManagedUsername = "admin"
 
-// eosCommandPath is the eAPI endpoint. There is exactly one, and it only
-// ever carries the "runCmds" method (never "runConfigCmds").
+// eosCommandPath only ever carries "runCmds", never "runConfigCmds".
 const eosCommandPath = "/command-api"
 
-// eosCommandAllowed reports whether cmd is a read verb this package is
-// permitted to send.
-//
-// This is the write guard for the EOS transport: only `show ...` (in any
-// of its scoped spellings) and the `enable` mode-entry command pass.
-// `configure`, `config`, `copy running-config startup-config`, `write`,
-// `reload`, `no ...` and every other mutating verb are rejected before a
-// request is built. There is no bypass.
+// eosCommandAllowed is the write guard for the EOS read transport: only
+// `show ...` and `enable` pass, and there is no bypass.
 func eosCommandAllowed(cmd string) bool {
 	trimmed := strings.TrimSpace(strings.ToLower(cmd))
 	if trimmed == "enable" {
 		return true
 	}
-	// `show` only, and never `show ... | ...` piping into a mutating
-	// alias. Piping to a filter is harmless, but keeping the surface
-	// literal keeps the guard trivially auditable.
+	// No `show ... | ...`: refusing pipes keeps the guard auditable and
+	// blocks piping into a mutating alias.
 	if !strings.HasPrefix(trimmed, "show ") {
 		return false
 	}
 	return !strings.ContainsAny(trimmed, "|;")
 }
 
-// EOSReader reads an Arista EOS device over eAPI (JSON-RPC/HTTPS).
-//
-// The JSON-RPC protocol is hand-rolled rather than delegated to
-// goeapi/pyeapi: it is a single POST with a small, stable body, and
-// hand-rolling (a) adds no dependency, (b) gives real context.Context
-// cancellation, which goeapi does not expose, and — the reason that
-// matters most here — (c) means the only code that can build a request is
-// in this file, behind eosCommandAllowed. A vendored client would ship
-// config-push methods (goeapi's Node.Config, pyeapi's node.config) that
-// are one call away from a caller.
+// EOSReader reads an Arista EOS device over eAPI. Hand-rolled rather than
+// goeapi, which has no context cancellation and whose Node.Config would put
+// config-push one call away from a caller.
 type EOSReader struct {
 	host     *model.Host
 	opts     Options
@@ -68,7 +52,7 @@ type EOSReader struct {
 
 var _ Reader = (*EOSReader)(nil)
 
-// NewEOS returns a read-only eAPI reader for h.
+// NewEOS returns a read-only EOS reader for h.
 func NewEOS(h *model.Host, opts Options) (*EOSReader, error) {
 	if h == nil {
 		return nil, fmt.Errorf("device: nil host")
@@ -88,13 +72,9 @@ func (r *EOSReader) credentials() (admin, enable string, err error) {
 	return r.creds.get(r.opts.Secrets, r.host.Hostname)
 }
 
-// eosCredentials caches one host's admin/enable secrets for the lifetime
-// of a reader or a writer, so a multi-command run resolves them once.
-//
-// Shared by EOSReader and EOSWriter, which had byte-identical copies of
-// this. Sharing the cache is safe in a way that sharing a transport
-// would not be: it only reads secrets, and it is the request builders on
-// either side — not this — that decide whether a command may be sent.
+// eosCredentials caches one host's admin/enable secrets. Shared by reader and
+// writer, which is safe where sharing a transport would not be: it only reads
+// secrets, the request builders decide what is sent.
 type eosCredentials struct {
 	once   sync.Once
 	admin  string
@@ -102,12 +82,8 @@ type eosCredentials struct {
 	err    error
 }
 
-// get resolves both secrets once.
-//
-// A missing enable secret is deliberately NOT fatal. For a reader, the
-// request simply goes unprivileged; for a writer, config mode will be
-// refused by the device itself, which is a better error than one guessed
-// at here. A missing admin secret is fatal in both cases.
+// get resolves both secrets once. A missing enable secret is deliberately NOT
+// fatal (the device itself gives the better error); a missing admin one is.
 func (c *eosCredentials) get(secrets Secrets, hostname string) (admin, enable string, err error) {
 	c.once.Do(func() {
 		c.admin, c.err = secrets.HostSecret(hostname, "admin-password")
@@ -118,8 +94,6 @@ func (c *eosCredentials) get(secrets Secrets, hostname string) (admin, enable st
 	})
 	return c.admin, c.enable, c.err
 }
-
-// -- JSON-RPC wire types ---------------------------------------------
 
 type eosRequest struct {
 	JSONRPC string    `json:"jsonrpc"`
@@ -154,12 +128,8 @@ func (e *eosError) Error() string {
 	return fmt.Sprintf("eAPI error %d: %s", e.Code, e.Message)
 }
 
-// runShow sends one or more `show` commands and returns their results.
-//
-// This is the ONLY function in the package that performs an eAPI request,
-// and it refuses anything eosCommandAllowed rejects. The method field is
-// hardcoded to "runCmds"; "runConfigCmds" appears nowhere in this
-// package.
+// runShow is the only read-side eAPI primitive; it refuses anything
+// eosCommandAllowed rejects.
 func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) ([]json.RawMessage, error) {
 	for _, cmd := range cmds {
 		if !eosCommandAllowed(cmd) {
@@ -167,8 +137,7 @@ func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) 
 		}
 	}
 
-	// A read's budget. Writes get their own, longer ones — see
-	// eos_writer.go's run.
+	// A read's budget; writes get their own, longer ones.
 	ctx, cancel := r.opts.withOpTimeout(ctx, TimeoutShow)
 	defer cancel()
 
@@ -183,8 +152,7 @@ func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) 
 	}
 
 	payload := make([]any, 0, len(cmds)+1)
-	// pyeapi's node.enable() prepends the enable command with the secret
-	// as its input; without a secret it is a bare "enable".
+	// As pyeapi's node.enable(): the secret is the command's input.
 	if enable != "" {
 		payload = append(payload, eosEnableCmd{Cmd: "enable", Input: enable})
 	} else {
@@ -244,19 +212,15 @@ func (r *EOSReader) runShow(ctx context.Context, format string, cmds ...string) 
 	return decoded.Result[1:], nil
 }
 
-// -- show version -----------------------------------------------------
-
 type eosShowVersion struct {
 	Version          string `json:"version"`
 	ModelName        string `json:"modelName"`
 	HardwareRevision string `json:"hardwareRevision"`
-	// Pre-4.27 EOS omits uptime entirely; a pointer distinguishes that
-	// from a genuine 0.
+	// Pre-4.27 EOS omits uptime; a pointer distinguishes that from a real 0.
 	Uptime *float64 `json:"uptime"`
 }
 
-// showVersion fetches and caches `show version`, so Status costs one
-// round trip for version + model + uptime (as the Python side does).
+// showVersion caches `show version`, so Status costs one round trip.
 func (r *EOSReader) showVersion(ctx context.Context) (eosShowVersion, error) {
 	r.versionOnce.Do(func() {
 		results, err := r.runShow(ctx, "json", "show version")
@@ -269,7 +233,7 @@ func (r *EOSReader) showVersion(ctx context.Context) (eosShowVersion, error) {
 	return r.versionData, r.versionErr
 }
 
-// Version is the running EOS version, e.g. "4.34.2F".
+// Version is the running EOS version string.
 func (r *EOSReader) Version(ctx context.Context) (string, error) {
 	version, err := r.showVersion(ctx)
 	if err != nil {
@@ -297,7 +261,7 @@ func eosModel(version eosShowVersion) string {
 	return "?"
 }
 
-// Uptime is the device's human-readable uptime.
+// Uptime is the device uptime as EOS reports it.
 func (r *EOSReader) Uptime(ctx context.Context) (string, error) {
 	version, err := r.showVersion(ctx)
 	if err != nil {
@@ -320,8 +284,7 @@ func (r *EOSReader) Uptime(ctx context.Context) (string, error) {
 	return parseShowUptime(out.Output), nil
 }
 
-// HumanizeUptime formats an uptime in seconds the way the Python
-// implementation does: "482d 17h", "5h 12m", "42m".
+// HumanizeUptime formats seconds as Python does: "482d 17h", "5h 12m", "42m".
 func HumanizeUptime(seconds float64) string {
 	total := int64(seconds)
 	minutes := total / 60
@@ -339,7 +302,9 @@ func HumanizeUptime(seconds float64) string {
 	return fmt.Sprintf("%dm", minutes)
 }
 
-// parseShowUptime pulls the uptime out of `show uptime` text output.
+// parseShowUptime pulls the uptime out of `show uptime` text, mirroring
+// Python's split on " up " then on ", load" (which drops the trailing load
+// averages).
 func parseShowUptime(output string) string {
 	if before, after, found := strings.Cut(output, " up "); found {
 		_ = before
@@ -350,8 +315,6 @@ func parseShowUptime(output string) string {
 	}
 	return strings.TrimSpace(output)
 }
-
-// -- Reader -----------------------------------------------------------
 
 // Status reports version, uptime and model in one round trip (two on
 // pre-4.27 EOS, which needs the `show uptime` fallback).
@@ -371,15 +334,14 @@ func (r *EOSReader) Status(ctx context.Context) (Status, error) {
 	}, nil
 }
 
-// RunningConfig returns `show running-config all` as text — a read; the
-// device is not asked to enter config mode and nothing is saved.
+// RunningConfig returns `show running-config all` as text; no config mode
+// is entered and nothing is saved.
 func (r *EOSReader) RunningConfig(ctx context.Context) (string, error) {
 	return r.RunningConfigSection(ctx, "")
 }
 
-// RunningConfigSection returns `show running-config all section <name>`,
-// or the whole config when name is empty. Mirrors the scoped reads
-// arista.py's _device_managed_state does.
+// RunningConfigSection returns a scoped read, or the whole config when name
+// is empty.
 func (r *EOSReader) RunningConfigSection(ctx context.Context, name string) (string, error) {
 	cmd := "show running-config all"
 	if name != "" {
@@ -398,8 +360,7 @@ func (r *EOSReader) RunningConfigSection(ctx context.Context, name string) (stri
 	return out.Output, nil
 }
 
-// RunningConfigSections concatenates several scoped reads in one request,
-// as the Python managed-state read does.
+// RunningConfigSections concatenates several scoped reads in one request.
 func (r *EOSReader) RunningConfigSections(ctx context.Context, names ...string) (string, error) {
 	cmds := make([]string, 0, len(names))
 	for _, name := range names {

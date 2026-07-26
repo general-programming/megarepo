@@ -1,13 +1,12 @@
 //go:build live
 
 // Live, read-only smoke tests against real fleet devices. Excluded from
-// the normal build and test run; run with:
+// the normal test run; run with:
 //
 //	go test -tags live -v ./go/barf/device/
 //
-// Requires a Vault token in the environment (secrets are read through the
-// `vault` CLI, so this file needs no dependency on go/vault). Every
-// command it issues is a `show`; nothing here can change a device.
+// Requires a Vault token in the environment (secrets come via the `vault`
+// CLI). Every command issued is a `show`; nothing here changes a device.
 package device
 
 import (

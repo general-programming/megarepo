@@ -7,24 +7,21 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// Port of barf/util/sites.py: geographic distance-based BGP path
-// weighting. This module owns the distance math; the vendor blocks
-// render the resulting integers verbatim (routers receive literal
-// numbers, never do the math themselves).
+// Port of barf/util/sites.py: geographic distance-based BGP path weighting.
+// This file owns the distance math; vendor blocks render the resulting
+// integers verbatim, routers never compute them.
 
 const earthRadiusKM = 6371.0
 
-// baseLocalPref is the baseline local-preference for fabric-learned
-// routes. Distance penalties (in km) are subtracted from it, so it must
-// stay comfortably above FRR/bird's default local-pref of 100.
+// baseLocalPref is the baseline local-preference for fabric-learned routes;
+// distance penalties (km) are subtracted, so it must stay above bird's 100.
 const baseLocalPref = 1_000_000
 
-// siteOriginFunc is the large-community "function" field identifying a
-// site-origin tag: <community_asn>:siteOriginFunc:<site_id>.
+// siteOriginFunc is the function field of <community_asn>:func:<site_id>.
 const siteOriginFunc = 1
 
-// haversineKM is the great-circle distance between two (lat, lon)
-// pairs, in whole km. Rounding is half-to-even to match Python's round().
+// haversineKM is the great-circle distance in whole km; rounding is
+// half-to-even to match Python's round().
 func haversineKM(a, b [2]float64) int {
 	lat1, lon1 := a[0]*math.Pi/180, a[1]*math.Pi/180
 	lat2, lon2 := b[0]*math.Pi/180, b[1]*math.Pi/180
@@ -34,8 +31,7 @@ func haversineKM(a, b [2]float64) int {
 	return int(math.RoundToEven(2 * earthRadiusKM * math.Asin(math.Sqrt(h))))
 }
 
-// siteDistanceKM is the distance between two sites; 0 for the same site
-// or missing data.
+// siteDistanceKM is the distance between two sites; 0 if same or unknown.
 func siteDistanceKM(a, b *model.Site) int {
 	if a == nil || b == nil || a.Name == b.Name {
 		return 0
@@ -49,20 +45,16 @@ type ImportRule struct {
 	LocalPref int
 }
 
-// SiteRules is one neighbor site's import rules. A slice rather than a
-// map: the render order is the order the host's links were declared,
-// and that ordering is part of the byte-parity contract.
+// SiteRules is one neighbor site's import rules. A slice, not a map: render
+// order follows link declaration order, which is byte-parity contract.
 type SiteRules struct {
 	Site  string
 	Rules []ImportRule
 }
 
-// neighborImportRules computes the per-origin-site import rules for
-// routes heard from neighborSite:
+// neighborImportRules computes, for every known site ordered by id,
 //
 //	local_pref = baseLocalPref - (dist(device, neighbor) + dist(neighbor, origin))
-//
-// for every known site, ordered by site id for a stable render.
 func neighborImportRules(deviceSite, neighborSite *model.Site, sites map[string]model.Site) []ImportRule {
 	base := siteDistanceKM(deviceSite, neighborSite)
 	rules := make([]ImportRule, 0, len(sites))
@@ -85,13 +77,10 @@ func sitesByID(sites map[string]model.Site) []model.Site {
 	return ordered
 }
 
-// siteImportRules returns the neighbor-site import rules for a device's
-// fabric links, keyed by the NEIGHBOR's site rather than by individual
-// neighbor host: the rules depend only on (device site, neighbor site),
-// so peers in the same site always get identical treatment.
-//
-// External peers are skipped even when they carry a `site` (recorded for
-// their physical location only): they send untagged routes.
+// siteImportRules returns the import rules for a device's fabric links, keyed
+// by the NEIGHBOR's site: rules depend only on (device site, neighbor site).
+// External peers are skipped even when they carry a `site`, since they send
+// untagged routes.
 func siteImportRules(host *model.Host, links []model.Link, n *model.Network) []SiteRules {
 	sites := n.Global.Sites
 	deviceSite, ok := sites[host.Site]

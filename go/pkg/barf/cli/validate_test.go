@@ -8,7 +8,6 @@ import (
 	"testing"
 )
 
-// writeYAML drops a network.yml into a temp dir and returns its path.
 func writeYAML(t *testing.T, body string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "network.yml")
@@ -153,8 +152,7 @@ func TestValidateMissingSections(t *testing.T) {
 }
 
 func TestValidateDerivedPortCollision(t *testing.T) {
-	// Two links between the same pair derive the same port; one of them
-	// has to be pinned.
+	// Two links between the same pair derive the same port.
 	report, err := validateFile(writeYAML(t, `
 global_meta:
   community_asn: 65000

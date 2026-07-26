@@ -78,7 +78,7 @@ func TestDiffRedactsSecretsByDefault(t *testing.T) {
 	if !strings.Contains(d.Text, redacted) {
 		t.Errorf("redaction placeholder missing:\n%s", d.Text)
 	}
-	// The Added set keeps the real line: only the printed body is redacted.
+	// Only the printed body is redacted; Added keeps the real line.
 	if d.Added[0] != strings.TrimRight(rendered, "\n") {
 		t.Errorf("added line was mutated: %q", d.Added[0])
 	}
@@ -103,10 +103,8 @@ func TestRedactLine(t *testing.T) {
 	}
 }
 
-// TestRedactLineIsKeyAwareNotPositional pins the fix for a redactLine
-// that blanked the LAST whitespace token of any line mentioning a secret
-// keyword. That is exactly backwards for the two spellings real vendors
-// use, and every case below leaked the secret before.
+// Regression: redactLine used to blank the LAST whitespace token of any
+// line mentioning a secret keyword, which leaked every case below.
 func TestRedactLineIsKeyAwareNotPositional(t *testing.T) {
 	cases := []struct{ name, in, want string }{
 		{
@@ -137,14 +135,12 @@ func TestRedactLineIsKeyAwareNotPositional(t *testing.T) {
 			"username admin password " + redacted + " privilege 15",
 		},
 		{
-			// Substring matching used to see "password" in here and
-			// blank the (harmless) last token.
+			// Substring matching used to see "password" here.
 			"a keyword that merely contains a secret word is untouched",
 			"set service ssh disable-password-authentication",
 			"set service ssh disable-password-authentication",
 		},
 		{
-			// The SSH *public* key must stay readable.
 			"public keys stay visible",
 			"set system login user supertech authentication public-keys erin key AAAAC3NzaC1",
 			"set system login user supertech authentication public-keys erin key AAAAC3NzaC1",
@@ -181,15 +177,10 @@ func TestRedactLineIsKeyAwareNotPositional(t *testing.T) {
 	}
 }
 
-// TestVyOSRedactionIsPathShapeAware is the security regression for the
-// fleet-wide VyOS API key. Before this, `barf diff` and the `deploy`
-// dry-run op list both printed
-//
-//	set service https api keys id vaultadmin key 'FLEETAPIKEY'
-//
-// in cleartext, because vyosconfig.RedactPath only looks at the parent
-// node name ("key") and `key` is not in its SecretNodes set. Adding it
-// there is not a fix: the SSH public key has the same parent.
+// Security regression: `barf diff` and the deploy dry-run printed the
+// fleet-wide VyOS API key in cleartext, because vyosconfig.RedactPath only
+// looked at the parent node name ("key"). Adding "key" to SecretNodes is no
+// fix — the SSH public key has the same parent.
 func TestVyOSRedactionIsPathShapeAware(t *testing.T) {
 	rendered := strings.Join([]string{
 		"set service https api keys id vaultadmin key 'FLEETAPIKEY'",
@@ -198,8 +189,7 @@ func TestVyOSRedactionIsPathShapeAware(t *testing.T) {
 		"set system login user supertech authentication plaintext-password 'ADMINPW'",
 		"set interfaces wireguard wg0 private-key 'WGPRIVKEY'",
 	}, "\n") + "\n"
-	// A running config that shares nothing, so every rendered path is an
-	// addition and every device path is a removal.
+	// Shares nothing, so every rendered path is an addition.
 	running := "set system host-name stale\n"
 
 	plan, err := planVyOS(rendered, running)
@@ -219,8 +209,8 @@ func TestVyOSRedactionIsPathShapeAware(t *testing.T) {
 		if !strings.Contains(text, "AAAAPUBKEY") {
 			t.Errorf("the SSH public key must stay visible:\n%s", text)
 		}
-		// The community is not the last component of its path; the
-		// authorization level either side of it stays readable.
+		// The community is not the path's last component; the level
+		// beside it stays readable.
 		if !strings.Contains(text, "authorization ro") {
 			t.Errorf("redaction ate the wrong component:\n%s", text)
 		}
@@ -288,8 +278,7 @@ func TestRedactVyOSPath(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			// Path.String() shlex-quotes, and "<redacted>" quotes; compare
-			// on the unquoted components instead.
+			// Path.String() shlex-quotes "<redacted>"; compare unquoted.
 			got := strings.Join(redactVyOSPath(tc.path), " ")
 			if got != tc.want {
 				t.Errorf("redactVyOSPath(%v)\n got %q\nwant %q", tc.path, got, tc.want)

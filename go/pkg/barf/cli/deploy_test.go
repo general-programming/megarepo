@@ -10,10 +10,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// NOTHING here contacts a device: every writer is a fakeWriter that only
-// records what it was asked to do.
-
-// fakeWriter records ops instead of sending them.
+// fakeWriter records ops instead of sending them; no test contacts a device.
 type fakeWriter struct {
 	mu         sync.Mutex
 	configured [][]ConfigOp
@@ -42,7 +39,6 @@ func (f *fakeWriter) SaveConfig(context.Context) error {
 	return nil
 }
 
-// installWriters replaces the writer registry for one test.
 func installWriters(t *testing.T, writers map[string]*fakeWriter) {
 	t.Helper()
 	old := writerFactories
@@ -59,16 +55,14 @@ func installWriters(t *testing.T, writers map[string]*fakeWriter) {
 	}
 }
 
-// vyosDeviceJSON is a `/retrieve` tree: host-name already correct, plus a
-// stray name-server and an lldp service the render does not carry.
+// A `/retrieve` tree: host-name already correct, plus a stray name-server
+// and an lldp service the render does not carry.
 const vyosDeviceJSON = `{
   "system": {"host-name": "sea1-vpn-0", "name-server": ["8.8.8.8"]},
   "service": {"lldp": {"interface": {"all": {}}}},
   "interfaces": {"ethernet": {"eth0": {"hw-id": "aa:bb:cc:dd:ee:ff"}}}
 }`
 
-// deployHarness is newHarness with only the vyos host selected and a
-// writer registry installed.
 func deployHarness(t *testing.T, writers map[string]*fakeWriter) *harness {
 	t.Helper()
 	h := newHarness(t)
@@ -78,8 +72,7 @@ func deployHarness(t *testing.T, writers map[string]*fakeWriter) *harness {
 	return h
 }
 
-// TestDeployDryRunIsTheDefault is the headline safety property: no --yes,
-// no writes, not even a constructed writer.
+// Safety invariant: no --yes, no writes, not even a constructed writer.
 func TestDeployDryRunIsTheDefault(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -98,12 +91,11 @@ func TestDeployDryRunIsTheDefault(t *testing.T) {
 	if !strings.Contains(out, "(dry run)") {
 		t.Errorf("summary row missing the dry-run marker:\n%s", out)
 	}
-	// It must print exactly what it would do.
 	if !strings.Contains(out, "delete service") {
 		t.Errorf("planned delete not shown:\n%s", out)
 	}
-	// host-name survives under "system", so the collapse rises exactly to
-	// the name-server node and no further.
+	// host-name survives under "system", so the collapse rises to the
+	// name-server node and no further.
 	if !strings.Contains(out, "delete system name-server\n") {
 		t.Errorf("planned collapsed delete not shown:\n%s", out)
 	}
@@ -112,7 +104,7 @@ func TestDeployDryRunIsTheDefault(t *testing.T) {
 	}
 }
 
-// TestDeployWritesWithYes: --yes on a non-TTY applies without prompting.
+// --yes on a non-TTY applies without prompting.
 func TestDeployWritesWithYes(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -129,8 +121,7 @@ func TestDeployWritesWithYes(t *testing.T) {
 	}
 
 	ops := w.configured[0]
-	// Deletes come first, then sets — one commit, mirroring
-	// VyOSHost.push_rendered_config.
+	// Deletes before sets in one commit, per VyOSHost.push_rendered_config.
 	var seenSet bool
 	for _, op := range ops {
 		switch op.Verb {
@@ -144,11 +135,9 @@ func TestDeployWritesWithYes(t *testing.T) {
 			t.Fatalf("unexpected verb %q", op.Verb)
 		}
 	}
-	// The stale lldp subtree collapses into one whole-node delete.
 	if !hasOp(ops, opDelete, "service") {
 		t.Errorf("collapsed delete missing: %v", ops)
 	}
-	// hw-id is ignored: it must never be deleted.
 	for _, op := range ops {
 		if strings.Contains(strings.Join(op.Path, " "), "hw-id") {
 			t.Fatalf("ignored hw-id path reached the device: %v", op)
@@ -165,8 +154,7 @@ func hasOp(ops []ConfigOp, verb string, path ...string) bool {
 	return false
 }
 
-// TestDeployNoChangesSkips: a device already in the rendered state is not
-// touched, even with --yes.
+// A device already in the rendered state is not touched, even with --yes.
 func TestDeployNoChangesSkips(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -184,8 +172,7 @@ func TestDeployNoChangesSkips(t *testing.T) {
 	}
 }
 
-// TestDeployRefusesUnsupportedDeviceType: EOS has no writer registered
-// here, so the whole run is refused rather than half-applied.
+// EOS has no writer here: the run is refused, not half-applied.
 func TestDeployRefusesUnsupportedDeviceType(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -202,7 +189,6 @@ func TestDeployRefusesUnsupportedDeviceType(t *testing.T) {
 	}
 }
 
-// TestDeployRedaction: secrets stay out of the output unless asked for.
 func TestDeployRedaction(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -232,9 +218,8 @@ func TestDeployRedaction(t *testing.T) {
 	}
 }
 
-// TestDeployInteractiveConfirmation: on a TTY WITHOUT --yes the prompt
-// is the confirmation — answering y applies in this same invocation, no
-// re-run with --yes required — and anything else means no.
+// On a TTY without --yes the prompt is the confirmation: y applies in the
+// same invocation, anything else means no.
 func TestDeployInteractiveConfirmation(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -279,8 +264,7 @@ func TestDeployInteractiveConfirmation(t *testing.T) {
 	}
 }
 
-// TestDeployInteractiveYesSkipsThePrompt: --yes on a TTY is the
-// scripting escape hatch, so stdin must not be read at all.
+// --yes on a TTY is the scripting escape hatch: stdin must not be read.
 func TestDeployInteractiveYesSkipsThePrompt(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -299,16 +283,14 @@ func TestDeployInteractiveYesSkipsThePrompt(t *testing.T) {
 	}
 }
 
-// TestDeployPlainNeverPrompts: with no TTY the confirmation reader is
-// never consulted, so an unattended run cannot hang — and without --yes
-// nothing is written at all.
+// With no TTY the reader is never consulted, so an unattended run cannot
+// hang; without --yes nothing is written.
 func TestDeployPlainNeverPrompts(t *testing.T) {
 	t.Run("with --yes it applies", func(t *testing.T) {
 		w := &fakeWriter{}
 		h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
 
 		o := h.options() // forced non-interactive
-		// A reader that would fail loudly if it were read from.
 		opts := DeployOptions{Yes: true, In: errReader{}}
 		if err := runDeploy(context.Background(), o, []string{"sea1-vpn-0"}, opts); err != nil {
 			t.Fatal(err)
@@ -321,8 +303,8 @@ func TestDeployPlainNeverPrompts(t *testing.T) {
 		}
 	})
 
-	// The rule that must never be weakened: no terminal and no --yes
-	// changes nothing, and does not go looking for an answer on stdin.
+	// Never weaken: no terminal and no --yes changes nothing, and never
+	// looks for an answer on stdin.
 	t.Run("without --yes it is a dry run", func(t *testing.T) {
 		w := &fakeWriter{}
 		h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
@@ -407,8 +389,7 @@ func TestDeployReportsDeviceErrors(t *testing.T) {
 	})
 }
 
-// TestDeployWithoutWiringCannotWrite: with no registered writers at all,
-// deploy refuses. A build that never imported the wiring cannot deploy.
+// A build that never imported the writer wiring cannot deploy.
 func TestDeployWithoutWiringCannotWrite(t *testing.T) {
 	h := newHarness(t)
 	h.reachable["10.0.0.1"] = true

@@ -13,18 +13,16 @@ import (
 	"time"
 )
 
-// VaultSecretPath is where the mirror's S3 API credentials live, matching
-// Python's VAULT_SECRET ("r2-firmware" under the default "secret" mount).
+// VaultSecretPath holds the mirror's S3 API credentials, Python's VAULT_SECRET
+// under the default "secret" mount.
 const VaultSecretPath = "r2-firmware"
 
-// mirrorRegion is what SigV4 signs with. R2 ignores regions but the
-// signature still needs one; boto3 is configured with "auto" for the
-// same reason.
+// mirrorRegion is what SigV4 signs with: R2 ignores regions but the signature
+// still needs one, as boto3's "auto" does.
 const mirrorRegion = "auto"
 
-// SecretReader is the read-only slice of the Vault client this package
-// needs. Declared locally so firmware does not import the vault package.
-// *vault.Client satisfies it.
+// SecretReader is the slice of *vault.Client this package needs, declared
+// locally so firmware does not import vault.
 type SecretReader interface {
 	ReadSecret(ctx context.Context, mount, path string) (map[string]any, error)
 }
@@ -42,11 +40,8 @@ var ErrNoMirrorConfig = errors.New(
 	"global_meta: no firmware mirror configured; add a firmware: block with " +
 		"s3_endpoint, bucket, and public_base")
 
-// MirrorConfigFromMeta reads the mirror out of a decoded global_meta map.
-//
-// The Go model package does not (yet) model the firmware block, so this
-// takes the raw map a caller decoded from network.yml rather than
-// reaching into model.GlobalMeta.
+// MirrorConfigFromMeta reads the mirror out of a decoded global_meta map; it
+// takes the raw map because model.GlobalMeta has no firmware block.
 func MirrorConfigFromMeta(globalMeta map[string]any) (MirrorConfig, error) {
 	raw, ok := globalMeta["firmware"].(map[string]any)
 	if !ok || len(raw) == 0 {
@@ -74,8 +69,7 @@ func MirrorConfigFromMeta(globalMeta map[string]any) (MirrorConfig, error) {
 	return cfg, nil
 }
 
-// Mirror publishes images and their signatures to an S3-compatible
-// bucket that is also served publicly.
+// Mirror publishes images and signatures to a publicly served S3 bucket.
 type Mirror struct {
 	endpoint   string
 	bucket     string
@@ -89,14 +83,11 @@ type Mirror struct {
 
 // MirrorOptions are the optional knobs on NewMirror.
 type MirrorOptions struct {
-	// HTTP overrides the client used for S3 calls.
 	HTTP *http.Client
-	// Now overrides the signing clock (tests).
-	Now func() time.Time
+	Now  func() time.Time // overrides the signing clock (tests)
 }
 
-// NewMirror builds a mirror from its config and credentials. Prefix
-// defaults to "firmware", matching Python.
+// NewMirror builds a mirror; Prefix defaults to "firmware", matching Python.
 func NewMirror(cfg MirrorConfig, creds Credentials, opts MirrorOptions) (*Mirror, error) {
 	if cfg.S3Endpoint == "" || cfg.Bucket == "" || cfg.PublicBase == "" {
 		return nil, ErrNoMirrorConfig
@@ -124,9 +115,8 @@ func NewMirror(cfg MirrorConfig, creds Credentials, opts MirrorOptions) (*Mirror
 	}, nil
 }
 
-// CredentialsFromVault reads the mirror's S3 API credentials from Vault,
-// the way Python's get_secret("r2-firmware", key=None) does. The values
-// are never logged.
+// CredentialsFromVault reads the mirror's S3 API credentials from Vault, as
+// Python's get_secret("r2-firmware", key=None) does. Values are never logged.
 func CredentialsFromVault(ctx context.Context, reader SecretReader) (Credentials, error) {
 	if reader == nil {
 		return Credentials{}, fmt.Errorf("firmware: no secret source for %s", VaultSecretPath)
@@ -184,8 +174,7 @@ func (m *Mirror) objectURL(key string) (string, error) {
 	return base.String(), nil
 }
 
-// ObjectSize is the mirrored object's size. found is false when the
-// object does not exist, which is not an error.
+// ObjectSize is the mirrored object's size; a missing object is not an error.
 func (m *Mirror) ObjectSize(ctx context.Context, key string) (size int64, found bool, err error) {
 	target, err := m.objectURL(key)
 	if err != nil {
@@ -220,8 +209,7 @@ func (m *Mirror) ObjectSize(ctx context.Context, key string) (size int64, found 
 }
 
 // Upload publishes a local file under the mirror's prefix, skipping the
-// transfer when a same-size copy is already there, and verifying the
-// mirrored size afterwards.
+// transfer when a same-size copy is there and verifying the size afterwards.
 func (m *Mirror) Upload(ctx context.Context, local string) error {
 	info, err := os.Stat(local)
 	if err != nil {
@@ -275,12 +263,9 @@ func (m *Mirror) Upload(ctx context.Context, local string) error {
 	return nil
 }
 
-// Publish mirrors an image and its optional signature, returning the
-// image's public URL.
-//
-// The signature lands first: VyOS fetches "<url>.minisig" during
-// `add system image`, so the image URL must never be visible before its
-// signature is.
+// Publish mirrors an image and its optional signature, returning the image's
+// public URL. The signature lands FIRST: VyOS fetches "<url>.minisig" during
+// `add system image`, so the image must never be visible before it.
 func (m *Mirror) Publish(ctx context.Context, image string, signature string) (string, error) {
 	if signature != "" {
 		if err := m.Upload(ctx, signature); err != nil {
@@ -293,8 +278,7 @@ func (m *Mirror) Publish(ctx context.Context, image string, signature string) (s
 	return m.PublicURL(filepath.Base(image)), nil
 }
 
-// Staged is the result of staging a release onto the mirror: everything
-// the update flow needs to tell a device what to install.
+// Staged is what the update flow needs to tell a device what to install.
 type Staged struct {
 	Version string
 	URL     string
@@ -302,11 +286,8 @@ type Staged struct {
 	Signed  bool
 }
 
-// Stage downloads the latest image for a device type, mirrors it (with
-// its signature when upstream ships one), and returns the public URL and
-// size the update flow hands to the device.
-//
-// It never touches a device itself.
+// Stage downloads the latest image, mirrors it with its signature when
+// upstream ships one, and returns its public URL. It never touches a device.
 func Stage(ctx context.Context, p Provider, m *Mirror) (Staged, error) {
 	version, err := p.LatestVersion(ctx)
 	if err != nil {

@@ -14,14 +14,10 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/render"
 )
 
-// TestVaultSourceImplementsEverySecretInterface is the regression for
-// render.TacacsSource having no production implementation at all: the
-// golden tests only ever exercised the test fake, so `barf generate` on
-// any Dell (dnos6 / dnos9) device failed 100% of the time with "secret
-// source cannot resolve the tacacs key".
-//
-// The compile-time assertions in wire.go are the real fix — this test
-// documents them and fails loudly if one is deleted.
+// Regression: render.TacacsSource had no production implementation, so
+// `barf generate` on any Dell device always failed with "secret source
+// cannot resolve the tacacs key". wire.go's compile-time assertions are
+// the fix; this fails loudly if one is deleted.
 func TestVaultSourceImplementsEverySecretInterface(t *testing.T) {
 	var s render.SecretSource = (*vaultSource)(nil)
 
@@ -61,14 +57,12 @@ func fakeVault(t *testing.T, secrets map[string]map[string]any) *vaultSource {
 	return &vaultSource{c: c}
 }
 
-// TestVaultSourceTacacsKey pins the Python shape: cluster-secrets mount,
-// path `tacacs-keys`, FIELD <hostname>, subkey "key" of the object
-// stored there (BaseHost.tacacs_key in projects/barf).
+// Pins the shape of BaseHost.tacacs_key in projects/barf: cluster-secrets
+// mount, path `tacacs-keys`, field <hostname>, subkey "key".
 func TestVaultSourceTacacsKey(t *testing.T) {
 	v := fakeVault(t, map[string]map[string]any{"tacacs-keys": {
 		"sea1-sw-0": map[string]any{"address": "10.0.0.1/32", "key": "TACACSKEY0"},
-		// The same object written as a JSON string, which is how the
-		// Vault CLI's `k=@file` spelling round-trips.
+		// A JSON string, as the Vault CLI's `k=@file` spelling round-trips.
 		"sea1-sw-1": `{"address": "10.0.0.2/32", "key": "TACACSKEY1"}`,
 		"broken":    map[string]any{"address": "10.0.0.3/32"},
 	}})
@@ -93,10 +87,8 @@ func TestVaultSourceTacacsKey(t *testing.T) {
 	}
 }
 
-// TestVaultSourceRendersDNOS is the end-to-end version: the real Dell
-// renderer (render/dell.go calls tacacsKey unconditionally) against the
-// real vaultSource. This whole call failed in production, and only the
-// test fake's TacacsKey kept the golden tests green.
+// End-to-end: render/dell.go calls tacacsKey unconditionally, against the
+// real vaultSource; this whole call used to fail.
 func TestVaultSourceRendersDNOS(t *testing.T) {
 	v := fakeVault(t, map[string]map[string]any{
 		"tacacs-keys":    {"sea1-sw-0": map[string]any{"key": "TACACSKEY0"}},
@@ -115,12 +107,9 @@ func TestVaultSourceRendersDNOS(t *testing.T) {
 	}
 }
 
-// TestGenerateWritesCredentialsOwnerOnly is the regression for `barf
-// generate` leaving world-readable plaintext credentials in output/.
-// The rendered config carries the admin password, the fleet VyOS API key
-// and WireGuard private keys, and `output/` is only gitignored under
-// projects/barf — so a run from the repo root left a credential tree
-// `git add -A` would happily stage.
+// Regression: `barf generate` left world-readable plaintext credentials in
+// output/, which is only gitignored under projects/barf — a run from the
+// repo root left a credential tree `git add -A` would stage.
 func TestGenerateWritesCredentialsOwnerOnly(t *testing.T) {
 	dir := t.TempDir()
 	host := &model.Host{Hostname: "sea1-vpn-0", Role: "vpn"}
@@ -158,7 +147,7 @@ func TestGenerateWritesCredentialsOwnerOnly(t *testing.T) {
 		}
 	}
 
-	// Rewriting an existing, wrongly-permissioned file must tighten it.
+	// Rewriting a wrongly-permissioned file must tighten it.
 	if err := os.Chmod(path, 0o644); err != nil {
 		t.Fatal(err)
 	}

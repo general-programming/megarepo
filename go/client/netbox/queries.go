@@ -2,9 +2,7 @@ package netbox
 
 import "context"
 
-// DNSQuery is the GraphQL document behind FetchDNS. Kept byte-compatible
-// with nix/modules/dns/refresh_dns.py so both implementations exercise the
-// same NetBox fields.
+// DNSQuery backs FetchDNS, field-compatible with refresh_dns.py.
 const DNSQuery = `
 query {
   device_list {
@@ -24,7 +22,7 @@ query {
 }
 `
 
-// DHCPQuery is the GraphQL document behind FetchDHCP.
+// DHCPQuery backs FetchDHCP.
 const DHCPQuery = `
 query {
   interface_list {
@@ -42,11 +40,9 @@ query {
 }
 `
 
-// DeviceConfigQuery is the GraphQL document behind DevicesByTag. It carries
-// the same fields as barf's Python `_CONFIG_QUERY`, but ported to the
-// NetBox 4.5 schema: `device_list` now takes a `filters: DeviceFilter`
-// argument instead of `tag:`, and a cable termination exposes a
-// `termination` union instead of the removed `_device` field.
+// DeviceConfigQuery backs DevicesByTag: Python's `_CONFIG_QUERY` on the NetBox
+// 4.5 schema, where `device_list` takes `filters: DeviceFilter` instead of
+// `tag:` and a cable termination exposes a `termination` union, not `_device`.
 const DeviceConfigQuery = `
 query ($filters: DeviceFilter) {
   device_list(filters: $filters) {
@@ -91,8 +87,7 @@ type DNSResult struct {
 	VirtualMachines []Host `json:"virtual_machine_list"`
 }
 
-// Hosts returns devices and virtual machines as one slice, devices first —
-// the same concatenation refresh_dns.py performs.
+// Hosts concatenates devices and VMs, devices first, as refresh_dns.py does.
 func (r DNSResult) Hosts() []Host {
 	out := make([]Host, 0, len(r.Devices)+len(r.VirtualMachines))
 	out = append(out, r.Devices...)
@@ -106,8 +101,7 @@ type DHCPResult struct {
 	VMInterfaces []Interface `json:"vm_interface_list"`
 }
 
-// AllInterfaces returns device and VM interfaces as one slice, device
-// interfaces first.
+// AllInterfaces concatenates device and VM interfaces, devices first.
 func (r DHCPResult) AllInterfaces() []Interface {
 	out := make([]Interface, 0, len(r.Interfaces)+len(r.VMInterfaces))
 	out = append(out, r.Interfaces...)
@@ -115,8 +109,8 @@ func (r DHCPResult) AllInterfaces() []Interface {
 	return out
 }
 
-// FetchDNS returns every device and virtual machine with its primary
-// addresses, plus device interfaces (so IPMI addresses can be derived).
+// FetchDNS returns every device and VM with primary addresses, plus device
+// interfaces (so IPMI addresses can be derived).
 func (c *Client) FetchDNS(ctx context.Context) (*DNSResult, error) {
 	var out DNSResult
 	if err := c.Query(ctx, DNSQuery, nil, &out); err != nil {
@@ -125,8 +119,8 @@ func (c *Client) FetchDNS(ctx context.Context) (*DNSResult, error) {
 	return &out, nil
 }
 
-// FetchDHCP returns every device and VM interface that carries a primary
-// MAC address, along with its IPs and its owner's primary IPv4.
+// FetchDHCP returns every interface with a primary MAC, its IPs and its owner's
+// primary IPv4.
 func (c *Client) FetchDHCP(ctx context.Context) (*DHCPResult, error) {
 	var out DHCPResult
 	if err := c.Query(ctx, DHCPQuery, nil, &out); err != nil {
@@ -135,8 +129,8 @@ func (c *Client) FetchDHCP(ctx context.Context) (*DHCPResult, error) {
 	return &out, nil
 }
 
-// DevicesByTag returns devices carrying any of the given NetBox tag slugs,
-// with interfaces, VLANs and cabling. Passing no tags returns every device.
+// DevicesByTag returns devices with any of the given tag slugs, plus
+// interfaces, VLANs and cabling; no tags means every device.
 func (c *Client) DevicesByTag(ctx context.Context, tagSlugs ...string) ([]Device, error) {
 	var vars map[string]any
 	if len(tagSlugs) > 0 {

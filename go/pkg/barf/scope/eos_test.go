@@ -44,8 +44,7 @@ func defaultSecrets() fakeSecrets {
 type fakeSections struct {
 	text string
 	err  error
-	// asked records the sections the comparer requested, so the test can
-	// assert the full running config is never fetched.
+	// Requested sections; tests assert the full config is never fetched.
 	asked []string
 }
 
@@ -57,9 +56,8 @@ func (f *fakeSections) RunningConfigSections(ctx context.Context, names ...strin
 	return f.text, nil
 }
 
-// deviceHash is a sha512-crypt hash with a salt that is NOT the one barf
-// derives — the adopted-device case, where the password is right but the
-// hash text differs.
+// deviceHash uses a salt that is NOT the one barf derives — the
+// adopted-device case: right password, different hash text.
 func deviceHash(t *testing.T, password string) string {
 	t.Helper()
 	hash, err := sha512_crypt.New().Generate([]byte(password), []byte("$6$handsetsalt00"))
@@ -77,10 +75,9 @@ func testNetwork(keys ...string) *model.Network {
 	return &model.Network{Global: model.GlobalMeta{SSHKeys: keys}}
 }
 
-// inSyncConfig is shaped like real `show running-config all section ...`
-// output: three-space indent, explicit default state, unmanaged users and
-// several hundred lines of unrelated `... enable ...` config that the
-// section filter drags in.
+// inSyncConfig mimics real `show running-config all section ...` output:
+// three-space indent, explicit defaults, unmanaged users, and unrelated
+// `... enable ...` lines the section filter drags in.
 func inSyncConfig(t *testing.T) string {
 	t.Helper()
 	return strings.Join([]string{
@@ -133,8 +130,8 @@ func TestParseEOSManagedStateFromRealisticOutput(t *testing.T) {
 	}
 }
 
-// The `username` section also lists accounts barf does not manage; none
-// of them may be mistaken for the managed one.
+// Unmanaged accounts in the `username` section must not be mistaken for
+// the managed one.
 func TestParseEOSManagedStateIgnoresOtherUsers(t *testing.T) {
 	text := strings.Join([]string{
 		"username erin privilege 15 secret sha512 $6$erin$hash",
@@ -147,7 +144,7 @@ func TestParseEOSManagedStateIgnoresOtherUsers(t *testing.T) {
 }
 
 // `show running-config all` prints defaults literally, so a disabled eAPI
-// block says so out loud rather than by omission.
+// block says so rather than being absent.
 func TestParseEOSAPISectionShutdownAndVRF(t *testing.T) {
 	text := strings.Join([]string{
 		"management api http-commands",
@@ -173,8 +170,8 @@ func TestParseEOSAPISectionShutdownAndVRF(t *testing.T) {
 	}
 }
 
-// An un-indented line ends the block; the `no shutdown` under a later
-// interface must not be read as eAPI state.
+// An un-indented line ends the block: a later interface's `no shutdown`
+// is not eAPI state.
 func TestParseEOSAPISectionEndsAtUnindentedLine(t *testing.T) {
 	text := strings.Join([]string{
 		"management api http-commands",
@@ -188,13 +185,10 @@ func TestParseEOSAPISectionEndsAtUnindentedLine(t *testing.T) {
 	}
 }
 
-// Regression: block termination asked `isSpace(raw[0])` against three
-// ASCII bytes, where Python asks `line[0].isspace()` — a Unicode
-// question. Any other whitespace indent (form feed, NBSP, a vertical tab
-// from a pasted document) read as "un-indented", closed the
-// `management api http-commands` block on its very first line, and made
-// barf report the eAPI block absent on a device where it is present:
-// spurious drift, and a deploy that rewrites correct config.
+// Regression: block termination tested three ASCII bytes where Python's
+// `line[0].isspace()` is a Unicode question, so any other whitespace
+// indent closed the block early and reported eAPI absent on a device
+// that has it.
 func TestParseEOSAPISectionAcceptsUnicodeIndents(t *testing.T) {
 	indents := map[string]string{
 		"space":              "   ",
@@ -227,11 +221,9 @@ func TestParseEOSAPISectionAcceptsUnicodeIndents(t *testing.T) {
 	}
 }
 
-// Regression: strings.Split(_, "\n") is not Python's splitlines(). A
-// running-config captured with CRLF endings left "\r" on every line, and
-// a device answer containing a form feed was never split at all — either
-// way the scoped comparison sees different lines than the Python
-// implementation and reports drift that is not there.
+// Regression: strings.Split(_, "\n") is not Python's splitlines() — CRLF
+// left a stray "\r" per line and form feeds never split, both reporting
+// drift that is not there.
 func TestParseEOSManagedStateHandlesPythonLineBoundaries(t *testing.T) {
 	crlf := strings.Join([]string{
 		"management api http-commands",
@@ -250,17 +242,15 @@ func TestParseEOSManagedStateHandlesPythonLineBoundaries(t *testing.T) {
 		t.Errorf("SSHKey = %q; a stray \\r leaked into the parsed value", state.SSHKey)
 	}
 
-	// A form feed is a line boundary in Python and was none in Go, so
-	// everything after it used to vanish into one unmatched line.
+	// A form feed is a line boundary in Python but not in Go.
 	ff := "management api http-commands\f   no shutdown\funtouched"
 	if got := ParseEOSManagedState(ff, ""); !isTrue(got.EAPIEnabled) {
 		t.Errorf("EAPIEnabled = %v, want true across a form feed", got.EAPIEnabled)
 	}
 }
 
-// The headline case: an adopted device whose hash carries a different
-// salt but the same password is IN SYNC, so a deploy never needlessly
-// rewrites its credentials.
+// An adopted device whose hash carries a different salt but the same
+// password is IN SYNC, so a deploy never rewrites its credentials.
 func TestEOSCompareInSyncDespiteDifferentSalt(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	result, err := EOS{}.Compare(context.Background(), Input{
@@ -284,8 +274,8 @@ func TestEOSCompareInSyncDespiteDifferentSalt(t *testing.T) {
 	}
 }
 
-// Only the managed sections are read; the megabyte running-config dump
-// that produced the `+4 -32859` nonsense is never fetched.
+// Only the managed sections are read; the whole running-config dump that
+// produced the `+4 -32859` nonsense is never fetched.
 func TestEOSCompareReadsOnlyManagedSections(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	if _, err := (EOS{}).Compare(context.Background(), Input{
@@ -320,7 +310,6 @@ func TestEOSCompareWrongPasswordDrifts(t *testing.T) {
 	if result.Summary != "2 managed item(s) drifted" {
 		t.Errorf("Summary = %q", result.Summary)
 	}
-	// Both the device line and the desired line appear, hashes redacted.
 	if strings.Count(result.Text, "- ") != 2 || strings.Count(result.Text, "+ ") != 2 {
 		t.Errorf("body is not `- device / + desired` shaped:\n%s", result.Text)
 	}
@@ -349,9 +338,8 @@ func TestEOSCompareShowSecrets(t *testing.T) {
 	}
 }
 
-// A device that has never been adopted: no admin user, no enable
-// password, eAPI block absent. Every item drifts and no `- ` line is
-// emitted, because there is nothing on the device to show.
+// Never-adopted device: every item drifts and no `- ` line is emitted,
+// because there is nothing on the device to show.
 func TestEOSCompareUnadoptedDevice(t *testing.T) {
 	sections := &fakeSections{text: "username erin privilege 15 secret sha512 $6$e$h\n"}
 	result, err := EOS{}.Compare(context.Background(), Input{
@@ -399,8 +387,8 @@ func TestEOSCompareSSHKeyRotation(t *testing.T) {
 	}
 }
 
-// A device with the right password but privilege dropped is drift: the
-// hash check alone is not enough.
+// Right password but dropped privilege is drift: the hash check alone is
+// not enough.
 func TestEOSCompareRequiresPrivilege15(t *testing.T) {
 	text := strings.Replace(inSyncConfig(t),
 		"username admin privilege 15 role network-admin secret",
@@ -447,16 +435,8 @@ func TestEOSCompareReaderErrorPropagates(t *testing.T) {
 	}
 }
 
-// The registry dispatch tests that used to live here (TestRegistryDispatch,
-// TestCompareRejectsUnknownDeviceType) moved with the registry to
-// ../vendor: TestComparerDispatch. They assert the same thing -- eos has
-// a scoped comparer, the lookup is case-insensitive, and vyos/linux/
-// mikrotik fall through to the generic whole-config diff.
-
-// The zero value of Input must redact. The field used to be `Redact
-// bool`, so an Input built without setting it printed crypt hashes in
-// cleartext; the polarity was flipped to ShowSecrets so that forgetting
-// the field fails safe.
+// The zero value of Input must redact: the field is ShowSecrets rather
+// than Redact so that forgetting it fails safe.
 func TestEOSCompareZeroValueInputRedacts(t *testing.T) {
 	sections := &fakeSections{text: inSyncConfig(t)}
 	result, err := EOS{}.Compare(context.Background(), Input{
@@ -477,8 +457,7 @@ func TestEOSCompareZeroValueInputRedacts(t *testing.T) {
 	}
 }
 
-// diff must refuse the same over-long key list generate refuses, rather
-// than reporting drift against a list that could never be produced.
+// diff must refuse the same over-long key list generate refuses.
 func TestEOSDriftRejectsOverLongSSHKeyList(t *testing.T) {
 	network := testNetwork(testSSHKey, testSSHKey2, "ssh-rsa AAAAthird third@host")
 	_, err := EOS{}.Compare(context.Background(), Input{

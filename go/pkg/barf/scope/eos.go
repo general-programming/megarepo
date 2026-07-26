@@ -17,16 +17,12 @@ import (
 // ManagedUsername is the one account barf owns on EOS devices.
 const ManagedUsername = "admin"
 
-// maxSSHKeys is render.MaxSSHKeys: all EOS models support per user, one
-// primary and one secondary. Aliased rather than redeclared so the limit
-// and the validation that enforces it cannot drift apart.
+// maxSSHKeys is all EOS supports per user: one primary, one secondary.
+// Aliased, not redeclared, so limit and validation cannot drift apart.
 const maxSSHKeys = render.MaxSSHKeys
 
-// EOSSections are the `show running-config all section <name>` blocks the
-// managed scope lives in — and the only config barf ever reads from an
-// EOS device for diffing. The full running-config is never fetched: it is
-// a megabyte of config barf does not own, and comparing against it is
-// what produced the nonsense `+4 -32859` summaries.
+// EOSSections are the only config barf reads from an EOS device for diffing;
+// fetching the full running-config produced nonsense `+4 -32859` summaries.
 var EOSSections = []string{
 	"username",
 	"enable",
@@ -39,40 +35,32 @@ type EOS struct{}
 
 var _ Comparer = EOS{}
 
-// EOSManagedState is the device's current managed-scope config, parsed.
-// A zero-value field means the item is absent from the device.
+// EOSManagedState is the device's parsed managed-scope config; a zero-value
+// field means the item is absent from the device.
 type EOSManagedState struct {
-	// AdminLine is the full `username admin ... secret ...` line.
+	// AdminLine is the full `username admin ...` line, AdminHash its crypt hash.
 	AdminLine string
-	// AdminHash is the crypt hash from AdminLine.
 	AdminHash string
-	// SSHKey is the primary ssh-key value.
-	SSHKey string
-	// SSHKeySecondary is the secondary ssh-key value.
+
+	SSHKey          string
 	SSHKeySecondary string
-	// EnableLine is the full `enable password ...` line.
+
+	// EnableLine is the full `enable password ...` line, EnableHash its hash.
 	EnableLine string
-	// EnableHash is the crypt hash from EnableLine.
 	EnableHash string
 
-	// EAPIEnabled is the api block's own shutdown state; nil when the
-	// block is absent entirely.
+	// EAPIEnabled is the api block's own shutdown state; nil when absent.
 	EAPIEnabled *bool
 	// EAPIHTTPS is whether the block carries an https protocol line.
 	EAPIHTTPS *bool
-	// EAPIVRFEnabled is the shutdown state of the host's eapi_vrf
-	// sub-block; nil when that VRF is not configured under the block.
+	// EAPIVRFEnabled is the shutdown state of the host's eapi_vrf sub-block.
 	EAPIVRFEnabled *bool
 }
 
 // Compare fetches the managed sections and reports what has drifted.
-//
-// The desired state is recomputed from Vault + network.yml rather than
-// taken from a pre-rendered string, because passwords must be compared by
-// *verifying* the secret against whatever hash the device holds, not by
-// comparing hash text: sha512-crypt salts differ per render seed, so a
-// hand-set device with the right password would otherwise look drifted
-// forever and get its credentials rewritten on every deploy.
+// Desired state is recomputed from Vault + network.yml so passwords can be
+// verified against the device's hash rather than compared as hash text:
+// salts differ per render, so text comparison drifts forever.
 func (EOS) Compare(ctx context.Context, in Input) (Result, error) {
 	if in.Host == nil {
 		return Result{}, fmt.Errorf("scope: eos: nil host")
@@ -101,9 +89,7 @@ func (EOS) Compare(ctx context.Context, in Input) (Result, error) {
 
 var (
 	// The ssh-key patterns must be tried before the secret pattern: a
-	// `username admin ssh-key ...` line can contain the word "secret"
-	// inside a key comment, and the ordering is what the Python
-	// implementation relies on too.
+	// `username admin ssh-key ...` line can contain "secret" in a comment.
 	eosSSHKeySecondaryRe = regexp.MustCompile(`^username ` + ManagedUsername + ` ssh-key secondary (.+)$`)
 	eosSSHKeyRe          = regexp.MustCompile(`^username ` + ManagedUsername + ` ssh-key (.+)$`)
 	eosAdminRe           = regexp.MustCompile(`^username ` + ManagedUsername + ` .*secret (?:sha512 )?(\S+)$`)
@@ -111,11 +97,9 @@ var (
 	eosVRFRe             = regexp.MustCompile(`^vrf (\S+)$`)
 )
 
-// ParseEOSManagedState pulls the managed items out of the concatenated
-// section output. Anything it does not recognise is ignored — the
-// `section` filter is generous (the `enable` section alone drags in a few
-// hundred `default snmp-server enable traps ...` lines), and unmanaged
-// config must stay invisible.
+// ParseEOSManagedState pulls the managed items out of the concatenated section
+// output. Anything unrecognised is ignored: the `section` filter is generous
+// (`enable` alone drags in hundreds of unrelated lines).
 func ParseEOSManagedState(text, eapiVRF string) EOSManagedState {
 	state := EOSManagedState{}
 	parseEOSAPISection(text, eapiVRF, &state)
@@ -144,13 +128,9 @@ func ParseEOSManagedState(text, eapiVRF string) EOSManagedState {
 }
 
 // parseEOSAPISection reads the `management api http-commands` block.
-//
-// `show running-config all` prints default state explicitly, so both
-// `shutdown` and `no shutdown` appear literally — presence of a line is
-// not evidence of intent, its polarity is. The block's own shutdown line
-// sits at one indent level; per-VRF shutdown lines sit inside their
-// `vrf <name>` sub-block, so a bare `no shutdown` means something
-// different depending on which sub-block is open.
+// `show running-config all` prints defaults explicitly, so polarity is the
+// evidence, not presence; a bare `no shutdown` means the block or the VRF
+// depending on which `vrf <name>` sub-block is open.
 func parseEOSAPISection(text, eapiVRF string, state *EOSManagedState) {
 	inBlock := false
 	currentVRF := ""
@@ -198,19 +178,10 @@ func parseEOSAPISection(text, eapiVRF string, state *EOSManagedState) {
 	}
 }
 
-// startsIndented reports whether line begins with a whitespace
-// character, i.e. whether it is still inside the open config block.
-//
-// The Python port asks `line[0].isspace()`, which is a Unicode question,
-// and this used to be a three-byte comparison (' ', '\t', '\r'). Any
-// other whitespace indent — a form feed, a non-breaking space, anything
-// pasted in from a document — read as "un-indented", closed the
-// `management api http-commands` block early, and made barf report the
-// eAPI block absent on a device where it is present: spurious drift, and
-// a deploy that rewrites config that was already correct.
-//
-// unicode.IsSpace is Python's set except for the C0 file/group/record/
-// unit separators, which Py_UNICODE_ISSPACE counts and Go does not.
+// startsIndented reports whether line is still inside the open config block.
+// Python asks `line[0].isspace()`; unicode.IsSpace is that set except the C0
+// file/group/record/unit separators (0x1c-0x1f), hence the extra range —
+// without it the eAPI block closes early and barf reports spurious drift.
 func startsIndented(line string) bool {
 	if line == "" {
 		return false
@@ -226,13 +197,8 @@ func isTrue(v *bool) bool { return v != nil && *v }
 // -- drift ------------------------------------------------------------
 
 // EOSHashMatches reports whether password is the secret behind a device's
-// sha512-crypt hash.
-//
-// This is the whole point of the scoped comparison: the device's salt is
-// whatever it was hashed with, ours is derived from the hostname, so the
-// hash *text* differs even when the password is identical. Verifying
-// instead of comparing is what stops barf rewriting the credentials of an
-// adopted device on every deploy.
+// sha512-crypt hash. Salts differ, so verifying rather than comparing hash
+// text is what stops barf rewriting an adopted device's credentials.
 func EOSHashMatches(password, deviceHash string) bool {
 	if deviceHash == "" || !strings.HasPrefix(deviceHash, "$6$") {
 		return false
@@ -240,9 +206,8 @@ func EOSHashMatches(password, deviceHash string) bool {
 	return sha512_crypt.New().Verify(deviceHash, []byte(password)) == nil
 }
 
-// EOSDrift returns the out-of-sync managed items, in the fixed order the
-// Python implementation reports them: admin user, primary ssh-key,
-// secondary ssh-key, enable password, eAPI block, eAPI VRF.
+// EOSDrift returns the out-of-sync managed items in Python's fixed order:
+// admin user, ssh-key, secondary ssh-key, enable password, eAPI block, VRF.
 func EOSDrift(h *model.Host, global model.GlobalMeta, secrets SecretSource, state EOSManagedState) ([]Change, error) {
 	if secrets == nil {
 		return nil, fmt.Errorf("scope: %s: no secret source", h.Hostname)
@@ -268,9 +233,8 @@ func EOSDrift(h *model.Host, global model.GlobalMeta, secrets SecretSource, stat
 			break
 		}
 	}
-	// render.EOSSSHKeys, not a local copy: the drift report must be
-	// built from exactly the list `generate` would emit, including its
-	// refusal of an over-long one.
+	// render.EOSSSHKeys, not a local copy: the drift report must use exactly
+	// the list `generate` would emit, refusals included.
 	keys, err := render.EOSSSHKeys(h, global)
 	if err != nil {
 		return nil, err

@@ -7,23 +7,19 @@ package device
 // #                                                          #
 // ############################################################
 //
-// It is the port of exactly two Python functions —
-// projects/barf/barf/util/vyos_api.py `vyos_api_configure` and
-// `vyos_api_config_save` — driven the way `VyOSHost.push_rendered_config`
-// drives them: one atomic /configure call (deletes first, then sets),
-// then /config-file save. `vyos_api_image_delete` is deliberately NOT
+// Port of vyos_api_configure and vyos_api_config_save, driven as
+// VyOSHost.push_rendered_config drives them: one atomic /configure call
+// (deletes first, then sets), then /config-file save. Image delete is NOT
 // ported.
 //
-// Three properties are load-bearing and must survive any edit here:
+// Three load-bearing properties any edit here must preserve:
 //
-//  1. The read guard in vyos.go is untouched. VyOSReader still cannot
-//     reach /configure; this file has its own separate primitive.
-//  2. A Writer cannot be built by accident. NewVyOSWriter fails unless
-//     Options.AllowWrites is explicitly true, and New() never returns
-//     one.
-//  3. The writer's own primitive is allowlisted too, to `configure` and
-//     `config-file`+save only — so /image (delete) stays unreachable
-//     from here as well.
+//  1. vyos.go's read guard is untouched — this file has its own separate
+//     primitive, so VyOSReader still cannot reach /configure.
+//  2. NewVyOSWriter fails unless Options.AllowWrites is explicitly true,
+//     and no reader constructor returns a Writer.
+//  3. This file's primitive is allowlisted too, to `configure` and
+//     `config-file`+save, so /image (delete) is unreachable here.
 
 import (
 	"context"
@@ -37,14 +33,9 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vyoswire"
 )
 
-// -- shared write surface ---------------------------------------------
-//
-// Op, Writer and ErrWritesNotAllowed are the cross-vendor write surface
-// and are declared in device/eos_writer.go; this file reuses them rather
-// than redeclaring them. VyOS reads Op.Verb and Op.Path.
+// Op and Writer are declared in eos_writer.go; VyOS reads Op.Verb/Op.Path.
 
-// The valid VyOS op verbs. Anything else is rejected before a request is
-// built.
+// The valid op verbs; anything else is rejected before a request is built.
 const (
 	OpSet    = "set"
 	OpDelete = "delete"
@@ -59,21 +50,15 @@ func VyOSOps(verb string, paths [][]string) []Op {
 	return ops
 }
 
-// vyosWireOp is the exact JSON the Python implementation sends to
-// /configure: {"op": "set"|"delete", "path": [...]}. Op itself carries
-// EOS fields too, so the payload is built explicitly rather than by
-// marshaling Op.
+// vyosWireOp is the exact JSON Python sends to /configure; Op carries EOS
+// fields too, so it is not marshaled directly.
 type vyosWireOp struct {
 	Op   string   `json:"op"`
 	Path []string `json:"path"`
 }
 
-// -- VyOS writer ------------------------------------------------------
-
-// The only two VyOS API endpoints the writer may talk to, and the only
-// ops each accepts. `/image` (delete) is absent: vyos_api_image_delete is
-// not ported. `/configure` takes a list rather than a single op, so its
-// per-op verbs are checked separately (see vyosWriteOpAllowed).
+// The only endpoints the writer may talk to; `/image` (delete) is absent.
+// `/configure` takes a list, so vyosWriteOpAllowed checks its per-op verbs.
 var vyosWriteAllowedRequests = map[string]map[string]bool{
 	"configure":   {"": true},
 	"config-file": {"save": true},
@@ -87,11 +72,9 @@ func vyosWriteOpAllowed(op string) bool {
 	return op == OpSet || op == OpDelete
 }
 
-// vyosWriteTimeout is the per-endpoint budget for a write, matching the
-// Python defaults (vyos_api_configure=120s, vyos_api_config_save=60s).
-// A commit is emphatically not a read: bounding it with the 10s read
-// budget aborted the HTTP request while the router went on to apply the
-// config, so the deploy reported failure and skipped the save.
+// vyosWriteTimeout is the per-endpoint write budget (configure=120s,
+// config_save=60s): the 10s read budget would abort the request while the
+// router commits anyway, so the deploy would report failure and skip the save.
 func vyosWriteTimeout(endpoint string) time.Duration {
 	if endpoint == "configure" {
 		return TimeoutConfigure
@@ -100,8 +83,6 @@ func vyosWriteTimeout(endpoint string) time.Duration {
 }
 
 // VyOSWriter applies configuration to a VyOS device over its HTTPS API.
-//
-// Construct it with NewVyOSWriter, which requires Options.AllowWrites.
 type VyOSWriter struct {
 	host     *model.Host
 	opts     Options
@@ -115,11 +96,8 @@ type VyOSWriter struct {
 
 var _ Writer = (*VyOSWriter)(nil)
 
-// NewVyOSWriter returns a config writer for h.
-//
-// It returns ErrWritesNotAllowed unless opts.AllowWrites is true. That
-// check is the whole point of the constructor: a caller that has not
-// thought about writing to a router cannot end up with one of these.
+// NewVyOSWriter returns a config writer for h, refusing with
+// ErrWritesNotAllowed unless opts.AllowWrites is true.
 func NewVyOSWriter(h *model.Host, opts Options) (*VyOSWriter, error) {
 	if h == nil {
 		return nil, fmt.Errorf("device: nil host")
@@ -150,15 +128,10 @@ func (w *VyOSWriter) apiKey() (string, error) {
 	return w.key, w.keyErr
 }
 
-// request is the ONLY function in this file that performs a request. It
-// shares the wire mechanics with VyOSReader.request (form-POST of
-// `data`+`key`, {success, data, error} reply) via vyoswire, but carries
-// the writer's own, equally closed, endpoint allowlist.
-//
-// The two guards are separate on purpose and stayed separate when the
-// plumbing was deduplicated: vyoswire holds no allowlist at all, so the
-// read primitive's guard is still untouched and unbypassable, and this
-// one is still the only thing standing between a caller and /configure.
+// request is the ONLY function here that performs a request. It shares the
+// wire mechanics with VyOSReader.request via vyoswire but carries its own,
+// equally closed, allowlist — vyoswire deliberately holds none, since this
+// guard is all that stands between a caller and /configure.
 func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload any) (string, error) {
 	if !vyosWriteRequestAllowed(endpoint, op) {
 		return "", &WriteAttemptError{What: fmt.Sprintf("VyOS %s request op=%q", endpoint, op)}
@@ -184,11 +157,8 @@ func (w *VyOSWriter) request(ctx context.Context, endpoint, op string, payload a
 	return vyoswire.Text(data), nil
 }
 
-// Configure applies ops via `/configure`, which commits them atomically:
-// the whole list is one commit and any failing op rolls back all of them.
-// Ports vyos_api_configure.
-//
-// An empty op list is a no-op that never reaches the wire — a deploy with
+// Configure applies ops via `/configure`, one atomic commit where a failing op
+// rolls back all of them. An empty list never reaches the wire: a deploy with
 // nothing to do must not open a commit.
 func (w *VyOSWriter) Configure(ctx context.Context, ops []Op) error {
 	if len(ops) == 0 {
@@ -204,8 +174,7 @@ func (w *VyOSWriter) Configure(ctx context.Context, ops []Op) error {
 			return fmt.Errorf("%s: refusing %s op with an empty path", w.host.Hostname, op.Verb)
 		}
 		if op.Command != "" {
-			// An EOS-shaped op reaching the VyOS writer is a wiring bug,
-			// not something to silently drop.
+			// An EOS-shaped op here is a wiring bug, not something to drop.
 			return fmt.Errorf("%s: refusing op[%d]: EOS Command set on a VyOS op", w.host.Hostname, i)
 		}
 		wire = append(wire, vyosWireOp{Op: op.Verb, Path: op.Path})
@@ -215,8 +184,7 @@ func (w *VyOSWriter) Configure(ctx context.Context, ops []Op) error {
 	return err
 }
 
-// SaveConfig persists the running config to the boot config via
-// `/config-file`. Ports vyos_api_config_save.
+// SaveConfig persists the running config to the boot config.
 func (w *VyOSWriter) SaveConfig(ctx context.Context) error {
 	_, err := w.request(ctx, "config-file", "save", map[string]any{"op": "save"})
 	return err

@@ -7,43 +7,31 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vyosconfig"
 )
 
-// VyOS is diffed as a PATH SET, not as a line set.
-//
-// The generic DiffConfigs in configdiff.go compares normalized lines,
-// which is the right thing for a vendor whose running config comes back
-// as text. VyOS's does not: `/retrieve` returns a JSON tree, and the two
-// sides only line up once both are flattened into `set` path tuples.
-// Beyond formatting, the path-set semantics are what make a deploy safe —
-// hashed passwords reconcile, ignored prefixes (hw-id) drop out, and
-// removals collapse into the fewest whole-node deletes. `barf diff` and
-// `barf deploy` both go through here so they can never disagree about
-// what a deploy would do.
-//
-// Mirrors VyOSHost._config_diff / diff_config in
-// projects/barf/barf/vendors/vyos.py.
+// VyOS is diffed as a PATH SET, not a line set: `/retrieve` returns a JSON
+// tree, so the two sides only line up once flattened into `set` path tuples.
+// Path-set semantics also make a deploy safe — hashed passwords reconcile,
+// ignored prefixes (hw-id) drop out, removals collapse into the fewest
+// whole-node deletes. `barf diff` and `barf deploy` both come through here.
+// Mirrors VyOSHost._config_diff / diff_config in barf/vendors/vyos.py.
 
-// vyosPlan is a computed VyOS deploy: the diff, plus the reconciled
-// running path set the delete collapse needs.
+// vyosPlan is a computed VyOS deploy: the diff, plus the reconciled running
+// path set the delete collapse needs.
 type vyosPlan struct {
 	diff    vyosconfig.ConfigDiff
 	running vyosconfig.Set
 }
 
-// planVyOS diffs a rendered config against the device's running config.
-//
-// running is normally the JSON tree text VyOSReader.RunningConfig
-// returns (the vendor-native `/retrieve` dump, pretty-printed). A flat
-// `set ...` listing is accepted too, so a config captured to a file can
-// be planned against without a device.
+// planVyOS diffs a rendered config against running, normally a `/retrieve`
+// JSON dump; a flat `set ...` listing is also accepted, so a config captured
+// to a file can be planned against without a device.
 func planVyOS(rendered, running string) (*vyosPlan, error) {
 	runningPaths, err := parseVyOSRunning(running)
 	if err != nil {
 		return nil, err
 	}
 
-	// The device stores passwords hashed; verify our plaintext against
-	// its hash so unchanged passwords do not show as drift and are not
-	// needlessly rewritten.
+	// The device stores passwords hashed; verify the plaintext against the
+	// hash so unchanged passwords are neither drift nor rewritten.
 	runningPaths, candidate := vyosconfig.ReconcileHashedPasswords(
 		runningPaths,
 		vyosconfig.ParseSetCommands(rendered),
@@ -55,11 +43,8 @@ func planVyOS(rendered, running string) (*vyosPlan, error) {
 }
 
 // parseVyOSRunning flattens a running config into path tuples, accepting
-// either representation.
-//
-// An unparseable config must be an error, never an empty path set: an
-// empty running config would silently turn every rendered path into an
-// addition and hide whatever the device actually has.
+// either representation. An unparseable config must error, never yield an
+// empty set: empty would turn every rendered path into an addition.
 func parseVyOSRunning(running string) (vyosconfig.Set, error) {
 	var tree any
 	if err := json.Unmarshal([]byte(running), &tree); err == nil {
@@ -74,15 +59,11 @@ func parseVyOSRunning(running string) (vyosconfig.Set, error) {
 }
 
 // configDiff renders the plan into the shape the CLI and TUI print.
-//
-// DiffOptions.ShowDeviceOnly is ignored, as it is in Python: barf owns
-// the whole VyOS tree, so there is no "device-only" set to opt into —
-// removals are always shown because they are always real deletions.
+// DiffOptions.ShowDeviceOnly is ignored, as in Python: barf owns the whole
+// VyOS tree, so removals are always real deletions and always shown.
 func (p *vyosPlan) configDiff(opts DiffOptions) ConfigDiff {
-	// Redaction is applied to the PATHS here (redactVyOSPath in
-	// configdiff.go) rather than being left to FormatDiff's own
-	// node-name test, which misses the fleet API key and the SNMP
-	// community. FormatDiff then only formats.
+	// Redact the PATHS here rather than leaving it to FormatDiff's node-name
+	// test, which misses the fleet API key and the SNMP community.
 	shown := p.diff
 	if !opts.ShowSecrets {
 		shown = redactVyOSDiff(p.diff)
@@ -101,9 +82,8 @@ func (p *vyosPlan) configDiff(opts DiffOptions) ConfigDiff {
 	return d
 }
 
-// ops is the ordered operation list a deploy would send: deletions of
-// stale owned config first (collapsed to whole-node deletes where
-// possible), then the additions as `set` ops. Mirrors
+// ops is the ordered operation list a deploy would send: deletes first
+// (collapsed to whole-node deletes where possible), then `set` ops. Mirrors
 // VyOSHost.push_rendered_config.
 func (p *vyosPlan) ops() []ConfigOp {
 	if !p.diff.HasChanges() {
@@ -122,8 +102,7 @@ func (p *vyosPlan) ops() []ConfigOp {
 }
 
 // describeOps renders the ops a deploy would send, redacted unless
-// opts.ShowSecrets. This is what a dry run prints: the literal commands,
-// not just the diff they came from.
+// opts.ShowSecrets. A dry run prints these literal commands.
 func describeOps(ops []ConfigOp, opts DiffOptions) []string {
 	lines := make([]string, 0, len(ops))
 	for _, op := range ops {

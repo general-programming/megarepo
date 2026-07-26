@@ -12,8 +12,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/vendor"
 )
 
-// barfRoot locates projects/barf relative to this source file, so the
-// test works from any working directory.
+// barfRoot locates projects/barf relative to this source file.
 func barfRoot(t *testing.T) string {
 	t.Helper()
 	_, file, _, ok := runtime.Caller(0)
@@ -36,9 +35,7 @@ func loadFleet(t *testing.T) *model.Network {
 	return network
 }
 
-// TestGoldenParity renders every host that has a golden and diffs the
-// result byte-for-byte. Hosts whose vendor has no Go renderer yet are
-// skipped loudly, so the parity table stays honest.
+// Byte-for-byte diff against every golden; unported vendors skip loudly.
 func TestGoldenParity(t *testing.T) {
 	root := barfRoot(t)
 	network := loadFleet(t)
@@ -79,8 +76,7 @@ func TestGoldenParity(t *testing.T) {
 	}
 }
 
-// TestRenderIsDeterministic guards the golden contract itself: any
-// nondeterminism would make byte-parity meaningless.
+// Nondeterminism would make byte-parity meaningless.
 func TestRenderIsDeterministic(t *testing.T) {
 	network := loadFleet(t)
 	for i := range network.Hosts {
@@ -102,7 +98,6 @@ func TestRenderIsDeterministic(t *testing.T) {
 	}
 }
 
-// firstDiff reports the first differing line plus a little context.
 func firstDiff(want, got string) string {
 	wantLines := strings.Split(want, "\n")
 	gotLines := strings.Split(got, "\n")

@@ -23,39 +23,20 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// `barf device ...`: the lifecycle commands.
-//
-// These are the only barf commands that can change a device, and the
-// rules they follow are:
-//
-//   - Nothing is changed until the operator says so. On a terminal
-//     `update` prints the full plan (what is running, what would be
-//     installed, what the redundancy check found, every step) and then
-//     asks [y/N] for THAT device; answering y performs it in the same
-//     invocation. --yes skips the prompt.
-//   - With no terminal there is no prompt, so --yes is required to
-//     change anything and without it the run is a dry run that prints
-//     the plan and exits. See confirm.go; `deploy` shares this matrix.
-//   - --force, separately, is the only way past a redundancy refusal.
-//     --yes never implies it, and --force applies per device.
-//   - `update` accepts several hostnames, or "all", but it updates them
-//     STRICTLY ONE AT A TIME, re-runs the redundancy check immediately
-//     before each one, and waits for each device to be genuinely healthy
-//     (answering, on the new image, routing recovered) before starting
-//     the next. The first failure stops the run.
-//   - "all" may not be combined with --yes: an unprompted, fleet-wide
-//     reboot has to be spelled out host by host.
+// `barf device ...`: with deploy, the only barf commands that change a device.
+// confirm.go holds the TTY/--yes matrix they share. --force is the only way
+// past a redundancy refusal, is never implied by --yes, and is re-decided per
+// device. `update` takes several hostnames or "all" but updates STRICTLY ONE
+// AT A TIME, re-running the redundancy check immediately before each and
+// waiting for the previous device to be answering, on the new image and
+// routing-healthy; the first failure stops the run.
 
-// sshPort is the port probed to find a device's SSH address. Python
-// probes it separately from the API port: sshd and the API can be bound
-// to different addresses.
+// sshPort is probed separately, as Python does: sshd and the API can bind
+// different addresses.
 const sshPort = 22
 
-// The lifecycle backends this file needs. They are vars so tests can
-// replace them with fakes: no test in this package may reach Vault, a
-// mirror, or a device.
+// Lifecycle backends as vars: no test here may reach Vault, a mirror, a device.
 var (
-	// newSupertechCredentials resolves the shared supertech account.
 	newSupertechCredentials = func() (sshx.CredentialSource, error) {
 		c, err := vault.New(vault.Options{})
 		if err != nil {
@@ -64,7 +45,6 @@ var (
 		return vaultSupertech{c: c}, nil
 	}
 
-	// newVyOSAPIKey resolves the VyOS HTTPS API key.
 	newVyOSAPIKey = func() (string, error) {
 		c, err := vault.New(vault.Options{})
 		if err != nil {
@@ -73,8 +53,6 @@ var (
 		return c.Get(context.Background(), "", "vyos-api-password", "secret")
 	}
 
-	// newImageProvider returns the upstream image source for a device
-	// type, adapted onto the shape the updater wants.
 	newImageProvider = func(deviceType string) (lifecycle.ImageProvider, error) {
 		p, ok := firmware.For(strings.ToLower(deviceType))
 		if !ok {
@@ -83,11 +61,8 @@ var (
 		return &firmwareProvider{provider: p}, nil
 	}
 
-	// newFirmwareMirror publishes an image where devices can fetch it.
-	// The mirror settings live in network.yml's global_meta.firmware
-	// block, which model.GlobalMeta does not (yet) carry, so the file is
-	// re-read as a raw map here — the same thing firmware's own
-	// MirrorConfigFromMeta expects.
+	// The mirror settings live in network.yml's global_meta.firmware, which
+	// model.GlobalMeta does not carry, hence re-reading the file as a raw map.
 	newFirmwareMirror = func(networkPath string) (lifecycle.Mirror, error) {
 		raw, err := os.ReadFile(networkPath) // #nosec G304 -- the operator's own --network path
 		if err != nil {
@@ -109,18 +84,12 @@ var (
 	}
 )
 
-// firmwareProvider adapts firmware.Provider onto
-// lifecycle.ImageProvider. The two differ in two places: firmware's
-// IsCurrent takes a context and can fail, and its Download takes the
-// asset rather than fetching it itself.
+// firmwareProvider adapts firmware.Provider onto lifecycle.ImageProvider.
 type firmwareProvider struct {
 	provider firmware.Provider
 
-	// once fetches the release tag exactly once; mu guards the result, so
-	// the ctx-less IsCurrent can read it without racing the fetch. once
-	// alone only orders callers that go through once.Do, and IsCurrent
-	// deliberately does not (it must never start a network fetch of its
-	// own — it has no context to bound one with).
+	// mu guards the once-fetched tag so the ctx-less IsCurrent can read it
+	// without racing the fetch, which it must never start itself.
 	once   sync.Once
 	mu     sync.RWMutex
 	latest string
@@ -139,10 +108,8 @@ func (f *firmwareProvider) LatestVersion(ctx context.Context) (string, error) {
 	return f.latest, f.err
 }
 
-// IsCurrent compares against the release tag resolved by LatestVersion,
-// which the updater always calls first. If it somehow has not been
-// resolved, "not current" is the safe answer: it makes the updater do
-// more work (and hit a real error later), never less.
+// IsCurrent compares against the tag LatestVersion resolved. Unresolved,
+// "not current" is the safe answer: it makes the updater do more, not less.
 func (f *firmwareProvider) IsCurrent(version string) bool {
 	f.mu.RLock()
 	latest := f.latest
@@ -173,11 +140,7 @@ func (f *firmwareProvider) DownloadSignature(ctx context.Context) (string, error
 	return f.provider.Download(ctx, asset)
 }
 
-// apiBaseURLOverride redirects a device's API requests at a test server.
-// It is nil in production: the real path always builds
-// https://<probed address>:443 from the host being operated on. Tests
-// set it to a per-hostname router, so one httptest server can stand in
-// for a whole fleet and each fake device answers for itself.
+// apiBaseURLOverride points a device's API at a test server; nil in production.
 var apiBaseURLOverride func(hostname string) string
 
 func apiBaseURL(hostname string) string {
@@ -187,9 +150,7 @@ func apiBaseURL(hostname string) string {
 	return apiBaseURLOverride(hostname)
 }
 
-// vaultSupertech reads the shared supertech account from Vault. The
-// password is held in memory only: it is never logged, printed or
-// written anywhere.
+// vaultSupertech reads the shared account; the password is never logged.
 type vaultSupertech struct{ c *vault.Client }
 
 func (v vaultSupertech) Supertech(ctx context.Context) (sshx.Credentials, error) {
@@ -204,8 +165,7 @@ func (v vaultSupertech) Supertech(ctx context.Context) (sshx.Credentials, error)
 	return sshx.Credentials{Username: username, Password: password}, nil
 }
 
-// sshUsername mirrors the per-vendor BaseHost.SSH_USERNAME. "" means the
-// shared supertech account (with its Vault password as the fallback).
+// sshUsername mirrors BaseHost.SSH_USERNAME; "" means the shared account.
 func sshUsername(deviceType string) string {
 	switch strings.ToLower(deviceType) {
 	case "eos":
@@ -216,9 +176,8 @@ func sshUsername(deviceType string) string {
 	return ""
 }
 
-// probeSSHEndpoint returns the first of a host's candidate addresses
-// answering on port 22, or "". Ports BaseHost.ssh_ip. Connecting and
-// immediately closing is the only device contact this makes.
+// probeSSHEndpoint returns the first candidate address answering on port 22,
+// or "". Ports BaseHost.ssh_ip; connect-and-close is its only device contact.
 func probeSSHEndpoint(ctx context.Context, h *model.Host, searchDomain string) string {
 	for _, candidate := range endpointCandidates(h, searchDomain) {
 		if ctx.Err() != nil {
@@ -234,7 +193,6 @@ func probeSSHEndpoint(ctx context.Context, h *model.Host, searchDomain string) s
 	return ""
 }
 
-// newDeviceCmd builds the `barf device` command group.
 func newDeviceCmd(o *Options) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "device",
@@ -254,8 +212,6 @@ func newDeviceCmd(o *Options) *cobra.Command {
 	return cmd
 }
 
-// -- device ssh -------------------------------------------------------
-
 func newDeviceSSHCmd(o *Options) *cobra.Command {
 	return &cobra.Command{
 		Use:   "ssh <host>",
@@ -270,8 +226,7 @@ func newDeviceSSHCmd(o *Options) *cobra.Command {
 	}
 }
 
-// execSSH runs the system ssh client. A var so tests can intercept it
-// without spawning anything.
+// execSSH runs the system ssh client; a var so tests can intercept it.
 var execSSH = func(ctx context.Context, argv []string) error {
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...) // #nosec G204 -- argv is built below from a resolved host, not user text
 	cmd.Stdin = os.Stdin
@@ -280,7 +235,6 @@ var execSSH = func(ctx context.Context, argv []string) error {
 	return cmd.Run()
 }
 
-// sshArgv builds the ssh(1) command line for a device.
 func sshArgv(username, address string) []string {
 	argv := []string{"ssh"}
 	if username != "" {
@@ -289,23 +243,10 @@ func sshArgv(username, address string) []string {
 	return append(argv, address)
 }
 
-// runDeviceSSH hands the terminal to the system ssh binary.
-//
-// Why exec ssh(1) rather than proxy a PTY through x/crypto/ssh: an
-// interactive shell is not just a byte pump. It needs the local tty in
-// raw mode with a guaranteed restore on every exit path, SIGWINCH
-// forwarded as window resizes, and correct signal and exit-status
-// propagation — the Python version spends ~50 lines on exactly that and
-// still ignores the user's ~/.ssh/config. ssh(1) already does all of it,
-// plus ProxyJump/ProxyCommand, known_hosts, agent forwarding, Match
-// blocks and Kerberos, so a device reachable in the operator's normal
-// shell stays reachable here. Re-implementing that is a large amount of
-// termios code whose failure mode is a wedged terminal on a router
-// console.
-//
-// os/exec (rather than syscall.Exec) keeps this portable and testable;
-// stdin/stdout/stderr are inherited, so the tty passes straight through
-// and the remote exit status comes back via ExitError.
+// runDeviceSSH execs ssh(1) rather than proxying a PTY through x/crypto/ssh:
+// ssh(1) already does raw-mode tty handling with guaranteed restore, SIGWINCH,
+// signal/exit propagation, ~/.ssh/config, ProxyJump, known_hosts and agent
+// forwarding. os/exec keeps it testable and returns the remote exit status.
 func runDeviceSSH(ctx context.Context, o *Options, target string) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -327,9 +268,8 @@ func runDeviceSSH(ctx context.Context, o *Options, target string) error {
 
 	username := sshUsername(host.DeviceType)
 	if username == "" {
-		// The shared account: ssh(1) needs the name, and only the name.
-		// The password is never passed on a command line; the fleet is
-		// publickey-only and the operator's agent/keys do the work.
+		// ssh(1) gets the name only; the password is never passed on a command
+		// line and the fleet is publickey-only.
 		source, err := newSupertechCredentials()
 		if err != nil {
 			return fmt.Errorf("%s: resolving the shared SSH account: %w", host.Hostname, err)
@@ -353,14 +293,11 @@ func runDeviceSSH(ctx context.Context, o *Options, target string) error {
 	return nil
 }
 
-// exitStatusError carries a remote exit status out to the caller.
 type exitStatusError int
 
 func (e exitStatusError) Error() string {
 	return fmt.Sprintf("remote shell exited with status %d", int(e))
 }
-
-// -- device update ----------------------------------------------------
 
 type updateFlags struct {
 	drainWait     time.Duration
@@ -369,8 +306,7 @@ type updateFlags struct {
 	imageURL      string
 	targetVersion string
 
-	// in is where per-device confirmations are read from; nil means
-	// os.Stdin.
+	// in is where confirmations are read from; nil means os.Stdin.
 	in io.Reader
 }
 
@@ -398,8 +334,9 @@ func newDeviceUpdateCmd(o *Options) *cobra.Command {
 			"The redundancy check refuses to reboot the last live spine or the last\n" +
 			"live leaf. That refusal is a hard error: --yes does not override it,\n" +
 			"only --force does, and it is re-decided per device.\n\n" +
-			"\"all\" cannot be combined with --yes: an unprompted fleet-wide reboot\n" +
-			"has to be spelled out host by host.",
+			"\"all\" with --yes is allowed and reboots the whole fleet unattended,\n" +
+			"one device at a time under those same gates. The resolved device\n" +
+			"list is printed before the run starts.",
 		Args: cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runDeviceUpdate(cmd.Context(), o, args, f)
@@ -419,7 +356,6 @@ func newDeviceUpdateCmd(o *Options) *cobra.Command {
 	return cmd
 }
 
-// Summary results, so the table wording is decided in one place.
 const (
 	resultAlreadyOK     = "already current"
 	resultSkipped       = "skipped (declined)"
@@ -429,11 +365,8 @@ const (
 	resultForcedUpdated = "updated (redundancy gate FORCED)"
 )
 
-// updateRun holds what a `device update` resolves ONCE for the whole
-// run. Everything that depends on the state of the fleet — the endpoint
-// probe, the running version, and above all the redundancy check — is
-// deliberately NOT in here: it is redone per device, because rebooting
-// one device changes the answer for the next.
+// updateRun holds what `device update` resolves ONCE per run. Anything
+// depending on fleet state, above all the redundancy check, is redone per device.
 type updateRun struct {
 	o     *Options
 	net   *model.Network
@@ -444,10 +377,8 @@ type updateRun struct {
 	mirror      lifecycle.Mirror
 	credentials sshx.CredentialSource
 
-	// requireRouting makes a post-reboot routing failure fatal instead of
-	// advisory. Set when this run has more than one device to get
-	// through: continuing to reboot a fleet whose last member has not
-	// recovered is how a maintenance window becomes an outage.
+	// requireRouting makes a post-reboot routing failure fatal, not advisory:
+	// rebooting on past an unrecovered device turns a window into an outage.
 	requireRouting bool
 }
 
@@ -456,8 +387,7 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 		ctx = context.Background()
 	}
 
-	// --force is an override of a hard safety refusal, never a thing you
-	// arrive at by pressing y at a prompt.
+	// --force overrides a hard refusal, never something a prompt can authorise.
 	if f.force && !f.yes {
 		return errors.New("--force requires --yes: overriding the redundancy gate is not something " +
 			"a [y/N] prompt can authorise, it has to be stated on the command line")
@@ -475,9 +405,8 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 	gate := newWriteGate(o, f.yes, f.in)
 	announceFleetSelection(o, targets, hosts, f.yes)
 
-	// Reboot leaves before spines, as the Python original does: a spine's
-	// safety gate only means anything while the leaves under it are up,
-	// so the leaves go first and the gate stays honest.
+	// Leaves before spines, as Python does: a spine's safety gate only means
+	// anything while the leaves under it are up.
 	sort.SliceStable(hosts, func(i, j int) bool {
 		return !hosts[i].IsSpine() && hosts[j].IsSpine()
 	})
@@ -507,11 +436,8 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 	return run.sequential(ctx, hosts, gate)
 }
 
-// updatableHosts narrows a selection to the devices update can handle.
-//
-// A single named device that is not supported is an error: the operator
-// asked for that device by name and got nothing. In a wider selection it
-// is a reported skip, so `all` does not fail on the EOS boxes.
+// updatableHosts narrows a selection to what update handles. A single named
+// unsupported device errors; in a wider selection it is a reported skip.
 func updatableHosts(o *Options, selected []*model.Host) ([]*model.Host, error) {
 	isVyOS := func(h *model.Host) bool { return strings.EqualFold(h.DeviceType, "vyos") }
 
@@ -532,18 +458,9 @@ func updatableHosts(o *Options, selected []*model.Host) ([]*model.Host, error) {
 	return hosts, nil
 }
 
-// announceFleetSelection prints the resolved device list before an
-// unattended multi-device run.
-//
-// "all" with --yes is deliberately NOT refused. The protection that
-// matters is in the mechanism, not in the spelling of the selection:
-// devices are updated strictly one at a time, the redundancy gate is
-// re-evaluated immediately before each one, and the first failure stops
-// the run. Pinning a hostname list instead would go stale — a device
-// added next month would silently never be updated, and a device quietly
-// missed for a year is the failure mode this fleet actually suffers
-// from. What is worth keeping is visibility: say out loud what is about
-// to be rebooted, so it is in the log even when nobody was watching.
+// announceFleetSelection prints the resolved device list before an unattended
+// multi-device run. "all" with --yes is deliberately not refused: the
+// mechanism is the protection, so only visibility is added here.
 func announceFleetSelection(o *Options, targets []string, hosts []*model.Host, yes bool) {
 	if !yes || len(hosts) < 2 {
 		return
@@ -565,14 +482,9 @@ func announceFleetSelection(o *Options, targets []string, hosts []*model.Host, y
 	o.printf("  %s\n\n", strings.Join(names, " "))
 }
 
-// sequential updates every host, one at a time, stopping on the first
-// failure.
-//
-// The ordering guarantee is the point of this function: nothing here is
-// concurrent, each device's plan (and therefore its redundancy check) is
-// built immediately before that device is touched, and the previous
-// device has already been confirmed answering, on the new image and
-// routing-healthy by the time the next one is planned.
+// sequential updates every host one at a time, stopping on the first failure.
+// Nothing here is concurrent: each device's plan (and so its redundancy check)
+// is built immediately before that device is touched.
 func (r *updateRun) sequential(ctx context.Context, hosts []*model.Host, gate writeGate) error {
 	o := r.o
 	rows := make([][]string, 0, len(hosts))
@@ -614,14 +526,12 @@ func (r *updateRun) sequential(ctx context.Context, hosts []*model.Host, gate wr
 	case firstErr == nil:
 		return nil
 	case len(hosts) == 1:
-		// One device: the device's own error IS the run's error.
 		return firstErr
 	default:
 		return fmt.Errorf("stopped at %s: %w", failedHost, firstErr)
 	}
 }
 
-// firstLine keeps a multi-line explanation out of a table cell.
 func firstLine(s string) string {
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
 		return s[:i]
@@ -636,16 +546,13 @@ func appendNotAttempted(rows [][]string, remaining []*model.Host) [][]string {
 	return rows
 }
 
-// one plans and, if permitted, performs the update of a single device.
-// It returns the summary line for the device, or an error that stops the
-// whole run.
+// one plans and, if permitted, performs one device's update, returning its
+// summary line or an error that stops the whole run.
 func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, anyChangeable *bool) (string, error) {
 	o := r.o
 
-	// The planning updater's API client is constructed read-only, so the
-	// phase that decides whether to proceed is structurally incapable of
-	// changing the device. The redundancy check happens here, NOW, for
-	// this device: any check run before the previous reboot is stale.
+	// The planning client is read-only, so deciding cannot change the device.
+	// The redundancy check runs NOW: any older verdict is stale.
 	planner, err := r.newUpdater(ctx, host, false)
 	if err != nil {
 		return "", err
@@ -669,8 +576,8 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 		return resultWouldUpdate, nil
 	}
 
-	// A refusal is decided per device and is hard: only --force passes
-	// it, and --force already required --yes.
+	// A refusal is per device and hard: only --force passes it, and --force
+	// already required --yes.
 	if plan.RedundancyErr != nil && !r.flags.force {
 		return "", fmt.Errorf("%w\n"+
 			"       This is a hard safety refusal and --yes does not override it.\n"+
@@ -698,8 +605,8 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 		return resultSkipped, nil
 	}
 
-	// Only now is a write-enabled client built, and a fresh Updater with
-	// it: one Updater still reboots at most one device.
+	// Only now is a write-enabled client built, in a fresh Updater: one
+	// Updater still reboots at most one device.
 	executor, err := r.newUpdater(ctx, host, true)
 	if err != nil {
 		return "", err
@@ -716,28 +623,21 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 }
 
 // newFleetProbe builds the liveness probe backing one redundancy check.
-// It is a var, and called once per device rather than once per run, so
-// tests can count that the gate really is re-evaluated for every device.
+// Called once per device, not per run, so tests can count re-evaluations.
 var newFleetProbe = fleetProbe
 
-// newSSHDialer opens sessions to the device being updated. A var so the
-// tests can drive a whole update without an SSH client existing.
 var newSSHDialer = sshDialer
 
-// updateTiming is how long an update waits: for the BGP drain to take
-// effect, and for the device to come back. Both zero values mean the
-// lifecycle defaults (a real 5s+ drain wait, a 15s/5s/15m reboot poll).
-// The tests shrink them so the suite never sits out a reboot.
+// updateTiming bounds the BGP drain and the wait for the device to return.
+// Zero means the lifecycle defaults (5s+ drain, 15s/5s/15m reboot poll).
 var updateTiming struct {
 	wait  lifecycle.WaitOptions
 	sleep func(ctx context.Context, d time.Duration) error
 }
 
-// newUpdater builds an Updater for one device.
-//
-// allowWrites drives BOTH the lifecycle write opt-in and the API
-// client's own: a planning updater cannot reach a write endpoint even
-// through a bug in a caller.
+// newUpdater builds an Updater for one device. allowWrites drives BOTH the
+// lifecycle write opt-in and the API client's own, so a planning updater
+// cannot reach a write endpoint even through a caller's bug.
 func (r *updateRun) newUpdater(ctx context.Context, host *model.Host, allowWrites bool) (*lifecycle.Updater, error) {
 	address := probeEndpoint(ctx, host, r.net.Global.SearchDomain)
 	if address == "" {
@@ -753,10 +653,8 @@ func (r *updateRun) newUpdater(ctx context.Context, host *model.Host, allowWrite
 	if err != nil {
 		return nil, err
 	}
-	// Only the planning updater gets a probe: the redundancy gate is
-	// evaluated exactly once per device, in BuildPlan, and Execute acts
-	// on the verdict the plan recorded. Handing the write-enabled updater
-	// a probe would only invite a second, differently-timed opinion.
+	// Only the planning updater gets a probe: the gate is evaluated exactly
+	// once per device in BuildPlan, and Execute acts on the recorded verdict.
 	var probe lifecycle.AliveProbe
 	if !allowWrites {
 		probe = newFleetProbe(r.net, r.key)
@@ -781,8 +679,7 @@ func (r *updateRun) newUpdater(ctx context.Context, host *model.Host, allowWrite
 	}, nil
 }
 
-// imageSource resolves where the image comes from: an explicit
-// --image-url, or the wired provider + firmware mirror.
+// imageSource resolves --image-url, else the provider plus firmware mirror.
 func imageSource(deviceType, networkPath string, f updateFlags) (lifecycle.ImageProvider, lifecycle.Mirror, error) {
 	if f.imageURL != "" {
 		static := staticImage{url: f.imageURL, version: f.targetVersion}
@@ -806,10 +703,8 @@ func imageSource(deviceType, networkPath string, f updateFlags) (lifecycle.Image
 	return provider, mirror, nil
 }
 
-// staticImage is the --image-url escape hatch: an image that is already
-// published somewhere the device can reach. It is both the "provider"
-// (it knows the target version) and the "mirror" (publishing is a no-op,
-// the URL is already public).
+// staticImage is the --image-url escape hatch: an image already published
+// where the device can reach it, acting as both provider and no-op mirror.
 type staticImage struct {
 	url     string
 	version string
@@ -817,19 +712,10 @@ type staticImage struct {
 
 func (s staticImage) LatestVersion(context.Context) (string, error) { return s.version, nil }
 
-// IsCurrent mirrors the Python `self.latest_version in version`
-// substring test, which tolerates the device reporting extra build
-// detail around the release tag.
-//
-// It delegates to firmware.IsCurrent rather than re-running
-// strings.Contains, which is what it used to do. The inline version was
-// missing the empty-target guard: strings.Contains(version, "") is true,
-// so a staticImage with no version reported EVERY device as already
-// current and the updater silently skipped the upgrade it was asked to
-// perform. imageSource refuses to build one without a version, so that
-// was latent rather than live — but "unknown version" must never be able
-// to mean "current", and the guard belongs in the predicate rather than
-// in one of its callers.
+// IsCurrent mirrors Python's `self.latest_version in version` substring test,
+// tolerating extra build detail around the tag. It must go through
+// firmware.IsCurrent: Contains(version, "") is true, so an empty target would
+// mark EVERY device already current.
 func (s staticImage) IsCurrent(version string) bool {
 	return firmware.IsCurrent(s.version, version)
 }
@@ -840,8 +726,7 @@ func (s staticImage) Publish(context.Context, string, string) (string, error) {
 	return s.url, nil
 }
 
-// fleetFor is the set of devices the redundancy check considers: every
-// VyOS host in the network, as the Python side does.
+// fleetFor is what the redundancy check considers: every VyOS host, as Python.
 func fleetFor(n *model.Network, exclude *model.Host) []*model.Host {
 	var fleet []*model.Host
 	for i := range n.Hosts {
@@ -855,10 +740,7 @@ func fleetFor(n *model.Network, exclude *model.Host) []*model.Host {
 	return fleet
 }
 
-// fleetProbe answers "is this other device alive?" for the redundancy
-// check: probe its API port, then ask for its version. Read-only, and
-// safe to call from several goroutines at once (each call builds its own
-// client).
+// fleetProbe answers "is this device alive?", read-only, one client per call.
 func fleetProbe(n *model.Network, key string) lifecycle.AliveProbe {
 	return func(ctx context.Context, h *model.Host) bool {
 		probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
@@ -874,7 +756,7 @@ func fleetProbe(n *model.Network, key string) lifecycle.AliveProbe {
 			InsecureSkipVerify: true,
 			BaseURL:            apiBaseURL(h.Hostname),
 			Timeout:            10 * time.Second,
-			// Explicitly read-only: the probe must never be able to write.
+			// The probe must never be able to write.
 			AllowWrites: false,
 		})
 		if err != nil {
@@ -885,7 +767,6 @@ func fleetProbe(n *model.Network, key string) lifecycle.AliveProbe {
 	}
 }
 
-// sshDialer opens an authenticated session to the target device.
 func sshDialer(_ context.Context, host *model.Host, n *model.Network, creds sshx.CredentialSource) lifecycle.SSHDialer {
 	return func(ctx context.Context) (lifecycle.SSHSession, error) {
 		address := probeSSHEndpoint(ctx, host, n.Global.SearchDomain)
@@ -942,8 +823,6 @@ func listOrNone(names []string) string {
 	}
 	return strings.Join(names, ", ")
 }
-
-// -- device cleanup ---------------------------------------------------
 
 func newDeviceCleanupCmd(o *Options) *cobra.Command {
 	var yes bool

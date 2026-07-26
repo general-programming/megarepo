@@ -33,8 +33,7 @@ func TestStatusModelStartsEveryRowPending(t *testing.T) {
 			t.Errorf("%s: status = %q, want probing", r.Device, r.Status)
 		}
 	}
-	// Every host must be on screen before anything answers: that is the
-	// whole point of the live table.
+	// Every host must be on screen before anything answers.
 	view := m.View()
 	for _, name := range []string{"a", "b", "c"} {
 		if !strings.Contains(view, name) {
@@ -48,8 +47,7 @@ func TestStatusModelStartsEveryRowPending(t *testing.T) {
 
 func TestStatusModelFillsRowsAsProbesAnswer(t *testing.T) {
 	m := NewStatusModel(context.Background(), probes("a", "b"))
-	// Init dispatches the first batch; without it the model would still
-	// have probes queued and a completion would release the next one.
+	// Init dispatches the first batch; otherwise probes stay queued.
 	m.Init()
 
 	row := StatusRow{Device: "b", Endpoint: "10.0.0.2", Model: "vyos", Uptime: "5d",

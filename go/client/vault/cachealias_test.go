@@ -1,18 +1,15 @@
 package vault
 
 import (
+	"reflect"
 	"sync"
 	"testing"
 )
 
-// Regression test for finding 7: ReadSecret used to return the cached map
-// itself (and, on a cold read, secret.Data, which then became the cache
-// entry). Every caller therefore held a reference to one shared map. A
-// caller adding or deleting a key is an unsynchronised map write racing
-// every other reader, which Go turns into "fatal error: concurrent map
-// writes" — a process-killing crash that the RWMutex in this package
-// cannot prevent, because the write happens outside the package. cacheMint
-// already copies on write precisely because it knew this.
+// Regression: ReadSecret used to hand out the cached map itself, so a caller
+// mutating it was an unsynchronised write racing every other reader — "fatal
+// error: concurrent map writes", which this package's RWMutex cannot prevent
+// because the write happens outside the package.
 
 func TestReadSecretReturnsACopy(t *testing.T) {
 	fv := fixture()
@@ -23,7 +20,6 @@ func TestReadSecretReturnsACopy(t *testing.T) {
 		t.Fatalf("ReadSecret: %v", err)
 	}
 
-	// A caller does what callers do with a map they were handed.
 	first["admin-password"] = "tampered"
 	first["injected"] = true
 	delete(first, "enable-password")
@@ -41,7 +37,9 @@ func TestReadSecretReturnsACopy(t *testing.T) {
 	if got := second["enable-password"]; got != "en" {
 		t.Fatalf("a caller's delete leaked into the cache: enable-password = %v", got)
 	}
-	if &first == &second {
+	// Map identity, not the identity of two distinct local variables:
+	// &first == &second is always false and asserts nothing.
+	if reflect.ValueOf(first).Pointer() == reflect.ValueOf(second).Pointer() {
 		t.Fatal("the same map was handed out twice")
 	}
 
@@ -55,10 +53,8 @@ func TestReadSecretReturnsACopy(t *testing.T) {
 	}
 }
 
-// TestConcurrentReadersAndAMutatingCaller is the -race companion: one
-// caller mutating what it was given must not be able to race the readers.
-// Before the fix this was an unsynchronised write to a map several
-// goroutines were ranging over.
+// The -race companion: before the fix this was an unsynchronised write to a
+// map several goroutines were ranging over.
 func TestConcurrentReadersAndAMutatingCaller(t *testing.T) {
 	fv := fixture()
 	c := newTestClient(t, fv)
@@ -79,12 +75,10 @@ func TestConcurrentReadersAndAMutatingCaller(t *testing.T) {
 				return
 			}
 			if i%2 == 0 {
-				// Half the callers mutate their copy...
 				data["mine"] = i
 				delete(data, "ttl")
 				return
 			}
-			// ...while the other half read theirs.
 			for k := range data {
 				_ = data[k]
 			}
@@ -101,9 +95,8 @@ func TestConcurrentReadersAndAMutatingCaller(t *testing.T) {
 	}
 }
 
-// TestMintDoesNotAliasIntoACallersMap keeps cacheMint's copy-on-write
-// honest now that ReadSecret clones: a minted key must land in the cache
-// without either side aliasing the other.
+// cacheMint must copy on write: a minted key lands in the cache without
+// either side aliasing the other.
 func TestMintDoesNotAliasIntoACallersMap(t *testing.T) {
 	fv := fixture()
 	srv := newTestClient(t, fv)

@@ -9,30 +9,23 @@ import (
 	"strings"
 )
 
-// The confirmation semantics shared by the only two commands that can
-// change a device: `barf deploy` and `barf device update`.
+// Confirmation semantics shared by `barf deploy` and `barf device update`.
+// "May this run change THIS device?" depends on whether stdout is a terminal
+// and whether --yes was given:
 //
-// Both commands answer one question the same way — "may this run change
-// THIS device?" — and the answer depends on exactly two inputs, whether
-// stdout is a terminal and whether --yes was given:
+//	terminal, no --yes   show the change, then ask [y/N] per device; y
+//	                     performs it in this same invocation. Anything
+//	                     else, including EOF, skips.
+//	terminal, --yes      no prompt.
+//	no terminal/--plain  never prompt, so an unattended run cannot hang.
+//	                     --yes is REQUIRED to change anything; without it
+//	                     the run is a dry run.
 //
-//	terminal, no --yes   show the change, then ask [y/N] per device. The
-//	                     prompt IS the confirmation: answering y performs
-//	                     the change in this same invocation. Empty input,
-//	                     anything that is not y/yes, and EOF all skip.
-//	terminal, --yes      no prompt, for someone scripting on a terminal.
-//	no terminal/--plain  never prompt: an unattended run must not hang on
-//	                     a question nobody will answer. --yes is
-//	                     therefore REQUIRED to change anything, and
-//	                     without it the run is a dry run.
-//
-// The rule that must never be weakened is the last one: no TTY and no
-// --yes changes nothing, ever.
+// The last rule must never be weakened: no TTY and no --yes changes nothing.
 
 // writeGate decides, per device, whether a run may proceed.
 type writeGate struct {
-	// dryRun means nothing may be changed at all: no TTY to ask on and
-	// no --yes. allows always answers false.
+	// dryRun (no TTY, no --yes) makes allows always answer false.
 	dryRun bool
 	// prompt means each device is confirmed interactively.
 	prompt bool
@@ -40,12 +33,11 @@ type writeGate struct {
 	confirm func(question string) (bool, error)
 }
 
-// newWriteGate builds the gate for a run. in is where confirmations are
-// read from; nil means os.Stdin.
+// newWriteGate builds the gate for a run. in is where confirmations are read
+// from; nil means os.Stdin.
 func newWriteGate(o *Options, yes bool, in io.Reader) writeGate {
 	switch {
 	case yes:
-		// Permission was given on the command line, terminal or not.
 		return writeGate{}
 	case o.interactive():
 		return writeGate{prompt: true, confirm: newConfirmer(o, in)}
@@ -54,8 +46,8 @@ func newWriteGate(o *Options, yes bool, in io.Reader) writeGate {
 	}
 }
 
-// allows reports whether the device this question is about may be
-// changed. A dry run answers false without asking anything.
+// allows reports whether the device in question may be changed; a dry run
+// answers false without asking anything.
 func (g writeGate) allows(question string) (bool, error) {
 	if g.dryRun {
 		return false, nil
@@ -66,9 +58,8 @@ func (g writeGate) allows(question string) (bool, error) {
 	return g.confirm(question)
 }
 
-// newConfirmer returns a yes/no prompt reading from in (os.Stdin when
-// nil). Only a gate in prompt mode ever calls it; a plain or piped run
-// never constructs one.
+// newConfirmer returns a yes/no prompt reading from in (os.Stdin when nil).
+// Only a gate in prompt mode ever constructs one.
 func newConfirmer(o *Options, in io.Reader) func(question string) (bool, error) {
 	if in == nil {
 		in = os.Stdin
@@ -90,7 +81,6 @@ func newConfirmer(o *Options, in io.Reader) func(question string) (bool, error) 
 	}
 }
 
-// confirmError wraps a failure to read the operator's answer.
 func confirmError(err error) error {
 	return fmt.Errorf("reading confirmation: %w", err)
 }

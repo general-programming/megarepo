@@ -6,11 +6,9 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// resolveTargets is the host selection shared by every command, ported
-// from barf/cli/common.py: hostnames, or the single word "all". No
-// targets at all also means "all", so `barf status` works bare.
-//
-// Duplicate names are deduplicated, keeping the order given.
+// resolveTargets is the host selection shared by every command, ported from
+// barf/cli/common.py: hostnames, or the single word "all". No targets also
+// means "all". Duplicates are dropped, keeping the order given.
 func resolveTargets(hosts []model.Host, targets []string) ([]*model.Host, error) {
 	byIndex := func(i int) *model.Host { return &hosts[i] }
 
@@ -57,7 +55,6 @@ func allHosts(hosts []model.Host) []*model.Host {
 	return out
 }
 
-// filterHosts keeps the hosts satisfying keep, in order.
 func filterHosts(hosts []*model.Host, keep func(*model.Host) bool) []*model.Host {
 	var out []*model.Host
 	for _, h := range hosts {
@@ -68,7 +65,6 @@ func filterHosts(hosts []*model.Host, keep func(*model.Host) bool) []*model.Host
 	return out
 }
 
-// loadTargets loads network.yml and resolves targets against it.
 func (o *Options) loadTargets(targets []string) (*model.Network, []*model.Host, error) {
 	path, err := o.networkPath()
 	if err != nil {

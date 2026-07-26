@@ -14,7 +14,6 @@ func host(name string) *model.Host {
 	return &model.Host{Hostname: name, DeviceType: "vyos", ASN: 65000}
 }
 
-// aliveSet builds a probe that considers exactly the named hosts alive.
 func aliveSet(names ...string) AliveProbe {
 	set := map[string]bool{}
 	for _, n := range names {
@@ -43,8 +42,7 @@ func TestSafeToRebootRefusesTheLastSpine(t *testing.T) {
 	target := host("sea1-spine-0")
 	fleet := []*model.Host{target, host("sea1-spine-1"), host("sea1-leaf-0")}
 
-	// Only the leaf answers: the other spine is down, so rebooting this
-	// one leaves the fabric spineless.
+	// Only the leaf answers: rebooting leaves the fabric spineless.
 	_, err := SafeToReboot(context.Background(), target, fleet, aliveSet("sea1-leaf-0"))
 	var redundancy *RedundancyError
 	if !errors.As(err, &redundancy) {
@@ -56,8 +54,7 @@ func TestSafeToRebootRefusesTheLastSpine(t *testing.T) {
 }
 
 func TestSafeToRebootRefusesWhenNoLeafIsAlive(t *testing.T) {
-	// Unconditional in the Python original, spine or leaf: a fleet with
-	// no live leaf has nothing carrying traffic.
+	// Unconditional in the Python original: no live leaf, nothing carries traffic.
 	target := host("sea1-spine-0")
 	fleet := []*model.Host{target, host("sea1-spine-1"), host("sea1-leaf-0")}
 
@@ -86,8 +83,7 @@ func TestSafeToRebootNeverProbesTheTarget(t *testing.T) {
 		t.Fatalf("unexpected refusal: %v", err)
 	}
 	if probedTarget.Load() {
-		// The target's own liveness says nothing about redundancy, and
-		// counting it would let a healthy device vouch for itself.
+		// Counting the target would let a healthy device vouch for itself.
 		t.Fatal("the target must not be counted as its own redundancy")
 	}
 }
@@ -102,8 +98,7 @@ func TestSafeToRebootRecordsUnreachable(t *testing.T) {
 	}
 }
 
-// TestSafeToRebootProbesInParallel is the -race target: many probes at
-// once, all writing into the same result slice.
+// -race target: many concurrent probes writing into one result slice.
 func TestSafeToRebootProbesInParallel(t *testing.T) {
 	target := host("sea1-leaf-0")
 	fleet := []*model.Host{target}

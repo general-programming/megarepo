@@ -12,9 +12,7 @@ import (
 )
 
 // eosWriteServer records every request body and answers with a plausible
-// eAPI success. NOTHING in this package's tests ever talks to a real
-// device; the production router these commands target is a core router
-// and a live deploy is a supervised human action.
+// eAPI success. NOTHING in this package's tests talks to a real device.
 type eosWriteServer struct {
 	*httptest.Server
 	bodies []eosRequest
@@ -58,8 +56,7 @@ func writerOptions(t *testing.T, s *eosWriteServer) Options {
 	return opts
 }
 
-// The opt-in is the whole guarantee: without it there is no writer to
-// call, so no code path can push config by accident.
+// Without the opt-in there is no writer, so nothing can push by accident.
 func TestNewEOSWriterRequiresAllowWrites(t *testing.T) {
 	s := newEOSWriteServer(t)
 	opts := writerOptions(t, s)
@@ -157,8 +154,7 @@ func TestConfigureSendsManagedSliceInConfigMode(t *testing.T) {
 	}
 }
 
-// Re-sending the same slice is what makes deploy safe to run repeatedly:
-// EOS treats an identical line as a no-op, and barf sends nothing else.
+// Deploy is safe to re-run: EOS treats an identical line as a no-op.
 func TestConfigureIsIdempotentlyShaped(t *testing.T) {
 	s := newEOSWriteServer(t)
 	w, err := NewEOSWriter(testHost("h", "eos"), writerOptions(t, s))
@@ -210,8 +206,7 @@ func TestConfigureRefusesCommandsOutsideTheManagedScope(t *testing.T) {
 	}
 }
 
-// One bad op poisons the whole batch: nothing is sent, so a deploy is
-// never half-applied because of a scope violation.
+// One bad op poisons the batch: a scope violation never half-applies.
 func TestConfigureRejectsTheWholeBatch(t *testing.T) {
 	s := newEOSWriteServer(t)
 	w, err := NewEOSWriter(testHost("h", "eos"), writerOptions(t, s))
@@ -227,8 +222,8 @@ func TestConfigureRejectsTheWholeBatch(t *testing.T) {
 	}
 }
 
-// A delete has no meaning in the EOS slice, and admitting one would be
-// the single way a deploy could remove config from the device.
+// A delete is meaningless in the EOS slice and the one way a deploy could
+// remove config from the device.
 func TestConfigureRefusesDeleteOps(t *testing.T) {
 	s := newEOSWriteServer(t)
 	w, err := NewEOSWriter(testHost("h", "eos"), writerOptions(t, s))
@@ -305,8 +300,8 @@ func TestWriterSurfacesAuthFailure(t *testing.T) {
 	}
 }
 
-// The EOS writer shares the VyOS writer's problem and its fix: a commit
-// and a save each get their own budget instead of the read client's 10s.
+// As with VyOS: commit and save each get their own budget, not the read
+// client's 10s.
 func TestEOSWriterGivesEachOperationItsOwnTimeout(t *testing.T) {
 	s := newEOSWriteServer(t)
 	opts, recorder := recordingOptions(writerOptions(t, s))
@@ -350,10 +345,9 @@ func TestEOSWriteCommandAllowed(t *testing.T) {
 	}
 }
 
-// Regression: bare `shutdown` used to be allowlisted alongside
-// `no shutdown`. Inside `management api http-commands` it disables eAPI —
-// the transport barf itself speaks — so the write succeeds and then locks
-// barf out of the device. Nothing in the managed slice needs it.
+// Regression: bare `shutdown` was allowlisted alongside `no shutdown`.
+// Inside `management api http-commands` it disables eAPI — the transport
+// barf itself speaks — so the write succeeds and then locks barf out.
 func TestEOSWriteCommandRefusesBareShutdown(t *testing.T) {
 	if eosWriteCommandAllowed("shutdown") {
 		t.Error("bare `shutdown` is allowed; it disables eAPI and locks barf out")
@@ -363,11 +357,10 @@ func TestEOSWriteCommandRefusesBareShutdown(t *testing.T) {
 	}
 }
 
-// Regression: TrimSpace strips the ends of a command, not its interior,
-// and every allowlist arm is a prefix test — so a newline inside one
-// "command" smuggled a second, unreviewed line past the guard. eAPI runs
-// a multi-line string as multiple config lines. Reachable in practice via
-// a two-line authorized_keys blob pasted into one YAML value.
+// Regression: allowlist arms are prefix tests and TrimSpace only strips
+// the ends, so a newline inside one "command" smuggled a second,
+// unreviewed config line past the guard — reachable via a two-line
+// authorized_keys blob pasted into one YAML value.
 func TestEOSWriteCommandRefusesEmbeddedSeparators(t *testing.T) {
 	smuggled := []string{
 		"username admin ssh-key ssh-ed25519 AAAA x\nno ip routing",
@@ -385,8 +378,8 @@ func TestEOSWriteCommandRefusesEmbeddedSeparators(t *testing.T) {
 	}
 }
 
-// The guard must also stop the smuggled command at Configure, not merely
-// at the predicate — nothing may reach the wire.
+// The guard must stop the smuggled command at Configure, not just at the
+// predicate.
 func TestEOSWriterConfigureRejectsEmbeddedNewline(t *testing.T) {
 	s := newEOSWriteServer(t)
 	w, err := NewEOSWriter(testHost("h", "eos"), writerOptions(t, s))
@@ -405,9 +398,8 @@ func TestEOSWriterConfigureRejectsEmbeddedNewline(t *testing.T) {
 	}
 }
 
-// commandStrings flattens the request's cmds, replacing the enable entry
-// (which carries the secret) with the literal "enable" so no test output
-// can ever contain a credential.
+// commandStrings flattens the request's cmds, replacing the secret-bearing
+// enable entry with "enable" so test output holds no credential.
 func commandStrings(t *testing.T, req eosRequest) []string {
 	t.Helper()
 	out := make([]string, 0, len(req.Params.Cmds))

@@ -12,7 +12,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// renderHost renders one host with the renderer for its device type.
 func renderHost(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	r, err := newRenderer(h.DeviceType)
 	if err != nil {
@@ -69,27 +68,25 @@ func runGenerate(_ context.Context, o *Options, targets []string, outputDir stri
 	return nil
 }
 
-// Rendered configs contain live credentials — the admin password, the
-// fleet VyOS API key, WireGuard private keys, IPsec PSKs. The output
-// tree is therefore owner-only: 0700 directories, 0600 files. `output/`
-// is only gitignored under projects/barf, and `barf generate` run from
-// the repo root or go/ writes somewhere `git add -A` would happily
-// stage, so the mode is the part that has to be right here.
+// Rendered configs carry live credentials, so the output tree is owner-only:
+// 0700 directories, 0600 files. `output/` is gitignored only under
+// projects/barf, so run from the repo root generate writes somewhere
+// `git add -A` would stage; the mode is what has to be right here.
 const (
 	renderDirMode  os.FileMode = 0o700
 	renderFileMode os.FileMode = 0o600
 )
 
-// writeRenderedConfig writes a rendered config and its cloud-init twin
-// under outputDir, returning the path of the main config file. Ported
-// from barf/util/render.py write_rendered_config.
+// writeRenderedConfig writes a rendered config and its cloud-init twin under
+// outputDir, returning the main config file's path. Ported from
+// barf/util/render.py write_rendered_config.
 func writeRenderedConfig(h *model.Host, rendered, outputDir string) (string, error) {
 	roleDir := filepath.Join(outputDir, h.Role)
 	if err := os.MkdirAll(filepath.Join(roleDir, "cloud_init"), renderDirMode); err != nil {
 		return "", err
 	}
-	// MkdirAll leaves a pre-existing directory's mode alone, and umask
-	// can only ever clear bits, so tighten explicitly.
+	// MkdirAll leaves an existing directory's mode alone and umask only
+	// clears bits, so tighten explicitly.
 	for _, dir := range []string{outputDir, roleDir, filepath.Join(roleDir, "cloud_init")} {
 		if err := os.Chmod(dir, renderDirMode); err != nil {
 			return "", err
@@ -118,9 +115,8 @@ func writeRenderedConfig(h *model.Host, rendered, outputDir string) (string, err
 	return configPath, nil
 }
 
-// writeSecretFile writes credential-bearing output owner-only, chmod'ing
-// even when the file already exists (os.WriteFile keeps the old mode) and
-// regardless of umask.
+// writeSecretFile writes credential-bearing output owner-only, chmod'ing even
+// on an existing file (os.WriteFile keeps the old mode) and despite umask.
 func writeSecretFile(path string, body []byte) error {
 	if err := os.WriteFile(path, body, renderFileMode); err != nil {
 		return err

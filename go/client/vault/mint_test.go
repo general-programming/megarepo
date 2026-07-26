@@ -14,12 +14,9 @@ import (
 	"testing"
 )
 
-// No test in this file talks to a real Vault: every one of them runs
-// against writableVault, an in-memory KV v2 backed by httptest.
-
-// writableVault serves KV v2 reads plus the two writes minting uses:
-// a JSON merge PATCH and a POST create/update. It records every write so
-// clobbering is observable.
+// writableVault is an in-memory KV v2 over httptest: reads plus the two
+// writes minting uses (JSON merge PATCH, POST create/update). It records every
+// write so clobbering is observable.
 type writableVault struct {
 	mu     sync.Mutex
 	data   map[string]map[string]any // "<mount>/<path>" -> secret
@@ -74,8 +71,7 @@ func (w *writableVault) handler() http.HandlerFunc {
 				return
 			}
 			incoming := w.body(r)
-			// Merge, never replace: this is what "does not clobber
-			// siblings" means at the wire level.
+			// Merge, never replace: siblings must survive.
 			for k, v := range incoming {
 				existing[k] = v
 			}
@@ -232,7 +228,6 @@ func TestMintPatchesWithoutClobberingSiblings(t *testing.T) {
 	if stored["enable-password"] != "minted" {
 		t.Fatalf("the minted key was not stored: %v", stored)
 	}
-	// The whole point of PATCH over PUT.
 	if stored["admin-password"] != "existing" || stored["ttl"] != float64(30) {
 		t.Fatalf("sibling keys were clobbered: %v", stored)
 	}
@@ -287,7 +282,6 @@ func TestMintFallsBackToReadThenWriteWithoutPatchCapability(t *testing.T) {
 	if got != "minted" {
 		t.Fatalf("got %q", got)
 	}
-	// read-then-write still merges: the sibling must survive.
 	stored := wv.secret("cluster-secrets/host-sea1-core-1")
 	if stored["admin-password"] != "existing" || stored["enable-password"] != "minted" {
 		t.Fatalf("rw fallback lost data: %v", stored)

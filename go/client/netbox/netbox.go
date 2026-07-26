@@ -1,17 +1,8 @@
-// Package netbox is a small read-only client for the NetBox GraphQL API.
-//
-// It is a shared library for the Go side of the megarepo: barf, the DNS
-// refresher and anything else that needs IPAM facts import it. The client
-// only ever issues GraphQL *queries* — there are deliberately no mutation
-// helpers, and none may be added.
-//
-// Two NetBox gotchas are baked in:
-//
-//   - NetBox >= 4.5 v2 tokens (`nbt_<key>.<secret>`) must be sent as
-//     `Authorization: Bearer <token>`, not the legacy `Token <token>`.
-//   - The instance sits behind Cloudflare, which blocks Go's default
-//     User-Agent with error 1010. A non-empty custom UA is mandatory and
-//     the client always sends one.
+// Package netbox is a small read-only client for the NetBox GraphQL API. It
+// only ever issues *queries*; no mutation helpers may be added. Two gotchas:
+// NetBox >= 4.5 v2 tokens must be sent as `Authorization: Bearer <token>`, not
+// the legacy `Token <token>`; and the instance sits behind Cloudflare, which
+// blocks Go's default User-Agent with error 1010, so a custom one is required.
 package netbox
 
 import (
@@ -29,33 +20,22 @@ import (
 // DefaultEndpoint is the megarepo NetBox GraphQL endpoint.
 const DefaultEndpoint = "https://netbox.generalprogramming.org/graphql/"
 
-// DefaultUserAgent is used when a caller does not set one. Cloudflare
-// rejects Go's default agent, so this is never allowed to be empty.
+// DefaultUserAgent is used when a caller sets none; it may never be empty.
 const DefaultUserAgent = "megarepo-go-netbox (github.com/general-programming/megarepo)"
 
 // DefaultTimeout bounds a single GraphQL round trip.
 const DefaultTimeout = 60 * time.Second
 
-// Options configures a Client. The zero value is usable: it targets
-// DefaultEndpoint with the default user agent and timeout, but a Token is
-// always required.
+// Options configures a Client. Only Token is required.
 type Options struct {
-	// Endpoint is the full GraphQL URL. Empty means DefaultEndpoint.
-	Endpoint string
-	// Token is the NetBox API token, sent as a Bearer credential.
-	Token string
-	// UserAgent overrides DefaultUserAgent. Must be non-empty if set.
-	UserAgent string
-	// Timeout bounds each request. Zero means DefaultTimeout. Ignored when
-	// HTTPClient is supplied.
-	Timeout time.Duration
-	// HTTPClient lets callers inject their own transport (tests, proxies,
-	// instrumentation). Its own Timeout is respected as-is.
-	HTTPClient *http.Client
+	Endpoint   string        // full GraphQL URL; empty means DefaultEndpoint
+	Token      string        // API token, sent as a Bearer credential
+	UserAgent  string        // must be non-empty if set
+	Timeout    time.Duration // ignored when HTTPClient is supplied
+	HTTPClient *http.Client  // its own Timeout is respected as-is
 }
 
-// Client is a read-only NetBox GraphQL client. It is safe for concurrent
-// use by multiple goroutines.
+// Client is a read-only NetBox GraphQL client, safe for concurrent use.
 type Client struct {
 	endpoint  string
 	token     string
@@ -63,8 +43,7 @@ type Client struct {
 	http      *http.Client
 }
 
-// New builds a Client. It fails when no token is provided; every other
-// field has a sane default.
+// New builds a Client. It fails without a token; everything else defaults.
 func New(opts Options) (*Client, error) {
 	if strings.TrimSpace(opts.Token) == "" {
 		return nil, fmt.Errorf("netbox: an API token is required")
@@ -97,10 +76,8 @@ func New(opts Options) (*Client, error) {
 	}, nil
 }
 
-// NewFromEnv builds a Client from the environment, matching the variables
-// the Python tooling uses: NETBOX_API_KEY (required) and NETBOX_URL
-// (optional, defaults to DefaultEndpoint). Fields already set on opts win
-// over the environment.
+// NewFromEnv builds a Client from NETBOX_API_KEY (required) and NETBOX_URL,
+// as the Python tooling does; fields set on opts win.
 func NewFromEnv(opts Options) (*Client, error) {
 	if opts.Token == "" {
 		opts.Token = os.Getenv("NETBOX_API_KEY")
@@ -127,8 +104,7 @@ type GraphQLError struct {
 
 func (e GraphQLError) Error() string { return e.Message }
 
-// GraphQLErrors is the whole `errors` array returned alongside (or instead
-// of) data. Callers can use errors.As to inspect the individual messages.
+// GraphQLErrors is the whole `errors` array. Use errors.As to inspect it.
 type GraphQLErrors []GraphQLError
 
 func (e GraphQLErrors) Error() string {
@@ -139,8 +115,8 @@ func (e GraphQLErrors) Error() string {
 	return "netbox: GraphQL errors: " + strings.Join(msgs, "; ")
 }
 
-// HTTPError is returned for a non-2xx response from NetBox (or from
-// whatever sits in front of it, e.g. a Cloudflare 1010 block page).
+// HTTPError is a non-2xx from NetBox or from what sits in front of it (e.g. a
+// Cloudflare 1010 block page).
 type HTTPError struct {
 	StatusCode int
 	Status     string
@@ -156,9 +132,8 @@ func (e *HTTPError) Error() string {
 	return fmt.Sprintf("netbox: HTTP %s: %s", e.Status, body)
 }
 
-// Query executes a raw GraphQL query and unmarshals the `data` object into
-// out. It is exported so callers can run their own documents without
-// forking the package; it is still read-only by contract.
+// Query runs a raw GraphQL query and unmarshals `data` into out; exported for
+// callers with their own documents, read-only by contract.
 func (c *Client) Query(ctx context.Context, query string, variables map[string]any, out any) error {
 	payload := map[string]any{"query": query}
 	if len(variables) > 0 {

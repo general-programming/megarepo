@@ -6,11 +6,8 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// Cisco renders a Cisco IOS switch in the `network_devices` role.
-//
-// Port of projects/barf/barf/templates/network_devices/cisco.j2, which
-// is `{% include 'common/cisco_ios.j2' %}`. The fleet devices this
-// covers are the 3750X stack and the Catalyst 9300 in NetBox.
+// Cisco renders a Cisco IOS switch in the `network_devices` role. Port of
+// network_devices/cisco.j2, i.e. common/cisco_ios.j2.
 type Cisco struct{}
 
 // Render returns the full IOS config text for h.
@@ -21,9 +18,8 @@ func (Cisco) Render(h *model.Host, n *model.Network, s SecretSource) (string, er
 	return RenderCiscoIOS(IOSDeviceFromHost(h), n.Global, s)
 }
 
-// RenderCiscoIOS renders a NetBox-sourced IOS switch. This is the real
-// entry point for the vendor: see ios.go on why these devices are an
-// IOSDevice rather than a model.Host.
+// RenderCiscoIOS renders a NetBox-sourced IOS switch, the real entry point
+// for the vendor; see ios.go on why it takes an IOSDevice.
 func RenderCiscoIOS(d *IOSDevice, global model.GlobalMeta, s SecretSource) (string, error) {
 	adminPassword, err := s.HostSecret(d.Hostname, "admin-password")
 	if err != nil {
@@ -71,9 +67,8 @@ func RenderCiscoIOS(d *IOSDevice, global model.GlobalMeta, s SecretSource) (stri
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// ciscoTacacs is the AAA half of common/cisco_ios.j2. It is unreachable
-// against the current Python (BaseHost.tacacs_servers is hardcoded to
-// an empty list), so no rendered config in the fleet contains it.
+// ciscoTacacs is the AAA half of common/cisco_ios.j2, unreachable because
+// BaseHost.tacacs_servers is hardcoded empty upstream.
 func ciscoTacacs(servers []string, key string) []string {
 	lines := []string{
 		"aaa new-model",

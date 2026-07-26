@@ -8,21 +8,10 @@ import (
 // DefaultPrefetchWorkers matches Python's prefetch_keypairs(max_workers=16).
 const DefaultPrefetchWorkers = 16
 
-// Prefetch warms the read cache for a set of paths on one mount using
-// concurrent reads.
-//
-// Vault KV v2 has no batch-read API, so "multi fetch" means doing the
-// per-secret reads concurrently. Rendering a fleet needs both sides of
-// every WireGuard link, and fetching those serially dominates render
-// time; warming them up front turns N round trips into N/workers.
-//
-// It is strictly read-only and never returns an error: a path that is
-// missing (or unreadable) is simply left cold for the render to deal
-// with serially, exactly like Python's prefetch, which swallows the
-// missing-keypair error so a cache warm never creates a secret.
-//
-// An empty mount uses the client's host mount ("cluster-secrets"), which
-// is where WireGuard keypairs live.
+// Prefetch warms the read cache for paths on one mount (empty = host mount).
+// KV v2 has no batch read, so this is concurrent per-secret reads. It never
+// errors: as in Python's prefetch, swallowing it is what keeps a cache warm
+// from ever creating a secret.
 func (c *Client) Prefetch(ctx context.Context, mount string, paths []string, workers int) {
 	if mount == "" {
 		mount = c.hostMount
@@ -31,8 +20,7 @@ func (c *Client) Prefetch(ctx context.Context, mount string, paths []string, wor
 		workers = DefaultPrefetchWorkers
 	}
 
-	// Deduplicate, and skip anything already cached, preserving order so
-	// the work is deterministic.
+	// Deduplicate and skip cached paths, preserving order.
 	seen := make(map[string]bool, len(paths))
 	todo := make([]string, 0, len(paths))
 	c.mu.RLock()
@@ -62,8 +50,7 @@ func (c *Client) Prefetch(ctx context.Context, mount string, paths []string, wor
 		go func() {
 			defer wg.Done()
 			for path := range work {
-				// Errors are deliberately dropped: this is a cache warm,
-				// not a fetch. ReadSecret populates the cache on success.
+				// Errors dropped: this is a cache warm, not a fetch.
 				_, _ = c.ReadSecret(ctx, mount, path)
 			}
 		}()
@@ -81,14 +68,12 @@ func (c *Client) Prefetch(ctx context.Context, mount string, paths []string, wor
 	wg.Wait()
 }
 
-// PrefetchHostSecrets warms the cache for per-host secret paths on the
-// host mount, using the default worker count.
+// PrefetchHostSecrets warms per-host paths with DefaultPrefetchWorkers.
 func (c *Client) PrefetchHostSecrets(ctx context.Context, paths ...string) {
 	c.Prefetch(ctx, c.hostMount, paths, DefaultPrefetchWorkers)
 }
 
-// Prefetcher is the cache-warming surface, declared so callers can depend
-// on it without importing this package. *Client implements it.
+// Prefetcher is the cache-warming surface, for callers avoiding this import.
 type Prefetcher interface {
 	PrefetchHostSecrets(ctx context.Context, paths ...string)
 }

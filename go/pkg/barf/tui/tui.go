@@ -1,35 +1,23 @@
-// Package tui holds the Bubble Tea interfaces for the read-only barf
-// commands. Every model here is a pure state machine over messages: the
-// work itself arrives as a func the caller supplies, so the cli package
-// can drive the same probes in plain (non-TTY) mode without a terminal.
-//
-// The package deliberately does not import barf/cli, barf/device or
-// barf/render. It only knows about rows of strings and funcs that
-// produce them, which keeps it testable by pushing messages through
-// Update directly.
+// Package tui holds the Bubble Tea interfaces for the read-only barf commands.
+// Every model is a pure state machine over messages and the work arrives as a
+// caller-supplied func, so cli can drive the same probes in non-TTY mode. It
+// imports none of barf/cli, barf/device or barf/render.
 package tui
 
 import "github.com/charmbracelet/lipgloss"
 
-// DefaultConcurrency is how many probes/jobs a model keeps in flight,
-// and therefore how many goroutines it creates: Bubble Tea runs one
-// goroutine per batched command, so a model that fired every device's
-// work up front would size its goroutine count by the fleet. It matches
-// the cli package's own probe limit (Python's max_workers=8).
+// DefaultConcurrency caps in-flight probes, and so goroutines: Bubble Tea runs
+// one per batched command. Matches the cli limit (Python max_workers=8).
 const DefaultConcurrency = 8
 
 // RowState is how a probed device is doing, and picks the row colour.
 type RowState int
 
 const (
-	// StatePending means the probe has not answered yet.
-	StatePending RowState = iota
-	// StateOK means the device answered and its config matches.
-	StateOK
-	// StateDrift means the device answered but its config differs.
-	StateDrift
-	// StateError means the device could not be probed.
-	StateError
+	StatePending RowState = iota // probe has not answered yet
+	StateOK                      // answered, config matches
+	StateDrift                   // answered, config differs
+	StateError                   // could not be probed
 )
 
 // String is the plain-text spelling of a state, used in tests and logs.
@@ -47,8 +35,7 @@ func (s RowState) String() string {
 	return "unknown"
 }
 
-// Styles are the colours shared by every model in this package. They are
-// package-level so a caller can restyle the whole surface at once.
+// Package-level so a caller can restyle the whole surface at once.
 var (
 	styleHeader  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("63"))
 	styleDim     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
@@ -61,7 +48,7 @@ var (
 	styleTitle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("81"))
 )
 
-// styleFor is the lipgloss style a row in the given state renders with.
+// styleFor is the style a row in the given state renders with.
 func styleFor(s RowState) lipgloss.Style {
 	switch s {
 	case StateOK:

@@ -9,8 +9,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// fakePrefetcher records what it was asked to warm. Nothing here touches
-// Vault.
+// fakePrefetcher records what it was asked to warm.
 type fakePrefetcher struct {
 	mu    sync.Mutex
 	calls [][]string
@@ -89,7 +88,6 @@ func TestLinkKeysWarmsOnce(t *testing.T) {
 		t.Fatalf("warmed %v", f.calls[0])
 	}
 
-	// Nothing to warm means no call at all.
 	f2 := &fakePrefetcher{}
 	LinkKeys(context.Background(), f2, []string{"nobody"}, fabric())
 	if len(f2.calls) != 0 {

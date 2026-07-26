@@ -15,20 +15,11 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/firmware"
 )
 
-// Regression tests for the cancellation and fan-out findings.
+// -- nothing was cancellable ------------------------------------------
 
-// -- finding 2: nothing was cancellable -------------------------------
-
-// TestSignalContextCancelsAndRestoresTheDefaultHandler covers both halves
-// of the wiring. Execute used to call root.Execute(), so every command ran
-// under context.Background() and all the ctx plumbing below it — the
-// interruptible sleep, Prefetch's cancel branch, SafeToReboot's check,
-// ProbeEndpoint's guard, tea.WithContext — was dead in production.
-//
-// The second half matters just as much: signal.NotifyContext keeps
-// swallowing signals until its stop function runs, so trapping SIGINT
-// without releasing it would leave a user unable to abort a cleanup with
-// a second Ctrl-C.
+// Regression: Execute called root.Execute(), so everything ran under
+// context.Background() and the ctx plumbing below was dead. The handler
+// must also be released, or a second Ctrl-C is swallowed.
 func TestSignalContextCancelsAndRestoresTheDefaultHandler(t *testing.T) {
 	var stopped atomic.Int64
 	fired := make(chan struct{})
@@ -62,8 +53,7 @@ func TestSignalContextCancelsAndRestoresTheDefaultHandler(t *testing.T) {
 		t.Fatal("the first signal did not cancel the command context")
 	}
 
-	// The default disposition must come back so a SECOND Ctrl-C kills the
-	// process outright instead of being swallowed.
+	// The default disposition must come back so a second Ctrl-C kills.
 	deadline := time.Now().Add(2 * time.Second)
 	for stopped.Load() == 0 {
 		if time.Now().After(deadline) {
@@ -74,8 +64,6 @@ func TestSignalContextCancelsAndRestoresTheDefaultHandler(t *testing.T) {
 	}
 }
 
-// TestSignalContextUsesTheRealSignals is a light check that the wiring
-// asks for the signals we mean; it never sends one.
 func TestSignalContextUsesTheRealSignals(t *testing.T) {
 	var got []os.Signal
 	original := notifyContext
@@ -91,16 +79,13 @@ func TestSignalContextUsesTheRealSignals(t *testing.T) {
 	if len(got) != 2 || got[0] != os.Interrupt {
 		t.Fatalf("signals = %v, want interrupt and SIGTERM", got)
 	}
-	// syscall.SIGTERM is the second; compare by string to stay portable.
+	// Compare SIGTERM by string to stay portable.
 	if !strings.Contains(strings.ToLower(got[1].String()), "term") {
 		t.Fatalf("second signal = %v, want SIGTERM", got[1])
 	}
 }
 
-// TestStatusStopsProbingWhenTheContextIsCancelled is the end-to-end half:
-// with a live context the command's ctx now really is the signal
-// context, and a cancelled one must stop devices being contacted rather
-// than leaving probes parked on the semaphore.
+// A cancelled context must stop devices being contacted, end to end.
 func TestStatusStopsProbingWhenTheContextIsCancelled(t *testing.T) {
 	h := newHarness(t)
 	h.reachable["10.0.0.1"] = true
@@ -108,7 +93,6 @@ func TestStatusStopsProbingWhenTheContextIsCancelled(t *testing.T) {
 	h.readers["sea1-vpn-0"] = fakeReader{running: "set system host-name sea1-vpn-0\n"}
 	h.readers["fmt2-core"] = fakeReader{running: "set system host-name fmt2-core\n"}
 
-	// Count device contacts made after cancellation.
 	var dials atomic.Int64
 	inner := dialContext
 	dialContext = func(ctx context.Context, network, address string) (net.Conn, error) {
@@ -130,12 +114,10 @@ func TestStatusStopsProbingWhenTheContextIsCancelled(t *testing.T) {
 	}
 }
 
-// -- finding 6: fan-out sized by input, semaphore not ctx-aware -------
+// -- fan-out sized by input, semaphore not ctx-aware ------------------
 
-// TestRunBoundedCapsGoroutinesNotJustNetworkCalls reproduces the
-// unbounded fan-out. The plain pools used to start one goroutine per
-// selected device and have each park on a semaphore, so 300 devices meant
-// 300 goroutines that could not be reclaimed.
+// Regression: pools started one goroutine per device, each parked on a
+// semaphore, so 300 devices meant 300 goroutines.
 func TestRunBoundedCapsGoroutinesNotJustNetworkCalls(t *testing.T) {
 	const items = 300
 
@@ -166,16 +148,15 @@ func TestRunBoundedCapsGoroutinesNotJustNetworkCalls(t *testing.T) {
 	if peak.Load() > maxProbes {
 		t.Fatalf("peak concurrency = %d, want at most %d", peak.Load(), maxProbes)
 	}
-	// A generous ceiling: the point is that it does not scale with items.
+	// Generous ceiling: the point is it does not scale with items.
 	if peakGoroutines.Load() > maxProbes+8 {
 		t.Fatalf("peak extra goroutines = %d for %d items; the fan-out is still sized by the input",
 			peakGoroutines.Load(), items)
 	}
 }
 
-// TestAcquireIsCancellable reproduces the parked-forever semaphore: a
-// plain `sem <- struct{}{}` cannot be interrupted, so on quit the queued
-// probes stayed in the queue and kept contacting devices as slots freed.
+// Regression: a plain `sem <- struct{}{}` cannot be interrupted, so on
+// quit the queued probes kept contacting devices as slots freed.
 func TestAcquireIsCancellable(t *testing.T) {
 	sem := make(chan struct{}, 1)
 	sem <- struct{}{} // fully occupied; nobody will ever release it
@@ -202,8 +183,7 @@ func TestAcquireIsCancellable(t *testing.T) {
 	}
 }
 
-// TestAcquireReleasesTheSlotItTookWhenCancelled: winning the race for a
-// slot and then finding the run cancelled must not strand the slot.
+// Winning a slot then finding the run cancelled must not strand it.
 func TestAcquireReleasesTheSlotItTookWhenCancelled(t *testing.T) {
 	sem := make(chan struct{}, 1)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -215,17 +195,15 @@ func TestAcquireReleasesTheSlotItTookWhenCancelled(t *testing.T) {
 	if len(sem) != 0 {
 		t.Fatal("the semaphore slot was not handed back")
 	}
-	// And the semaphore is still usable.
 	if !acquire(context.Background(), sem) {
 		t.Fatal("the semaphore was left unusable")
 	}
 }
 
-// -- finding 8: firmwareProvider.latest was read without the lock -----
+// -- firmwareProvider.latest was read without the lock ----------------
 
-// TestFirmwareProviderIsCurrentDoesNotRaceLatestVersion is the -race
-// reproduction: IsCurrent read f.latest with no once.Do and no lock while
-// LatestVersion wrote it from inside f.once.Do.
+// -race reproduction: IsCurrent read f.latest with no once.Do and no
+// lock while LatestVersion wrote it from inside f.once.Do.
 func TestFirmwareProviderIsCurrentDoesNotRaceLatestVersion(t *testing.T) {
 	release := make(chan struct{})
 	f := &firmwareProvider{provider: blockingProvider{release: release}}
@@ -240,7 +218,6 @@ func TestFirmwareProviderIsCurrentDoesNotRaceLatestVersion(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			// Whatever it answers, it must not race the write above.
 			_ = f.IsCurrent("1.5-rolling")
 		}()
 	}
@@ -256,8 +233,7 @@ func TestFirmwareProviderIsCurrentDoesNotRaceLatestVersion(t *testing.T) {
 }
 
 // blockingProvider resolves a fixed tag once release is closed, widening
-// the window in which IsCurrent and LatestVersion overlap. Nothing else
-// on the interface is exercised, and nothing here reaches the network.
+// the IsCurrent/LatestVersion overlap window.
 type blockingProvider struct {
 	release chan struct{}
 }

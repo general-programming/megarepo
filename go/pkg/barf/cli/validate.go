@@ -13,15 +13,13 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// This file ports barf/cli/validate.py. model.Load already rejects most of
-// what is checked here, but it dies on the first problem; validate does a
-// tolerant re-parse of the same document so one run reports everything
-// wrong with a network.yml at once. model.Load is then run as a
-// belt-and-braces check, and anything only it caught is reported too.
+// Ports barf/cli/validate.py. model.Load rejects most of what is checked here
+// but dies on the first problem, so validate re-parses the document
+// tolerantly, reports everything wrong at once, then runs model.Load too.
 
-// validDeviceTypes mirrors model's unexported deviceTypes (the Python
-// VENDOR_MAP), including the aliases. Keep the two in step: a type added
-// there and missing here shows up as a false "unsupported type".
+// validDeviceTypes mirrors model's unexported deviceTypes (Python's
+// VENDOR_MAP) including aliases; a type added there and missing here shows up
+// as a false "unsupported type".
 var validDeviceTypes = map[string]bool{
 	"vyos": true, "edgeos": true, "linux": true, "external": true,
 	"cisco": true, "cisco-ios": true, "eos": true,
@@ -32,8 +30,7 @@ var validDeviceTypes = map[string]bool{
 // problem is one validation finding.
 type problem struct {
 	// Where is the offending part of the document ("hosts.sea1-vpn-0").
-	Where string `json:"where"`
-	// Message says what is wrong with it.
+	Where   string `json:"where"`
 	Message string `json:"message"`
 	// Line is the 1-based network.yml line, or 0 when unknown.
 	Line int `json:"line,omitempty"`
@@ -112,9 +109,8 @@ func runValidate(o *Options, path string, jsonOut bool) error {
 	return nil
 }
 
-// validateFile parses path tolerantly and returns every problem found.
-// The returned error is reserved for problems reading or parsing the file
-// at all — a document that parses but is wrong is a report, not an error.
+// validateFile parses path tolerantly and returns every problem found. The
+// error is reserved for failing to read or parse the file at all.
 func validateFile(path string) (*validateReport, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -132,9 +128,8 @@ func validateFile(path string) (*validateReport, error) {
 	v := &validator{report: &validateReport{File: path, Problems: []problem{}}}
 	v.run(root.Content[0])
 
-	// model.Load is the real parser; anything it rejects that the pass
-	// above missed still has to surface, or validate would bless a file
-	// every other command refuses.
+	// model.Load is the real parser; anything it rejects that the pass above
+	// missed must still surface.
 	if _, err := loadNetwork(path); err != nil && len(v.report.Problems) == 0 {
 		v.add("network.yml", 0, "%s", err.Error())
 	}
@@ -143,14 +138,12 @@ func validateFile(path string) (*validateReport, error) {
 	return v.report, nil
 }
 
-// validator accumulates findings over one document.
 type validator struct {
 	report *validateReport
 	// sites are the site names global_meta declared, for host lookups.
 	sites map[string]bool
 	// hostIDs maps hostname to its `id`, 0 when absent.
-	hostIDs map[string]int
-	// hostOrder keeps hostnames in document order.
+	hostIDs   map[string]int
 	hostOrder []string
 }
 
@@ -281,9 +274,8 @@ func (v *validator) checkInterfaces(where string, node *yaml.Node) {
 			v.add(where, item.Line, "an interface has no name")
 			continue
 		}
-		// The same physical interface legitimately appears once per
-		// VLAN sub-interface, so a duplicate is only a duplicate when
-		// the VLAN matches too.
+		// One physical interface appears once per VLAN sub-interface, so a
+		// duplicate needs a matching VLAN too.
 		key := name
 		if vlan, ok := yint(yget(fields, "vlan")); ok {
 			key = fmt.Sprintf("%s.%d", name, vlan)
@@ -307,8 +299,8 @@ func (v *validator) checkInterfaces(where string, node *yaml.Node) {
 	}
 }
 
-// checkLinks walks the nested links: {peer: {uplink: spec}} mapping. The
-// inner key is side A, matching model.parseLinks.
+// checkLinks walks the nested {peer: {uplink: spec}} mapping; the inner key is
+// side A, matching model.parseLinks.
 func (v *validator) checkLinks(node *yaml.Node) {
 	known := map[string]bool{}
 	for _, name := range v.hostOrder {
@@ -338,8 +330,7 @@ func (v *validator) checkLinks(node *yaml.Node) {
 				port, pinned = yint(yget(ymap(inner.val), "port"))
 			}
 			if !pinned {
-				// Derived ports need both ids; model.Load refuses
-				// otherwise.
+				// Derived ports need both ids; model.Load refuses otherwise.
 				missing := []string{}
 				for _, name := range []string{sideA, sideB} {
 					if known[name] && v.hostIDs[name] == 0 {
@@ -378,9 +369,8 @@ func derivedLinkPort(a, b int) int {
 }
 
 // --- tolerant YAML helpers -------------------------------------------
-//
-// model has equivalents, but they are unexported and validate must keep
-// walking a document model.Load would have rejected outright.
+// model's equivalents are unexported, and validate must keep walking a
+// document model.Load would have rejected.
 
 type yentry struct {
 	key string
@@ -394,9 +384,9 @@ func yderef(n *yaml.Node) *yaml.Node {
 	return n
 }
 
-// ymap flattens a mapping into ordered entries, resolving `<<` merge keys
-// the way PyYAML does: merged entries first, an explicit key of the same
-// name overriding in place.
+// ymap flattens a mapping into ordered entries, resolving `<<` merge keys as
+// PyYAML does: merged entries first, an explicit same-name key overriding in
+// place.
 func ymap(n *yaml.Node) []yentry {
 	n = yderef(n)
 	if n == nil || n.Kind != yaml.MappingNode {

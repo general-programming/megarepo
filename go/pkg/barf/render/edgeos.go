@@ -8,35 +8,21 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// EdgeOS renders a Ubiquiti EdgeOS/vyatta host in the vpn role.
+// EdgeOS renders a Ubiquiti EdgeOS/vyatta host in the vpn role. Port of
+// vpn/edgeos.j2, whose shared prefix is byte-identical to the VyOS blocks
+// extracted from the same include; only interface_prefix and fabric differ.
 //
-// Port of projects/barf/barf/templates/vpn/edgeos.j2, which is
-// `{% include 'common/vyos.j2' %}` plus its own fabric section. The
-// shared prefix is byte-identical to the VyOS blocks (the blocks were
-// extracted from that very include), so this reuses them; only
-// `interface_prefix` (barf/vendors/edgeos.py) and the fabric section
-// differ.
+// The legacy template is ported bug-for-bug because parity is the contract.
+// Three bugs reproduced here, unfixed because barf has no EdgeOS host to
+// validate against:
 //
-// This template is legacy and unmaintained, and the port is deliberately
-// bug-for-bug faithful to it. Three things it gets wrong on the current
-// fabric, reproduced here because parity is the contract:
-//
-//   - The tunnel interface is named from the LAST THREE DIGITS of the
-//     link port ("wg080" for port 51080), so ports sharing a suffix
-//     collide. The VyOS blocks use the whole port ("wg51080").
-//   - Unnumbered (IPv6 link-local, v6only) fabric links have no /31, so
-//     `link.get_ip()` is None and the template interpolates the literal
-//     string "None" into the address and neighbor lines. Every modern
+//   - Tunnels are named from the LAST THREE DIGITS of the link port
+//     ("wg080" for 51080), so ports sharing a suffix collide.
+//   - Unnumbered links have no /31, so `link.get_ip()` is None and the
+//     literal "None" lands in the address and neighbor lines; every modern
 //     fabric link is unnumbered, so this output does not work as-is.
-//   - Peers are keyed by public key rather than by name, and the tunnel
-//     carries only `allowed-ips 0.0.0.0/0` (VyOS 1.3-era syntax, no
-//     IPv6). IPsec links are not handled at all.
-//
-// It is ported rather than fixed because barf has no EdgeOS host today:
-// there is nothing to validate a "fixed" version against, and inventing
-// a different output would be a behaviour change wearing a port's
-// clothes. Anything that grows a real EdgeOS device should move it onto
-// the block path the way vyos/linux/mikrotik went.
+//   - Peers are keyed by public key, tunnels carry only
+//     `allowed-ips 0.0.0.0/0` (no IPv6), and IPsec links are not handled.
 type EdgeOS struct{}
 
 // edgeosKeepalive is the persistent-keepalive the template hardcodes.
@@ -76,9 +62,8 @@ func (EdgeOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, e
 	return strings.Join(lines, "\n") + "\n", nil
 }
 
-// edgeosInterfacePrefix is EdgeOSHost.interface_prefix. Unlike the VyOS
-// one it has no bridge or wireguard branch, so modeled bridges and
-// static WireGuard tunnels render under `set interfaces ethernet`.
+// edgeosInterfacePrefix is EdgeOSHost.interface_prefix; with no bridge or
+// wireguard branch, both render under `set interfaces ethernet`.
 func edgeosInterfacePrefix(iface *model.Interface) string {
 	interfaceType := "ethernet"
 	if iface.Management {
@@ -96,9 +81,8 @@ func edgeosInterfaces(c *renderCtx) ([]string, error) {
 	return vyattaInterfaces(c, edgeosInterfacePrefix)
 }
 
-// edgeosFabric is the vpn/edgeos.j2 body: one WireGuard tunnel and one
-// BGP neighbor per fabric link, then the announced networks and the
-// peer-group/timer boilerplate.
+// edgeosFabric is the vpn/edgeos.j2 body: a tunnel and BGP neighbor per link,
+// then announced networks and boilerplate.
 func edgeosFabric(c *renderCtx) ([]string, error) {
 	// The template's blank separator after common/vyos.j2.
 	lines := []string{""}
@@ -128,8 +112,7 @@ func edgeosFabric(c *renderCtx) ([]string, error) {
 			iface+" route-allowed-ips false",
 			fmt.Sprintf("%s peer '%s' allowed-ips 0.0.0.0/0", iface, peerKeys.Public),
 		)
-		// Only dialable peers get an endpoint; the template uses the
-		// raw network.yml `address:` spelling, unquoted here.
+		// Only dialable peers get an endpoint, in the raw network.yml spelling.
 		if peer.AddressRaw != "" {
 			lines = append(lines,
 				fmt.Sprintf("%s peer %s endpoint %s:%d", iface, peerKeys.Public,
@@ -147,9 +130,8 @@ func edgeosFabric(c *renderCtx) ([]string, error) {
 		}
 		lines = append(lines,
 			fmt.Sprintf("%s remote-as %d", neighbor, peer.ASN),
-			// Rendered from `device.management_address.ip`, which is
-			// Undefined (and so empty, leaving the line's trailing
-			// space) on a host with no management interface.
+			// `device.management_address.ip` is Undefined without a management
+			// interface, which is why this line keeps its trailing space.
 			fmt.Sprintf("%s update-source %s", neighbor, managementIP(c.host)),
 			fmt.Sprintf("%s peer-group %s", neighbor, peerGroup),
 		)
@@ -158,8 +140,8 @@ func edgeosFabric(c *renderCtx) ([]string, error) {
 	for _, network := range c.host.Networks {
 		lines = append(lines, fmt.Sprintf("set protocols bgp %s network %s", asn, network))
 	}
-	// The loopback announcement carries its prefix length, and is the
-	// literal "None" on a host with no management interface.
+	// The loopback announcement carries its prefix length, and is literally
+	// "None" without a management interface.
 	management := "None"
 	if address := c.host.ManagementAddress(); address != nil {
 		management = address.String()
@@ -184,8 +166,7 @@ func edgeosTunnelName(port int) string {
 	return "wg" + digits
 }
 
-// managementIP is `device.management_address.ip`: the bare address of
-// the management interface, empty when there is none.
+// managementIP is `device.management_address.ip`, empty when there is none.
 func managementIP(h *model.Host) string {
 	if address := h.ManagementAddress(); address != nil {
 		return address.IP.String()
@@ -193,8 +174,8 @@ func managementIP(h *model.Host) string {
 	return ""
 }
 
-// pythonNone renders an absent value the way Jinja renders Python's
-// None, which is what the legacy template does with unnumbered links.
+// pythonNone renders an absent value as Jinja renders None -- what the legacy
+// template does with unnumbered links.
 func pythonNone(value string) string {
 	if value == "" {
 		return "None"

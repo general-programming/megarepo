@@ -7,12 +7,9 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
-// VyOS renders a whole VyOS config as `set` commands.
-//
-// Port of the ("vpn", "vyos") entry of the Python BLOCK_REGISTRY
-// (projects/barf/barf/configs/__init__.py): the block list order IS the
-// output order and part of the byte-parity contract, as are the blank
-// separator lines each block carries.
+// VyOS renders a whole VyOS config as `set` commands. Port of the
+// ("vpn", "vyos") Python BLOCK_REGISTRY entry: block order IS output order
+// and, like the blank separator lines each block carries, byte-parity contract.
 type VyOS struct{}
 
 // renderCtx is the Go twin of barf.configs.base.RenderContext.
@@ -24,8 +21,7 @@ type renderCtx struct {
 
 	// links are the host's own fabric links, in network.yml order.
 	links []model.Link
-	// importRules are the geographic weighting inputs, empty for
-	// unweighted hosts.
+	// importRules are the geographic weighting inputs, empty when unweighted.
 	importRules []SiteRules
 	originSite  *model.Site
 	communityAS int
@@ -58,8 +54,7 @@ func (c *renderCtx) peer(link model.Link) (*model.Host, error) {
 // Render returns the full VyOS config text for h.
 func (VyOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, error) {
 	if h.Role != "vpn" {
-		// Not a gap in the port: Python has no vyos template outside
-		// the vpn role either (see the renderers table in render.go).
+		// Not a gap: Python has no vyos template outside the vpn role either.
 		return "", noTemplateError(h)
 	}
 	ctx := newRenderCtx(h, n, s)
@@ -94,8 +89,7 @@ func (VyOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, err
 
 // -- system -----------------------------------------------------------
 
-// vyosSystemConfig is configs.system.SystemConfig: identity, SNMP, DNS,
-// syslog, conntrack.
+// vyosSystemConfig is configs.system.SystemConfig.
 func vyosSystemConfig(c *renderCtx) ([]string, error) {
 	adminPassword, err := c.secrets.HostSecret(c.host.Hostname, "admin-password")
 	if err != nil {
@@ -122,8 +116,7 @@ func vyosSystemConfig(c *renderCtx) ([]string, error) {
 	}
 	lines = append(lines,
 		"",
-		// The factory-default empty loopback node; rendering it keeps
-		// the owned diff clean instead of fighting the default.
+		// Factory-default empty loopback node; rendering it keeps the diff clean.
 		"set interfaces loopback lo",
 		"",
 		"set system syslog local facility all level info",
@@ -139,8 +132,7 @@ func vyosSystemConfig(c *renderCtx) ([]string, error) {
 	return lines, nil
 }
 
-// vyosSSHConfig is configs.system.SshConfig: the fleet ssh_keys on the
-// fleet-standard supertech user.
+// vyosSSHConfig is configs.system.SshConfig.
 func vyosSSHConfig(c *renderCtx) ([]string, error) {
 	lines := []string{"", "set service ssh disable-password-authentication"}
 	for _, sshKey := range c.global.SSHKeys {
@@ -160,8 +152,7 @@ func vyosSSHConfig(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// vyosPlatform is configs.system.VyosPlatform: update-check, SSH, BFD,
-// HTTPS API, ping.
+// vyosPlatform is configs.system.VyosPlatform.
 func vyosPlatform(c *renderCtx) ([]string, error) {
 	apiKey, err := vaultSecret(c.secrets, "vyos_api_password")
 	if err != nil {
@@ -202,16 +193,15 @@ func vyosNTPConfig(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// vyosExtraConfig is configs.system.ExtraConfig: verbatim extra_config
-// lines, carrying the template's final unconditional blank separator.
+// vyosExtraConfig is configs.system.ExtraConfig; the leading blank is the
+// template's final unconditional separator.
 func vyosExtraConfig(c *renderCtx) ([]string, error) {
 	return append([]string{""}, c.host.ExtraConfig...), nil
 }
 
 // -- interfaces -------------------------------------------------------
 
-// vyosInterfacePrefix is VyOSHost.interface_prefix: the `set interfaces
-// <type> <name> [vif <vid>]` stem every interface line hangs off.
+// vyosInterfacePrefix is VyOSHost.interface_prefix, the stem lines hang off.
 func vyosInterfacePrefix(iface *model.Interface) string {
 	interfaceType := "ethernet"
 	switch {
@@ -230,15 +220,13 @@ func vyosInterfacePrefix(iface *model.Interface) string {
 	return prefix
 }
 
-// vyosInterfaces is configs.interfaces.InterfacesConfig: every modeled
-// interface through the one vyatta loop.
+// vyosInterfaces is configs.interfaces.InterfacesConfig.
 func vyosInterfaces(c *renderCtx) ([]string, error) {
 	return vyattaInterfaces(c, vyosInterfacePrefix)
 }
 
-// vyattaInterfaces is the shared common/vyatta.j2 interface loop. The
-// only thing that varies between the vyatta-lineage vendors is
-// `device.interface_prefix`, so it is the one parameter.
+// vyattaInterfaces is the shared common/vyatta.j2 loop; interface_prefix is
+// the only thing that varies between vyatta vendors.
 func vyattaInterfaces(c *renderCtx, interfacePrefix func(*model.Interface) string) ([]string, error) {
 	var lines []string
 	for i := range c.host.Interfaces {
@@ -279,8 +267,7 @@ func vyattaInterfaces(c *renderCtx, interfacePrefix func(*model.Interface) strin
 	return lines, nil
 }
 
-// vyosStaticWireguard renders a static (non-fabric) WireGuard tunnel
-// declared on an interface.
+// vyosStaticWireguard renders a static (non-fabric) WireGuard tunnel.
 func vyosStaticWireguard(c *renderCtx, iface *model.Interface, prefix string) ([]string, error) {
 	wg := iface.Wireguard
 	privateKey, err := c.secrets.HostSecret(c.host.Hostname, wgString(wg, "private_key_secret"))
@@ -354,8 +341,8 @@ func wgStrings(m map[string]any, key string) []string {
 
 // -- firewall / nat ---------------------------------------------------
 
-// vyosFirewallGroups is configs.firewall.FirewallGroups. VyOS
-// interface-groups are flat, so include= nesting is resolved here.
+// vyosFirewallGroups is configs.firewall.FirewallGroups; interface-groups are
+// flat, so include= nesting is resolved here.
 func vyosFirewallGroups(c *renderCtx) ([]string, error) {
 	var lines []string
 	for _, group := range c.host.Firewall.Address {
@@ -450,8 +437,7 @@ func vyosStaticRoutes(c *renderCtx) ([]string, error) {
 
 // -- fabric -----------------------------------------------------------
 
-// vyosIPsecDefaults is configs.fabric.IpsecDefaults: the fleet-standard
-// ESP/IKE groups, vpn-role VyOS boilerplate.
+// vyosIPsecDefaults is configs.fabric.IpsecDefaults.
 func vyosIPsecDefaults(c *renderCtx) ([]string, error) {
 	return []string{
 		"",
@@ -473,12 +459,9 @@ func vyosIPsecDefaults(c *renderCtx) ([]string, error) {
 	}, nil
 }
 
-// vyosSiteWeighting is configs.fabric.SiteWeighting: the origin-site tag
-// route-map out and the per-neighbor-site local-pref maps in.
-//
-// The section is gated on originSite but its trailing separator is not
-// (the template's blank line renders unconditionally), so an unweighted
-// host still emits the blank.
+// vyosSiteWeighting is configs.fabric.SiteWeighting. The section is gated on
+// originSite but its trailing separator is not, so unweighted hosts still
+// emit the blank line.
 func vyosSiteWeighting(c *renderCtx) ([]string, error) {
 	var lines []string
 	if c.originSite != nil {
@@ -517,20 +500,17 @@ func vyosSiteWeighting(c *renderCtx) ([]string, error) {
 	return append(lines, ""), nil
 }
 
-// vyosFabricWireGuard is configs.fabric.FabricWireGuard's vyos method.
-//
-// VyOS interleaves each link's interface (WireGuard or IPsec/vti) with
-// its BGP neighbor, so the whole per-link loop lives here; the shared
-// BGP tail is vyosFabricBGP.
+// vyosFabricWireGuard is configs.fabric.FabricWireGuard's vyos method. VyOS
+// interleaves each link's interface with its BGP neighbor, so the whole
+// per-link loop lives here; the shared BGP tail is vyosFabricBGP.
 func vyosFabricWireGuard(c *renderCtx) ([]string, error) {
 	management := c.host.ManagementAddress()
 	var lines []string
 
 	for _, link := range c.links {
 		if management == nil {
-			// The template silently rendered a bare `update-source`
-			// here; a fabric host without a management interface is a
-			// modeling error.
+			// The template silently rendered a bare `update-source` here; a
+			// fabric host without a management interface is a modeling error.
 			return nil, fmt.Errorf("%s: fabric BGP needs a management address for update-source",
 				c.host.Hostname)
 		}
@@ -666,12 +646,10 @@ func vyosWireguardLink(c *renderCtx, link model.Link, peer *model.Host) ([]strin
 	return lines, interfaceName, nil
 }
 
-// vyosFabricBGP is configs.fabric.FabricBGP's vyos method: the announced
-// networks plus the shared fabric peer-group and timers.
+// vyosFabricBGP is configs.fabric.FabricBGP's vyos method.
 func vyosFabricBGP(c *renderCtx) ([]string, error) {
-	// One line per network: the route-map suffix rides the same config
-	// node, so a separate bare `network X` line would read as a
-	// forever-pending diff against the device.
+	// The route-map suffix rides the same config node; a separate bare
+	// `network X` line would read as a forever-pending diff.
 	tagSuffix := ""
 	if c.originSite != nil {
 		tagSuffix = " route-map TAG-SITE-ORIGIN"
@@ -698,8 +676,8 @@ func vyosFabricBGP(c *renderCtx) ([]string, error) {
 		"set protocols bgp peer-group fabric address-family ipv4-unicast",
 		"set protocols bgp peer-group fabric address-family ipv6-unicast",
 		"set protocols bgp peer-group fabric capability extended-nexthop",
-		// Numbered fabric peers drop routes from the v6-only sea1 spine
-		// without this: it lets FRR set a resolvable IPv4 next-hop.
+		// Without this, numbered fabric peers drop routes from the v6-only
+		// sea1 spine: it lets FRR set a resolvable IPv4 next-hop.
 		"set protocols bgp peer-group fabric disable-connected-check",
 		"set protocols bgp timers keepalive 10",
 		"set protocols bgp timers holdtime 30",

@@ -14,22 +14,15 @@ import (
 	"time"
 )
 
-// Regression tests for the two ways the provider misbehaved under
-// concurrency. Everything here is served by httptest; nothing reaches
-// GitHub or a mirror.
+// Concurrency regression tests; all served by httptest.
 
 // -- finding 4: ".partial" was not unique -----------------------------
 
-// TestConcurrentDownloadsDoNotCorruptTheImage reproduces the corrupt-ISO
-// path. The scratch file used to be a deterministic "<target>.partial",
-// so two barf processes sharing ~/.cache/barf/images both os.Create'd
-// (and truncated) the same inode and io.Copy'd into it at independent
-// offsets. Both wrote Size bytes, so the short-download guard passed for
-// both, and os.Rename promoted an interleaved file — which is then
-// mirrored and handed to a router as a system image.
-//
-// The server hands each request a *different* body of the same length, so
-// any interleaving is visible: a correct download is all one byte value.
+// Regression: the scratch file was a deterministic "<target>.partial", so two
+// processes sharing the cache truncated the same inode and copied into it at
+// independent offsets; both passed the length guard and an interleaved image
+// got promoted. Each response body is a different repeated byte, so any
+// interleaving shows up.
 func TestConcurrentDownloadsDoNotCorruptTheImage(t *testing.T) {
 	const size = 512 * 1024
 	const chunk = 4096
@@ -50,7 +43,6 @@ func TestConcurrentDownloadsDoNotCorruptTheImage(t *testing.T) {
 				return
 			}
 			w.(http.Flusher).Flush()
-			// Interleave the two writers deterministically.
 			time.Sleep(time.Millisecond)
 		}
 	}))
@@ -59,8 +51,7 @@ func TestConcurrentDownloadsDoNotCorruptTheImage(t *testing.T) {
 	dir := t.TempDir()
 	asset := Asset{Name: "vyos-rolling-generic-amd64.iso", Size: size, URL: srv.URL}
 
-	// Two independent providers, as two barf processes would be, sharing
-	// one cache directory.
+	// Two independent providers sharing one cache directory.
 	const downloaders = 2
 	paths := make([]string, downloaders)
 	errs := make([]error, downloaders)
@@ -88,8 +79,7 @@ func TestConcurrentDownloadsDoNotCorruptTheImage(t *testing.T) {
 	if len(body) != size {
 		t.Fatalf("cached image is %d bytes, want %d", len(body), size)
 	}
-	// Every byte must come from ONE response. A mix means the two
-	// downloads shared a file.
+	// A mix of byte values means the two downloads shared a file.
 	fill := body[0]
 	for i, b := range body {
 		if b != fill {
@@ -98,7 +88,6 @@ func TestConcurrentDownloadsDoNotCorruptTheImage(t *testing.T) {
 		}
 	}
 
-	// And no scratch file was left behind.
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		t.Fatalf("reading the cache dir: %v", err)
@@ -126,11 +115,9 @@ func names(entries []os.DirEntry) []string {
 
 // -- finding 5: the mutex was held across the HTTP round trip ---------
 
-// TestFetchReleaseDoesNotBlockOtherCallers reproduces the head-of-line
-// block. fetchRelease used to hold v.mu across Do + decode, and
-// firmware.For("vyos") returns a package-level shared provider, so a
-// second caller — even one whose context is already cancelled — waited
-// out the first caller's full 30s HTTP timeout before it could fail.
+// Regression: fetchRelease held v.mu across Do + decode on the shared
+// package-level provider, so a second caller — even with a dead context —
+// waited out the first caller's full 30s HTTP timeout.
 func TestFetchReleaseDoesNotBlockOtherCallers(t *testing.T) {
 	release := make(chan struct{})
 	var once sync.Once
@@ -154,12 +141,10 @@ func TestFetchReleaseDoesNotBlockOtherCallers(t *testing.T) {
 		_, err := v.LatestVersion(t.Context())
 		slow <- err
 	}()
-	// Give it time to actually get into the round trip (and so, before
-	// the fix, to be holding the lock).
+	// Let it get into the round trip (i.e. holding the lock, before the fix).
 	time.Sleep(100 * time.Millisecond)
 
-	// Caller two arrives with a context that is already dead. It must come
-	// straight back rather than queueing behind caller one.
+	// Caller two's context is already dead; it must not queue behind caller one.
 	cancelled, cancel := context.WithCancel(t.Context())
 	cancel()
 
@@ -193,9 +178,8 @@ func TestFetchReleaseDoesNotBlockOtherCallers(t *testing.T) {
 	}
 }
 
-// TestConcurrentFetchReleaseAgreesOnOneRelease is the -race companion:
-// several cold callers at once must all see the same cached release, and
-// only a successful fetch may be cached.
+// -race companion: cold callers must agree on one release, and only a
+// successful fetch may be cached.
 func TestConcurrentFetchReleaseAgreesOnOneRelease(t *testing.T) {
 	srv, calls := releaseServer(t, releaseFixture(), http.StatusOK)
 	v := &VyOS{ReleaseURL: srv.URL}
@@ -222,9 +206,8 @@ func TestConcurrentFetchReleaseAgreesOnOneRelease(t *testing.T) {
 			t.Fatalf("caller %d saw %q, want %q", i, got, fleetLatest)
 		}
 	}
-	// A cold stampede may cost a few duplicate GETs (deliberately
-	// preferred over an uncancellable wait), but the cache must settle:
-	// once warm, no further requests.
+	// A cold stampede may cost duplicate GETs (preferred over an uncancellable
+	// wait), but once warm the cache must issue no further requests.
 	before := calls.Load()
 	if _, err := v.LatestVersion(t.Context()); err != nil {
 		t.Fatalf("warm read: %v", err)

@@ -14,13 +14,11 @@ var (
 func init() {
 	var err error
 
-	// Create the encoder
 	ZSTDEncoder, err = zstd.NewWriter(nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create ZSTD encoder: %s", err))
 	}
 
-	// Create the decoder
 	ZSTDDecoder, err = zstd.NewReader(nil)
 	if err != nil {
 		panic(fmt.Sprintf("Failed to create ZSTD decoder: %s", err))

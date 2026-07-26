@@ -48,8 +48,7 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
 
-	// Render serially for the same reason status does: templating can
-	// mint secrets, and that must not race.
+	// Render serially: templating can mint secrets, and that must not race.
 	rendered := make(map[string]string, len(hosts))
 	renderErrs := make(map[string]error, len(hosts))
 	for _, h := range hosts {
@@ -129,8 +128,8 @@ func runDiffJobsPlain(ctx context.Context, jobs []tui.DiffJob) []tui.DiffOutcome
 	return outcomes
 }
 
-// diffJob renders one host against its running config. Errors come back
-// in the outcome so one unreachable device never hides the rest.
+// diffJob renders one host against its running config. Errors come back in
+// the outcome so one unreachable device never hides the rest.
 func diffJob(o *Options, net *model.Network, h *model.Host, rendered string, renderErr error, secrets SecretSource, opts DiffOptions) func(context.Context) tui.DiffOutcome {
 	log := o.Logger()
 
@@ -156,8 +155,7 @@ func diffJob(o *Options, net *model.Network, h *model.Host, rendered string, ren
 			return out
 		}
 
-		// Vendor-appropriate comparison, shared with `status` and
-		// `deploy` so the three can never disagree. See compare.go.
+		// Vendor-appropriate comparison, shared with `status` and `deploy`.
 		d, err := compareConfig(ctx, reader, h, net, rendered, secrets, opts)
 		if err != nil {
 			log.Debug("config comparison failed", "host", h.Hostname, "err", err)
