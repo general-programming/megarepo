@@ -81,6 +81,43 @@ func lookup(entries []entry, key string) *yaml.Node {
 	return nil
 }
 
+// Entry is one key/value pair of a YAML mapping, in document order; the
+// exported shape of entry, for callers outside model that need the same
+// `<<`-merge semantics without going through Load.
+type Entry struct {
+	Key string
+	Val *yaml.Node
+}
+
+// MapEntries flattens a mapping into ordered key/value pairs, resolving `<<`
+// exactly as mapEntries/PyYAML does (earlier alias wins). Exported so a
+// second walker — cli's validate, which must keep walking a document Load
+// would have rejected — does not reimplement merge order and risk drifting
+// from it.
+func MapEntries(n *yaml.Node) []Entry {
+	in := mapEntries(n)
+	out := make([]Entry, len(in))
+	for i, e := range in {
+		out[i] = Entry{Key: e.key, Val: e.val}
+	}
+	return out
+}
+
+// Lookup finds key in entries (as returned by MapEntries), dereferencing its
+// value.
+func Lookup(entries []Entry, key string) *yaml.Node {
+	for _, e := range entries {
+		if e.Key == key {
+			return deref(e.Val)
+		}
+	}
+	return nil
+}
+
+// Deref follows YAML alias nodes to their target; exported for the same
+// reason as MapEntries.
+func Deref(n *yaml.Node) *yaml.Node { return deref(n) }
+
 func nodeString(n *yaml.Node) string {
 	n = deref(n)
 	if n == nil || n.Kind != yaml.ScalarNode || n.Tag == "!!null" {
