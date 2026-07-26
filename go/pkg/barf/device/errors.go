@@ -21,7 +21,38 @@ var (
 
 	// ErrUnsupported is returned for devicetypes with no read transport.
 	ErrUnsupported = errors.New("unsupported devicetype")
+
+	// ErrPreSend means the failure happened before any request reached the
+	// device: resolving a secret (the VyOS API key, EOS credentials),
+	// resolving an endpoint, or an op-shape guard (an empty delete path, an
+	// EOS-shaped Op sent to the VyOS writer). Nothing could have been
+	// applied, so a caller distinguishing "maybe applied" from "definitely
+	// not" (cli's writerAdapter.Configure) must not treat this like an
+	// in-flight failure.
+	ErrPreSend = errors.New("device: refused before any request reached the device")
 )
+
+// PreSendError wraps a failure that happened before a request was sent.
+type PreSendError struct {
+	What string
+	Err  error
+}
+
+func (e *PreSendError) Error() string {
+	if e.Err != nil {
+		return fmt.Sprintf("device: %s: %v", e.What, e.Err)
+	}
+	return fmt.Sprintf("device: %s", e.What)
+}
+
+// Unwrap exposes both ErrPreSend (so errors.Is(err, ErrPreSend) works) and
+// the underlying cause, if any (so errors.Is/As still reach it).
+func (e *PreSendError) Unwrap() []error {
+	if e.Err != nil {
+		return []error{ErrPreSend, e.Err}
+	}
+	return []error{ErrPreSend}
+}
 
 // WritesNotAllowedError guards accidental construction of a writer, where
 // WriteAttemptError guards the read transports.
@@ -64,7 +95,9 @@ func (e *UnmanagedCommandError) Unwrap() error { return ErrWriteAttempt }
 // IsRefusal reports whether err is any guard's refusal to change a device.
 // The check that matters after a failed deploy: a refusal means no write
 // reached the device, while any other error may have left a half-applied
-// commit.
+// commit. ErrPreSend is the broader case: not a closed-allowlist refusal
+// specifically, but still provably pre-send (a secret/endpoint lookup or an
+// op-shape guard failed before any bytes went to the device).
 func IsRefusal(err error) bool {
-	return errors.Is(err, ErrWritesNotAllowed) || errors.Is(err, ErrWriteAttempt)
+	return errors.Is(err, ErrWritesNotAllowed) || errors.Is(err, ErrWriteAttempt) || errors.Is(err, ErrPreSend)
 }

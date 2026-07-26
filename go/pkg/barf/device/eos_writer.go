@@ -166,12 +166,15 @@ func (w *EOSWriter) SaveConfig(ctx context.Context) error {
 func (w *EOSWriter) run(ctx context.Context, cmds ...string) ([]json.RawMessage, error) {
 	admin, enable, err := w.credentials()
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", w.host.Hostname, err)
+		return nil, &PreSendError{What: fmt.Sprintf("%s: resolving credentials", w.host.Hostname), Err: err}
 	}
 	address, err := w.resolver.resolve(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("%s: no address answering on %d (is eAPI enabled? see docs/network/arista-adoption.md): %w",
-			w.host.Hostname, w.opts.port(), err)
+		return nil, &PreSendError{
+			What: fmt.Sprintf("%s: no address answering on %d (is eAPI enabled? see docs/network/arista-adoption.md)",
+				w.host.Hostname, w.opts.port()),
+			Err: err,
+		}
 	}
 
 	payload := make([]any, 0, len(cmds)+1)

@@ -60,6 +60,17 @@ func (a writerAdapter) Configure(ctx context.Context, ops []ConfigOp) error {
 		converted = append(converted, device.Op{Command: op.Command, Verb: op.Verb, Path: op.Path})
 	}
 	if err := a.w.Configure(ctx, converted); err != nil {
+		// device.IsRefusal covers every guard that runs BEFORE a request
+		// reaches the device: ErrWritesNotAllowed, a closed-allowlist
+		// WriteAttemptError/UnmanagedCommandError, and PreSendError (a
+		// lazily-fetched API key/credentials failure, an unreachable
+		// endpoint, or an empty-path-delete guard). None of these could
+		// have applied the config, so the "maybe applied, NOT saved"
+		// warning would be actively misleading here — it is reserved for
+		// errors from the write itself.
+		if device.IsRefusal(err) {
+			return fmt.Errorf("%s: refused: %w", a.hostname, err)
+		}
 		return unsavedConfigError{host: a.hostname, err: err}
 	}
 	return nil
