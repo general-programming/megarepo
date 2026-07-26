@@ -30,7 +30,10 @@ type listJSON struct {
 }
 
 func runList(o *Options, targets []string, jsonOut bool) error {
-	_, hosts, err := o.loadTargets(targets)
+	// `list` has no Python original; it keeps the historical "no args means
+	// the whole fleet" behaviour, but opts in explicitly rather than relying
+	// on resolveTargets to default an empty selection.
+	_, hosts, err := o.loadTargets(defaultAllTargets(targets))
 	if err != nil {
 		return err
 	}

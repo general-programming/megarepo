@@ -24,7 +24,7 @@ func newGenerateCmd(o *Options) *cobra.Command {
 	var outputDir string
 
 	cmd := &cobra.Command{
-		Use:   "generate [hosts...]",
+		Use:   "generate <hosts...|all>",
 		Short: "Render configs for the selected hosts into an output directory",
 		Long: "generate renders each selected host's config into\n" +
 			"<output>/<role>/<hostname>, plus a cloud-init twin under\n" +
@@ -39,7 +39,11 @@ func newGenerateCmd(o *Options) *cobra.Command {
 	return cmd
 }
 
-func runGenerate(_ context.Context, o *Options, targets []string, outputDir string) error {
+func runGenerate(ctx context.Context, o *Options, targets []string, outputDir string) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	net, hosts, err := o.loadTargets(targets)
 	if err != nil {
 		return err
@@ -53,6 +57,7 @@ func runGenerate(_ context.Context, o *Options, targets []string, outputDir stri
 	if err != nil {
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
+	prefetchLinkKeys(ctx, secrets, hosts, net.Links)
 
 	for _, h := range hosts {
 		text, err := renderHost(h, net, secrets)

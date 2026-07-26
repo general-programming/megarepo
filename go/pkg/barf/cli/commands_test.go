@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/model"
 )
 
 func TestListPlain(t *testing.T) {
@@ -87,11 +89,30 @@ func TestGenerateWritesConfigs(t *testing.T) {
 func TestGenerateSkipsNonTemplatable(t *testing.T) {
 	h := newHarness(t)
 	dir := t.TempDir()
-	if err := h.run(t, "generate", "-o", dir); err != nil {
+	if err := h.run(t, "generate", "all", "-o", dir); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(dir, "external")); !os.IsNotExist(err) {
 		t.Error("a non-templatable host was rendered")
+	}
+}
+
+// Regression: an empty target list used to mean the whole fleet, so a bare
+// `barf generate`/`diff` with no arguments silently rendered/probed every
+// managed device. It must now be a usage error; "all" is the explicit spelling.
+func TestGenerateWithNoTargetsIsAnError(t *testing.T) {
+	h := newHarness(t)
+	err := h.run(t, "generate", "-o", t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "no hosts given") {
+		t.Fatalf("err = %v, want a no-hosts-given usage error", err)
+	}
+}
+
+func TestDiffWithNoTargetsIsAnError(t *testing.T) {
+	h := newHarness(t)
+	err := h.run(t, "diff")
+	if err == nil || !strings.Contains(err.Error(), "no hosts given") {
+		t.Fatalf("err = %v, want a no-hosts-given usage error", err)
 	}
 }
 
@@ -110,7 +131,7 @@ func TestDiffPlain(t *testing.T) {
 	h.readers["sea1-vpn-0"] = fakeReader{running: "set system host-name sea1-vpn-0\n"}
 	h.readers["fmt2-core"] = fakeReader{running: "set system host-name wrong-name\n"}
 
-	if err := h.run(t, "diff"); err != nil {
+	if err := h.run(t, "diff", "all"); err != nil {
 		t.Fatal(err)
 	}
 	out := h.out.String()
@@ -131,13 +152,38 @@ func TestDiffPlain(t *testing.T) {
 	}
 }
 
+// Regression: diff used to select hosts by isTemplatable alone, but several
+// templatable vendors (linux, mikrotik, cisco, ...) have no reader at all —
+// bare `barf diff` on a fleet with any of them always emitted a failed row
+// and exited 1. A no-reader vendor must be an explicit skip, matching
+// Python's diff_config raising NotImplementedError -> "skipped: no diff
+// support", and must not fail the run or the exit code.
+func TestDiffSkipsTemplatableVendorsWithNoReader(t *testing.T) {
+	h := newHarness(t)
+	h.reachable["10.0.0.1"] = true
+	h.reachable["10.0.0.2"] = true
+	h.readers["sea1-vpn-0"] = fakeReader{running: "set system host-name sea1-vpn-0\n"}
+	h.readers["fmt2-core"] = fakeReader{running: "set system host-name fmt2-core\n"}
+	// mikrotik: isTemplatable true (the fake mirrors the real vendor table),
+	// reportsStatus false (real barf has no MikroTik reader either).
+	h.net.Hosts = append(h.net.Hosts, model.Host{Hostname: "sea1-mikrotik-0", DeviceType: "mikrotik", Role: "vpn", Site: "sea1"})
+
+	if err := h.run(t, "diff", "all"); err != nil {
+		t.Fatalf("a skip must not fail the run: %v\n%s", err, h.out.String())
+	}
+	out := h.out.String()
+	if !strings.Contains(out, "sea1-mikrotik-0  skipped: no diff support") {
+		t.Errorf("skip row missing or misformatted:\n%s", out)
+	}
+}
+
 func TestDiffFailureExitsNonZero(t *testing.T) {
 	h := newHarness(t)
 	h.reachable["10.0.0.1"] = true
 	h.readers["sea1-vpn-0"] = fakeReader{configErr: errors.New("boom")}
 	h.readers["fmt2-core"] = fakeReader{}
 
-	err := h.run(t, "diff")
+	err := h.run(t, "diff", "all")
 	if err == nil {
 		t.Fatal("a failed diff must be an error exit")
 	}

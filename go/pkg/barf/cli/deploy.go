@@ -33,7 +33,7 @@ func newDeployCmd(o *Options) *cobra.Command {
 	var opts DeployOptions
 
 	cmd := &cobra.Command{
-		Use:   "deploy [hosts...]",
+		Use:   "deploy <hosts...|all>",
 		Short: "Apply rendered configs to devices (asks first; dry run when not on a terminal)",
 		Long: "deploy renders each selected host, diffs it against the config the\n" +
 			"device is actually running, and applies the difference.\n" +
@@ -60,9 +60,14 @@ func newDeployCmd(o *Options) *cobra.Command {
 type deployPlan struct {
 	host    *model.Host
 	address string
-	diff    ConfigDiff
-	ops     []ConfigOp
-	err     error
+	// rendered is the exact templated config the confirmed diff/ops came
+	// from; pushPlan re-diffs against it after confirmation, so a device
+	// that changed in the meantime is re-planned against the same target
+	// config the operator saw, not a stale one.
+	rendered string
+	diff     ConfigDiff
+	ops      []ConfigOp
+	err      error
 }
 
 func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOptions) error {
@@ -88,6 +93,7 @@ func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOpt
 	if err != nil {
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
+	prefetchLinkKeys(ctx, secrets, hosts, net.Links)
 
 	// Render serially: templating can mint secrets, and that must not race.
 	rendered := make(map[string]string, len(hosts))
@@ -104,7 +110,7 @@ func runDeploy(ctx context.Context, o *Options, targets []string, opts DeployOpt
 	plans := computeDeployPlans(ctx, o, net, hosts, rendered, renderErrs, secrets,
 		DiffOptions{ShowSecrets: opts.ShowSecrets})
 
-	return applyDeployPlans(ctx, o, plans, opts)
+	return applyDeployPlans(ctx, o, plans, secrets, opts)
 }
 
 func checkDeployable(hosts []*model.Host) error {
@@ -160,6 +166,7 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 		plan.err = fmt.Errorf("render: %w", renderErr)
 		return plan
 	}
+	plan.rendered = rendered
 
 	plan.address = probeEndpoint(ctx, h, net.Global.SearchDomain)
 	if plan.address == "" {
@@ -197,7 +204,7 @@ func planDeploy(ctx context.Context, o *Options, net *model.Network, h *model.Ho
 }
 
 // applyDeployPlans prints every plan and, when permitted, applies it.
-func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts DeployOptions) error {
+func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, secrets SecretSource, opts DeployOptions) error {
 	gate := newWriteGate(o, opts.Yes, opts.In)
 
 	rows := make([][]string, 0, len(plans))
@@ -246,7 +253,7 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 			continue
 		}
 
-		if err := pushPlan(ctx, plan, opts); err != nil {
+		if err := pushPlan(ctx, plan, secrets, opts); err != nil {
 			failed = true
 			o.printf("%s: deploy failed: %v\n\n", name, err)
 			rows = append(rows, []string{name, "failed: " + err.Error()})
@@ -268,23 +275,85 @@ func applyDeployPlans(ctx context.Context, o *Options, plans []deployPlan, opts 
 
 // pushPlan is the one function in this package that writes to a device. The
 // writer is built at the last possible moment, after the plan is confirmed.
-func pushPlan(ctx context.Context, plan deployPlan, opts DeployOptions) error {
+// secrets is the run-level SecretSource computeDeployPlans already warmed
+// (WG keypairs etc.), reused rather than a fresh empty-cache one: minting a
+// new SecretSource here would force a live Vault GET inside the write path,
+// serialized behind the operator's confirmation, for secrets already fetched
+// seconds earlier.
+func pushPlan(ctx context.Context, plan deployPlan, secrets SecretSource, opts DeployOptions) error {
 	if len(plan.ops) == 0 {
 		return nil
 	}
-	secrets, err := newSecrets()
-	if err != nil {
-		return fmt.Errorf("secret backend unavailable: %w", err)
+
+	ops := plan.ops
+	if plan.host.DeviceType == "vyos" {
+		// Python's push_rendered_config re-fetches the running config and
+		// recomputes the diff/ops immediately before sending them, rather
+		// than trusting what was shown at the confirmation prompt — the
+		// device may have changed in between. Recompute here too, and
+		// refuse to apply a silently different set of ops than what was
+		// confirmed: surfacing that beats guessing which one the operator
+		// meant to approve.
+		fresh, err := recheckVyOSOps(ctx, plan, secrets)
+		if err != nil {
+			return err
+		}
+		if !opsEqual(fresh, plan.ops) {
+			return fmt.Errorf(
+				"%s: the running config changed after this deploy was confirmed; "+
+					"re-run `barf deploy` to review the new diff before applying anything",
+				plan.host.Hostname)
+		}
+		ops = fresh
 	}
+
 	writer, err := newWriterFor(plan.host, plan.address, secrets)
 	if err != nil {
 		return err
 	}
-	if err := writer.Configure(ctx, plan.ops); err != nil {
+	if err := writer.Configure(ctx, ops); err != nil {
 		return err
 	}
 	if opts.SkipSave {
 		return nil
 	}
 	return writer.SaveConfig(ctx)
+}
+
+// recheckVyOSOps re-reads plan.host's running config and recomputes the ops
+// against plan.rendered (the exact config the confirmed diff was for),
+// reusing the same diff machinery (vyosdiff.go) the confirmation step used.
+func recheckVyOSOps(ctx context.Context, plan deployPlan, secrets SecretSource) ([]ConfigOp, error) {
+	reader, err := newReader(plan.host, plan.address, secrets)
+	if err != nil {
+		return nil, fmt.Errorf("%s: re-reading the running config before applying: %w", plan.host.Hostname, err)
+	}
+	running, err := reader.RunningConfig(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: re-reading the running config before applying: %w", plan.host.Hostname, err)
+	}
+	fresh, err := planVyOS(plan.rendered, running)
+	if err != nil {
+		return nil, fmt.Errorf("%s: re-planning before applying: %w", plan.host.Hostname, err)
+	}
+	return fresh.ops(), nil
+}
+
+// opsEqual reports whether a and b are the same ops in the same order: order
+// matters (deletes must still precede sets), so this is not a set comparison.
+func opsEqual(a, b []ConfigOp) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i].Verb != b[i].Verb || a[i].Command != b[i].Command || len(a[i].Path) != len(b[i].Path) {
+			return false
+		}
+		for j := range a[i].Path {
+			if a[i].Path[j] != b[i].Path[j] {
+				return false
+			}
+		}
+	}
+	return true
 }

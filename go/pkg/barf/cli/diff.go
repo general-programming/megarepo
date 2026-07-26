@@ -15,7 +15,7 @@ func newDiffCmd(o *Options) *cobra.Command {
 	var opts DiffOptions
 
 	cmd := &cobra.Command{
-		Use:   "diff [hosts...]",
+		Use:   "diff <hosts...|all>",
 		Short: "Compare rendered configs against what devices are running",
 		Long: "diff renders each selected host locally, fetches the config the\n" +
 			"device is actually running, and shows the difference. It is strictly\n" +
@@ -47,6 +47,7 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 	if err != nil {
 		return fmt.Errorf("secret backend unavailable: %w", err)
 	}
+	prefetchLinkKeys(ctx, secrets, hosts, net.Links)
 
 	// Render serially: templating can mint secrets, and that must not race.
 	rendered := make(map[string]string, len(hosts))
@@ -99,8 +100,17 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 
 	rows := make([][]string, 0, len(outcomes))
 	failed := false
+	notRun := false
 	for _, out := range outcomes {
 		switch {
+		// A quit-before-compared device is neither a success nor an
+		// ordinary per-device failure: it must not read as "clean" (a
+		// zero-value outcome otherwise would), and it must still make the
+		// run exit non-zero so a short-circuited `diff` is never mistaken
+		// for a clean fleet.
+		case out.NotRun:
+			notRun = true
+			rows = append(rows, []string{out.Device, out.Summary})
 		case out.Err != nil:
 			failed = true
 			rows = append(rows, []string{out.Device, "failed: " + out.Err.Error()})
@@ -112,6 +122,9 @@ func runDiff(ctx context.Context, o *Options, targets []string, opts DiffOptions
 
 	if failed {
 		return errors.New("one or more devices could not be diffed")
+	}
+	if notRun {
+		return errors.New("diff was interrupted before every device was compared")
 	}
 	return nil
 }
@@ -138,6 +151,18 @@ func diffJob(o *Options, net *model.Network, h *model.Host, rendered string, ren
 		if renderErr != nil {
 			out.Err = fmt.Errorf("render: %w", renderErr)
 			out.Summary = "failed: " + out.Err.Error()
+			return out
+		}
+
+		// Several templatable vendors (linux, mikrotik, cisco, ...) have no
+		// reader at all: barf can render config for them but never fetch
+		// what they are running, so there is nothing to diff against. This
+		// is a skip, not a failure, matching Python's NotImplementedError ->
+		// "skipped: no diff support" (host.diff_config raises it for exactly
+		// these vendors) rather than probing an address that was never going
+		// to answer a config read.
+		if !reportsStatus(h.DeviceType) {
+			out.Summary = "skipped: no diff support"
 			return out
 		}
 

@@ -72,6 +72,21 @@ func deployHarness(t *testing.T, writers map[string]*fakeWriter) *harness {
 	return h
 }
 
+// Regression: an empty target list used to mean the whole fleet, so a bare
+// `barf deploy` with no arguments would have deployed to every device.
+func TestDeployWithNoTargetsIsAnError(t *testing.T) {
+	w := &fakeWriter{}
+	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+	err := h.run(t, "deploy", "--yes")
+	if err == nil || !strings.Contains(err.Error(), "no hosts given") {
+		t.Fatalf("err = %v, want a no-hosts-given usage error", err)
+	}
+	if len(w.configured) != 0 {
+		t.Fatalf("a refused run still wrote to the deployable host: %v", w.configured)
+	}
+}
+
 // Safety invariant: no --yes, no writes, not even a constructed writer.
 func TestDeployDryRunIsTheDefault(t *testing.T) {
 	w := &fakeWriter{}
@@ -177,7 +192,7 @@ func TestDeployRefusesUnsupportedDeviceType(t *testing.T) {
 	w := &fakeWriter{}
 	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
 
-	err := h.run(t, "deploy", "--yes")
+	err := h.run(t, "deploy", "all", "--yes")
 	if err == nil {
 		t.Fatal("want an error for the eos host")
 	}
@@ -401,5 +416,131 @@ func TestDeployWithoutWiringCannotWrite(t *testing.T) {
 
 	if err := h.run(t, "deploy", "sea1-vpn-0", "--yes"); err == nil {
 		t.Fatal("want an error with no writers registered")
+	}
+}
+
+// statefulReader answers RunningConfig differently after `after` calls,
+// simulating a device that changes between the plan phase and the
+// post-confirmation recheck.
+type statefulReader struct {
+	mu      sync.Mutex
+	calls   int
+	before  string
+	after   string
+	afterAt int
+}
+
+func (r *statefulReader) Status(context.Context) (DeviceStatus, error) {
+	return DeviceStatus{}, nil
+}
+
+func (r *statefulReader) RunningConfig(context.Context) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if r.calls > r.afterAt {
+		return r.after, nil
+	}
+	return r.before, nil
+}
+
+func (r *statefulReader) callCount() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.calls
+}
+
+// Regression: pushPlan applied the ops computed (and shown to the operator)
+// at plan time even if the device's running config changed before the
+// operator's confirmation was acted on. It must re-read and recompute
+// immediately before applying, and refuse rather than silently apply
+// something the operator never actually saw.
+func TestDeployRechecksRunningConfigBeforeApplying(t *testing.T) {
+	w := &fakeWriter{}
+	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+	// Plan time (1st RunningConfig call): host-name already correct, no
+	// drift beyond the usual stray name-server/lldp/hw-id. By push time
+	// (2nd call onward): the device has ALSO picked up an unrelated stray
+	// NTP server, changing the delete set the confirmed plan did not include.
+	reader := &statefulReader{
+		before:  vyosDeviceJSON,
+		after:   `{"system": {"host-name": "sea1-vpn-0", "name-server": ["8.8.8.8"], "ntp": {"server": {"pool.ntp.org": {}}}}}`,
+		afterAt: 1,
+	}
+	old := newReader
+	newReader = func(host *model.Host, address string, s SecretSource) (DeviceReader, error) {
+		if host.Hostname == "sea1-vpn-0" {
+			return reader, nil
+		}
+		return old(host, address, s)
+	}
+	t.Cleanup(func() { newReader = old })
+
+	err := h.run(t, "deploy", "sea1-vpn-0", "--yes")
+	if err == nil {
+		t.Fatal("want an error: the device drifted after confirmation")
+	}
+	if !strings.Contains(err.Error(), "could not be deployed") {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(h.out.String(), "changed after this deploy was confirmed") {
+		t.Errorf("drift not reported:\n%s", h.out.String())
+	}
+	if len(w.configured) != 0 || w.saved != 0 {
+		t.Fatalf("wrote a plan the operator never actually confirmed: %v", w.configured)
+	}
+	if reader.callCount() < 2 {
+		t.Errorf("RunningConfig called %d times, want at least 2 (plan + recheck)", reader.callCount())
+	}
+}
+
+// The unchanged case: the recheck must run (RunningConfig called twice) but
+// must not block the deploy when the device still matches what was confirmed.
+func TestDeployRecheckAppliesWhenRunningConfigUnchanged(t *testing.T) {
+	w := &fakeWriter{}
+	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+	reader := &statefulReader{before: vyosDeviceJSON, after: vyosDeviceJSON, afterAt: 1}
+	old := newReader
+	newReader = func(host *model.Host, address string, s SecretSource) (DeviceReader, error) {
+		if host.Hostname == "sea1-vpn-0" {
+			return reader, nil
+		}
+		return old(host, address, s)
+	}
+	t.Cleanup(func() { newReader = old })
+
+	if err := h.run(t, "deploy", "sea1-vpn-0", "--yes"); err != nil {
+		t.Fatalf("unchanged device must still deploy: %v\n%s", err, h.out.String())
+	}
+	if len(w.configured) != 1 || w.saved != 1 {
+		t.Fatalf("configured = %v, saved = %d, want one atomic apply", w.configured, w.saved)
+	}
+	if reader.callCount() < 2 {
+		t.Errorf("RunningConfig called %d times, want at least 2 (plan + recheck)", reader.callCount())
+	}
+}
+
+// Regression: pushPlan built a fresh, empty-cache SecretSource per device
+// rather than reusing the run-level one, forcing a live Vault GET inside the
+// write path for secrets already warmed at plan time.
+func TestDeployReusesRunLevelSecretSource(t *testing.T) {
+	w := &fakeWriter{}
+	h := deployHarness(t, map[string]*fakeWriter{"sea1-vpn-0": w})
+
+	calls := 0
+	old := newSecrets
+	newSecrets = func() (SecretSource, error) {
+		calls++
+		return fakeSecrets{}, nil
+	}
+	t.Cleanup(func() { newSecrets = old })
+
+	if err := h.run(t, "deploy", "sea1-vpn-0", "--yes"); err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 {
+		t.Errorf("newSecrets called %d times, want exactly 1 (the run-level source, reused for the push)", calls)
 	}
 }

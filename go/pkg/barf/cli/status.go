@@ -97,7 +97,11 @@ func runStatus(ctx context.Context, o *Options, targets []string, jsonOut bool) 
 	}
 	log := o.Logger()
 
-	net, hosts, err := o.loadTargets(targets)
+	// Unlike generate/diff/deploy, status has no required-target Python
+	// original (device_status takes no TARGETS at all): an empty selection
+	// here means the whole fleet, so say so explicitly rather than relying
+	// on resolveTargets to fill it in.
+	net, hosts, err := o.loadTargets(defaultAllTargets(targets))
 	if err != nil {
 		return err
 	}
