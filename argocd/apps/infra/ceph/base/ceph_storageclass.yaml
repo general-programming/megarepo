@@ -56,5 +56,13 @@ parameters:
   csi.storage.k8s.io/controller-expand-secret-namespace: ceph
   csi.storage.k8s.io/node-stage-secret-name: rook-csi-cephfs-node
   csi.storage.k8s.io/node-stage-secret-namespace: ceph
+# Without this, an MDS-blocklisted client wedges permanently: every operation
+# returns EACCES and the only recovery is a force-unmount on the node. That is
+# what took out ipfs, sentry, synapse and the alloy WAL on 2026-07-27.
+# recover_session=clean makes the kernel client reconnect and drop its stale
+# state instead. In-flight writes on a reconnected mount can see EIO, which is
+# a far better failure mode than a mount that never comes back.
+mountOptions:
+  - recover_session=clean
 reclaimPolicy: Delete
 allowVolumeExpansion: true
