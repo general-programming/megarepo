@@ -8,7 +8,6 @@ ansible-galaxy collection install netbox.netbox
 
 ## Netbox tags
 * dnsserver - Deploys DNS entries from Netbox.
-* dhcpserver - Deploys static DHCP leases to this server.
 
 ## Container lx config flags
 ```

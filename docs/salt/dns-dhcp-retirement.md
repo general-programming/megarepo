@@ -27,7 +27,7 @@ salt -G 'tags:dnsserver'  grains.get id
 salt -G 'tags:dhcpserver' grains.get id
 ```
 
-## `dhcp_server` — removable, with one check
+## `dhcp_server` — removed 2026-07-27
 
 On `fmt2-core-0` (10.65.67.6), verified directly:
 
@@ -39,14 +39,33 @@ Kea on fmt2-core now serves all three fmt2 subnets (`79.110.170.0/24`,
 `10.65.67.0/24`, `10.255.1.0/24`) at isc-dhcpd parity including the PXE chain,
 per `4fd66877`. sea1 moved in `baa0f7a6`, sea420 in `766269f0`.
 
-**Before deleting:** `4fd66877` names `fmt2-core-0/oob-backup` as the pair Kea
-took over from. `oob-backup` was not reachable during this assessment — confirm
-its `isc-dhcp-server` is also stopped and that no other minion carries
-`tags:dhcpserver`.
+`salt/state/dhcp_server/`, its `top.sls` entry, the `salt/kv/dhcp_webhook` row
+in `docs/salt/secrets.md`, and the `dhcpserver` tag description in
+`automation/ansible/README.md` are gone.
 
-Removal touches: `salt/state/dhcp_server/`, its `top.sls` entry, the
-`salt/kv/dhcp_webhook` row in `docs/salt/secrets.md`, and the `dhcpserver` tag
-description in `automation/ansible/README.md`.
+**Two things this deliberately did not do.**
+
+`4fd66877` names `fmt2-core-0/oob-backup` as the pair Kea took over from, and
+`oob-backup` could not be reached during this work — its `isc-dhcp-server` is
+unconfirmed. Note that deleting the state only stops Salt *managing* a host: it
+does not stop a running `isc-dhcp-server` or delete `/etc/dhcp/dhcpd.d/`. If
+`oob-backup` is still serving, it keeps serving, now with static leases that no
+longer track NetBox. Verify and stop it by hand:
+
+```sh
+salt -G 'tags:dhcpserver' service.status isc-dhcp-server
+```
+
+`salt/pillar/firewalld/init.sls` still opens `dhcp`, `dhcpv6`, and
+`dhcpv6-client` in the public zone. Those are **not** gated on the
+`dhcpserver` tag — they are open on every firewalld-managed host, so tightening
+them is a fleet-wide firewall change rather than part of retiring this role.
+`dhcp` (67/udp) and `dhcpv6` (547/udp) are server ports and should now be
+closable; `dhcpv6-client` (546/udp) is still needed by clients. Do it as its own
+change.
+
+Also still to clean up: the `dhcpserver` grain itself remains set on tagged
+minions and NetBox still carries the tag. Neither does anything now.
 
 ## `dns_server` — not yet
 
