@@ -35,4 +35,18 @@
       ];
     };
   };
+
+  # This is the only consul server in dc sea420, so the site's clients
+  # (sea420-hv-2, wob-app-cream) connect inbound. The Ubuntu box filtered
+  # nothing; NixOS defaults to deny, so open server RPC + LAN serf or the
+  # cluster loses every client. 8302/WAN serf stays closed: sea420 is not
+  # WAN-federated (`consul members -wan` lists only itself) -- open it here
+  # if that ever changes. HTTP/DNS (8500/8600) bind 127.0.0.1 only.
+  networking.firewall = {
+    allowedTCPPorts = [
+      8300
+      8301
+    ];
+    allowedUDPPorts = [ 8301 ];
+  };
 }
