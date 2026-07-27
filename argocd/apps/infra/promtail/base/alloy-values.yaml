@@ -61,8 +61,13 @@ alloy:
       loki.process "process" {
         forward_to = [loki.write.loki.receiver]
 
+        // Guards against replaying a pod's entire log history after an Alloy
+        // restart. Must stay below Loki's reject_old_samples_max_age (168h),
+        // otherwise we ship data the server will reject anyway. Was "1h", which
+        // silently discarded everything buffered during the sea1 -> fmt2 outage
+        // on 2026-07-14..07-17 instead of backfilling it.
         stage.drop {
-          older_than          = "1h"
+          older_than          = "96h"
           drop_counter_reason = "too old"
         }
 
@@ -96,11 +101,35 @@ alloy:
       loki.write "loki" {
         endpoint {
           url = "http://loki.fmt2.generalprogramming.org/loki/api/v1/push"
+
+          // sea1 reaches this endpoint cross-site, so transient link loss is
+          // expected. Retry for longer before giving up on a batch.
+          max_backoff_period  = "10m"
+          max_backoff_retries = 20
+        }
+
+        // Durable on-disk queue. Without this, anything not yet accepted by
+        // Loki lives only in memory and dies with the pod. max_segment_age
+        // bounds how far back we can replay, and is matched to the 96h
+        // stage.drop cutoff above.
+        wal {
+          enabled         = true
+          max_segment_age = "96h"
+          drain_timeout   = "60s"
         }
       }
+
+  # The WAL lives under storagePath. The chart default (/tmp/alloy) is the
+  # container's ephemeral layer, which is wiped on every container restart --
+  # useless as a crash buffer. Pin it to a hostPath instead.
+  storagePath: /var/lib/alloy
+
   mounts:
     varlog: true
     dockercontainers: true
+    extra:
+      - name: alloy-wal
+        mountPath: /var/lib/alloy
 
   resources:
     limits:
@@ -109,3 +138,22 @@ alloy:
     requests:
       cpu: 1
       memory: 1Gi
+
+controller:
+  # Scraped by the annotation-driven VMPodScrape ("all-scrape"). Without these
+  # the Alloy metrics referenced by the logging-pipeline alerts do not exist.
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "12345"
+
+  volumes:
+    extra:
+      # WAL backing store. Sizing: sea1 ingests ~5 GB/day average and ~10 GB/day
+      # peak across 4 nodes, so a 96h buffer needs roughly 10 GB per node in the
+      # worst case. Nodes have ~114 GiB allocatable ephemeral storage, so this
+      # fits with a wide margin. hostPath (not emptyDir) so the queue survives
+      # pod restarts and rescheduling onto the same node.
+      - name: alloy-wal
+        hostPath:
+          path: /var/lib/alloy
+          type: DirectoryOrCreate
