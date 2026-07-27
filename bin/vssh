@@ -1,0 +1,162 @@
+#!/usr/bin/env bash
+# vssh — ssh using a short-lived certificate from the Vault/OpenBao SSH CA.
+#
+# Why this exists: nothing in this repo keeps a long-lived SSH private key on
+# disk. Interactive humans have a forwarded agent, but agents/CI do not (and a
+# forwarded agent with `ssh-add -c` refuses to sign unattended). vssh sidesteps
+# both by minting a throwaway keypair, having the CA sign it, and handing the
+# cert straight to ssh — no agent, nothing persistent to leak.
+#
+#   vssh admin@fmt2-core-0            # same arg shape as ssh
+#   vssh fmt2-core-0 -- uptime        # everything after -- goes to ssh
+#   vssh --status                     # show the cached cert
+#   vssh --logout                     # drop the cache
+#
+# Env knobs:
+#   VSSH_MOUNT      CA secrets mount        (default: ssh-client-signer)
+#   VSSH_ROLE       signing role            (default: administrator-role)
+#   VSSH_PRINCIPAL  principal / login user  (default: admin)
+#   BAO_ADDR/VAULT_ADDR, BAO_TOKEN/VAULT_TOKEN as usual
+#
+# NOTE: the CA is only trusted by the salt-managed fleet (see
+# salt/state/sshd_config). NixOS hosts do not carry TrustedUserCAKeys yet, so
+# vssh cannot reach them — use the documented break-glass path for those.
+
+set -euo pipefail
+
+MOUNT="${VSSH_MOUNT:-ssh-client-signer}"
+ROLE="${VSSH_ROLE:-administrator-role}"
+PRINCIPAL="${VSSH_PRINCIPAL:-admin}"
+
+# Re-sign when less than this much life is left, so a long command doesn't die
+# mid-flight on a cert that expired after the handshake.
+RENEW_MARGIN_SECS=300
+
+CACHE_DIR="${XDG_RUNTIME_DIR:-/tmp}/vssh-$(id -u)"
+KEY="${CACHE_DIR}/id_ed25519"
+CERT="${CACHE_DIR}/id_ed25519-cert.pub"
+
+die() { printf 'vssh: %s\n' "$*" >&2; exit 1; }
+
+# OpenBao is what this repo actually deploys; keep the vault fallback for hosts
+# that still ship the old CLI.
+bao_cli() {
+    if command -v bao >/dev/null 2>&1; then
+        command bao "$@"
+    elif command -v vault >/dev/null 2>&1; then
+        command vault "$@"
+    else
+        die "neither 'bao' nor 'vault' is on PATH (try: direnv reload)"
+    fi
+}
+
+# bao reads BAO_*; a lot of this repo only exports VAULT_*. Bridge them rather
+# than making every caller set both.
+bridge_env() {
+    [ -n "${BAO_ADDR:-}" ] || [ -z "${VAULT_ADDR:-}" ] || export BAO_ADDR="$VAULT_ADDR"
+    if [ -z "${BAO_TOKEN:-}" ]; then
+        if [ -n "${VAULT_TOKEN:-}" ]; then
+            export BAO_TOKEN="$VAULT_TOKEN"
+        elif [ -r "${HOME}/.bao-token" ]; then
+            BAO_TOKEN="$(cat "${HOME}/.bao-token")" && export BAO_TOKEN
+        elif [ -r "${HOME}/.vault-token" ]; then
+            BAO_TOKEN="$(cat "${HOME}/.vault-token")" && export BAO_TOKEN
+        fi
+    fi
+    [ -n "${BAO_ADDR:-}" ] || die "BAO_ADDR/VAULT_ADDR is unset"
+    [ -n "${BAO_TOKEN:-}" ] || die "no token: set BAO_TOKEN or run 'bao login'"
+}
+
+# Seconds of validity left on the cached cert, or 0 if there isn't a usable one.
+cert_remaining() {
+    [ -r "$CERT" ] && [ -r "$KEY" ] || { echo 0; return; }
+
+    local valid_to epoch now
+    # `ssh-keygen -L` prints e.g. "Valid: from 2026-07-27T12:00:00 to 2026-07-27T12:30:00"
+    valid_to="$(ssh-keygen -L -f "$CERT" 2>/dev/null \
+        | awk '/Valid:/ { print $NF }')" || true
+    [ -n "$valid_to" ] || { echo 0; return; }
+    # "forever" certs have no expiry to compute against.
+    [ "$valid_to" != "forever" ] || { echo 999999; return; }
+
+    epoch="$(date -d "${valid_to/T/ }" +%s 2>/dev/null)" || { echo 0; return; }
+    now="$(date +%s)"
+    if [ "$epoch" -gt "$now" ]; then echo $((epoch - now)); else echo 0; fi
+}
+
+# The cert is bound to one principal; a cached admin cert is useless if the
+# caller now wants a different login, so treat a mismatch as a cache miss.
+cert_principal_matches() {
+    [ -r "$CERT" ] || return 1
+    ssh-keygen -L -f "$CERT" 2>/dev/null \
+        | grep -qE "^[[:space:]]*${PRINCIPAL}\$"
+}
+
+ensure_cert() {
+    local remaining
+    remaining="$(cert_remaining)"
+    if [ "$remaining" -gt "$RENEW_MARGIN_SECS" ] && cert_principal_matches; then
+        return 0
+    fi
+
+    bridge_env
+    mkdir -p "$CACHE_DIR"
+    chmod 700 "$CACHE_DIR"
+
+    # Fresh keypair every signing round — the private half never outlives the
+    # cert, so a stale cache directory is not a standing credential.
+    rm -f "$KEY" "$KEY.pub" "$CERT"
+    ssh-keygen -q -t ed25519 -N '' -f "$KEY" -C "vssh-${PRINCIPAL}@$(hostname -s)"
+
+    local signed
+    signed="$(bao_cli write -field=signed_key \
+        "${MOUNT}/sign/${ROLE}" \
+        public_key=@"${KEY}.pub" \
+        valid_principals="$PRINCIPAL" 2>&1)" || die "signing failed: $signed"
+
+    case "$signed" in
+        ssh-*-cert-v01@openssh.com\ *) ;;
+        *) die "unexpected response from ${MOUNT}/sign/${ROLE}: ${signed%%$'\n'*}" ;;
+    esac
+
+    umask 077
+    printf '%s\n' "$signed" > "$CERT"
+}
+
+cmd_status() {
+    local remaining
+    remaining="$(cert_remaining)"
+    if [ "$remaining" -eq 0 ]; then
+        echo "no valid cached certificate (${CACHE_DIR})"
+        return 1
+    fi
+    printf 'cached cert: %s\nvalid for:   %dm%02ds\n\n' \
+        "$CERT" "$((remaining / 60))" "$((remaining % 60))"
+    ssh-keygen -L -f "$CERT"
+}
+
+case "${1:-}" in
+    --status) cmd_status; exit $? ;;
+    --logout) rm -rf "$CACHE_DIR"; echo "vssh: cache cleared"; exit 0 ;;
+    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    '') die "usage: vssh [user@]host [ssh args...]  (see --help)" ;;
+esac
+
+# Take the principal from an explicit user@host so `vssh root@box` asks the CA
+# for a root cert instead of silently logging in as admin.
+target="$1"; shift
+case "$target" in
+    *@*) PRINCIPAL="${target%%@*}" ;;
+    *)   target="${PRINCIPAL}@${target}" ;;
+esac
+
+ensure_cert
+
+# IdentitiesOnly + IdentityAgent=none keep ssh from wandering off into the
+# forwarded agent, which is exactly the thing vssh exists to avoid.
+exec ssh \
+    -o IdentitiesOnly=yes \
+    -o IdentityAgent=none \
+    -i "$KEY" \
+    -o CertificateFile="$CERT" \
+    "$target" "$@"
