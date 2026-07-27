@@ -39,10 +39,11 @@ spec:
             summary: "Alloy on {{ $labels.pod }} has shipped no log entries for 30m"
             description: "Zero entries delivered for 30m. Sustained zero means the write path is broken, not idle."
 
-        # Anything counted here is permanently lost.
+        # A restart legitimately discards a burst of old container logs, so only
+        # alert when drops persist well past that.
         - alert: AlloyDroppingTooOldLines
           expr: increase(loki_process_dropped_lines_total{reason="too old"}[30m]) > 0
-          for: 15m
+          for: 2h
           labels:
             severity: warning
           annotations:

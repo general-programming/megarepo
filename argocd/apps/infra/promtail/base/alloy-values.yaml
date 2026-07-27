@@ -67,10 +67,14 @@ alloy:
       loki.process "process" {
         forward_to = [loki.write.loki.receiver]
 
-        // Caps replay after a restart. Keep under Loki's
-        // reject_old_samples_max_age (168h).
+        // Caps replay of old container logs when an instance starts with no
+        // position state. Must stay within Loki's per-stream out-of-order
+        // window (max_chunk_age/2, so 1h at the default 2h) or the replayed
+        // entries come back as 400s. This does NOT limit WAL backfill: entries
+        // are filtered here on read, and anything already queued was fresh
+        // when it went in.
         stage.drop {
-          older_than          = "96h"
+          older_than          = "1h"
           drop_counter_reason = "too old"
         }
 
