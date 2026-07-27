@@ -8,3 +8,6 @@ metadata:
     app.kubernetes.io/name: ipfs
 data:
   IPFS_PROFILE: server
+  # Emit structured logs so Loki can parse them with `| json` instead of
+  # regex against kubo's tab-delimited default.
+  GOLOG_LOG_FMT: json
