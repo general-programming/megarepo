@@ -6,14 +6,8 @@ metadata:
   namespace: victoriametrics
 spec:
   groups:
-    # Covers the Alloy -> Loki log pipeline. Both clusters ship to
-    # loki.fmt2.generalprogramming.org, so for sea1 this path crosses sites and
-    # is the component most likely to break silently.
-    #
-    # Context: sea1 shipped nothing from 2026-07-14 to 2026-07-17 and nobody
-    # noticed, because nothing watched this pipeline. The logs were then
-    # discarded client-side rather than backfilled. These rules exist so the
-    # next occurrence pages instead of being discovered months later.
+    # Alloy -> Loki pipeline. sea1 ships cross-site to fmt2, so this path
+    # breaks silently; it went unnoticed for 4 days in July 2026.
     - name: alloy
       interval: 30s
       rules:
@@ -24,8 +18,7 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy is down on {{ $labels.pod }}"
-            description: "Alloy pod {{ $labels.pod }} has been unscrapeable for 10m.
-              Logs from this node are not reaching Loki."
+            description: "Unscrapeable for 10m; logs from this node are not reaching Loki."
 
         - alert: AlloyAbsent
           expr: absent(alloy_build_info)
@@ -34,12 +27,9 @@ spec:
             severity: critical
           annotations:
             summary: "No Alloy instances are reporting metrics in this cluster"
-            description: "Every Alloy instance has stopped reporting for 15m. The whole
-              cluster is almost certainly shipping no logs at all."
+            description: "All instances stopped reporting for 15m; the cluster is shipping no logs."
 
-        # The gap detector. Alloy can be up, healthy and scrapeable while
-        # delivering nothing, which is exactly what the July 2026 outage looked
-        # like from the outside.
+        # Alloy can be up and scrapeable while delivering nothing.
         - alert: AlloyNotShippingLogs
           expr: sum by (pod) (rate(loki_write_sent_entries_total[15m])) == 0
           for: 30m
@@ -47,12 +37,9 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy on {{ $labels.pod }} has shipped no log entries for 30m"
-            description: "Alloy is running but has delivered zero entries to Loki for 30m.
-              Every node runs logging workloads, so a sustained zero means the write
-              path is broken rather than idle."
+            description: "Zero entries delivered for 30m. Sustained zero means the write path is broken, not idle."
 
-        # Direct signal that the stage.drop cutoff is eating data. Anything
-        # counted here is permanently lost and cannot be backfilled.
+        # Anything counted here is permanently lost.
         - alert: AlloyDroppingTooOldLines
           expr: increase(loki_process_dropped_lines_total{reason="too old"}[30m]) > 0
           for: 15m
@@ -60,11 +47,8 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy on {{ $labels.pod }} is discarding logs as too old"
-            description: "Alloy dropped {{ $value | humanize }} lines in the last 30m for
-              exceeding the stage.drop older_than cutoff. This is unrecoverable data
-              loss and usually means the backlog has outgrown the buffer window."
+            description: "Dropped {{ $value | humanize }} lines past the older_than cutoff; the backlog has outgrown the buffer window."
 
-        # queue_is_full / rate_limited / line_too_long / ingester_error.
         - alert: AlloyDroppingEntries
           expr: sum by (pod, reason) (increase(loki_write_dropped_entries_total[15m])) > 0
           for: 10m
@@ -72,8 +56,7 @@ spec:
             severity: critical
           annotations:
             summary: "Alloy on {{ $labels.pod }} is dropping entries ({{ $labels.reason }})"
-            description: "Alloy dropped {{ $value | humanize }} entries in 15m with reason
-              \"{{ $labels.reason }}\". These log lines are gone for good."
+            description: "Dropped {{ $value | humanize }} entries in 15m, reason \"{{ $labels.reason }}\". Gone for good."
 
         - alert: AlloyWriteErrors
           expr: |
@@ -85,12 +68,9 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy on {{ $labels.pod }} is failing to push to Loki (status {{ $labels.status_code }})"
-            description: "Push requests to Loki are returning {{ $labels.status_code }}.
-              A status_code of -1 means the connection itself failed, which is the
-              signature of the cross-site sea1 -> fmt2 link going away."
+            description: "Pushes returning {{ $labels.status_code }}. -1 means the connection failed, i.e. the cross-site link dropped."
 
-        # Backlog signal: sustained retries mean the WAL is draining slower than
-        # it fills, which ends in dropped entries if left alone.
+        # Sustained retries mean the WAL is draining slower than it fills.
         - alert: AlloyBacklogGrowing
           expr: sum by (pod) (rate(loki_write_batch_retries_total[10m])) > 0.1
           for: 20m
@@ -98,9 +78,7 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy on {{ $labels.pod }} is retrying pushes persistently"
-            description: "Alloy has been retrying batches at {{ $value | humanize }}/s for
-              20m. The on-disk queue is backing up; if this continues it will start
-              dropping entries once segments age out."
+            description: "Retrying batches at {{ $value | humanize }}/s for 20m; the queue will start dropping once segments age out."
 
         - alert: AlloyRateLimitedByLoki
           expr: rate(loki_write_request_duration_seconds_count{status_code="429"}[10m]) > 0
@@ -109,9 +87,7 @@ spec:
             severity: warning
           annotations:
             summary: "Loki is rate limiting Alloy on {{ $labels.pod }}"
-            description: "Loki is returning 429 to Alloy. Consider raising
-              limits_config.ingestion_rate_mb (currently 10MB/s) or reducing what
-              gets shipped."
+            description: "Loki returning 429. Raise limits_config.ingestion_rate_mb (currently 10MB/s) or ship less."
 
         - alert: AlloyComponentUnhealthy
           expr: alloy_component_controller_running_components{health_type!="healthy"} > 0
@@ -120,8 +96,7 @@ spec:
             severity: warning
           annotations:
             summary: "Alloy on {{ $labels.pod }} has unhealthy components"
-            description: "{{ $value }} Alloy components are in state
-              \"{{ $labels.health_type }}\"."
+            description: "{{ $value }} components in state \"{{ $labels.health_type }}\"."
 
     - name: loki
       interval: 30s
@@ -133,7 +108,7 @@ spec:
             severity: warning
           annotations:
             summary: "Loki component {{ $labels.pod }} is down"
-            description: "Loki pod {{ $labels.pod }} has been unscrapeable for 10m."
+            description: "Unscrapeable for 10m."
 
         - alert: LokiAbsent
           expr: absent(loki_build_info)
@@ -142,8 +117,7 @@ spec:
             severity: critical
           annotations:
             summary: "No Loki instances are reporting metrics"
-            description: "Every Loki component has stopped reporting for 15m. Log ingest
-              for the entire fleet is likely down."
+            description: "All components stopped reporting for 15m; fleet-wide ingest is likely down."
 
         - alert: LokiRequestErrors
           expr: |
@@ -157,8 +131,7 @@ spec:
             severity: warning
           annotations:
             summary: "Loki route {{ $labels.route }} is returning 5xx"
-            description: "{{ $value | humanize }}% of requests to {{ $labels.route }} are
-              failing with 5xx over the last 5m."
+            description: "{{ $value | humanize }}% of requests failing with 5xx over 5m."
 
         - alert: LokiPanics
           expr: increase(loki_panic_total[10m]) > 0
