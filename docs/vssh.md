@@ -40,29 +40,52 @@ then `~/.bao-token`, then `~/.vault-token`. Certificates are cached under
 The role issues 30-minute certs carrying `permit-pty` only — no agent
 forwarding, no port forwarding.
 
-## Current limitations
+## Who trusts the CA
 
-**Read this before assuming vssh can reach a given host.**
+The role (`ssh-client-signer/roles/administrator-role`) issues exactly one
+principal: `admin`. `vssh root@host` asks the CA for a `root` cert and is
+refused — always connect as `admin`.
 
-- The role (`ssh-client-signer/roles/administrator-role`) allows exactly one
-  principal: `admin`. There is no `root` principal, so `vssh root@host` will be
-  refused by the CA.
-- Only the salt-managed fleet trusts the CA. `salt/state/sshd_config` installs
-  `TrustedUserCAKeys /etc/ssh/ssh_vault_ca.pub` and sets
-  `AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u`.
-- **NixOS hosts do not trust the CA at all.** `nix/machines/base.nix` sets only
-  `users.users.root.openssh.authorizedKeys.keys`, with no `TrustedUserCAKeys`.
-  That covers fmt2-core, sea1-core, sea420-core, and sea1-nix-builder — so vssh
-  cannot currently reach the very boxes the DNS/DHCP work happens on.
+- **NixOS hosts** trust it via `nix/modules/ssh-ca`, imported fleet-wide from
+  `machines/base.nix`. These boxes have no `admin` user, so root's
+  `AuthorizedPrincipalsFile` lists `admin` and an admin cert lands on root
+  directly. Disable per-host with `sshCa.rootPrincipals = [ ]`.
+- **Salt-managed hosts** trust it via `salt/state/sshd_config`
+  (`TrustedUserCAKeys /etc/ssh/ssh_vault_ca.pub`,
+  `AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u`), with
+  `salt/state/admin_user` creating the `admin` user, its NOPASSWD sudoers entry,
+  and `/etc/ssh/auth_principals/admin`.
 
-Closing the gap needs two decisions that are deliberately not made here:
-whether NixOS hosts should trust the client CA, and whether the CA should be
-allowed to issue a `root` principal (versus provisioning an `admin` user with
-sudo, matching the salt fleet). Both widen who can reach root on core
-infrastructure and should be chosen explicitly, not inherited from a helper
-script.
+## Known-broken: certificate auth on the salt fleet
 
-Until then the break-glass path is the operator's forwarded agent.
+As of 2026-07-27, `vssh admin@fmt2-core-0` fails with `Permission denied
+(publickey,...)`. The client side is fine — `ssh -vvv` shows the certificate
+loaded and offered, and the server rejecting it without comment:
+
+```
+debug1: Offering public key: .../id_ed25519-cert.pub ED25519-CERT ... explicit
+debug1: Authentications that can continue: publickey,gssapi-keyex,...
+```
+
+All the pieces exist in the repo, so this is drift on the host rather than a
+missing state. Diagnose on the box (needs the break-glass agent path):
+
+1. `ls -l /etc/ssh/ssh_vault_ca.pub` — most likely culprit. The state that
+   writes it is wrapped in `{% if has_vault_ssh %}` precisely because
+   "vault_ssh disappears when a salt upgrade wipes salt-pip packages". When the
+   module is gone the state is skipped silently, so `TrustedUserCAKeys` can
+   point at a stale or absent file while highstate still reports success.
+2. `sshd -T | grep -iE 'trusteduserca|authorizedprincipals'` — confirms the
+   directives actually took effect. Note the managed fragment lives in
+   `/etc/sshd/sshd_config.d/` (not `/etc/ssh/`), pulled in by an `Include` that
+   `file.append` adds to the *end* of `/etc/ssh/sshd_config`; anything landing
+   after a `Match` block would be scoped to that block.
+3. `cat /etc/ssh/auth_principals/admin` — must contain `admin`.
+4. `id admin` — the account must exist.
+5. `journalctl -u ssh -n 50` during an attempt — sshd logs the real reason.
+
+Until that is resolved, treat vssh as working against NixOS hosts and unproven
+against the salt fleet.
 
 ## Related
 

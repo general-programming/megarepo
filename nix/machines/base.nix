@@ -16,6 +16,7 @@
     (self.lib.nixosModule "nix-cache")
     (self.lib.nixosModule "nix-builder-client")
     (self.lib.nixosModule "glances")
+    (self.lib.nixosModule "ssh-ca")
   ];
 
   # Self-hosted Attic binary cache (fmt2 k8s); populate with
