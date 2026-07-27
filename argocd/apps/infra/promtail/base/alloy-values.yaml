@@ -56,6 +56,17 @@ alloy:
       loki.source.kubernetes "pods" {
         targets    = discovery.relabel.pods.output
         forward_to = [loki.process.process.receiver]
+
+        // discovery.kubernetes hands every pod in the cluster to every Alloy
+        // instance, so without this each of the N DaemonSet pods tailed all
+        // ~349 sea1 pods and shipped a full duplicate copy of the cluster's
+        // logs. Loki deduplicated them on ingest, so it was invisible in
+        // stored volume while still costing Nx the push traffic (the source of
+        // the 429s) and Nx the on-disk queue. Clustering shards targets across
+        // instances instead.
+        clustering {
+          enabled = true
+        }
       }
 
       loki.process "process" {
@@ -119,9 +130,16 @@ alloy:
         }
       }
 
+  # Distributes log collection across instances rather than every pod tailing
+  # every target. Required for the clustering block in loki.source.kubernetes
+  # above to take effect.
+  clustering:
+    enabled: true
+
   # The WAL lives under storagePath. The chart default (/tmp/alloy) is the
   # container's ephemeral layer, which is wiped on every container restart --
-  # useless as a crash buffer. Pin it to a hostPath instead.
+  # useless as a crash buffer. Backed by CephFS so the queue survives pod
+  # restarts and rescheduling anywhere in the cluster.
   storagePath: /var/lib/alloy
 
   mounts:
@@ -130,6 +148,9 @@ alloy:
     extra:
       - name: alloy-wal
         mountPath: /var/lib/alloy
+        # One RWX volume shared by the DaemonSet, but each instance gets its
+        # own directory -- a shared WAL directory would corrupt.
+        subPathExpr: $(K8S_NODE_NAME)
 
   resources:
     limits:
@@ -148,12 +169,6 @@ controller:
 
   volumes:
     extra:
-      # WAL backing store. Sizing: sea1 ingests ~5 GB/day average and ~10 GB/day
-      # peak across 4 nodes, so a 96h buffer needs roughly 10 GB per node in the
-      # worst case. Nodes have ~114 GiB allocatable ephemeral storage, so this
-      # fits with a wide margin. hostPath (not emptyDir) so the queue survives
-      # pod restarts and rescheduling onto the same node.
       - name: alloy-wal
-        hostPath:
-          path: /var/lib/alloy
-          type: DirectoryOrCreate
+        persistentVolumeClaim:
+          claimName: alloy-wal
