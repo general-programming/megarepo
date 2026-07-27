@@ -11,6 +11,7 @@ resources:
   # Our rules
   - alerts-argocd.yaml
   - alerts-ceph.yaml
+  - alerts-logging.yaml
   - alerts-smart.yaml
   - node-disk.yaml
   - resources-memory.yaml

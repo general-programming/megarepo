@@ -1,6 +1,12 @@
 loki:
   auth_enabled: false
 
+  # Scraped by the annotation-driven VMPodScrape ("all-scrape"). Without these
+  # no loki_* series reach VictoriaMetrics and the logging alerts are blind.
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "3100"
+
   # rate limits
   limits_config:
     ingestion_rate_mb: 10
