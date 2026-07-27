@@ -17,10 +17,16 @@ spec:
           resources:
             requests:
               storage: 128Gi
+    # Was 1Gi, which all five replicas sat pinned against (985-1022 MiB
+    # observed). Inserts then took >60s, vminsert backed up and OOMed, and
+    # ingestion stopped entirely on 2026-07-27.
     resources:
       limits:
         cpu: "2"
-        memory: 1Gi
+        memory: 4Gi
+      requests:
+        cpu: "1"
+        memory: 4Gi
   vmselect:
     replicaCount: 3
     cacheMountPath: "/select-cache"
@@ -34,6 +40,9 @@ spec:
     resources:
       limits:
         cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
         memory: "1Gi"
     serviceSpec:
       spec:
@@ -43,6 +52,15 @@ spec:
           external-dns.alpha.kubernetes.io/hostname: vmselect.fmt2.generalprogramming.org
   vminsert:
     replicaCount: 3
+    # No resources were set, so the operator applied its defaults of
+    # 500m/500Mi. That is what got OOMKilled while vmstorage was stalling.
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: "200m"
+        memory: 512Mi
     serviceSpec:
       spec:
         type: LoadBalancer
