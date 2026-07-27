@@ -6,6 +6,18 @@ metadata:
   namespace: monitoring
 spec:
   replicaCount: 2
+  # /alertmanager holds the notification log and silences. It defaulted to an
+  # emptyDir, so every roll dropped active silences and re-notified for alerts
+  # already sent. Both files are tiny; 1Gi is the practical minimum.
+  storage:
+    volumeClaimTemplate:
+      spec:
+        storageClassName: ceph-rbd
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 1Gi
   # Keep the 2 alertmanager replicas on distinct nodes so one node loss can't
   # take out alerting entirely.
   topologySpreadConstraints:

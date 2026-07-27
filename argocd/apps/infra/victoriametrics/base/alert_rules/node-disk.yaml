@@ -34,8 +34,12 @@ spec:
             summary: "Low inodes on {{ $labels.mountpoint }} ({{ $labels.instance }})"
             description: "Filesystem {{ $labels.mountpoint }} has {{ $value | humanizePercentage }} inodes free."
 
+        # io_time counts time with at least one request in flight, which pins to
+        # 1.0 on queueing network-backed devices without meaning saturation.
+        # Ceph RBD volumes sat at exactly 1.00 while the physical disks behind
+        # them were at 0.07-0.13, so they are excluded.
         - alert: NodeDiskIOSaturation
-          expr: rate(node_disk_io_time_seconds_total[5m]) > 0.9
+          expr: rate(node_disk_io_time_seconds_total{device!~"(/dev/)?rbd[0-9]+"}[5m]) > 0.9
           for: 10m
           labels:
             severity: warning

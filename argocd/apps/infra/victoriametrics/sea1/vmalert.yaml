@@ -14,6 +14,11 @@ spec:
     url: "http://vmalertmanager-alertmanager.monitoring.svc.cluster.local:9093"
   remoteWrite:
     url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus"
+  # remoteWrite alone only persists ALERTS_FOR_STATE; without remoteRead vmalert
+  # never reads it back, so a pod roll resets every alert's activeAt and
+  # restarts its "for" timer from zero.
+  remoteRead:
+    url: "http://vmselect-sea1-victoriametrics.victoriametrics.svc.cluster.local:8481/select/0/prometheus"
   # Select all VMRule resources across all namespaces.
   selectAllByDefault: true
   evaluationInterval: 1m
