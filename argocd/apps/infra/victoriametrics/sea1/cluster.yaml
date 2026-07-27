@@ -26,10 +26,15 @@ spec:
           resources:
             requests:
               storage: 128Gi
+    # Matches fmt2: 1Gi was too tight (779-911 MiB observed here) and is what
+    # stalled fmt2's ingestion entirely on 2026-07-27.
     resources:
       limits:
         cpu: "2"
-        memory: 1Gi
+        memory: 4Gi
+      requests:
+        cpu: "1"
+        memory: 4Gi
   vmselect:
     replicaCount: 3
     # Stateless query tier — prefer spreading but stay available under
@@ -52,6 +57,9 @@ spec:
     resources:
       limits:
         cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
         memory: "1Gi"
     serviceSpec:
       spec:
@@ -70,6 +78,15 @@ spec:
         labelSelector:
           matchLabels:
             app.kubernetes.io/name: vminsert
+    # Without this the operator applies 500m/500Mi defaults, which OOMKilled
+    # on fmt2 when vmstorage stalled.
+    resources:
+      limits:
+        cpu: "1"
+        memory: 1Gi
+      requests:
+        cpu: "200m"
+        memory: 512Mi
     serviceSpec:
       spec:
         type: ClusterIP
