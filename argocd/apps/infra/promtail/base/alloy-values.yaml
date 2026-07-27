@@ -57,13 +57,8 @@ alloy:
         targets    = discovery.relabel.pods.output
         forward_to = [loki.process.process.receiver]
 
-        // discovery.kubernetes hands every pod in the cluster to every Alloy
-        // instance, so without this each of the N DaemonSet pods tailed all
-        // ~349 sea1 pods and shipped a full duplicate copy of the cluster's
-        // logs. Loki deduplicated them on ingest, so it was invisible in
-        // stored volume while still costing Nx the push traffic (the source of
-        // the 429s) and Nx the on-disk queue. Clustering shards targets across
-        // instances instead.
+        // Shard targets across instances; otherwise every pod tails the whole
+        // cluster and ships a duplicate copy.
         clustering {
           enabled = true
         }
@@ -72,11 +67,8 @@ alloy:
       loki.process "process" {
         forward_to = [loki.write.loki.receiver]
 
-        // Guards against replaying a pod's entire log history after an Alloy
-        // restart. Must stay below Loki's reject_old_samples_max_age (168h),
-        // otherwise we ship data the server will reject anyway. Was "1h", which
-        // silently discarded everything buffered during the sea1 -> fmt2 outage
-        // on 2026-07-14..07-17 instead of backfilling it.
+        // Caps replay after a restart. Keep under Loki's
+        // reject_old_samples_max_age (168h).
         stage.drop {
           older_than          = "96h"
           drop_counter_reason = "too old"
@@ -113,16 +105,12 @@ alloy:
         endpoint {
           url = "http://loki.fmt2.generalprogramming.org/loki/api/v1/push"
 
-          // sea1 reaches this endpoint cross-site, so transient link loss is
-          // expected. Retry for longer before giving up on a batch.
+          // sea1 reaches this cross-site; ride out transient link loss.
           max_backoff_period  = "10m"
           max_backoff_retries = 20
         }
 
-        // Durable on-disk queue. Without this, anything not yet accepted by
-        // Loki lives only in memory and dies with the pod. max_segment_age
-        // bounds how far back we can replay, and is matched to the 96h
-        // stage.drop cutoff above.
+        // Durable queue; without it unsent data dies with the pod.
         wal {
           enabled         = true
           max_segment_age = "96h"
@@ -130,16 +118,11 @@ alloy:
         }
       }
 
-  # Distributes log collection across instances rather than every pod tailing
-  # every target. Required for the clustering block in loki.source.kubernetes
-  # above to take effect.
+  # Required for the clustering block above to take effect.
   clustering:
     enabled: true
 
-  # The WAL lives under storagePath. The chart default (/tmp/alloy) is the
-  # container's ephemeral layer, which is wiped on every container restart --
-  # useless as a crash buffer. Backed by CephFS so the queue survives pod
-  # restarts and rescheduling anywhere in the cluster.
+  # WAL location. Chart default (/tmp/alloy) is ephemeral and wiped on restart.
   storagePath: /var/lib/alloy
 
   mounts:
@@ -148,8 +131,7 @@ alloy:
     extra:
       - name: alloy-wal
         mountPath: /var/lib/alloy
-        # One RWX volume shared by the DaemonSet, but each instance gets its
-        # own directory -- a shared WAL directory would corrupt.
+        # Private WAL dir per instance on the shared RWX volume.
         subPathExpr: $(K8S_NODE_NAME)
 
   resources:
@@ -161,8 +143,8 @@ alloy:
       memory: 1Gi
 
 controller:
-  # Scraped by the annotation-driven VMPodScrape ("all-scrape"). Without these
-  # the Alloy metrics referenced by the logging-pipeline alerts do not exist.
+  # Picked up by the "all-scrape" VMPodScrape; without these there are no
+  # alloy_* metrics to alert on.
   podAnnotations:
     prometheus.io/scrape: "true"
     prometheus.io/port: "12345"

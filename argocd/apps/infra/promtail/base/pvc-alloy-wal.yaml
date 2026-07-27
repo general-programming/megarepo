@@ -1,15 +1,8 @@
 ---
 # Backing store for Alloy's loki.write WAL.
 #
-# ReadWriteMany because this is a DaemonSet: one volume is shared by every
-# instance, and each mounts it with subPathExpr $(K8S_NODE_NAME) so they never
-# share a WAL directory. ceph-rbd cannot do RWX, hence cephfs.
-#
-# Sizing: sea1 stores ~5 GB/day of logs on average and ~10 GB/day at peak. With
-# clustering enabled that volume is split across the instances rather than each
-# one carrying a full copy, so a 96h buffer needs roughly 10 GB/day * 4 days =
-# ~40Gi in total across all instances at peak. 48Gi leaves headroom. fmt2 is
-# considerably smaller (~3 GB/day peak) and shares this definition.
+# RWX because the DaemonSet shares one volume, split by subPathExpr; ceph-rbd
+# can't do RWX. Sized for a 96h buffer at sea1's ~10 GB/day peak.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
