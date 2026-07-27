@@ -51,9 +51,12 @@ nodes:
       # never own a MetalLB L2 VIP from the sea1 pool. Workloads behind such a
       # VIP refuse nodes carrying this label.
       generalprogramming.org/no-lan-vip: "true"
+    # This node takes DHCP only for v6, so its resolvers are static rather
+    # than inherited from sea1-core's Kea. Both entries are NixOS dnsmasq:
+    # sea420-core, then fmt2-core for cross-site redundancy.
     nameservers:
       - 10.3.0.3
-      - 10.65.67.6
+      - 10.65.67.5
     networkInterfaces:
       - interface: enp6s18
         addresses:
