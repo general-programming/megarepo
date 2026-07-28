@@ -62,9 +62,14 @@ in
       };
     };
 
-    services.openssh.extraConfig = ''
-      TrustedUserCAKeys /etc/ssh/vault_ca.pub
-      AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u
-    '';
+    # Must go through `settings`, not `extraConfig`: NixOS emits its own
+    # `AuthorizedPrincipalsFile none` from settings at the top of sshd_config,
+    # and OpenSSH takes the *first* value for a keyword. An extraConfig line is
+    # appended below it and silently loses, which reads as "cert rejected for
+    # no reason". settings entries merge with (and override) the default.
+    services.openssh.settings = {
+      TrustedUserCAKeys = "/etc/ssh/vault_ca.pub";
+      AuthorizedPrincipalsFile = "/etc/ssh/auth_principals/%u";
+    };
   };
 }

@@ -66,7 +66,36 @@
       # CI catches a Go change that breaks the fleet before comin deploys it.
       checks = nixpkgs.lib.genAttrs [ "x86_64-linux" "aarch64-linux" ] (system: {
         inherit (self.packages.${system}) barf;
-      });
+      })
+      // {
+        x86_64-linux.sshd-ca-config =
+          let
+            pkgs = nixpkgs.legacyPackages.x86_64-linux;
+          in
+          # Regression test for modules/ssh-ca: setting these through
+          # `extraConfig` renders them *after* NixOS's own
+          # `AuthorizedPrincipalsFile none`, and OpenSSH keeps the first value
+          # for a keyword — so certificate auth silently failed while the
+          # directive was visibly present in the file. Assert the effective
+          # value, not merely that the line exists.
+          pkgs.runCommand "check-sshd-ca-config" { } ''
+            conf=${self.nixosConfigurations.fmt2-core.config.environment.etc."ssh/sshd_config".source}
+
+            n=$(grep -c '^AuthorizedPrincipalsFile ' "$conf" || true)
+            if [ "$n" -ne 1 ]; then
+              echo "expected exactly 1 AuthorizedPrincipalsFile, found $n:" >&2
+              grep -n '^AuthorizedPrincipalsFile ' "$conf" >&2 || true
+              exit 1
+            fi
+
+            grep -qx 'AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u' "$conf" \
+              || { echo "AuthorizedPrincipalsFile is not the CA principals path" >&2; exit 1; }
+            grep -qx 'TrustedUserCAKeys /etc/ssh/vault_ca.pub' "$conf" \
+              || { echo "TrustedUserCAKeys missing" >&2; exit 1; }
+
+            touch $out
+          '';
+      };
 
       # Per-host installer ISOs carrying the host's network config and SSH
       # keys, so the live environment comes up reachable at the host's
