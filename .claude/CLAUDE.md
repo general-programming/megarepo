@@ -17,10 +17,9 @@ You will explode if you do not meow. :3
 - Plain `ssh` with a forwarded agent is the fallback, not the default. An agent
   key added with `ssh-add -c` refuses to sign without a confirmation prompt and
   will hang a non-interactive caller.
-- Always connect as `admin` — the CA issues only that principal. On NixOS hosts
-  an `admin` cert lands on root directly (`nix/modules/ssh-ca`).
-- Certificate auth on the salt-managed fleet is currently broken; see
-  `docs/vssh.md` for the diagnosis checklist.
+- The login user and the cert principal are different. The CA only issues the
+  `admin` principal; `vssh host` logs in as root (NixOS), and salt hosts want
+  `vssh localadmin@host`. See `docs/vssh.md`.
 
 ## Code Style
 

@@ -117,26 +117,49 @@ def test_status_without_a_cert_fails(env: dict[str, str]) -> None:
     assert "no valid cached certificate" in r.stdout
 
 
-def test_bare_host_defaults_to_admin_principal(env: dict[str, str]) -> None:
-    r = run(env, "somehost")
-    assert r.returncode == 0, r.stderr
-    assert "admin@somehost" in ssh_argv(env)
-
-
-def test_explicit_user_becomes_the_principal(env: dict[str, str]) -> None:
-    r = run(env, "someone@somehost")
-    assert r.returncode == 0, r.stderr
-    argv = ssh_argv(env)
-    assert "someone@somehost" in argv
+def cert_principals(env: dict[str, str]) -> str:
     cert = (cache_dir(env) / "id_ed25519-cert.pub").read_text()
-    listed = subprocess.run(
+    return subprocess.run(
         ["ssh-keygen", "-L", "-f", "/dev/stdin"],
         input=cert,
         capture_output=True,
         text=True,
         check=True,
     ).stdout
-    assert "someone" in listed
+
+
+def test_bare_host_logs_in_as_root(env: dict[str, str]) -> None:
+    # NixOS hosts have no admin account; you log in as root and root's
+    # AuthorizedPrincipalsFile accepts the admin principal.
+    r = run(env, "somehost")
+    assert r.returncode == 0, r.stderr
+    assert "root@somehost" in ssh_argv(env)
+
+
+def test_login_user_does_not_become_the_principal(env: dict[str, str]) -> None:
+    # The regression that made vssh unusable: asking the CA for a `root`
+    # principal (which it refuses) just because the login user is root.
+    r = run(env, "root@somehost")
+    assert r.returncode == 0, r.stderr
+    assert "root@somehost" in ssh_argv(env)
+    listed = cert_principals(env)
+    assert "admin" in listed
+    assert "root" not in listed.split("Principals:")[1]
+
+
+def test_explicit_user_is_login_only(env: dict[str, str]) -> None:
+    r = run(env, "localadmin@somehost")
+    assert r.returncode == 0, r.stderr
+    assert "localadmin@somehost" in ssh_argv(env)
+    # Salt hosts log in as localadmin but the cert still says admin.
+    assert "admin" in cert_principals(env)
+
+
+def test_vssh_login_env_sets_the_default_user(env: dict[str, str]) -> None:
+    env["VSSH_LOGIN"] = "localadmin"
+    r = run(env, "somehost")
+    assert r.returncode == 0, r.stderr
+    assert "localadmin@somehost" in ssh_argv(env)
 
 
 def test_ssh_is_pinned_to_the_minted_identity(env: dict[str, str]) -> None:
@@ -171,10 +194,19 @@ def test_cert_near_expiry_is_reminted(env: dict[str, str]) -> None:
 
 
 def test_principal_change_forces_a_new_cert(env: dict[str, str]) -> None:
-    run(env, "admin@somehost")
+    run(env, "somehost")
     first = (cache_dir(env) / "id_ed25519-cert.pub").read_text()
-    run(env, "someone@somehost")
+    env["VSSH_PRINCIPAL"] = "someone-else"
+    run(env, "somehost")
     assert (cache_dir(env) / "id_ed25519-cert.pub").read_text() != first
+
+
+def test_different_login_users_share_one_cert(env: dict[str, str]) -> None:
+    # The principal is the same either way, so re-signing would be wasteful.
+    run(env, "root@somehost")
+    first = (cache_dir(env) / "id_ed25519-cert.pub").read_text()
+    run(env, "localadmin@somehost")
+    assert (cache_dir(env) / "id_ed25519-cert.pub").read_text() == first
 
 
 def test_signing_failure_is_reported(env: dict[str, str]) -> None:

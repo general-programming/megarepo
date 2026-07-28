@@ -7,20 +7,22 @@
 # both by minting a throwaway keypair, having the CA sign it, and handing the
 # cert straight to ssh — no agent, nothing persistent to leak.
 #
-#   vssh admin@fmt2-core-0            # same arg shape as ssh
-#   vssh fmt2-core-0 -- uptime        # everything after -- goes to ssh
+#   vssh fmt2-core                    # NixOS host: logs in as root
+#   vssh admin@fmt2-core-0            # salt host: has a real admin account
+#   vssh fmt2-core uptime             # trailing args go to ssh
 #   vssh --status                     # show the cached cert
 #   vssh --logout                     # drop the cache
 #
-# Env knobs:
-#   VSSH_MOUNT      CA secrets mount        (default: ssh-client-signer)
-#   VSSH_ROLE       signing role            (default: administrator-role)
-#   VSSH_PRINCIPAL  principal / login user  (default: admin)
-#   BAO_ADDR/VAULT_ADDR, BAO_TOKEN/VAULT_TOKEN as usual
+# The certificate always carries the `admin` principal; the login user is a
+# separate thing (see the note further down). Default login is root because the
+# NixOS fleet has no admin account.
 #
-# NOTE: the CA is only trusted by the salt-managed fleet (see
-# salt/state/sshd_config). NixOS hosts do not carry TrustedUserCAKeys yet, so
-# vssh cannot reach them — use the documented break-glass path for those.
+# Env knobs:
+#   VSSH_MOUNT      CA secrets mount      (default: ssh-client-signer)
+#   VSSH_ROLE       signing role          (default: administrator-role)
+#   VSSH_PRINCIPAL  certificate principal (default: admin)
+#   VSSH_LOGIN      default login user    (default: root)
+#   BAO_ADDR/VAULT_ADDR, BAO_TOKEN/VAULT_TOKEN as usual
 
 set -euo pipefail
 
@@ -138,16 +140,24 @@ cmd_status() {
 case "${1:-}" in
     --status) cmd_status; exit $? ;;
     --logout) rm -rf "$CACHE_DIR"; echo "vssh: cache cleared"; exit 0 ;;
-    -h|--help) sed -n '2,27p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     '') die "usage: vssh [user@]host [ssh args...]  (see --help)" ;;
 esac
 
-# Take the principal from an explicit user@host so `vssh root@box` asks the CA
-# for a root cert instead of silently logging in as admin.
+# The login user and the certificate principal are NOT the same thing, and
+# deriving one from the other is wrong in both directions:
+#
+#   - NixOS hosts have no `admin` account. You log in as root; root's
+#     AuthorizedPrincipalsFile lists `admin`, so an admin cert is accepted.
+#     Asking the CA for a `root` principal instead just gets refused.
+#   - Salt hosts do have an `admin` account, so there login user == principal.
+#
+# So: the principal is always VSSH_PRINCIPAL, and the login user is whatever
+# the caller asked for, defaulting to root (the NixOS fleet).
 target="$1"; shift
 case "$target" in
-    *@*) PRINCIPAL="${target%%@*}" ;;
-    *)   target="${PRINCIPAL}@${target}" ;;
+    *@*) ;;
+    *)   target="${VSSH_LOGIN:-root}@${target}" ;;
 esac
 
 ensure_cert

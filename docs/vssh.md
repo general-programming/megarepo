@@ -5,11 +5,24 @@ throwaway ed25519 keypair, has the OpenBao SSH CA sign it, and hands the
 certificate straight to `ssh`.
 
 ```sh
-vssh admin@fmt2-core-0        # same argument shape as ssh
-vssh fmt2-core-0 -- uptime    # defaults to the admin principal
-vssh --status                 # inspect the cached cert
-vssh --logout                 # drop the cache
+vssh fmt2-core                  # NixOS host: logs in as root
+vssh localadmin@fmt2-hv-...     # salt host: log in as localadmin
+vssh fmt2-core uptime           # trailing args go to ssh
+vssh --status                   # inspect the cached cert
+vssh --logout                   # drop the cache
 ```
+
+**The login user and the certificate principal are different things.** The CA
+only ever issues the `admin` principal; who you log in *as* is separate:
+
+| Fleet | Log in as | Why |
+| --- | --- | --- |
+| NixOS | `root` (the default) | no `admin` account exists; root's `AuthorizedPrincipalsFile` lists `admin` |
+| Salt | `localadmin` or `admin` | both accounts exist, both principals files list `admin` |
+
+Deriving one from the other is wrong in both directions — `vssh root@host` must
+still ask the CA for an `admin` certificate, because a `root` principal is
+refused.
 
 `bin/` is already on `PATH` inside the devenv shell — `.envrc` appends both
 `bin/` and `scripts/`, so `direnv allow` is all that is needed.
@@ -31,7 +44,8 @@ fresh one — so the cache directory is not a standing credential.
 | --- | --- | --- |
 | `VSSH_MOUNT` | `ssh-client-signer` | CA secrets mount |
 | `VSSH_ROLE` | `administrator-role` | signing role |
-| `VSSH_PRINCIPAL` | `admin` | principal / remote login |
+| `VSSH_PRINCIPAL` | `admin` | certificate principal |
+| `VSSH_LOGIN` | `root` | default login user when none is given |
 
 `BAO_ADDR`/`BAO_TOKEN` are used if set; otherwise `VAULT_ADDR`/`VAULT_TOKEN`,
 then `~/.bao-token`, then `~/.vault-token`. Certificates are cached under
@@ -43,8 +57,7 @@ forwarding, no port forwarding.
 ## Who trusts the CA
 
 The role (`ssh-client-signer/roles/administrator-role`) issues exactly one
-principal: `admin`. `vssh root@host` asks the CA for a `root` cert and is
-refused — always connect as `admin`.
+principal: `admin`.
 
 - **NixOS hosts** trust it via `nix/modules/ssh-ca`, imported fleet-wide from
   `machines/base.nix`. These boxes have no `admin` user, so root's
@@ -53,39 +66,53 @@ refused — always connect as `admin`.
 - **Salt-managed hosts** trust it via `salt/state/sshd_config`
   (`TrustedUserCAKeys /etc/ssh/ssh_vault_ca.pub`,
   `AuthorizedPrincipalsFile /etc/ssh/auth_principals/%u`), with
-  `salt/state/admin_user` creating the `admin` user, its NOPASSWD sudoers entry,
-  and `/etc/ssh/auth_principals/admin`.
+  `salt/state/admin_user` creating the account, its NOPASSWD sudoers entry, and
+  the matching principals file. Note the account name comes from the
+  `admin_user:username` pillar and is **`localadmin`** in practice, not `admin`
+  — `/etc/ssh/auth_principals/localadmin` is what contains `admin`. An `admin`
+  account also exists on IPA-joined hosts, but that one comes from IPA, not
+  Salt.
 
-## Known-broken: certificate auth on the salt fleet
+## Fixed 2026-07-27: what was actually broken
 
-As of 2026-07-27, `vssh admin@fmt2-core-0` fails with `Permission denied
-(publickey,...)`. The client side is fine — `ssh -vvv` shows the certificate
-loaded and offered, and the server rejecting it without comment:
+Two independent faults, neither of them in the client:
 
-```
-debug1: Offering public key: .../id_ed25519-cert.pub ED25519-CERT ... explicit
-debug1: Authentications that can continue: publickey,gssapi-keyex,...
-```
+**1. NixOS: the directives never took effect.** `nix/modules/ssh-ca` first set
+them via `services.openssh.extraConfig`, which renders *below* NixOS's own
+`AuthorizedPrincipalsFile none`. OpenSSH keeps the first value for a keyword,
+so the setting was visibly present in the file and completely inert. Fixed by
+going through `settings`; the `sshd-ca-config` flake check now asserts the
+effective value.
 
-All the pieces exist in the repo, so this is drift on the host rather than a
-missing state. Diagnose on the box (needs the break-glass agent path):
+**2. Salt: `TrustedUserCAKeys` pointed at a file that does not exist.** Roughly
+half the fleet had a stale `/etc/sshd/sshd_config.d/10-genprog.conf` naming
+`/etc/ssh/vault_ssh_ca.pub`, while the CA is actually written to
+`/etc/ssh/ssh_vault_ca.pub` (note the transposition). The template in this repo
+was correct all along — those hosts simply had not run the state since the path
+changed. Converged with `salt <targets> state.apply sshd_config`; all 16
+connected minions now agree.
 
-1. `ls -l /etc/ssh/ssh_vault_ca.pub` — most likely culprit. The state that
-   writes it is wrapped in `{% if has_vault_ssh %}` precisely because
-   "vault_ssh disappears when a salt upgrade wipes salt-pip packages". When the
-   module is gone the state is skipped silently, so `TrustedUserCAKeys` can
-   point at a stale or absent file while highstate still reports success.
-2. `sshd -T | grep -iE 'trusteduserca|authorizedprincipals'` — confirms the
-   directives actually took effect. Note the managed fragment lives in
-   `/etc/sshd/sshd_config.d/` (not `/etc/ssh/`), pulled in by an `Include` that
-   `file.append` adds to the *end* of `/etc/ssh/sshd_config`; anything landing
-   after a `Match` block would be scoped to that block.
-3. `cat /etc/ssh/auth_principals/admin` — must contain `admin`.
-4. `id admin` — the account must exist.
-5. `journalctl -u ssh -n 50` during an attempt — sshd logs the real reason.
+`fmt2-core-0` still has the stale path and cannot be fixed this way: it is not
+an enrolled minion, so highstate never reaches it. It is being decommissioned
+(`docs/fmt2/fmt2-core-0-retirement.md`), so it was left alone.
 
-Until that is resolved, treat vssh as working against NixOS hosts and unproven
-against the salt fleet.
+The third fault was mine and lived in vssh itself: it derived the certificate
+principal from the login user, so `vssh root@host` asked the CA for a `root`
+principal and was refused. Principal and login user are now independent.
+
+If certificate auth breaks again, check in this order:
+
+1. `sshd -T | grep -iE 'trusteduserca|authorizedprincipalsfile'` — the
+   *effective* values, not what any one config file says.
+2. `ls -l $(sshd -T | awk '/trustedusercakeys/ {print $2}')` — does the file
+   sshd actually wants exist?
+3. `cat /etc/ssh/auth_principals/<login-user>` — must contain `admin`.
+4. `journalctl -u ssh -n 50` during an attempt. `Invalid user X` means the
+   account does not exist, which is a login-user problem, not a cert problem.
+
+Beware `Include` ordering: `/etc/ssh/sshd_config` pulls in
+`/etc/ssh/sshd_config.d/` at line 13 and `/etc/sshd/sshd_config.d/` (the
+salt-managed one) at line 125, so anything in the former wins.
 
 ## Declarative pieces
 
