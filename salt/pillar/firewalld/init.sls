@@ -66,8 +66,10 @@ firewalld:
         - ssh
         - salt-minion
         - dns
-        - dhcp
-        - dhcpv6
+        # DHCP *client* reply port (546/udp) only. The server ports — `dhcp`
+        # (67/udp) and `dhcpv6` (547/udp) — used to be open on every host;
+        # nothing in the fleet serves DHCP from Salt any more (Kea on the
+        # NixOS boxes owns it), so they are gone rather than tag-gated.
         - dhcpv6-client
 {% if 'dnsserver' in salt['grains.get']('tags', []) %}
         - dns
