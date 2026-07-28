@@ -14,9 +14,12 @@ host is powered off.
       static `.6` consumers are being enumerated via query logging
       (`/etc/dnsmasq.d/98-query-logging.conf` →
       `/var/log/dnsmasq-queries.log`, enabled 2026-07-26). Known so far:
-      10.255.1.23, 10.255.1.24 (static resolv on OOB gear), plus
-      sea420-core's dhcpd options (`10.3.0.3,10.65.67.6` — fix in salt
-      pillar when touched). Retire .6 only after the log goes quiet.
+      10.255.1.23, 10.255.1.24 (static resolv on OOB gear). sea420-core's
+      DHCP options are **done** — it is NixOS/Kea now and hands out
+      `10.3.0.3, 10.65.67.5`. Retire .6 only after the log goes quiet.
+      Full client census as of 2026-07-27 in
+      `docs/salt/dns-dhcp-retirement.md`; the largest consumer
+      (`sea1-k8s-103-0`, ~97% of queries) was repointed in `63bdc201`.
 - [ ] **TACACS+** — docker container `tacacs`, bound to `10.65.67.6:49`.
       Network gear authenticates against this IP. Needs a new home
       (container on fmt2-core or k8s) and a gear-side IP update — or keep

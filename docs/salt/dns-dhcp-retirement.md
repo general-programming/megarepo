@@ -43,29 +43,38 @@ per `4fd66877`. sea1 moved in `baa0f7a6`, sea420 in `766269f0`.
 in `docs/salt/secrets.md`, and the `dhcpserver` tag description in
 `automation/ansible/README.md` are gone.
 
-**Two things this deliberately did not do.**
+### Verified: no legacy host was still receiving it
 
-`4fd66877` names `fmt2-core-0/oob-backup` as the pair Kea took over from, and
-`oob-backup` could not be reached during this work — its `isc-dhcp-server` is
-unconfirmed. Note that deleting the state only stops Salt *managing* a host: it
-does not stop a running `isc-dhcp-server` or delete `/etc/dhcp/dhcpd.d/`. If
-`oob-backup` is still serving, it keeps serving, now with static leases that no
-longer track NetBox. Verify and stop it by hand:
-
-```sh
-salt -G 'tags:dhcpserver' service.status isc-dhcp-server
+```
+$ salt -G 'tags:dhcpserver' service.status isc-dhcp-server
+sea1-core:
+    Minion did not return. [Not connected]
+sea420-core.generalprogramming.org:
+    Minion did not return. [Not connected]
 ```
 
-`salt/pillar/firewalld/init.sls` still opens `dhcp`, `dhcpv6`, and
-`dhcpv6-client` in the public zone. Those are **not** gated on the
-`dhcpserver` tag — they are open on every firewalld-managed host, so tightening
-them is a fleet-wide firewall change rather than part of retiring this role.
-`dhcp` (67/udp) and `dhcpv6` (547/udp) are server ports and should now be
-closable; `dhcpv6-client` (546/udp) is still needed by clients. Do it as its own
-change.
+Exactly two minions carry the grain, and **both are the NixOS Kea hosts** —
+reprovisioned off Ubuntu, no longer salt minions, which is why they are
+disconnected. No Debian host carries `tags:dhcpserver` at all, so the state was
+already dead code before it was deleted.
 
-Also still to clean up: the `dhcpserver` grain itself remains set on tagged
-minions and NetBox still carries the tag. Neither does anything now.
+`fmt2-core-0` was checked directly: `isc-dhcp-server` inactive, no v4
+`dhcpd.conf`, nothing listening on 67. The `oob-backup` named in `4fd66877`
+refers to the OOB-side dhcpd on the vlan1000 (`10.255.1.0/24`) segment, which
+Kea on fmt2-core now serves; that network is not routed from the devbox, so it
+was confirmed via the tag query above rather than by probing.
+
+Remaining cosmetic cleanup: the `dhcpserver` grain and the NetBox tag are still
+set on sea1-core and sea420-core. Neither does anything now.
+
+`salt/pillar/firewalld/init.sls` no longer opens the DHCP **server** ports —
+`dhcp` (67/udp) and `dhcpv6` (547/udp) were open on *every* firewalld-managed
+host, ungated by the tag, and are gone. `dhcpv6-client` (546/udp) stays.
+
+Note the same shape still applies to `dns`: it is listed unconditionally *and*
+again under the `dnsserver` tag, so port 53 is open fleet-wide. Closing the
+unconditional entry depends on the `dnsserver` grain actually being set
+everywhere it matters — worth doing, but as its own change.
 
 ## `dns_server` — not yet
 
