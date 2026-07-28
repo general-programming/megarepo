@@ -87,9 +87,25 @@ missing state. Diagnose on the box (needs the break-glass agent path):
 Until that is resolved, treat vssh as working against NixOS hosts and unproven
 against the salt fleet.
 
+## Declarative pieces
+
+| What | Where |
+| --- | --- |
+| CA mount + `administrator-role` | `terraform/auth/ssh_ca.tf` |
+| NixOS trust (`TrustedUserCAKeys`, root principals) | `nix/modules/ssh-ca` |
+| Salt trust (`TrustedUserCAKeys`, `admin` user, principals) | `salt/state/sshd_config`, `salt/state/admin_user` |
+| CA public key | `nix/modules/ssh-ca/client-ca.pub` |
+| Client | `bin/vssh`, tests in `bin/tests/` |
+
+The Terraform resources adopt the existing mount and role — import them before
+the first apply, per the header comment in `ssh_ca.tf`. The CA *signing key* is
+intentionally not Terraform-managed: a destroy/recreate would invalidate every
+issued certificate and lock the fleet out.
+
+This replaced `infrastructure/vault/ssh-admin.sh` and `ssh-role.json`, which
+were removed. The shell script's heredoc used typographic quotes and was never
+valid JSON, so the live role had been created by hand and drifted from both.
+
 ## Related
 
-- `infrastructure/vault/ssh-admin.sh` — original role bootstrap. Note the
-  heredoc in it contains typographic quotes and is not valid JSON; the live
-  role was created some other way. Do not re-run it as-is.
 - `docs/salt/secrets.md` — CA rotation caveats.
