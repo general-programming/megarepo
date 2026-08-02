@@ -23,27 +23,51 @@ spec:
           command:
             - bash
             - -c
-            - 'precreate-core docspell; exec solr -f -Dsolr.modules=analysis-extras -v -V'
+            - 'precreate-core docspell; exec solr -f -Dsolr.modules=analysis-extras'
           env:
             - name: SOLR_PORT
               value: "8983"
-          livenessProbe: # Check for a 302 response
+            # Keep logs (and the per-request jetty log) off the cephfs PVC; a
+            # stalled write there blocks the request thread the probes hit.
+            - name: SOLR_LOGS_DIR
+              value: /var/log/solr
+            - name: SOLR_REQUESTLOG_ENABLED
+              value: "false"
+          resources:
+            requests:
+              cpu: 250m
+              memory: 1Gi
+            limits:
+              memory: 2Gi
+          startupProbe:
             httpGet:
               path: /solr/admin/info/system
               port: 8983
-            initialDelaySeconds: 60
             periodSeconds: 10
-            timeoutSeconds: 5
+            timeoutSeconds: 10
+            failureThreshold: 30
+          livenessProbe:
+            httpGet:
+              path: /solr/admin/info/system
+              port: 8983
+            periodSeconds: 15
+            timeoutSeconds: 10
+            failureThreshold: 6
           readinessProbe:
             httpGet:
               path: /solr/admin/info/system
               port: 8983
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            timeoutSeconds: 1
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
           volumeMounts:
             - name: solr-data
               mountPath: /var/solr
+            - name: solr-logs
+              mountPath: /var/log/solr
+      volumes:
+        - name: solr-logs
+          emptyDir: {}
   volumeClaimTemplates:
     - metadata:
         name: solr-data

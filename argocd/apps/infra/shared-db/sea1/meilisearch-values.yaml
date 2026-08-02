@@ -1,10 +1,22 @@
 environment:
   MEILI_NO_ANALYTICS: true
   MEILI_ENV: production
-  MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE: "true"
+  # Renamed from MEILI_EXPERIMENTAL_DUMPLESS_UPGRADE; without it the engine
+  # refuses to start when the on-disk DB was written by an older version.
+  MEILI_UPGRADE_DB: "true"
 
 auth:
   existingMasterKeySecret: meilisearch-master-key
+
+# Chart default is 60x1s, which is not enough headroom for an on-startup DB
+# upgrade after a chart bump. 5s x 120 = 10 minutes.
+startupProbe:
+  periodSeconds: 5
+  InitialDelaySeconds: 1
+  failureThreshold: 120
+  timeoutSeconds: 5
+  path: "/health"
+  httpHeaders: []
 
 persistence:
   enabled: true
