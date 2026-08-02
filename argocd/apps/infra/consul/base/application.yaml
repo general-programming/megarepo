@@ -20,6 +20,21 @@ spec:
         client:
           enabled: true
           exposeGossipPorts: false
+          # The chart default (100m/100Mi) starves the agent: it gets throttled
+          # in >99% of CPU periods, misses memberlist acks, and crashes on
+          # "timeout starting DNS servers" or OOM. No CPU limit — gossip is
+          # latency-sensitive and throttling is what breaks it.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 256Mi
+            limits:
+              memory: 512Mi
+          extraEnvironmentVars:
+            # Go otherwise sizes GOMAXPROCS from the node's core count (24 on
+            # the sea1 workers), which thrashes the scheduler against the
+            # cgroup quota — 97% of the agent's CPU was system time.
+            GOMAXPROCS: "2"
         dns:
           enabled: true
         server:
