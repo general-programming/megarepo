@@ -56,11 +56,6 @@ in
     coder
     git
     talosctl
-    # virtctl, for KubeVirt guests: `virtctl console <vm> -n <ns>` is the only
-    # way to drive an interactive ISO install, and the guest-console-log
-    # fallback is read-only. The attribute is `kubevirt`, not `virtctl`.
-    # Currently 1.8.4, matching the cluster -- virtctl and the cluster's
-    # KubeVirt should not drift far apart.
     kubevirt
     # machine provisioning (nix/justfile)
     attic-client
