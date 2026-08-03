@@ -3,6 +3,14 @@ kind: ConfigMap
 metadata:
   name: rook-ceph-mon-endpoints
   namespace: ceph
+  annotations:
+    # Converged Rook owns this object -- it rewrites data/mapping/maxMonId as
+    # mons come and go. ArgoCD held these fields via server-side apply and was
+    # reverting every write, which left mon.d registered in the monmap at one
+    # address while its pod ran on another, permanently out of quorum.
+    # This annotation is applied FIRST so that when the resource is dropped
+    # from the kustomization, ArgoCD relinquishes it instead of pruning it.
+    argocd.argoproj.io/sync-options: Prune=false
 data:
   csi-cluster-config-json: >-
     [{"clusterID":"ceph","monitors":["[2602:fa6d:10:ffff::101]:6789","[2602:fa6d:10:ffff::102]:6789","[2602:fa6d:10:ffff::103]:6789"],"namespace":""}]
