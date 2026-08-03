@@ -62,7 +62,16 @@ spec:
         namespace: '{{path.basename}}'
       syncPolicy:
         automated:
-          prune: true
+          # Never prune. Unlike a stateless workload, a pruned VM takes its
+          # PVC -- and therefore the RBD image and the guest's data -- with it.
+          # Removing a VM from git leaves it running and needs a deliberate
+          # `kubectl delete`, which is the correct amount of friction here.
+          #
+          # This nearly bit during the freepbx migration: moving the VM between
+          # Applications made ArgoCD want to prune the PVC out of the old app,
+          # and ceph-rbd reclaims with Delete. It was only safe because the
+          # disk had not been populated yet.
+          prune: false
           selfHeal: true
           allowEmpty: true
         syncOptions:

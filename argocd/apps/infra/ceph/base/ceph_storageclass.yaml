@@ -66,3 +66,29 @@ mountOptions:
   - recover_session=clean
 reclaimPolicy: Delete
 allowVolumeExpansion: true
+---
+# Same pool as ceph-rbd, but the volume outlives its claim. For KubeVirt guest
+# disks: with Delete, anything that removes the PVC -- an ArgoCD prune, a
+# mistaken kubectl, an app moved between projects -- destroys the RBD image and
+# the guest with it. Retain leaves the PV Released and the image intact, so the
+# worst case is a manual reattach instead of data loss.
+#
+# Pairs with prune: false on the vms AppProject; both layers are deliberate.
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ceph-rbd-retain
+provisioner: ceph.rbd.csi.ceph.com
+parameters:
+  clusterID: ceph
+  pool: k8s-rbd
+  imageFormat: '2'
+  imageFeatures: layering,fast-diff,object-map,deep-flatten,exclusive-lock
+  csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/provisioner-secret-namespace: ceph
+  csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner
+  csi.storage.k8s.io/controller-expand-secret-namespace: ceph
+  csi.storage.k8s.io/node-stage-secret-name: rook-csi-rbd-node
+  csi.storage.k8s.io/node-stage-secret-namespace: ceph
+reclaimPolicy: Retain
+allowVolumeExpansion: true
