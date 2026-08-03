@@ -157,6 +157,11 @@ nodes:
     nodeLabels:
       generalprogramming.org/no-database: "true"
       generalprogramming.org/no-lan-vip: "true"
+      # And KubeVirt guests: this node has no br0, so a LAN-attached VM here
+      # would have no way onto the sea1 LAN. The KubeVirt CR keeps
+      # virt-handler off any node carrying this, which is what actually makes
+      # VMs unschedulable here rather than merely deprefered.
+      generalprogramming.org/no-virt: "true"
     nameservers:
       - 10.3.0.3
       - 10.65.67.5

@@ -16,6 +16,24 @@ spec:
       # useEmulation unset keeps QEMU on hardware virt -- if it ever silently
       # flips to TCG emulation, VMs still boot but run ~20x slower.
       useEmulation: false
+  workloads:
+    # VMs can only run where virt-handler runs, so keeping it off nodes
+    # labelled no-virt is what actually makes them unschedulable there --
+    # sea1-k8s-103-0 sits in the wobscale rack with no br0, so a LAN-attached
+    # guest there would have no route onto the sea1 LAN at all.
+    #
+    # This is a hard exclusion by necessity: nodePlacement governs a
+    # DaemonSet, where preferredDuringScheduling would be a no-op. The
+    # positive counterpart -- preferring the bridged nodes -- is a soft
+    # affinity and has to live on each VM instead.
+    nodePlacement:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: generalprogramming.org/no-virt
+                    operator: DoesNotExist
   # imagePullPolicy/imageTag intentionally unset: virt-operator then pins every
   # component to its own version, so bumping the vendored operator manifest is
   # the single source of truth for the KubeVirt version.
