@@ -1,0 +1,68 @@
+# Talos creates this ConfigMap as a bootstrap manifest and is create-only
+# afterwards, so edits survive reboots and config applies. `talosctl
+# upgrade-k8s` is the exception: it re-applies bootstrap manifests and would
+# put the stock Corefile back. ArgoCD with selfHeal is what makes the change
+# durable -- it reverts the revert. Keep the owning-inventory annotation so
+# Talos's own manifest inventory stays consistent.
+#
+# Re-check this file on CoreDNS major upgrades: pinning it here also pins it
+# against any Corefile changes a new version would want.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns
+  namespace: kube-system
+  annotations:
+    config.k8s.io/owning-inventory: talos-bootstrap-manifests-inventory
+data:
+  Corefile: |
+    .:53 {
+        errors
+        health {
+            lameduck 5s
+        }
+        ready
+        log . {
+            class error
+        }
+        prometheus :9153
+
+        kubernetes cluster.local in-addr.arpa ip6.arpa {
+            pods insecure
+            fallthrough in-addr.arpa ip6.arpa
+            ttl 30
+        }
+        forward . /etc/resolv.conf {
+           max_concurrent 1000
+        }
+        cache 30 {
+           disable success cluster.local
+           disable denial cluster.local
+        }
+        loop
+        reload
+        loadbalance
+    }
+
+    # Internal zones live only on sea1-core (dnsmasq, generated from NetBox).
+    # Once the node resolvers move to Cloudflare these stop resolving via
+    # /etc/resolv.conf, so route them explicitly. Public *.generalprogramming.org
+    # names still work through here: sea1-core forwards anything it has no record
+    # for, exactly as it does today.
+    generalprogramming.org:53 {
+        errors
+        cache 30
+        forward . 10.3.2.6 2602:fa6d:10:ffff::f00
+    }
+
+    # Reverse zones for the 94 NetBox PTR records. Public resolvers return
+    # NXDOMAIN for RFC1918 space, and the two public ranges here (79.110.x,
+    # 209.251.x) have no published PTRs either -- all ten are internal-only.
+    # Deliberately NOT 10.in-addr.arpa: that would swallow the pod CIDR
+    # (244.10.in-addr.arpa) and the service CIDR, which the kubernetes plugin
+    # above must keep answering.
+    3.10.in-addr.arpa:53 36.10.in-addr.arpa:53 65.10.in-addr.arpa:53 213.10.in-addr.arpa:53 255.10.in-addr.arpa:53 16.172.in-addr.arpa:53 168.192.in-addr.arpa:53 255.199.in-addr.arpa:53 110.79.in-addr.arpa:53 251.209.in-addr.arpa:53 {
+        errors
+        cache 30
+        forward . 10.3.2.6 2602:fa6d:10:ffff::f00
+    }

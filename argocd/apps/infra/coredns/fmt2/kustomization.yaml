@@ -1,0 +1,9 @@
+# Intentionally empty: the zone forwarding is sea1-specific (it points at
+# sea1-core). fmt2 keeps the stock Talos Corefile.
+#
+# The overlay still has to exist -- the infra ApplicationSet is a matrix of
+# clusters x app directories, so a missing directory becomes an Application
+# stuck in Unknown/ComparisonError.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
