@@ -66,3 +66,18 @@ data:
         cache 30
         forward . 10.3.2.6 2602:fa6d:10:ffff::f00
     }
+
+    # .consul is not a real TLD, so a public resolver NXDOMAINs it. sea1-core
+    # forwards it to its own agent (server=/consul/127.0.0.1#8600); keep that
+    # indirection rather than pointing at the servers' :8600 directly, so this
+    # follows whatever the DC decides is authoritative.
+    #
+    # The consul chart's join list already falls back to the HV addresses, so
+    # consul itself survives without this -- but radosgw.service.consul is used
+    # as an S3 endpoint (loki, tempo, attic) and has no such fallback.
+    # Short TTL: these are service records that move.
+    consul:53 {
+        errors
+        cache 10
+        forward . 10.3.2.6 2602:fa6d:10:ffff::f00
+    }
