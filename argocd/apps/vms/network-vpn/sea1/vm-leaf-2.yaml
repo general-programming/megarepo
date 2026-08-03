@@ -5,6 +5,11 @@
 # peers and forwards but holds no gateway address. Promotion is a separate,
 # reversible change once it has proven itself against leaf-1.
 #
+# The installer volume and its cdrom were removed after the image was written
+# to leaf-2-root: with bootOrder 1 the cdrom wins every reboot, so the guest
+# comes straight back into the installer instead of the system it just
+# installed.
+#
 # Addresses (barf network.yml): eth0 2602:fa6d:10:ffff::f06/116 +
 # 199.255.18.163/32, eth1 10.3.2.2/23, dum0 2602:fa6d:f:aaaa::f0a/128 +
 # 10.255.2.10/32. MACs are the NetBox reservations for VM 120.
@@ -22,26 +27,6 @@ spec:
   resources:
     requests:
       storage: 32Gi
----
-# Installer media. The VyOS ISO is dd'd into this volume from a hypervisor,
-# which avoids needing a container registry to host a containerDisk or CDI to
-# upload through. Delete this claim and the cdrom disk below once the install
-# has been written to leaf-2-root -- leaving it attached means an interrupted
-# boot can land back in the installer, which on a router reads as a hardware
-# fault rather than a boot-order mistake.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: leaf-2-installer
-  namespace: network-vpn
-spec:
-  storageClassName: ceph-rbd-retain
-  volumeMode: Block
-  accessModes:
-    - ReadWriteMany
-  resources:
-    requests:
-      storage: 1Gi
 ---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
@@ -99,12 +84,6 @@ spec:
             - name: rootdisk
               disk:
                 bus: scsi
-              bootOrder: 2
-            - name: installer
-              cdrom:
-                bus: sata
-                readonly: true
-              bootOrder: 1
           # MACs match the NetBox reservations on VM 120, so kea hands out
           # 10.3.2.2 and the upstream route for 199.255.18.163/32 lands here.
           # VyOS pins interfaces by hw-id once barf deploys its config.
@@ -126,6 +105,3 @@ spec:
         - name: rootdisk
           persistentVolumeClaim:
             claimName: leaf-2-root
-        - name: installer
-          persistentVolumeClaim:
-            claimName: leaf-2-installer
