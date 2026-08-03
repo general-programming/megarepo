@@ -32,8 +32,10 @@ global_meta:
 func TestLoadRealNetworkYML(t *testing.T) {
 	network := loadReal(t)
 
-	if got := len(network.Hosts); got != 17 {
-		t.Errorf("host count = %d, want 17", got)
+	// Fleet size, so it moves whenever a host is added to network.yml.
+	// 18 as of sea1-vpn-leaf-2.
+	if got := len(network.Hosts); got != 18 {
+		t.Errorf("host count = %d, want 18", got)
 	}
 	if got := network.Global.SearchDomain; got != "generalprogramming.org" {
 		t.Errorf("search domain = %q", got)

@@ -94,11 +94,31 @@ type githubAsset struct {
 	URL  string `json:"browser_download_url"`
 }
 
+// httpClient is for metadata: the release index and other small JSON, where a
+// short deadline is the point. Do not use it for image bodies -- see
+// downloadClient.
 func (v *VyOS) httpClient() *http.Client {
 	if v.HTTP != nil {
 		return v.HTTP
 	}
 	return &http.Client{Timeout: 30 * time.Second}
+}
+
+// downloadClient fetches image bodies. http.Client.Timeout covers the whole
+// request including reading the body, so the 30s metadata deadline caps an
+// image download at however much fits in 30 seconds -- roughly 185 Mbit/s
+// sustained for a 700MB VyOS ISO. Faster links finished and slower ones failed
+// with "context deadline exceeded ... while reading body", which reads like a
+// hung server rather than a client-side cap.
+//
+// No Timeout here: cancellation belongs to the caller's context, which already
+// bounds the operation and is not a function of file size. Matches the 30
+// minute allowance the R2 mirror already gives the same bytes.
+func (v *VyOS) downloadClient() *http.Client {
+	if v.HTTP != nil {
+		return v.HTTP
+	}
+	return &http.Client{}
 }
 
 func (v *VyOS) releaseURL() string {
@@ -240,7 +260,7 @@ func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	resp, err := v.httpClient().Do(req)
+	resp, err := v.downloadClient().Do(req)
 	if err != nil {
 		return "", fmt.Errorf("firmware: downloading %s: %w", a.Name, err)
 	}

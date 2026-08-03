@@ -567,3 +567,36 @@ func TestSigV4Structure(t *testing.T) {
 		t.Fatal("a different secret produced the same signature")
 	}
 }
+
+// TestDownloadClientHasNoTimeout pins the split between the two clients.
+// http.Client.Timeout bounds the whole request including reading the body, so
+// reusing the 30s metadata client for image bodies capped downloads at
+// whatever fits in 30 seconds -- about 185 Mbit/s sustained for a 700MB VyOS
+// ISO. It surfaced as "context deadline exceeded ... while reading body",
+// which reads like a hung server rather than a client-side cap, and only on
+// links slow enough to miss the window.
+func TestDownloadClientHasNoTimeout(t *testing.T) {
+	v := NewVyOS()
+
+	if got := v.httpClient().Timeout; got != 30*time.Second {
+		t.Errorf("metadata client timeout = %v, want 30s: short deadlines are the point for the release feed", got)
+	}
+	if got := v.downloadClient().Timeout; got != 0 {
+		t.Errorf("download client timeout = %v, want 0: image size must not race a fixed deadline; the caller's context bounds it", got)
+	}
+}
+
+// TestDownloadClientHonoursInjection keeps both clients overridable together,
+// so tests and callers cannot end up exercising a different client than the
+// one they configured.
+func TestDownloadClientHonoursInjection(t *testing.T) {
+	custom := &http.Client{Timeout: 7 * time.Second}
+	v := &VyOS{HTTP: custom}
+
+	if v.downloadClient() != custom {
+		t.Error("downloadClient ignored the injected client")
+	}
+	if v.httpClient() != custom {
+		t.Error("httpClient ignored the injected client")
+	}
+}
