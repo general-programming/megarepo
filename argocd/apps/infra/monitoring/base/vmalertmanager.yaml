@@ -31,6 +31,14 @@ spec:
   # Empty selector matches all labels.
   # nil configNamespaceSelector = only look in this namespace (monitoring).
   configSelector: {}
+  # By default the operator staples `namespace = "monitoring"` onto every route
+  # it generates from a VMAlertmanagerConfig, scoping that config to alerts
+  # originating in its own namespace. Our configs are cluster-wide receivers,
+  # not per-tenant ones, so that matcher meant only alerts labelled
+  # namespace=monitoring ever reached Discord or IRM -- everything from argocd,
+  # loki, victoriametrics, kubevirt and so on fell through to blackhole with no
+  # error anywhere. Routing is filtered by the routes themselves instead.
+  disableNamespaceMatcher: true
   # Public routing config lives here in the repo.
   # Private receiver config (webhook URLs) lives in VMAlertmanagerConfig,
   # which references secrets synced from Vault.
