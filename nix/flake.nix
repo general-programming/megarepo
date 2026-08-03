@@ -50,6 +50,7 @@
         "fmt2-vault-0" = self.lib.nixosSystem "fmt2-vault-0";
         "fmt2-vault-1" = self.lib.nixosSystem "fmt2-vault-1";
         "fmt2-vault-2" = self.lib.nixosSystem "fmt2-vault-2";
+        "pipebomb" = self.lib.nixosSystem "pipebomb";
       };
 
       nixosModules = {

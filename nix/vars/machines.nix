@@ -36,4 +36,7 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   fmt2-vault-2 = {
     machineID = "ce407f7032bb4988969406fa2a0244ec";
   };
+  pipebomb = {
+    machineID = "509b69a73338bc2bf6d47da9f78fc69f";
+  };
 }
