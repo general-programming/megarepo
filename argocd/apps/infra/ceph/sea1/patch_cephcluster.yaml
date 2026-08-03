@@ -7,7 +7,23 @@ metadata:
   # StorageClass patch, a namespaced target needs it to resolve.
   namespace: ceph
 spec:
+  external:
+    # THE CUTOVER. Rook stops being a passive consumer of this cluster and
+    # starts running daemons in it. Everything above/below is what makes that
+    # safe; see .claude/skills/ceph-cephadm-brake for the brakes.
+    enable: false
+  mgr:
+    # Not in the same change as the mons. cephadm keeps all three mgrs.
+    count: 0
+  storage:
+    # OSDs are adopted per-host during the metal migration, not here.
+    useAllNodes: false
+    useAllDevices: false
   mon:
+    # ONE Rook mon first, joining the three cephadm mons -> quorum of 4.
+    # Step to 2 and 3 only after this one is proven in quorum.
+    count: 1
+    allowMultiplePerNode: false
     # The cephadm-managed mons of THIS cluster. Rook's health checker removes
     # any mon in quorum that is not its own (health.go:250); externalMonIDs is
     # what shields them, by stripping them out of the quorum status before that
@@ -26,6 +42,14 @@ spec:
     # All 35 daemons on sea1 are 20.2.1 tentacle. The 19.2.3 squid visible on
     # the hypervisors is Proxmox's host CLI package, not the cluster.
     image: quay.io/ceph/ceph:v20.2.1
+  healthCheck:
+    daemonHealth:
+      mon:
+        # Unlike `disabled`, `timeout` IS read (health.go:70-79). Zero disables
+        # mon failover outright (health.go:286-289), so Rook cannot decide a
+        # cephadm mon is dead and replace it. Does NOT stop the removal at
+        # health.go:250 -- only externalMonIDs does that.
+        timeout: 0s
   network:
     # Ceph here is IPv6-only (ms_bind_ipv4 false, public_network
     # 2602:fa6d:10:ffff::/116) and pod IPs are outside that range, so mons must
