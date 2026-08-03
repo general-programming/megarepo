@@ -1,0 +1,51 @@
+# Rook-managed MDS for the three EXISTING CephFS filesystems.
+#
+# Nothing here creates or moves data. MDS daemons are stateless -- all CephFS
+# metadata lives in the metadata pool in RADOS -- so adopting them is purely a
+# matter of standing up new daemons and retiring the cephadm ones. The active
+# rank fails over to a standby; no rank is ever without a daemon.
+#
+# preservePoolNames is what makes adoption possible at all: without it Rook
+# derives pool names as "<fsName>-<poolName>" and would ADD new pools
+# (k8s-cephfs-data) alongside the real ones (k8s-cephfs_data), which use
+# underscores because cephadm created them. With it, the names below are used
+# literally and Rook binds to the pools that already exist.
+#
+# preserveFilesystemOnDelete + preservePoolsOnDelete are non-negotiable: a
+# deleted CR must never take a filesystem or its pools with it.
+#
+# Every filesystem is max_mds 1 (tmpim was reranked from 2 on 2026-08-03), so
+# activeCount 1 matches reality and Rook will not try to change it.
+#
+# Memory: mds_cache_memory_limit is 4Gi cluster-wide and the live k8s-cephfs
+# and tmpim daemons each sit around 4.5-4.6Gi RSS. Limits below ~6Gi would
+# OOM-loop the MDS and take the filesystem down, so they are set well clear.
+---
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: cephfs
+  namespace: ceph
+spec:
+  preservePoolNames: true
+  preserveFilesystemOnDelete: true
+  preservePoolsOnDelete: true
+  metadataPool:
+    name: cephfs_metadata
+    replicated:
+      size: 3
+      requireSafeReplicaSize: true
+  dataPools:
+    - name: cephfs_data
+      replicated:
+        size: 3
+        requireSafeReplicaSize: true
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 5Gi
+      limits:
+        memory: 8Gi
