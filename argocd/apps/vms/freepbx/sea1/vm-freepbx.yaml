@@ -53,8 +53,7 @@ metadata:
   name: freepbx
   namespace: freepbx
 spec:
-  # Halted while the disk is copied onto the RWX claim.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
@@ -72,6 +71,12 @@ spec:
                     operator: In
                     values:
                       - "true"
+      # Drain a node and the guest migrates instead of being killed. Without
+      # this the default is None: the virt-launcher pod is simply deleted and,
+      # because runStrategy is Always, the VM cold-boots elsewhere -- a reboot,
+      # not a migration. Setting it also makes KubeVirt create a PDB for the
+      # VMI. Note a cordon alone still does nothing; only a drain evicts.
+      evictionStrategy: LiveMigrate
       domain:
         cpu:
           cores: 2
@@ -113,4 +118,4 @@ spec:
       volumes:
         - name: rootdisk
           persistentVolumeClaim:
-            claimName: freepbx-root
+            claimName: freepbx-root-rwx
