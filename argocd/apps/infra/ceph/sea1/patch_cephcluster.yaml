@@ -13,16 +13,20 @@ spec:
     # safe; see .claude/skills/ceph-cephadm-brake for the brakes.
     enable: false
   mgr:
-    # Not in the same change as the mons. cephadm keeps all three mgrs.
-    count: 0
+    # Two Rook mgrs alongside cephadm's three. mgrs are active/standby, so extra
+    # ones are harmless standbys -- no quorum maths, unlike the mons.
+    count: 2
   storage:
     # OSDs are adopted per-host during the metal migration, not here.
     useAllNodes: false
     useAllDevices: false
   mon:
-    # ONE Rook mon first, joining the three cephadm mons -> quorum of 4.
-    # Step to 2 and 3 only after this one is proven in quorum.
-    count: 1
+    # mon.d proved the join works (quorum sea1-hv-0,sea1-hv-1,sea1-hv-2,d).
+    # Going to 3 Rook mons -> 6 total during coexistence. Six is even, which is
+    # fine transiently but must not be lingered in; the cephadm mons are drained
+    # one at a time afterwards, `ceph mon remove` FIRST and only then dropping
+    # the name from externalMonIDs (reversing that order un-shields a live mon).
+    count: 3
     allowMultiplePerNode: false
     # The cephadm-managed mons of THIS cluster. Rook's health checker removes
     # any mon in quorum that is not its own (health.go:250); externalMonIDs is
