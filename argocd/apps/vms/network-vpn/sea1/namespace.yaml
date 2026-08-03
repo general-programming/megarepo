@@ -1,0 +1,12 @@
+# Shared namespace for the sea1 VPN fabric, unlike the one-VM-per-namespace
+# pattern used for freepbx and freeipa. These are one system, and
+# podAntiAffinity between them is simplest within a single namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: network-vpn
+  labels:
+    kubernetes.io/metadata.name: network-vpn
+    # virt-launcher needs it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
