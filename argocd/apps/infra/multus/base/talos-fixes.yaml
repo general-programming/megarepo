@@ -1,0 +1,30 @@
+# Talos-specific adjustments from the SideroLabs Multus guide.
+# https://docs.siderolabs.com/kubernetes-guides/cni/multus
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-multus-ds
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      containers:
+        # Upstream caps this at 50Mi, which the Talos guide calls out as an
+        # OOM source. Its recommended figures instead.
+        - name: kube-multus
+          resources:
+            requests:
+              cpu: 200m
+              memory: 100Mi
+            limits:
+              cpu: 300m
+              memory: 150Mi
+      volumes:
+        # Talos wants the netns bind at /var/run/netns, not upstream's
+        # /run/netns. On Talos 1.13.7 the two resolve to the same directory,
+        # so this is currently a no-op -- but the guide is emphatic that
+        # getting it wrong "will leave your cluster crippled", so track the
+        # documented path rather than rely on the layout staying that way.
+        - name: host-run-netns
+          hostPath:
+            path: /var/run/netns/
