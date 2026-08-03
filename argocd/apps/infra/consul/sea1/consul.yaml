@@ -4,6 +4,18 @@ metadata:
   name: consul-helm
   namespace: argocd
 spec:
+  syncPolicy:
+    # Required by the ADVERTISE_IP override below. The chart emits its own
+    # ADVERTISE_IP (a fieldRef) and ours (a literal) as two env entries; on
+    # create that is fine and the last wins, but Kubernetes strategic-merge
+    # patches env by `name`, so a patching sync collapses them into one entry
+    # holding both value and valueFrom, which is invalid:
+    #   env[0].valueFrom: may not be specified when `value` is not empty
+    # Replace does a whole-object update instead of a merge. It does not
+    # restart pods unless the pod template actually changed.
+    syncOptions:
+      - allowEmpty=true
+      - Replace=true
   source:
     helm:
       valuesObject:
