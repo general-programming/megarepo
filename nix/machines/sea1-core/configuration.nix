@@ -95,7 +95,14 @@ in
           # DHCPv6 clients talk from link-local sources; Kea needs the
           # explicit interface binding to select this subnet for them.
           interface = "ens18";
-          pools = [ { pool = "2602:fa6d:10:ffff::200 - 2602:fa6d:10:ffff::fff"; } ];
+          # Stops at ::eff so the whole ::f00-::fff block is reserved for
+          # infrastructure and can never be handed to a DHCPv6 client. Four
+          # addresses were already exposed by the old ::fff bound -- this
+          # host's own ::f00, sea1-vpn-leaf-1 ::f01, sea1-vpn-spine-1 ::f02
+          # and sea1-vpn-spine-2 ::f13 -- and survived only because kea
+          # allocates from the low end and there are three leases in use.
+          # sea1-vpn-leaf-2 at ::f06 would have joined them.
+          pools = [ { pool = "2602:fa6d:10:ffff::200 - 2602:fa6d:10:ffff::eff"; } ];
           option-data = [
             { name = "dns-servers"; data = "2602:fa6d:10:ffff::f00"; }
           ];
