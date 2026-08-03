@@ -15,7 +15,6 @@ commonAnnotations:
   argocd.argoproj.io/sync-options: Prune=false
 resources:
   - ../base
-  - ceph_secret.yaml
 patches:
   - path: patch_storageclass.yaml
   - path: patch_cephcluster.yaml
