@@ -96,19 +96,39 @@ nodes:
           - "2602:fa6d:10:ffff::111/116"
         routes: *k8s-worker-nvme-routes
     userVolumes: *k8s-worker-nvme-volumes
+  # Bridged: KubeVirt VMs need a LAN-attached secondary network (sea1-core is
+  # the LAN's DHCP/DNS server, which no Service can front), so the node's
+  # addresses move off the NIC and onto br0 and the NIC becomes a bridge port.
+  # Only this node for now -- it is also where the Multus canary runs.
   - <<: *k8s-worker-nvme
     hostname: sea1-k8s-2
     ipAddress: "10.3.2.12"
     nameservers: *k8s-worker-nvme-dns
     networkInterfaces:
+      # MTU stays on the port too: a bridge cannot exceed its members, so
+      # leaving this at the 1500 default would silently cap br0.
       - deviceSelector:
           driver: virtio_net
+        dhcp: false
+        mtu: 9000
+      - interface: br0
         dhcp: false
         mtu: 9000
         addresses:
           - "10.3.2.12/23"
           - "2602:fa6d:10:ffff::112/116"
         routes: *k8s-worker-nvme-routes
+        bridge:
+          stp:
+            enabled: false
+          # ethSel0 is the alias talhelper generates for the deviceSelector
+          # above. Naming the alias rather than ens18 keeps this portable to
+          # bare metal, where the NIC will not be called ens18.
+          # NB: bridgePort.master is silently dropped by talhelper v3.1.15 --
+          # it generates a memberless bridge. Membership has to be declared
+          # from this side.
+          interfaces:
+            - ethSel0
     userVolumes: *k8s-worker-nvme-volumes
   # wobscale rack, literally a oneoff. zfs disk, dual nic for v4/v6
   - hostname: sea1-k8s-103-0
