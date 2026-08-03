@@ -104,6 +104,7 @@ nodes:
     # Inherited by sea1-k8s-1 and -2 through the merge key. Marks the nodes
     # that actually have br0, so Multus and LAN-attached VMs can select them.
     nodeLabels: &k8s-worker-nvme-labels
+      generalprogramming.org/lan-bridge: "true"
     nodeAnnotations:
       # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
       # IPv4 one on these dual-stack nodes. Ceph's public_network is
@@ -111,7 +112,6 @@ nodes:
       # no other mon can reach and hangs in probing. This annotation overrides
       # the choice.
       network.rook.io/mon-ip: "2602:fa6d:10:ffff::110"
-      generalprogramming.org/lan-bridge: "true"
     # Same reasoning as the control planes above: public only, no sea1-core.
     nameservers: &k8s-worker-nvme-dns
       - 1.1.1.1
