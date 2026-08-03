@@ -1,0 +1,129 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: kubevirt-alerts
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: kubevirt-control-plane
+      interval: 30s
+      rules:
+        - alert: KubeVirtComponentDown
+          expr: |
+            up{job=~"virt-api|virt-controller|virt-handler|virt-operator"} == 0
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "KubeVirt {{ $labels.job }} unreachable on {{ $labels.node }}"
+            description: "Scrape of {{ $labels.pod }} ({{ $labels.job }}) has failed for 5 minutes. A single replica being down is survivable; see KubeVirt*AllDown for loss of the whole component."
+
+        - alert: KubeVirtVirtHandlerAllDown
+          expr: |
+            count(kubevirt_virt_handler_ready_status == 1) == 0 or absent(kubevirt_virt_handler_ready_status)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No ready virt-handler in sea1"
+            description: "virt-handler is the per-node VM agent. With none ready, running VMs keep running but nothing can start, stop, migrate or report VMI state."
+
+        - alert: KubeVirtVirtControllerAllDown
+          expr: |
+            count(kubevirt_virt_controller_ready_status == 1) == 0 or absent(kubevirt_virt_controller_ready_status)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No ready virt-controller in sea1"
+            description: "No virt-controller replica is ready, so VM/VMI reconciliation has stopped."
+
+        - alert: KubeVirtVirtApiAllDown
+          expr: |
+            count(kubevirt_virt_api_ready_status == 1) == 0 or absent(kubevirt_virt_api_ready_status)
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No ready virt-api in sea1"
+            description: "virt-api backs the KubeVirt subresource API; console/VNC access and VM start/stop subresource calls will fail."
+
+        - alert: KubeVirtNoVirtControllerLeader
+          expr: |
+            count(kubevirt_virt_controller_leading_status == 1) == 0
+          for: 10m
+          labels:
+            severity: critical
+          annotations:
+            summary: "virt-controller has no leader"
+            description: "Replicas are up but none holds the lease, so no VM reconciliation is happening. Usually a stuck or unrenewable leader election lease."
+
+        - alert: KubeVirtEmulationEnabled
+          expr: |
+            kubevirt_configuration_emulation_enabled == 1
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "KubeVirt fell back to software emulation"
+            description: "useEmulation is on, so guests run under TCG instead of KVM -- they still boot but run roughly 20x slower. Check that /dev/kvm is present on the nodes and that spec.configuration.developerConfiguration.useEmulation is still false."
+
+    - name: kubevirt-workloads
+      interval: 30s
+      rules:
+        # The *_status_last_transition_timestamp_seconds metrics are unix
+        # timestamps and read 0 when the VM is NOT in that state, so both the
+        # `> 0` guard and the age subtraction are required.
+        - alert: KubeVirtVMInErrorState
+          expr: |
+            (kubevirt_vm_error_status_last_transition_timestamp_seconds > 0)
+              and on(name, namespace)
+            (time() - kubevirt_vm_error_status_last_transition_timestamp_seconds > 300)
+          labels:
+            severity: critical
+          annotations:
+            summary: "VM {{ $labels.namespace }}/{{ $labels.name }} is in an error state"
+            description: "The VM has reported an error status for over 5 minutes. Check `kubectl -n {{ $labels.namespace }} describe vm {{ $labels.name }}` and the virt-launcher pod events."
+
+        # Fires for VMs that are deliberately stopped too -- runStrategy: Halted
+        # is indistinguishable from a crash at this metric. Warning, not paging.
+        - alert: KubeVirtVMNotRunning
+          expr: |
+            (kubevirt_vm_non_running_status_last_transition_timestamp_seconds > 0)
+              and on(name, namespace)
+            (time() - kubevirt_vm_non_running_status_last_transition_timestamp_seconds > 1800)
+          labels:
+            severity: warning
+          annotations:
+            summary: "VM {{ $labels.namespace }}/{{ $labels.name }} has not been running for 30m"
+            description: "The VM has been in a non-running state for over 30 minutes. Expected if it was stopped on purpose; otherwise check the virt-launcher pod for a scheduling or storage failure."
+
+        - alert: KubeVirtMigrationStuck
+          expr: |
+            (kubevirt_vmi_migrations_in_pending_phase + kubevirt_vmi_migrations_in_scheduling_phase) > 0
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "KubeVirt migrations stuck before running"
+            description: "One or more VMI migrations have sat in pending/scheduling for 15 minutes. The target virt-launcher usually cannot be scheduled -- check node affinity, the no-virt exclusion, and RWX storage on the target."
+
+        - alert: KubeVirtOutdatedVMIs
+          expr: |
+            kubevirt_vmi_number_of_outdated > 0
+          for: 24h
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $value }} VMI(s) still running an outdated virt-launcher"
+            description: "workloadUpdateStrategy is LiveMigrate, so these should have drained themselves within a day. A VMI that cannot live-migrate (non-migratable disk or a bridged interface) will stay outdated until it is restarted by hand."
+
+        - alert: KubeVirtVMINonEvictable
+          expr: |
+            kubevirt_vmi_non_evictable > 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "VMI {{ $labels.namespace }}/{{ $labels.name }} is not live-migratable"
+            description: "The VMI on {{ $labels.node }} has evictionStrategy set but cannot be migrated, so draining that node will block. Check its disks and interfaces for non-migratable devices."

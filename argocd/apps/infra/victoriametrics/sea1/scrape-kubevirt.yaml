@@ -1,0 +1,35 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMServiceScrape
+metadata:
+  name: kubevirt
+  namespace: victoriametrics
+spec:
+  # virt-operator publishes one headless Service fronting every component that
+  # carries prometheus.kubevirt.io=true -- virt-api, virt-controller,
+  # virt-handler and virt-operator all land here.
+  namespaceSelector:
+    matchNames:
+      - kubevirt
+  selector:
+    matchLabels:
+      prometheus.kubevirt.io: "true"
+  endpoints:
+    - port: metrics
+      # The endpoint is TLS with a cert from KubeVirt's own internal CA, which
+      # is not in the scraper's trust store and rotates on its own schedule.
+      # No bearer token is required.
+      scheme: https
+      tlsConfig:
+        insecureSkipVerify: true
+      # kubevirt_vmi_* series already carry their own node/name/namespace, and
+      # those must win over the target labels below.
+      honorLabels: true
+      relabelConfigs:
+        # Without this every component shares one job name, so `up` cannot
+        # distinguish a dead virt-handler from a dead virt-api.
+        - sourceLabels: [__meta_kubernetes_pod_label_kubevirt_io]
+          targetLabel: job
+        - sourceLabels: [__meta_kubernetes_pod_node_name]
+          targetLabel: node
+        - sourceLabels: [__meta_kubernetes_pod_name]
+          targetLabel: pod

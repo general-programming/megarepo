@@ -8,3 +8,5 @@ resources:
   - vmalert.yaml
   - ingress-vmalert.yaml
   - sea1_scrape.yaml
+  - scrape-kubevirt.yaml
+  - alerts-kubevirt.yaml
