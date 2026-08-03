@@ -1,0 +1,93 @@
+# FreePBX, migrated off Proxmox VM 911 on sea1-hv-1.
+#
+# Its disk was already an RBD image in this same ceph cluster
+# (pool/vm-911-disk-0), so the migration was an intra-ceph copy into the PVC
+# below rather than a transfer over the wire. pool/vm-911-disk-0@pre-kubevirt
+# is a protected snapshot kept as the rollback, and VM 911 is left defined but
+# stopped on the hypervisor as a second one.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freepbx-root
+  namespace: virt
+spec:
+  storageClassName: ceph-rbd
+  # Block, not filesystem: this is a raw guest disk, not a mounted volume. The
+  # storage class's fstype parameter is simply ignored in this mode.
+  volumeMode: Block
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: freepbx
+  namespace: virt
+spec:
+  # Halted until the PVC has been populated from the old RBD image -- ArgoCD
+  # would otherwise boot the VM off an empty disk the moment the PVC appeared.
+  # Flipped to Always in the follow-up commit.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: freepbx
+    spec:
+      affinity:
+        nodeAffinity:
+          # Soft: prefer the bridged nodes. The hard half is the KubeVirt CR's
+          # workloads.nodePlacement, which keeps virt-handler off no-virt nodes.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 12Gi
+        firmware:
+          # Preserved from the Proxmox smbios1 uuid so the guest keeps its
+          # machine identity.
+          uuid: a39deae9-7a94-46c3-bd3e-e0c00266f926
+          bootloader:
+            efi:
+              # Proxmox had pre-enrolled-keys=1, but KubeVirt hands the guest a
+              # fresh OVMF NVRAM either way, so the old boot entry is gone and
+              # it comes up via the removable fallback path. Enabling Secure
+              # Boot here would additionally require SMM; not worth it to boot
+              # a machine that was already trusted.
+              secureBoot: false
+        devices:
+          # LAN only. This guest carries a public /32 alongside its LAN
+          # address, so a masqueraded pod interface would be actively wrong.
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                # scsi, matching Proxmox's virtio-scsi-single, so the guest
+                # sees the same device topology it was installed against.
+                bus: scsi
+          interfaces:
+            - name: lan
+              bridge: {}
+              # Must match the old NIC. 199.255.18.165/32 is reachable only
+              # because the upstream router has an ARP entry for this MAC, and
+              # the guest pins its interface name to it via a .link file.
+              macAddress: "BC:24:11:E7:1C:53"
+      networks:
+        - name: lan
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: freepbx-root

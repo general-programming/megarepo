@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - ../base
   - nad-br0-lan.yaml
+  - vm-freepbx.yaml
