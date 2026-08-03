@@ -350,37 +350,31 @@ nodes:
           interfaces:
             - bond0
 
-    # DISABLED 2026-08-03 -- do not re-enable until nvme7 is proven stable.
+    # RE-ENABLED 2026-08-03, but ONLY because the no-discard udev rule below is
+    # in place. The two belong together -- never enable this volume without it.
     #
-    # ROOT CAUSE IS KNOWN (docs/sn200-firmware-re.md): the 7.68T HGST SN200
-    # has a firmware bug where a LARGE DEALLOCATE races the L2P journal flush
-    # and drops the drive into "Post Crash Startup" lockup. WD's own errata
-    # name it (OM-6588/6836/6850/7044). Talos formatting this volume issues a
-    # whole-device TRIM via mkfs.xfs, which is exactly the trigger. The drive
-    # then reset-loops, udevd's queue never drains, its health check fails and
-    # KUBELET NEVER STARTS -- the node cannot join at all. It also hangs POST
-    # for ~5 minutes while BIOS tries to enumerate it.
+    # This selects the 7.68T HGST SN200, which has a firmware bug where a large
+    # deallocate races the L2P journal flush and drops the drive into "Post
+    # Crash Startup": no namespace, kernel reset loop, udevd's queue never
+    # drains, and kubelet never starts. Formatting this volume issues a
+    # whole-device TRIM, which is exactly the trigger. WD errata
+    # OM-6588/6836/6850/7044; full teardown in docs/sn200-firmware-re.md.
     #
-    # Re-enabling therefore requires BOTH:
-    #   1. the drive recovered (the clear schedules a re-init that rebuilds
-    #      the L2P and ZEROES the namespace -- budget for total data loss), and
-    #   2. the volume pre-created out-of-band with discard suppressed
-    #      (`mkfs.xfs -K`) so Talos ADOPTS it and never runs mkfs on this disk.
-    # Talos exposes no mkfs flags, so 2 cannot be expressed here.
+    # Proven on the host before enabling: with discard_max_bytes forced to 0,
+    # partitioning + mkfs.xfs + a 512 MiB write + remount + md5 verify all ran
+    # with ZERO controller resets. mkfs took 1s instead of wedging the drive.
     #
-    # The size guard below is still correct and load-bearing: without it the
-    # selector matches all eight NVMe and Talos would format a ceph OSD.
-    # disk.size is a uint -- the literal needs the u suffix or talhelper
-    # rejects the CEL.
-    #
-    # userVolumes:
-    #   - name: data
-    #     provisioning:
-    #       diskSelector:
-    #         match: disk.transport == "nvme" && disk.size > 5000000000000u
-    #       minSize: 500GiB
-    #     filesystem:
-    #       type: xfs
+    # The size guard is load-bearing: without it the selector matches all eight
+    # NVMe and Talos would format a ceph OSD. disk.size is a uint -- the literal
+    # needs the u suffix or talhelper rejects the CEL.
+    userVolumes:
+      - name: data
+        provisioning:
+          diskSelector:
+            match: disk.transport == "nvme" && disk.size > 5000000000000u
+          minSize: 500GiB
+        filesystem:
+          type: xfs
 
     patches:
       - # nodeID LUKS, NOT tpm. hv-2's TPM 2.0 is present and enabled (verified
