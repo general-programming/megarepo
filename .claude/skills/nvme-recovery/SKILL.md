@@ -139,11 +139,18 @@ echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/unbind
 echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/bind
 ```
 
-**`unbind` is the only one of these that is a CLEAN stop.** It issues `CC.SHN`
-and waits for `CSTS.SHST`; every other entry above drops `CC.EN` or the link
-without it. On firmware that latches on an unfinished shutdown (see the SN200
-section) those resets are themselves the fault condition, so escalating through
-the ladder can make things worse rather than better. Prefer `unbind`/`bind`.
+**`unbind` is the only one of these that even attempts a clean stop** — it
+issues `CC.SHN` and waits for `CSTS.SHST`; every other entry drops `CC.EN` or
+the link without it. On firmware that latches on an unfinished shutdown (see the
+SN200 section) those resets are themselves the fault condition, so escalating
+the ladder can make things worse. Prefer `unbind`/`bind`.
+
+**But `CC.SHN` is NOT sufficient, and do not rely on it as an escape.** On the
+SN200 the NVMe shutdown path writes only marker 5 `Normal Shutdown STARTED`;
+the CLEAN marker is written by a *different* routine once the System Area /
+L2P flush actually completes. A shutdown that is acknowledged but whose flush
+does not finish still lands in the "never finished" handler. Allow time after
+`unbind` and do not assume a returned ioctl means the drive is safe to cut.
 
 **A warm reboot is not a power cycle** — it does not drop rail power. But do
 not reach for `ForceOff` reflexively either: an abrupt power cut is an unclean
@@ -157,14 +164,23 @@ Model `HUSMR7676BDP3Y1`, firmware `KNGND1xx`. Procedure below is what actually
 worked, not what the forum posts say. Full firmware teardown:
 `docs/sn200-firmware-re.md`.
 
-**The latch is an UNFINISHED SHUTDOWN, not TRIM.** Two independent firmware
-teardowns agree (`docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`).
-The drive keeps a shutdown marker; a 16-bit table at PROC0 `0x7ff81180` maps it
-to 11 values. Markers **5/6/7** — `Normal Shutdown STARTED`, `PFAIL Shutdown
-STARTED`, `PFAIL Shutdown TIMEOUT` — all mean *began and never finished*, and
-all converge on one handler that writes an `UNEXSTRT` stub into the crash area.
-From then on `SYS: Detected a CRASH or PFCRASH section.` forces the post-crash
-state on **every** boot. That is the latch.
+**One predicate, several arming routes.** Two independent teardowns agree
+(`docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`). At boot, PROC0
+runs two separate tests — one per section — both branching to
+`SYS: Detected a CRASH or PFCRASH section.` and both forcing marker
+`0x80000009` (Post Crash) at `0x7ffaaf08`. **Either section latches, and the
+forced marker overrides whatever the shutdown actually recorded.**
+
+A third route needs no crash section at all: `SYS: Unexpected empty System
+Area.` jumps straight to the same forced marker. Sibling blocks force marker 3
+(REINIT) for `Found an incompatible SA`, `Detected an erased SysArea` and a
+CellCare mismatch.
+
+Feeding those sections: shutdown markers **5/6/7** — `Normal Shutdown STARTED`,
+`PFAIL Shutdown STARTED`, `PFAIL Shutdown TIMEOUT` — all mean *began and never
+finished*, and converge on one handler at `0x7ffaaf6b`. A power loss whose
+hold-up sequence **completes** writes marker 2 and boots normally, which is why
+these drives do not all brick on every power event.
 
 The state probe's byte[1] == **6** is a *different* enum — it really does mean
 diagnostic mode. `7ffaac95: extui a10,a5,0,3` masks the startup type to 3 bits
@@ -293,11 +309,11 @@ course. Use `pull-crash-dump.sh`, which cannot emit `0xFF` at all.
 clear if retrieval failed (`"Crash dump not retrieved successfully, not
 cleared"`). The 6.7 MB E6 pull cannot finish inside a 5s window.
 
-It fails a second way on this model, silently. `hgst_nvmec_cap_diags_get_data`
-only records "retrieved" if `startup_type == expected`, where `expected` is 7
-when `IDCTRL.MN[0]=='H' && ((MN[3]+0xBF)&0xFF) >= 5` — true for `HUSMR…`. The
-drive reports 6, so the flag stays at its `-2008` sentinel and `cap_diags_end`
-takes neither branch: no clear, **no message**.
+That window limit is the **only** reason it fails. (An earlier note here claimed
+a second silent failure via `hgst_nvmec_cap_diags_get_data`'s
+`startup_type == expected` check. That was wrong: the check reads Identify
+offset `0x40` = **Firmware Revision**, not Model Number, so `FR[0]=='K'` for
+`KNGND1xx` leaves `expected == 6`, which *matches* the drive.)
 
 **The clear does not need the dump.** That gate is two ints in host memory
 (`HGSTNVMeController+0x40/+0x44`); the wire command is unconditional.
@@ -352,16 +368,25 @@ It took 175-408 polls per command in practice.
 /root/fire.sh nvme admin-passthru /dev/nvme7 --opcode=0xff --namespace-id=0 \
   --cdw10=0 --cdw12=0x0603 --data-len=0    # pfail dump
 
-# 4. A CLEAN STOP, then restart. This is the step everyone gets wrong.
-#    `unbind` is the ONLY host action that issues CC.SHN and waits for
-#    CSTS.SHST. Every other reset (nvme reset, NSSR, FLR, SBR, link-disable,
-#    warm reboot) stops the controller WITHOUT CC.SHN and is therefore itself
-#    another unfinished shutdown, which re-arms the marker.
-echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/unbind
-sleep 10
-echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/bind
-#    Fall back to a cold power cycle (OFF >=90s) only if that fails.
+# 4. Cold power cycle, OFF >=90s. There is NO host-side escape -- this was
+#    established exhaustively: 28 dispatch tables, 78 command ids, and a scan
+#    of every aligned u64 in .data/.rodata. EXIT_MODE / SET_MODE /
+#    WRITE_MARKER are orphan names whose handlers are not in the binary, and
+#    dispatch is a name-keyed hash built only from class tables, so no unlock
+#    can add them. Firmware Commit is accepted while latched but CA=3
+#    ("activate without reset") is unimplemented and every other activate
+#    path demands a reset. The UART console has 8 commands and needs physical
+#    pads. Power cycling is structural.
 ```
+
+Still prefer `unbind` over the other resets when stopping the drive for any
+*other* reason — it is the only one that even attempts `CC.SHN`.
+
+**The one untested escape: NVMe-MI over SMBus.** PROC9 is a full MI/MCTP stack
+on both SMBus and PCIe VDM, with an admin tunnel and `MI: Initiating an NVM
+subystem reset`. SMBus survives the BIOS link-disable, so it can reach a drive
+whose PCIe port is dead. Whether the tunnel passes vendor opcode `0xFF` is
+unknown.
 
 **Check WHICH section is armed before firing anything.** `0x0320` probes the
 crash section, `0x0520` the pfail section. `0x0603` (pfail) clears
@@ -423,11 +448,34 @@ pfail = cmd 3/sub 6. Sizes use opcode `0xC6`, `CDW10=2`, CDW12 `0x0320` crash /
 `0x0520` pfail. `nvme wdc clear-assert-dump` is an SN640/SN840 opcode and
 reports "unsupported device" here — not the SN200 path.
 
-**There is no exit-diagnostic-mode command.** All 21 dispatch tables in
-`libdmi_core` were enumerated: `EXIT_MODE`, `SET_MODE`, `WRITE_MARKER` exist in
-the command-id enum but are in no table, and SN200's `omc_cmds` has no
-`RESET_TO_DEFAULTS`. WD's own tool returns `HDMS_SHUTDOWN_REQUIRED` after a
-successful clear — it expects a power cycle.
+**There is no exit-diagnostic-mode command — power cycling is structural.**
+Exhaustive: 28 dispatch tables, 78 command ids, and a scan of every aligned
+`u64` in `.data`/`.data.rel.ro`/`.rodata` finds zero command ids outside them.
+`EXIT_MODE`/`SET_MODE`/`WRITE_MARKER` are orphans whose **handler functions are
+not in the binary**, and dispatch is a name-keyed hash built only from the class
+tables, so no unlock can add them. Both raw-passthru functions are unreferenced
+and unexported. `reset-to-defaults` *is* inherited (Omaha's parent is
+GallantFox) but is refused at startup type 6 and resizes capacity anyway.
+`attach-ns` is refused by the firmware itself —
+`Admin_NamespaceAttachment: The LBN Translation Table is invalid.` WD's own tool
+returns `HDMS_SHUTDOWN_REQUIRED` after a clear.
+
+**The one untested avenue is NVMe-MI over SMBus.** PROC9 is a full NVMe-MI /
+MCTP stack running on **both** SMBus and PCIe VDM — `MI_AdminCmdHandler`,
+`MI_PCIECmdHandler` (config read/write), and `MI: Initiating an NVM subystem
+reset`. SMBus is independent of the PCIe link, so this is the only path that
+survives a BIOS link-disable (`UEFI0067`). Six admin opcodes are whitelisted
+through the MI tunnel; whether vendor `0xFF` is among them is **UNKNOWN**. If it
+were, the clears could be issued from a BMC with no PCIe link at all. The MI
+NSSR is implemented but is still a reset without `CC.SHN`, so expect it to
+re-arm rather than clear.
+
+**The `DiagMgr>` UART console is a dead end.** 8 commands, physical pads only
+(115200 8N1, both I/O via SBL-owned function pointers; nothing reaches the line
+parser from any admin/VUC/MI path). `Load` is a compiled-out stub. The only
+state-changing commands are ☠ `SBL` (hands the chip to the bootloader, drive
+leaves the bus), ☠ `I2CErase` (blanks 512 B of all three I2C EEPROM copies —
+plausibly the boot TOC), and `LogicTrap` (deliberately *creates* a crash).
 
 Full VUC map, status-code tables and firmware control flow:
 `docs/sn200-firmware-re.md`.

@@ -921,13 +921,27 @@ override are two blocks of one master startup-evaluation routine.
 7ffaac74: call8 0x7ffb5398      ; log "SYS: UNEXSTRT detected, writing UNEXSTRT stub header to crash area"
 ```
 
-**UNKNOWN — and this is the most important open question in the whole document.**
-Whether this block is *gated*, and on what. Three FLIX bundles at `0x7ffaac3b`,
-`0x7ffaac43`, `0x7ffaac4b` sit between the function entry and the byte edit, and their
-branch fields are not reliably decoded yet. It cannot be unconditional: if every
-unexpected start stamped the crash area, **every** SN200 that ever lost power would latch
-permanently, which is plainly not the case in the field. There is a gate; we have not
-found it.
+**UNKNOWN — the gate.** Three FLIX bundles at `0x7ffaac3b`, `0x7ffaac43`, `0x7ffaac4b` sit
+between the function entry and the byte edit, and their branch fields are not reliably
+decoded. It cannot be unconditional: if every unexpected start stamped the crash area,
+**every** SN200 that ever lost power would latch permanently, which is plainly not the
+case in the field.
+
+**Position matters, though — PROVEN.** The block sits at `0x7ffaac53`, only `0x23` bytes
+past the function's `entry` at `0x7ffaac30`, i.e. in the **prologue**, reached by
+fall-through *before* the marker dispatch chain at `0x7ffaae69`. So UNEXSTRT is evaluated
+on its own predicate up front, not from inside a per-marker handler.
+
+**Convergent finding, with one caveat.** An independent teardown
+(`docs/sn200-independent-re.md`) concludes that markers **5/6/7** — the three
+"started but never finished" states — are what drive the UNEXSTRT stub write. That fits
+the semantics exactly and is very likely right. The one observation I could not reconcile:
+the 5/6/7 handler at `0x7ffaaf6b` (`l32r a15,0x7ff826b8` + FLIX) appears to branch back to
+**`0x7ffaacea`**, which is *past* the UNEXSTRT block, not into it. My `b12` field
+extraction for these bundles is unvalidated, so this is **not** a refutation — but the
+control-flow edge from "unfinished shutdown" to "stamp the crash area" is **still not
+demonstrated instruction-by-instruction.** Treat the mechanism as strongly supported and
+the exact edge as open.
 
 **INFERRED (from the firmware's own wording, high confidence) — UNEXSTRT targets the
 CRASH section, not PFCRASH.** The string says "writing UNEXSTRT stub header **to crash
