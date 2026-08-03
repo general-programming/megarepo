@@ -352,17 +352,21 @@ nodes:
 
     # DISABLED 2026-08-03 -- do not re-enable until nvme7 is proven stable.
     #
-    # The 7.68T HGST SN200 this selects is in the firmware's "Post Crash
-    # Startup" lockup (see .claude/skills/nvme-recovery). Partitioning it
-    # re-latches the crash dump instantly: Talos creates u-data, the drive
-    # starts reset-looping, udevd's queue never drains, its health check fails
-    # and KUBELET NEVER STARTS -- the node cannot join with this enabled. It
-    # also hangs POST for ~5 minutes while the BIOS tries to enumerate it.
+    # ROOT CAUSE IS KNOWN (docs/sn200-firmware-re.md): the 7.68T HGST SN200
+    # has a firmware bug where a LARGE DEALLOCATE races the L2P journal flush
+    # and drops the drive into "Post Crash Startup" lockup. WD's own errata
+    # name it (OM-6588/6836/6850/7044). Talos formatting this volume issues a
+    # whole-device TRIM via mkfs.xfs, which is exactly the trigger. The drive
+    # then reset-loops, udevd's queue never drains, its health check fails and
+    # KUBELET NEVER STARTS -- the node cannot join at all. It also hangs POST
+    # for ~5 minutes while BIOS tries to enumerate it.
     #
-    # The drive is currently absent from `talosctl get disks` entirely. The
-    # recovery procedure works but the data does not survive it, and it
-    # re-latches on the next write, so this needs the drive replaced or its
-    # firmware behaviour understood before it can carry a volume again.
+    # Re-enabling therefore requires BOTH:
+    #   1. the drive recovered (the clear schedules a re-init that rebuilds
+    #      the L2P and ZEROES the namespace -- budget for total data loss), and
+    #   2. the volume pre-created out-of-band with discard suppressed
+    #      (`mkfs.xfs -K`) so Talos ADOPTS it and never runs mkfs on this disk.
+    # Talos exposes no mkfs flags, so 2 cannot be expressed here.
     #
     # The size guard below is still correct and load-bearing: without it the
     # selector matches all eight NVMe and Talos would format a ceph OSD.
