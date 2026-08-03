@@ -1,36 +1,80 @@
 clusterName: sea1
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.13.6
+talosVersion: v1.13.7
 kubernetesVersion: v1.36.2
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
-  - hostname: controlplane
-    ipAddress: "10.3.2.16,10.3.2.17,10.3.2.18"
+  # Split per-node for static IPs; DHCPv6 leases churn (Talos remints its DUID each boot).
+  # Do NOT re-add ignoreHostname: with DHCP off there is no other hostname source and Talos
+  # invents one, which re-registers the node in k8s and leaves a duplicate behind.
+  - &k8s-cp
+    hostname: sea1-k8s-cp-0
+    ipAddress: "10.3.2.16"
     installDisk: /dev/sda
     controlPlane: true
-    ignoreHostname: true
+    # DHCP supplied these; pinned here because both families are now static.
+    nameservers: &k8s-cp-dns
+      - 10.3.2.6
+      - 2602:fa6d:10:ffff::f00
     networkInterfaces:
       - deviceSelector:
           driver: virtio_net
-        dhcp: true
-        dhcpOptions:
-          ipv4: true
-          ipv6: true
-  # nvme passthrough, single nic for v4/v6
-  - hostname: worker-nvme
-    ipAddress: "10.3.2.10,10.3.2.11,10.3.2.12"
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.16/23"
+          - "2602:fa6d:10:ffff::116/116"   # /116 is the on-link prefix the RA advertises
+        routes: &k8s-cp-routes
+          - network: "0.0.0.0/0"
+            gateway: "10.3.2.1"
+  - <<: *k8s-cp
+    hostname: sea1-k8s-cp-1
+    ipAddress: "10.3.2.17"
+    nameservers: *k8s-cp-dns
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.17/23"
+          - "2602:fa6d:10:ffff::117/116"
+        routes: *k8s-cp-routes
+  - <<: *k8s-cp
+    hostname: sea1-k8s-cp-2
+    ipAddress: "10.3.2.18"
+    nameservers: *k8s-cp-dns
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.18/23"
+          - "2602:fa6d:10:ffff::118/116"
+        routes: *k8s-cp-routes
+  # nvme passthrough, single nic for v4/v6.
+  - &k8s-worker-nvme
+    hostname: sea1-k8s-0
+    ipAddress: "10.3.2.10"
     installDisk: /dev/sda
     controlPlane: false
-    ignoreHostname: true
+    nameservers: &k8s-worker-nvme-dns
+      - 10.3.2.6
+      - 2602:fa6d:10:ffff::f00
     networkInterfaces:
       - deviceSelector:
           driver: virtio_net
-        dhcp: true
-        dhcpOptions:
-          ipv4: true
-          ipv6: true
-    userVolumes:
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.10/23"
+          - "2602:fa6d:10:ffff::110/116"
+        routes: &k8s-worker-nvme-routes
+          - network: "0.0.0.0/0"
+            gateway: "10.3.2.1"
+    userVolumes: &k8s-worker-nvme-volumes
       - name: data
         provisioning:
           diskSelector:
@@ -38,22 +82,43 @@ nodes:
           minSize: 50GiB
         filesystem:
           type: xfs
+  - <<: *k8s-worker-nvme
+    hostname: sea1-k8s-1
+    ipAddress: "10.3.2.11"
+    nameservers: *k8s-worker-nvme-dns
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.11/23"
+          - "2602:fa6d:10:ffff::111/116"
+        routes: *k8s-worker-nvme-routes
+    userVolumes: *k8s-worker-nvme-volumes
+  - <<: *k8s-worker-nvme
+    hostname: sea1-k8s-2
+    ipAddress: "10.3.2.12"
+    nameservers: *k8s-worker-nvme-dns
+    networkInterfaces:
+      - deviceSelector:
+          driver: virtio_net
+        dhcp: false
+        mtu: 9000
+        addresses:
+          - "10.3.2.12/23"
+          - "2602:fa6d:10:ffff::112/116"
+        routes: *k8s-worker-nvme-routes
+    userVolumes: *k8s-worker-nvme-volumes
   # wobscale rack, literally a oneoff. zfs disk, dual nic for v4/v6
   - hostname: sea1-k8s-103-0
     ipAddress: "10.3.6.3"
     installDisk: /dev/sda
     controlPlane: false
     # Keep CloudNativePG databases off this one-off wobscale-rack node.
-    # CNPG Clusters carry a nodeAffinity that refuses nodes with this label.
     nodeLabels:
       generalprogramming.org/no-database: "true"
-      # This node is on 10.3.6.0/27, not the 10.3.2.0/23 site LAN, so it can
-      # never own a MetalLB L2 VIP from the sea1 pool. Workloads behind such a
-      # VIP refuse nodes carrying this label.
       generalprogramming.org/no-lan-vip: "true"
-    # This node takes DHCP only for v6, so its resolvers are static rather
-    # than inherited from sea1-core's Kea. Both entries are NixOS dnsmasq:
-    # sea420-core, then fmt2-core for cross-site redundancy.
     nameservers:
       - 10.3.0.3
       - 10.65.67.5
