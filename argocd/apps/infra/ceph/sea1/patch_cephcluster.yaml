@@ -17,9 +17,29 @@ spec:
     # ones are harmless standbys -- no quorum maths, unlike the mons.
     count: 2
   storage:
-    # OSDs are adopted per-host during the metal migration, not here.
+    # OSDs are adopted per-host during the metal migration, one host at a time.
     useAllNodes: false
     useAllDevices: false
+    nodes:
+      # sea1-hv-2 -> metal Talos, 2026-08-03. The 7 Intel SSDPE2KX020T8 already
+      # carry cephadm-created encrypted OSDs; Rook ADOPTS them via
+      # `ceph-volume lvm activate`. Nothing is created and no data moves --
+      # ceph-volume reports them "available": false ("LVM detected"), so the
+      # provisioning path cannot claim them even by accident.
+      - name: sea1-k8s-2
+        # nvme7n1 is the 7.68T HGST data disk, NOT an OSD. Bounded to 0-6 so a
+        # rename or a re-enumeration can never hand it to Rook. Widening this
+        # to ^nvme[0-9]+n1$ would let Rook build an OSD on it.
+        deviceFilter: "^nvme[0-6]n1$"
+        config:
+          # Selects the lockbox branch (and sets hostIPC, which cryptsetup
+          # needs). Does NOT re-encrypt: the passphrase is fetched from the
+          # cluster's config-key store using the cephx identity in the LV tag.
+          encryptedDevice: "true"
+          # The existing 21 OSDs are class `ssd`. Left to itself Rook would
+          # register these as `nvme`, and any class-restricted CRUSH rule would
+          # then place zero PGs here -- silently, with the migration looking fine.
+          deviceClass: ssd
   mon:
     # mon.d proved the join works (quorum sea1-hv-0,sea1-hv-1,sea1-hv-2,d).
     # Going to 3 Rook mons -> 6 total during coexistence. Six is even, which is
