@@ -494,9 +494,14 @@ hosts:
           protocols: [udp, tcp]
           to: 10.3.2.10
     extra_config:
+      # Priority is explicit now that sea1-vpn-leaf-2 shares vrid 10. Both
+      # defaulted to 100, so mastership was decided by the higher interface
+      # address (leaf-1 .4 over leaf-2 .2) -- correct by accident, and it
+      # would have silently inverted if either address ever changed.
       - set high-availability vrrp group internal vrid 10
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
+      - set high-availability vrrp group internal priority 200
   # Second sea1 leaf, built from scratch rather than migrated. Deliberately
   # has NO vrrp and NO nat: it joins the fabric as a passive BGP participant
   # first and only takes gateway duties once proven. Adding those two blocks,
@@ -539,6 +544,28 @@ hosts:
       - 2606:4700:4700::1001
     networks:
       - 10.3.2.0/23
+    # Masquerade is required for the VRRP promotion below, not optional
+    # alongside it: winning 10.3.2.1 without translating 10.3.2.0/23 hands the
+    # LAN a default gateway that black-holes every outbound v4 packet, which
+    # is strictly worse than having no second leaf at all.
+    #
+    # leaf-1's Torrent port-forward is deliberately not copied. It DNATs on
+    # eth0, which here means leaf-2's own 199.255.18.163 rather than leaf-1's
+    # .162 -- so it would not be a failover of that forward, it would be a
+    # second, permanently-live entry point nobody asked for. The forward is
+    # bound to an address that does not move, so it cannot fail over.
+    nat:
+      masquerade:
+        - interface: eth0
+          source: 10.3.2.0/23
+    extra_config:
+      # Backup for the LAN gateway. Priority 100 against leaf-1's 200, so
+      # leaf-1 holds 10.3.2.1 whenever it is alive and reclaims it on return
+      # (VyOS preempts by default).
+      - set high-availability vrrp group internal vrid 10
+      - set high-availability vrrp group internal interface eth1
+      - set high-availability vrrp group internal address 10.3.2.1/23
+      - set high-availability vrrp group internal priority 100
 links:
   fmt2-vpn-leaf-1:
     fmt2-vpn-spine-1: {}     # rotated to derived port + pair keys
