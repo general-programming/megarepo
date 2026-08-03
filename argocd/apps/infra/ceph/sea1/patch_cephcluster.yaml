@@ -26,3 +26,38 @@ spec:
     # All 35 daemons on sea1 are 20.2.1 tentacle. The 19.2.3 squid visible on
     # the hypervisors is Proxmox's host CLI package, not the cluster.
     image: quay.io/ceph/ceph:v20.2.1
+  network:
+    # Ceph here is IPv6-only (ms_bind_ipv4 false, public_network
+    # 2602:fa6d:10:ffff::/116) and pod IPs are outside that range, so mons must
+    # be on the host network to be reachable by the OSDs and the other mons.
+    provider: host
+    ipFamily: IPv6
+    dualStack: false
+  placement:
+    # Hard gate for every Rook daemon. lan-bridge=true is exactly the three
+    # mainline LAN workers (sea1-k8s-0/1/2 on ::110-112), which are the only
+    # nodes inside ceph's public_network. sea1-k8s-103-0 is on an entirely
+    # different prefix (2620:fc:c000::/…) at the wobscale rack, so a mon placed
+    # there could never reach quorum; the control planes are in-range but are
+    # not intended daemon hosts.
+    all:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: generalprogramming.org/lan-bridge
+                  operator: In
+                  values:
+                    - "true"
+    mon:
+      # Belt and braces alongside mon.allowMultiplePerNode=false: losing one
+      # node must never cost more than one mon.
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - rook-ceph-mon
+            topologyKey: kubernetes.io/hostname

@@ -104,6 +104,13 @@ nodes:
     # Inherited by sea1-k8s-1 and -2 through the merge key. Marks the nodes
     # that actually have br0, so Multus and LAN-attached VMs can select them.
     nodeLabels: &k8s-worker-nvme-labels
+    nodeAnnotations:
+      # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
+      # IPv4 one on these dual-stack nodes. Ceph's public_network is
+      # 2602:fa6d:10:ffff::/116, so a mon launched on 10.3.2.x binds an address
+      # no other mon can reach and hangs in probing. This annotation overrides
+      # the choice.
+      network.rook.io/mon-ip: "2602:fa6d:10:ffff::110"
       generalprogramming.org/lan-bridge: "true"
     # Same reasoning as the control planes above: public only, no sea1-core.
     nameservers: &k8s-worker-nvme-dns
@@ -171,6 +178,13 @@ nodes:
     hostname: sea1-k8s-1
     ipAddress: "10.3.2.11"
     nodeLabels: *k8s-worker-nvme-labels
+    nodeAnnotations:
+      # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
+      # IPv4 one on these dual-stack nodes. Ceph's public_network is
+      # 2602:fa6d:10:ffff::/116, so a mon launched on 10.3.2.x binds an address
+      # no other mon can reach and hangs in probing. This annotation overrides
+      # the choice.
+      network.rook.io/mon-ip: "2602:fa6d:10:ffff::111"
     nameservers: *k8s-worker-nvme-dns
     networkInterfaces:
       - deviceSelector:
@@ -190,6 +204,13 @@ nodes:
     hostname: sea1-k8s-2
     ipAddress: "10.3.2.12"
     nodeLabels: *k8s-worker-nvme-labels
+    nodeAnnotations:
+      # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
+      # IPv4 one on these dual-stack nodes. Ceph's public_network is
+      # 2602:fa6d:10:ffff::/116, so a mon launched on 10.3.2.x binds an address
+      # no other mon can reach and hangs in probing. This annotation overrides
+      # the choice.
+      network.rook.io/mon-ip: "2602:fa6d:10:ffff::112"
     nameservers: *k8s-worker-nvme-dns
     networkInterfaces:
       - deviceSelector:
