@@ -32,8 +32,7 @@ metadata:
   name: sea1-vpn-spine-2
   namespace: network-vpn
 spec:
-  # Halted until the PVC is populated from pool/vm-111-disk-0.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
