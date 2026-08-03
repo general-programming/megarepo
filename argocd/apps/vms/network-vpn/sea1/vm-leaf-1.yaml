@@ -1,0 +1,119 @@
+# sea1-vpn-leaf-1, migrated off Proxmox VM 100 on sea1-hv-1.
+#
+# This is the LAN's v4 gateway, not just a router. keepalived holds
+# 10.3.2.1/23 as a VRRP secondary on eth1 (group vrid 10, single member, so it
+# always wins the election), it masquerades 10.3.2.0/23 out eth0, and it
+# carries the public 199.255.18.162/32. Every Talos node routes 0.0.0.0/0
+# through it.
+#
+# Its window therefore drops v4 for the whole site. IPv6 is unaffected: the v6
+# router is separate physical gear (e4:dc:5f:f0:03:a0) and every node now
+# carries a declared ::/0 via 2602:fa6d:10:ffff::1, so ceph (v6 mons, on-link),
+# node DNS (Cloudflare over v6) and the cluster itself keep running while this
+# guest is down. That premise was verified before this was attempted, not
+# assumed.
+#
+# Rollback: pool/vm-100-disk-0@pre-kubevirt (protected) and VM 100 left
+# defined but stopped on sea1-hv-1.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: leaf-1-root
+  namespace: network-vpn
+spec:
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 32Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: sea1-vpn-leaf-1
+  namespace: network-vpn
+spec:
+  # Halted until the PVC is populated from pool/vm-100-disk-0.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: sea1-vpn-leaf-1
+        vpn-layer: leaf
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          # Hard within the layer, as for the spines. Only one leaf exists
+          # today, so this is a rule for the future rather than a constraint
+          # now.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: vpn-layer
+                    operator: In
+                    values:
+                      - leaf
+              topologyKey: kubernetes.io/hostname
+          # Soft against the fabric as a whole, so it lands on the node the
+          # spines are not using rather than doubling up for no reason.
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: vpn-layer
+                      operator: Exists
+                topologyKey: kubernetes.io/hostname
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 8
+        memory:
+          guest: 4Gi
+        firmware:
+          uuid: b949fab6-aaa1-459f-9970-0411af09062d
+          # SeaBIOS, like the spines: Proxmox set no bios: ovmf and no
+          # efidisk, and KubeVirt defaults to BIOS when bootloader is unset.
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                bus: scsi
+          # eth0 external carries 2602:fa6d:10:ffff::f01/116 and the public
+          # 199.255.18.162/32; eth1 internal carries 10.3.2.4/23 and the VRRP
+          # VIP 10.3.2.1. Both were on Proxmox vmbr0.
+          #
+          # VyOS pins both by hw-id (eth0 91:9b:97, eth1 75:fe:0c), so the MACs
+          # bind them correctly whatever PCI order KubeVirt uses. Getting this
+          # wrong would put the gateway on the wrong side of the router.
+          interfaces:
+            - name: external
+              bridge: {}
+              macAddress: "BC:24:11:91:9B:97"
+            - name: internal
+              bridge: {}
+              macAddress: "BC:24:11:75:FE:0C"
+      networks:
+        - name: external
+          multus:
+            networkName: br0-lan
+        - name: internal
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: leaf-1-root

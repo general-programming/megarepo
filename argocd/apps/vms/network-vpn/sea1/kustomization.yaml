@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - nad-br0-lan.yaml
+  - vm-leaf-1.yaml
   - vm-spine-1.yaml
   - vm-spine-2.yaml
