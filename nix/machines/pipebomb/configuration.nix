@@ -1,29 +1,16 @@
 {
+  modulesPath,
+  lib,
   self,
-  inputs,
   ...
 }:
-
-let
-  inherit (inputs)
-    disko
-    ;
-in
 
 {
   system.stateVersion = "26.05"; # do not change
 
   imports = [
-    disko.nixosModules.disko
-
-    (self.lib.nixosModule "hardware/proxmox-vm")
-    (self.lib.nixosModule "glances-tty")
+    (modulesPath + "/virtualisation/proxmox-lxc.nix")
     (self.lib.nixosModule "gitops")
-    (self.lib.nixosModule "impermanence")
-    # No secureboot module: this VM boots EFI with Secure Boot disabled, so
-    # plain systemd-boot from base.nix is what we want.
-
-    ./disko.nix
   ];
 
   gitops = {
@@ -34,44 +21,34 @@ in
   networking = {
     hostName = "pipebomb";
     domain = "generalprogramming.org";
-    useDHCP = false;
-    # Required by ZFS.
-    hostId = "f1bc0b56";
   };
 
-  # Ephemeral root: zroot/root is rolled back to @blank in initrd, and
-  # /persist has to be mounted before the bind mounts and activation run.
-  impermanence.enable = true;
-  fileSystems."/persist".neededForBoot = true;
+  proxmoxLXC = {
+    # manageNetwork = false enables systemd-networkd but ships no matching
+    # .network file for eth0 (Proxmox's own net-injection only covers
+    # distros it recognizes, and "nixos" isn't one), so the interface has
+    # to be configured here. Same story for the hostname: leaving
+    # manageHostName = true lets Nix set it from the machine name.
+    manageNetwork = false;
+    manageHostName = true;
+  };
 
-  # Daemon state, on top of the module's defaults (/var/lib, /var/log,
-  # /root). /var/lib/daemon already rides along inside the /var/lib bind;
-  # listing it explicitly just pins its existence and mode under /persist.
-  impermanence.extraPersistDirectories = [
-    {
-      path = /etc/daemon;
-      mode = "0755";
-      owner = "root";
-      group = "root";
-    }
-    {
-      path = /var/lib/daemon;
-      mode = "0755";
-      owner = "root";
-      group = "root";
-    }
-  ];
-
-  # Single NIC, DHCP. Matches both plausible predictable names for the
-  # Proxmox virtio NIC: the live installer brings it up as ens18 (i440fx
-  # SMBIOS onboard index), while a q35 board names the same device enp6s18.
-  systemd.network.enable = true;
-  systemd.network.networks."10-primary" = {
-    matchConfig.Name = [
-      "enp6s18"
-      "ens18"
-    ];
+  systemd.network.networks."10-eth0" = {
+    matchConfig.Name = "eth0";
     networkConfig.DHCP = "yes";
     linkConfig.RequiredForOnline = "routable";
   };
+
+  # Container: no real bootloader/firmware/kernel to manage, and no raw
+  # sockets for lldpd under an unprivileged LXC.
+  boot.loader.systemd-boot.enable = lib.mkForce false;
+  boot.loader.efi.canTouchEfiVariables = lib.mkForce false;
+  hardware.enableRedistributableFirmware = lib.mkForce false;
+  hardware.cpu.intel.updateMicrocode = lib.mkForce false;
+  hardware.cpu.amd.updateMicrocode = lib.mkForce false;
+  services.lldpd.enable = lib.mkForce false;
+
+  # No glances-tty module either: it wants a real /dev/tty5, which the
+  # container does not have. `ssh pipebomb -t glances` still works — the
+  # package comes in fleet-wide from base.nix.
 }

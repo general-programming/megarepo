@@ -97,9 +97,11 @@ build_cache cache="general-programming:general-programming":
         nix run nixpkgs#attic-client -- push {{cache}} "$out"
     done
 
-# Build the Proxmox-importable LXC tarball for the `sea1-nix-builder` remote-build host.
-build_builder_image:
-    nix build --no-link --print-out-paths .#nixosConfigurations.sea1-nix-builder.config.system.build.tarball
+# Build the Proxmox-importable LXC tarball for a container machine, e.g.
+# `just build_lxc_image pipebomb`. Feed the printed path to
+# scripts/provision-lxc.py.
+build_lxc_image machine="sea1-nix-builder":
+    nix build --no-link --print-out-paths .#nixosConfigurations.{{machine}}.config.system.build.tarball
 
 # Validate the NetBox API key in Vault by generating and testing a dnsmasq config.
 netbox-check:

@@ -27,7 +27,7 @@
   };
 
   # Remote Nix builder: CT 9000 (sea1-nix-builder) on sea1-hv-0, provisioned via
-  # scripts/provision-builder-lxc.py. Off by default fleet-wide because it
+  # scripts/provision-lxc.py. Off by default fleet-wide because it
   # also needs vaultAgent.enable (per-host AppRole creds from `just
   # provision`/`rekey`), which not every machine has yet; enable per-host
   # once that's seeded (see fmt2-core/configuration.nix for the first one).

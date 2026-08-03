@@ -2,7 +2,7 @@
 # nix/machines/sea1-nix-builder/configuration.nix) as a remote Nix builder.
 #
 # Disabled until the container is actually provisioned (see
-# scripts/provision-builder-lxc.py) and its address/host key are known.
+# scripts/provision-lxc.py) and its address/host key are known.
 
 {
   lib,
