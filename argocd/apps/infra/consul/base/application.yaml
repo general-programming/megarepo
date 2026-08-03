@@ -22,13 +22,16 @@ spec:
           exposeGossipPorts: false
           # The chart default (100m/100Mi) starves the agent: it gets throttled
           # in >99% of CPU periods, misses memberlist acks, and crashes on
-          # "timeout starting DNS servers" or OOM. No CPU limit — gossip is
-          # latency-sensitive and throttling is what breaks it.
+          # "timeout starting DNS servers" or OOM. The CPU limit is deliberate
+          # headroom (~10x measured need) rather than absent -- Argo patches
+          # the DaemonSet instead of replacing it, so an omitted limit leaves
+          # the old one in place and the sync fails on requests > limits.
           resources:
             requests:
               cpu: 500m
               memory: 256Mi
             limits:
+              cpu: "2"
               memory: 512Mi
           extraEnvironmentVars:
             # Go otherwise sizes GOMAXPROCS from the node's core count (24 on
