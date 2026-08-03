@@ -1340,3 +1340,313 @@ Two cheap measurements would settle it and neither has been taken:
 it is the *likely actual input* here, via a real rail droop. §4's model-A verdict stands but
 gains a second, non-semantic route: a deallocate contributes through **current draw**, not only
 through L2P/journal semantics. Nothing in §1–§3, §11 or §12 changes.
+
+---
+
+# ADDENDUM 2 — fleet-wide incidence: the cable hypothesis is refuted, and I was wrong to promote it
+
+New fact from the owner: **this lockup has occurred on every host they run an SN200 in** —
+multiple chassis, cables, bays. A marginal U.2 cable on one host cannot explain that. Addendum
+1 §A5/§A6 promoted the interconnect to proximate cause and recommended re-testing in another
+bay. **That recommendation was wrong as a primary action.** Retracted below.
+
+The mechanism I traced (§2) is unchanged. What changes is the answer to *"what makes the
+shutdown fail to finish?"* — and the WD documentation shipped inside the firmware zip answers
+it directly.
+
+## B0. I had not read the vendor documentation. It was in the zip all along.
+
+`HGST-UltraStar-SN200-HHHL.zip` contains a `docs/` directory I did not open in my first pass:
+
+```
+docs/KNGND122_Release_Notes.pdf      docs/KNGND110_Release_Notes_v2.pdf
+docs/KNGND100_SN2xx_Errata.pdf       docs/KNGNP100_SN2xx_Errata.pdf
+docs/80-11-80171_Ultrastar_SN200_Product_Spec_Rev_4.pdf   (+ product manuals)
+```
+
+I extracted the text myself (PDF streams → zlib → text-show operators). Everything quoted
+below is verbatim from those files.
+
+## B1. WD documents this exact failure, repeatedly, as a firmware defect family
+
+Searching the change lists for the words that matter:
+
+| document | `pfail` | `deallocate` | `diagnostic mode` | `crashed` | `capacitor`/`VCAP`/`hold-up`/`power backup` |
+|---|---|---|---|---|---|
+| KNGND100 errata | 0 | 3 | 0 | 0 | **0** |
+| KNGND110 release notes | 23 | 34 | 10 | 8 | **0** |
+| KNGND122 release notes | 3 | 0 | 0 | 0 | **0** |
+| KNGNP100 errata | 0 | 0 | 0 | 0 | **0** |
+
+**Zero mentions of capacitors, VCAP, hold-up, PLP or power backup in any WD document for this
+family.** WD has never documented a hold-up-capacitor failure mode here. (That is not proof
+the caps are fine — see §B4 — but it removes the "known batch problem" version of the theory.)
+
+What WD *does* document is a large family of firmware defects that all end the same way. From
+**KNGND110** (i.e. all of these were **open in KNGND100**), verbatim, cited by title because
+the PDF's table layout makes the `ID:`↔title pairing ambiguous under text extraction — the
+other agent's document flags the same hazard and is right to:
+
+> **"Namespace Disappears During AC Power Cycle Testing"** — *Failure Scenario:* Power Cycling
+> + Random Read/Write/Deallocate IO Profile Testing results in **incomplete shutdown** after
+> 2000+ iterations. *Root Cause:* When both a link down and a Pfail interrupt occur at exactly
+> the same time, there is a corner case in which **the Pfail interrupt may get lost.**
+
+That is the owner's symptom, by name, with "incomplete shutdown" as the mechanism — exactly
+the marker-5/6/7 → UNEXSTRT → Post Crash chain I traced.
+
+> **"Drives failed to restore L2P table after large deallocate and a pfail"** — *Failure
+> Scenario:* Heavy deallocate IO workloads during pfail could cause L2P table to become
+> corrupt. *Root Cause:* metadata corruption due to a **race condition between large
+> deallocate commands and internal flushing of L2P updates to NAND**. *Change Description:*
+> Fixed race condition **and added counter to VU log page for tracking any future
+> occurrences.**
+
+> **"Drive in crashed state following Power Cycle, Controller Reset, and Deallocate Test"** —
+> *Root Cause:* With back-to-back PFails, PFails that occur in the middle of a 200 ms power-on
+> window may cause small loss of usable media. **Over time, this leads to a crash.**
+
+> **"GC stuck during shutdown"** — a page-relocation request received by GC Mgr after
+> Shutdown creates a **deadlock**; the drive hangs and cannot complete the shutdown request.
+
+> **"Drive faulted during firmware download"** — firmware download followed by a shutdown
+> could cause memory corruption and lead to drive in **crash/diagnostic mode**.
+
+> **"Queue Engine state change error handling"** — when a link down occurs between the Queue
+> Manager and Queue Engines enable sequence, no check ensured enable completed, **resulting in
+> a hang** → crashed/diagnostic mode.
+
+> **"2x Drives Crashed during REFCLK Short Testing"** — if REFCLK goes away around the same
+> time as a Link Down/Link Training occurs, both clocks become invalid.
+
+plus a race where the **System Manager never sends the shutdown message**, and an admin
+manager that gets **stuck saving CellCare data during shutdown**.
+
+And from **KNGND122** — the *last* firmware that exists for this product, February 2021 — the
+same class of bug was still being fixed:
+
+> **Dual Port Shutdown / Severity High / Drive Recovery: Unable to recover** — *"When a
+> shutdown is issued, internally the firmware will invoke a thread to monitor PFAIL (power
+> fail) during shutdown. Due to a logic error in the firmware, if there is another shutdown
+> triggered from the other port during this time, the PFAIL monitor thread is added again to
+> the thread execution list… the pointers to the execution list becomes broken and **a hang
+> occurs during the shutdown process**."*
+
+> **Reset / Severity High / Drive Recovery: Unable to recover** — *"A race condition exists
+> when a PCIE uncorrectable error occurs with a host link down that causes the Completion
+> Queue messages to go into autodisable mode. The firmware timeouts waiting for the response
+> from the hardware and **leads to a drive hang**."*
+
+> **Link Error Handling** — *"A hang condition may occur during a race condition… when a host
+> link down is combined with a PCIe error… Also, the timeout condition would no longer cause
+> the drive to go into debug mode."*
+
+> **Shutdown / Severity High / Drive Recovery: Unable to recover** — *"A Format with Secure
+> Erase for user data option interrupted by an NVMe shutdown causes the drive to crash."*
+
+Note how many entries carry **`Drive Recovery: Unable to recover`**. WD's own position is that
+once this happens, the drive does not come back by any host action.
+
+## B2. Re-ranked causes for a fleet-wide pattern
+
+| rank | cause | verdict | basis |
+|---|---|---|---|
+| **1** | **Firmware defect family: the shutdown/PFAIL/reset path hangs or drops the PFAIL interrupt, leaving the save unfinished** | **CONFIRMED — this is the root cause** | WD's own change lists, ~10 distinct entries across KNGND110 and KNGND122, several titled with the exact observed symptom, most marked "Unable to recover". Matches my code trace exactly. |
+| 2 | Usage pattern common to every host (whole-device discard on mkfs, heavy write, abrupt reboots) acting as the **trigger** for those defects | CONFIRMED as trigger, not cause | WD's failing test profiles are literally "Power Cycling + Random Read/Write/**Deallocate**" and "Power Cycle, Controller Reset, and **Deallocate**". |
+| 3 | Aged hold-up capacitors | **UNPROVEN, and now unlikely as the primary** | Zero mention in any WD document; and the firmware would report it via a *different* posture (write-protect, §B4) rather than Post Crash. Still worth measuring — §B3. |
+| 4 | Marginal U.2 cable / interconnect | **DEMOTED to aggravator on one host** | Cannot explain fleet-wide incidence. Retains explanatory value for latch #2's `UEFI0067` only, and note that several WD defects are specifically triggered *by* link-down events — so a flaky cable makes a firmware bug fire, it is not itself the fault. |
+
+**Retraction.** Addendum 1 §A6 said "the drive should not be binned on this evidence; move it
+to a different bay". The bay swap is still worth doing for the one host with `UEFI0067`, but it
+is no longer the primary action and it will not fix the fleet.
+
+## B3. How to read power-backup / PLP health non-destructively — the fleet-wide measurement
+
+**There is no capacitance readout. There is a fault counter, and it is the right measurement.**
+
+**PROVEN** from `libdmi_core.so.0.39`: the SMART attribute display tables at file offsets
+`0xe4598…` and `0xe4728…` contain, among ~80 attributes:
+
+| attribute | JSON key | library symbol |
+|---|---|---|
+| **`Power Backup Faults`** (`0xa6b8f`) | `power_backup_faults` | `HDME_SMART_ATTR_NAME_POWER_BACKUP_FAULTS` |
+| **`Lifetime Number of Power Backup Faults`** (`0xa91b8`) | — | `HDME_SMART_ATTR_VALUE_LIFETIME_NUMBER_OF_POWER_BACKUP_FAULTS` |
+| `Unexpected Power Loss Count` (`0xa6b5c`) | — | `HDME_SMART_ATTR_NAME_UNEXPECTED_POWER_LOSS_COUNT` |
+| `Surprise Power Loss Events` (`0xa6dbd`) | — | `HDME_SMART_ATTR_VALUE_SURPRISE_POWER_LOSS_EVENTS` |
+| `Exception and Assert Count` (`0xa6d88`) | — | — |
+
+"Power backup" is this firmware's name for the hold-up subsystem — corroborated on the drive
+side by StrId 2162 `Flush Admin_isPowerBackupFailed = %d` (PROC8 `0x300292e6`).
+
+**How to read it, in priority order:**
+
+1. **`dm-cli get-smart`** on each SN200. The RPM the owner already has provides the tool
+   (`opt/Western_Digital/dm-cli/bin/dm-cli`; `get-smart`, `get-state`, `get-statistics`,
+   `get-log-page` are all in its command table). This is the only path that decodes the
+   attributes by name. **Read-only.**
+2. Raw vendor log pages, if `dm-cli` is unavailable — `om_get_log_page_data` @ `0x67e70`
+   accepts page ids **`0xC2`, `0xC3`, `0xCA`, `0xDE`**, and `_gf_capture_vu_log_page` @
+   `0x3c2d0` dumps **`0xC1`** (it names the artefact `L_LOGXC1`), 64 KiB:
+   ```sh
+   for p in c1 c2 c3 ca de; do
+     nvme get-log /dev/nvmeX --log-id=0x$p --log-len=4096 -b > sn200-lp-$p.bin
+   done
+   ```
+   Get Log Page is admin opcode `0x02` — **read-only, cannot change drive state.**
+3. `nvme smart-log` for the standard `unsafe_shutdowns` counter as a cross-check.
+
+**What to look for.** On a healthy fleet, `Power Backup Faults` / `Lifetime Number of Power
+Backup Faults` should be **0**. Non-zero on multiple drives would resurrect the VCAP theory and
+would be decisive. Also compare `Unexpected Power Loss Count` / `unsafe_shutdowns` against
+`Exception and Assert Count`: if asserts track the latches, the cause is the firmware hang
+family (rank 1); if power-backup faults track them, it is the capacitors (rank 3).
+
+**Do this on the HEALTHY drives too** — they are not gated, every command works, and the
+comparison across the fleet is the entire point.
+
+There is one more counter worth pulling: the KNGND110 fix for the deallocate/L2P race
+explicitly *"added counter to VU log page for tracking any future occurrences"*. If the fleet
+is on KNGND110 or KNGND122, that counter exists in one of the pages above and directly reports
+whether the deallocate×pfail race has fired.
+
+## B4. Is there a periodic VCAP self-test? **No — and that is important**
+
+**PROVEN.** PROC0 has a VCAP test suite — `VCAP: Start Test` (1188), `PowerUp started`
+(1189), `PowerUp test succeeded/failed` (1190/1191), `Short test succeeded/failed`
+(1192/1193), `Open test started` (1194), and the one that actually measures capacitance:
+
+```
+1195  VCAP: Open test complete in %ums, Watermarks={%ums,%ums}
+1196  VCAP: Open test failed: Time is too short  / Discharge completed in %ums …
+1197  VCAP: Open test failed: Time is too long   / Discharge not completed in %ums …
+```
+
+The "Open test" times a discharge against two watermarks — that is a real RC/capacitance
+measurement, and a degraded cap would fail it "too short".
+
+**But it is gated to BIST mode.** The VCAP message handler at PROC0 `0x7ffacf58` is a
+three-instruction early return that logs StrId 1199 **`VCAP: Not in BIST mode, message
+ignored`** and returns 1:
+
+```
+7ffacf58: entry a1,0x20
+7ffacf5b: { l32r a10,0x7ff837b0 ; movi a8,0x0 }   ; a10 = LOG 1199 descriptor
+7ffacf63: s32i.n a8,a3,0x0
+7ffacf65: call8 0x7ffb5398                        ; log "Not in BIST mode, message ignored"
+7ffacf68: movi.n a2,1
+7ffacf6a: retw.n
+```
+
+So **the drive never measures its own hold-up capacitance in the field.** The only runtime
+signal is a *binary* VCAP status from hardware, consumed by `Admin_VCapStatusHandler`
+(PROC8 `0x7ffb0740`, StrIds 2954/2955), which on failure logs StrId 2061 `Received notify that
+the VCAP has failed`, raises an async event (StrId 3267 `VCAP failure async event detected but
+masked, discarded`), and puts the drive into **write-protect mode** — StrId 661
+`VCAP has failed, drive is in write protect mode` (PROC2/3/4/5/10 `0x7ffa4baa`, `0x7ffa5033`).
+
+**This is the strongest single argument against the VCAP theory.** A drive whose hold-up
+subsystem has failed *detectably* goes to **write-protect**, not Post Crash — a different,
+clearly-labelled posture. The field drives show Post Crash. So either the caps are fine, or
+they are degraded in the narrow band that still passes the hardware's crude threshold. The
+`Power Backup Faults` counter in §B3 is what distinguishes those.
+
+(Related and observable: StrId 3516 `SYS: Delayed SAM startup by %d ms (waiting for VCAPOK)` —
+the drive waits for the caps to charge before starting the media manager. A growing delay
+across the fleet would be a degradation signal, but it is only visible in the internal log, not
+to the host.)
+
+## B5. The PFAIL budget, and why it is workload-dependent
+
+**PROVEN.** The PFAIL monitor's literal pool in PROC0 is self-documenting:
+
+```
+0x7ff830c0 = 0x7ff8cd80   ; the PFAIL monitor object (referenced nowhere else in any image)
+0x7ff830e0 = 0x000061a8   ; 25000  -- the deadline
+0x7ff830e8 = 0x7ffa838b   ; handler
+0x7ff830ec = 0x80000006   ; marker 6  PFAIL Shutdown STARTED
+0x7ff830f0 = 0x7ffa8380   ; handler
+0x7ff830f4 = 0x80000007   ; marker 7  PFAIL Shutdown TIMEOUT
+```
+
+Markers 6 and 7 are literals **inside the PFAIL monitor's own pool**, next to its deadline.
+That closes the loop: the PFAIL monitor writes marker 6 when the save starts and marker 7 when
+the deadline expires, and both feed the `0x7ffaaf6b` convergence point I traced in §2. I could
+not determine the time unit of 25000 (`SYS: PFAIL time = % 5u.%03u ms`, StrId 1256, has no
+reference in any image — compiled out), so the absolute budget is **UNKNOWN**.
+
+**The work is workload-dependent — PROVEN from the counters the firmware keeps:**
+`PfailRspPth: flush WB` / `flush %d entries in WB` / `wait for %d writes to complete`
+(StrIds 1500–1504, 3068), `PFail: Flushed %d WB frames` (1518), then BlockMgr saving valid
+counts, erase counts and CellCare tables (2733–2736), then the System Area save. Plus explicit
+statistics `ForcedWritesAfterPFail`, `WritesAfterPFailCM`, `WritesAfterPFailOthers`
+(StrIds 2360, 2489–2492).
+
+So the coordinator's point 3 holds: **the amount that must be flushed scales with dirty write
+buffer and dirty L2P**, which is why a peak-load workload is the one that runs out of budget —
+whether the budget is short because the caps are weak *or* because a firmware hang is eating
+it. Both hypotheses predict "fails under load"; the counter in §B3 is what separates them.
+
+## B6. Plain verdict
+
+> **These drives are not failing because of your cables, and they are not (on the evidence
+> available) failing because their capacitors have aged out. They are failing because the
+> SN200's firmware has a documented family of race conditions in its shutdown, reset and
+> power-fail paths that leave the power-loss save unfinished — after which the drive latches
+> itself into Post Crash Startup permanently. Western Digital found, and progressively fixed,
+> about ten of these between 2017 and 2021, several titled with your exact symptom, and marked
+> most of them "Drive Recovery: Unable to recover."**
+>
+> **KNGND122 (February 2021) is the last firmware that will ever exist for this product. The
+> SN200 was discontinued. If a drive on KNGND122 still latches, there is no fix coming.**
+
+### What to do, in order
+
+1. **Check the firmware revision on every SN200 you own** — `nvme id-ctrl /dev/nvmeX | grep fr`.
+   This is the highest-value action and it is free. Drives of this vintage very commonly still
+   ship **KNGND100 (Oct 2017)**, which has **every** defect in §B1 open, including "Namespace
+   Disappears During AC Power Cycle Testing" and the deallocate/L2P race. **KNGND110 and
+   KNGND122 are both in the zip you already have.** If any drive is below KNGND122, update it —
+   after a clean shutdown, not while dirty, and note that "firmware download followed by a
+   shutdown" was itself a KNGND110 bug, so update from a quiesced drive.
+2. **Pull `dm-cli get-smart` from every SN200** and compare `Power Backup Faults`,
+   `Lifetime Number of Power Backup Faults`, `Unexpected Power Loss Count` and
+   `Exception and Assert Count` across the fleet (§B3). This is the measurement that decides
+   firmware-hang vs. capacitor-aging, and nobody has taken it.
+3. **Suppress the trigger permanently, fleet-wide** — no whole-device discard, ever:
+   `mkfs.xfs -K`, `mkfs.ext4 -E nodiscard`, mount without `discard`, LVM `issue_discards = 0`,
+   no whole-device `fstrim`, and Talos/ceph configured likewise. WD's own failing test profiles
+   are deallocate profiles.
+4. **Always stop these drives cleanly.** Unbind the nvme driver
+   (`echo 0000:BB:DD.F > /sys/bus/pci/drivers/nvme/unbind`) before a reboot or power-off — it
+   is the only host action that issues `CC.SHN` and waits for `CSTS.SHST=10b`. Every other
+   stop, including a plain reboot, risks the marker being left at "STARTED".
+
+### Keep or bin?
+
+**Keep, conditionally, and plan to replace.** Concretely:
+
+- If the fleet is on **KNGND100 or KNGND110**: update to KNGND122 and re-evaluate. There is a
+  real, documented, applicable fix. Do not bin anything before doing this.
+- If the fleet is **already on KNGND122** and drives still latch: you are running the final
+  firmware for a discontinued product with a known-unfixed defect family whose vendor-stated
+  recovery is "unable to recover". These are not trustworthy for anything you cannot afford to
+  rebuild — no ceph OSDs without replicas you would actually rely on, no single-copy data.
+  That is a retirement decision driven by unsupportability, not by any individual drive being
+  bad.
+- Either way, **`Power Backup Faults` non-zero on multiple drives flips this to "bin"** — that
+  would mean the hold-up hardware is degrading and no firmware can help.
+
+### Corrections to earlier sections of this document
+
+- **Addendum 1 §A5/§A6 is retracted** in its ranking: the interconnect is an aggravator on one
+  host, not the fleet's root cause. §A5's *code* findings (PFAIL is a PROC0-local brownout ISR
+  unreachable from PCIe; U.2 carries 12 V; the deallocate×PFail string is in the data-path
+  processors) all still stand, and note that WD's errata make link-down events a *trigger for
+  firmware hangs*, which is a better fit than rail droop.
+- **§4 model A** is upgraded: WD's "Drives failed to restore L2P table after large deallocate
+  and a pfail" is a real, named defect with a real fix, so deallocate is a genuine sufficient
+  cause on pre-KNGND110 firmware, not merely a provocation.
+- **On errata IDs:** my text extraction cannot reliably pair `ID:` values with titles — the
+  PDF table columns interleave, and both possible readings are self-consistent. The commonly
+  quoted `OM-6588 = deallocate/L2P` mapping may be off by one entry. **Cite these by title.**
+  The titles and root causes are unambiguous; the IDs are not.

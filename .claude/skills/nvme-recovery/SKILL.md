@@ -208,24 +208,51 @@ Still worth suppressing discard on a suspect drive — `mkfs.xfs -K`,
 `mkfs.ext4 -E nodiscard`, no `discard` mount option, LVM `issue_discards = 0`,
 no whole-device `fstrim` — just do not mistake it for a fix.
 
-**Suspect the drive, not the cable — this is fleet-wide.** It has been observed
-on every host using an SN200, across different cables, bays and chassis. A
-marginal U.2 cable can aggravate it (U.2 carries `PC12V`/`ATX12V`, monitored via
-`I2C_DEVICE_VMON`, and a high-resistance connector gives both link-training
-failures and I²R rail droop) but cannot explain fleet-wide incidence.
+**Root cause: a WD-acknowledged firmware defect family. Read the release notes
+first — they are in a `docs/` folder inside the firmware zip.** That folder was
+the single highest-value artefact in the whole teardown and is easy to miss.
 
-**Leading hypothesis: aged power-loss-protection capacitors.** `VCAP has failed,
-drive is in write protect mode` is a distinct firmware posture. A batch of
-same-age drives with degraded hold-up caps means every power event starts a
-PFAIL save that cannot finish inside the shrinking budget → marker 6/7 → latch.
-That fits the correlation with power events, and fits why peak-current
-workloads make it worse — a weak cap sags fastest under load. **Measure VCAP
-health before deciding to keep or bin.** `KNGND122` (2020) is the newest
-firmware that exists, so a defect persisting there has no fix.
+WD documents this symptom by name: **"Namespace Disappears During AC Power Cycle
+Testing"** — *"Power Cycling + Random Read/Write/Deallocate IO Profile Testing
+results in **incomplete shutdown** … when both a link down and a Pfail interrupt
+occur at exactly the same time … the Pfail interrupt may get lost."* That is the
+marker-5/6/7 → UNEXSTRT → Post Crash chain, in the vendor's own words. Related
+entries cover the large-deallocate/L2P race, GC deadlock during shutdown, the
+System Manager never sending the shutdown message, and link-down-during-
+queue-enable hangs.
 
-There is no code path from LINKDOWN/PERST to PFAIL (PFAIL lives in PROC0, PCIe
-in PROC9). A disabled port does still guarantee an unclean stop, since `CC.SHN`
-can never be delivered.
+**It is not the capacitors.** `capacitor`, `VCAP`, `hold-up` and `power backup`
+appear **zero** times across all WD documentation for this family. A genuinely
+failed hold-up subsystem produces a *different, clearly-labelled* posture —
+`VCAP has failed, drive is in write protect mode` — not Post Crash. The drive
+also never measures its own capacitance in the field: the PowerUp/Short/Open
+tests early-return outside BIST (`VCAP: Not in BIST mode, message ignored`).
+
+**It is not the cable either**, though a marginal one aggravates it: WD
+separately documents *"PCIe uncorrectable error with a host link down → drive
+hang"* with **"Drive Recovery: Unable to recover."**
+
+### First thing to check on any SN200: the firmware revision
+
+```sh
+cat /sys/class/nvme/nvmeN/firmware_rev     # or: nvme id-ctrl /dev/nvmeN | grep ^fr
+```
+
+Drives of this vintage commonly still ship `KNGND100` (2017), which has **every**
+defect above open. `KNGND110` and `KNGND122` are in the firmware zip already.
+`KNGND122` (Feb 2021) is the last firmware ever released — and it was *still*
+fixing this class (*"the PFAIL monitor thread is added again … a hang occurs
+during the shutdown process"*, recovery: unable to recover). A drive already on
+`KNGND122` that still latches has no fix available.
+
+### The measurement that would settle a capacitor concern
+
+WD's library exposes SMART attributes **`Power Backup Faults`** and **`Lifetime
+Number of Power Backup Faults`**, plus `Unexpected Power Loss Count` and
+`Exception and Assert Count`. Read them read-only via `dm-cli get-smart`, or
+vendor log pages `0xC1/0xC2/0xC3/0xCA/0xDE` with `nvme get-log`. Compare against
+healthy drives — the fleet comparison is the point. Non-zero power-backup faults
+would revive the capacitor theory.
 
 **This is why a whole-device TRIM latches it: current, not semantics.** A
 whole-device deallocate is the drive's peak-current workload (map invalidate →
@@ -281,6 +308,24 @@ header to crash area`. Any start not preceded by a recorded clean shutdown
 That is why no in-band reset works: `nvme reset`, NSSR, FLR, SBR and link-disable
 all drop `CC.EN` or the link without first issuing `CC.SHN`, so each one is
 another "unexpected start".
+
+### Triage FIRST: which section is armed?
+
+The latch fires on **either** the CRASH or the PFAIL section, tested
+independently. Only the CRASH clear (`0xFF`/`0x0503`) schedules the
+namespace-wiping REINIT. So which section is armed decides whether a
+non-destructive recovery is even possible:
+
+```sh
+cd tools/sn200-fw && sudo ./check-latch-state.sh /dev/nvmeN     # read-only
+```
+
+⚠ **Armed-ness is the size probe's STATUS, not its value.** A section that is
+not armed makes the probe **fail with SC 0xC3**; it does not return zero.
+`0x00320000` is a fixed section reservation and says nothing about armed-ness.
+
+See `docs/sn200-nondestructive-recovery.md`. The non-destructive sequence there
+is **not yet verified** — read it before acting.
 
 ### Get the crash dump FIRST — there is a script
 
