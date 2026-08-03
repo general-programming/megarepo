@@ -112,6 +112,20 @@ nodes:
         routes: &k8s-worker-nvme-routes
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+          # The v6 default is declared rather than learned. It used to arrive
+          # by RA, which worked only because br0 inherited
+          # net.ipv6.conf.default.accept_ra=2 at link-creation time; a later
+          # config apply had Talos reconcile the bridge to accept_ra=0 and the
+          # learned route aged out, leaving all three workers with no IPv6
+          # egress at all (ping6 to any global address: network unreachable).
+          # The control planes were unaffected because they are not bridged.
+          #
+          # Link-local gateway is the router's EUI-64 from MAC e4:dc:5f:f0:03:a0,
+          # scoped to br0 by living under this interface. It is hardcoded in the
+          # same way 10.3.2.1 is, and breaks in the same way if that router is
+          # replaced.
+          - network: "::/0"
+            gateway: "fe80::e6dc:5fff:fef0:3a0"
         bridge: &k8s-worker-nvme-bridge
           stp:
             enabled: false
