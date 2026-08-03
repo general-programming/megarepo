@@ -56,6 +56,83 @@ because the cable may simply have trained that time.
 not recover the drive and coincided with it leaving the PCIe bus entirely.
 Whether the reboots caused that or the cable did is **not established**.
 
+## Marker 0x06 — my reframing was WRONG, "diagnostic mode" was right
+
+**Retracted.** I proposed that byte[1]==6 meant "PFAIL Shutdown STARTED" rather
+than diagnostic mode. Independent RE refuted it with four proofs:
+
+- `7ffaac95: extui a10,a5,0,3` masks the startup type to **3 bits** (7 reachable
+  values). The marker enum has **11**. They are different enums.
+- The marker table at PROC0 `0x7ff81180` is a u16 StrId array indexed
+  separately — its printed order *is* correct, but it is not what this probe
+  returns.
+- WD's `gf_nvme_sys_init_done_real` @ `0x8b0b0` is exactly this probe, and
+  `gf_is_diagnostic_mode` @ `0x42c90` tests `== 6` → `HDMS_DEV_DIAGNOSTIC_MODE`.
+- The `== 7` variant is gated on **Firmware Revision**, not model:
+  `FR[0]=='H' && FR[3]>'E'`. `KNGND122` starts with 'K', so `== 6` applies.
+
+Kept as a worked example of why string-table adjacency must not be trusted:
+the enum order was right, the *identification* of which enum was wrong.
+
+**The hardware half of the hypothesis survived and was strengthened** — see
+below.
+
+### The original (refuted) reasoning, retained for context
+
+`StringTable.csv` (KNGND122) holds these eleven strings **contiguously**, the
+shape of a `const char *markerNames[]`:
+
+```
+0  No previous marker found        6  PFAIL Shutdown STARTED
+1  CLEAN shutdown                  7  PFAIL Shutdown TIMEOUT
+2  PFAIL shutdown                  8  READONLY Startup requested
+3  Drive REINIT requested          9  POST CRASH Startup
+4  FACTORY drive REINIT requested  10 Invalid marker
+5  Normal Shutdown STARTED
+```
+
+Zero-indexed, **6 = "PFAIL Shutdown STARTED"** — a power-fail shutdown that
+began and never completed. Corroborating: WD's `libdmi_core.so` gates its
+crash-dump "retrieved" flag on `startup_type == expected` with `expected == 7`
+for `HUSMR…`, and 7 would be `PFAIL Shutdown TIMEOUT` — the adjacent PFAIL
+state. That is an economical explanation for the silent-gate bug.
+
+**INFERRED, not proven** — derived from string-table order, which in this
+firmware is known to follow source-file appearance rather than case value. Both
+RE agents are locating the enum in code to confirm or refute.
+
+### Why this would reframe everything
+
+Supporting strings, all verbatim in KNGND122:
+
+- `A de-allocate command is broken during PFail from LBA %x to %x` — deallocate
+  and PFail interacting directly, matching OM-6588's "large deallocate **and a
+  pfail**"
+- `PCIe_SendResetRequest LINKDOWN Reset Detected port %d`, `PerstLinkDown set`,
+  `BottomHalfAttentionHandler: Link down detected`, counters `LinkDownCnt`/`PerstCnt`
+- `SYS: PFAIL is detected`, `PFAIL interrupt enabled`, `Enable PFAIL monitoring`
+- VMON rail monitoring including `PC12V` and `ATX12V`, plus power-excursion warnings
+- `SPI Crash Section is in an invalid state` / `SPI PFail Crash Sections …`
+
+**A U.2 cable carries 12 V as well as the PCIe lanes**, and this bay's cable is
+known-flaky. Marginal power delivery would produce real rail droop, which VMON
+reports as a genuine PFAIL; the drive starts an emergency shutdown, the glitch
+clears before it finishes, and the marker is left at "PFAIL Shutdown STARTED".
+
+This explains what the deallocate-only theory cannot:
+
+| Observation | Under the power model |
+|---|---|
+| row 2 — mkfs latched it | whole-device deallocate = massive parallel NAND erase = peak current = droop. Trigger is POWER, not TRIM semantics |
+| row 6 — no-discard run survived | far lower peak draw |
+| rows 8-10 — ForceOff latched it, no deallocate at all | a real power event |
+| recovery only via cold cycle | full rail reset clears the marker |
+| `percentage_used` 16%, 0 media errors | NAND healthy — this is power/interconnect, not wear |
+
+If confirmed, **the firmware is behaving correctly and reporting a real power
+fault**, and this is a cable/hardware problem rather than a firmware bug. That
+flips the remedy from "mitigate in software" to "replace the cable".
+
 ## Open questions for the firmware analysis
 
 1. Does an unclean start alone latch the drive, or only when combined with a

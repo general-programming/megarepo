@@ -13,34 +13,71 @@ Companion runbook: `.claude/skills/nvme-recovery/SKILL.md`.
 
 ## Summary
 
-1. **Why the crash erase returns Success but does nothing.** It is not an erase — it is a
-   *scheduling* call. It sets the `Drive REINIT requested` boot marker so the erase runs
-   at the next startup (`OAM ERASE CMD: Schedule reinit after crash dump erase failed.`).
-   The pfail erase (`0x0603`) is synchronous, which is why only *it* clears immediately.
-   **And the scheduled reinit is what zeroes the namespace — the recovery, not the crash,
+1. **Why the crash erase returns Success but does nothing.** Proven in the disassembly:
+   the Crash Dump case is the *only* one of the eight that does extra work on success — it
+   branches forward to `0x30033704` and issues a **second** operation whose failure logs
+   `Schedule reinit after crash dump erase failed.` The PFail case has no second step,
+   which is why only *it* clears immediately. So `0x0503` is a *scheduling* call: it arms
+   the `Drive REINIT requested` boot marker and the erase happens at the next startup.
+   **And that scheduled reinit is what zeroes the namespace — the recovery, not the crash,
    destroys the data.** (§4)
-2. **Is there a VUC that exits Post Crash mode?** **No.** All 21 dispatch tables in
-   `libdmi_core.so` were enumerated: `EXIT_MODE`/`SET_MODE`/`WRITE_MARKER` exist in the
-   command-id enum but in no table, and SN200's `omc_cmds` has no `RESET_TO_DEFAULTS`.
-   WD's own tool returns `HDMS_SHUTDOWN_REQUIRED` after a clear. Full 30-entry VUC map
-   in §10. (§10)
-3. **What triggers the crash?** Large deallocate/TRIM — confirmed by WD's own release
-   notes (OM-6588 "failed to restore L2P table after large deallocate and a pfail",
-   OM-6850, OM-6836, OM-7044) and by a firmware watchdog dedicated to outstanding trims.
-   A whole-device TRIM races the L2P journal flush. (§8)
+2. **Is there any host-side escape from Post Crash mode? No — power cycling is
+   structural.** Exhaustive: **28** dispatch tables, **78** command ids, and a scan of
+   every aligned `u64` in `.data`/`.data.rel.ro`/`.rodata` finds **zero** command ids
+   outside them. `EXIT_MODE`/`SET_MODE`/`WRITE_MARKER` are orphans whose **handler
+   functions are not in the binary**, and dispatch is a name-keyed hash built only from
+   the class tables — so no unlock can add them. Both raw-passthru functions are
+   unreferenced and unexported. Namespace re-attach is refused by the firmware itself
+   (`The LBN Translation Table is invalid.`). No `Admin_Vuc*` writes a marker or changes
+   mode. **The one untested avenue is NVMe-MI over SMBus** (PROC9), which survives a dead
+   PCIe link; whether its admin tunnel passes opcode `0xFF` is **UNKNOWN**. (§10)
+3. **What triggers the latch?** ⚠ **Revised after a second field latch.** There is one
+   boot predicate — `SYS: Detected a CRASH or PFCRASH section.` → force startup marker 9
+   (`POST CRASH Startup`), **PROVEN** at PROC0 `0x7ffaaf02`/`0x7ffaaf08`. **Either**
+   section latches the drive, and it **overrides whatever the previous shutdown
+   recorded**. Large deallocate/TRIM (WD's OM-6588/6836/6850/7044) arms the **CRASH**
+   section; an unclean power-off or a link/power glitch arms the **PFCRASH** section. A
+   deallocate is therefore *sufficient but not necessary* — latch #2 had none. (§6a, §8)
 4. **Can the AEN be suppressed?** Not by masking — Persistent Internal Error is an
    Error-class AEN and the firmware's maskable list contains only the SMART warnings and
    the two notice bits. The `0x400b` on `set-feature 0x0b` is `Invalid Namespace or
    Format`, i.e. the missing namespace, not an unsupported feature. But the AEN can be
    **starved**: bind to `vfio-pci` and never submit an Asynchronous Event Request. (§9)
 5. **Is the E6 retrieval a firmware precondition for the erase?** **No — tool-side only**,
-   two ints in host memory. On this exact model it fails a *second*, silent way: a
-   model-string heuristic expects startup type 7 while the drive reports 6, so the
-   "retrieved" flag is never committed and the clear is skipped with no message. (§11)
+   two ints in host memory (`HGSTNVMeController+0x40/+0x44`); the wire command is
+   unconditional. The single reason `dm-cli` never clears is that the 6.7 MB E6 pull
+   cannot finish inside the ~5 s window. (§11 — note an earlier "second silent reason"
+   claim in this document has been **retracted**; it rested on misreading Identify offset
+   `0x40` as Model Number when it is Firmware Revision.)
 
-Newly identified and not previously documented: the **`UNEXSTRT`** mechanism (§7) — every
-start not preceded by a recorded clean shutdown re-writes a stub crash header, which is
-why no in-band reset ever breaks the loop.
+6. **Is the namespace suppressed or wiped?** **Suppressed** — Post Crash Startup is a
+   quarantine posture, not a rebuild: type 6 *skips* the System Area step (`0x7ffb2518`)
+   and no namespace-invalidate path is keyed to it. But that does **not** mean the data
+   survived: the originating crash may have corrupted the L2P, `0x0503` schedules the
+   rebuild, and while latched nothing on the media is observable at all. (§10a)
+
+**The single most actionable consequence:** before clearing anything, probe *which* section
+is armed (`0xC6 cdw12=0x0320` vs `0x0520`). `0x0603` (pfail) is synchronous and schedules
+nothing; `0x0503` (crash) schedules the destructive re-init. A drive latched only by
+PFCRASH may be recoverable **without a wipe**. Both sea1-hv-2 recoveries fired `0x0503`
+blind, which forces the destructive path regardless. See "Actionable recovery options"
+step 0.
+
+Newly identified and not previously documented:
+- The startup marker is `0x8000000N` and is **overridden at boot** by System-Area state —
+  crash/pfcrash → 9, erased SA / incompatible SA / CellCare mismatch → 3 (§6a).
+- The **`UNEXSTRT`** mechanism (§7) — every start not preceded by a recorded clean
+  shutdown re-writes a stub crash header, which is why no in-band reset breaks the loop.
+- The admin rejection status is **`0x7C5`** (SCT=7, SC=0xC5 = "diagnostic mode"), **not
+  `0x7D3`**. `0x7D3` is the status on the *async-event error-log entry*, a different
+  thing. (§10)
+- The cores use **FLIX (VLIW) bundles** and **Ghidra's Xtensa module cannot decode them**
+  — every decompilation from it on these images is garbage. (§1)
+- The firmware **log-call ABI**: `descriptor = (StrId<<16) | (level<<8) | nargs`, loaded
+  by `l32r` into a10 before `call8`. This makes any handler findable by its log
+  message. (§1)
+- The OAM erase switch has **seven sub-commands (0–6)**, and **sub 3 ≈ Erase SBL EEPROM**
+  / **sub 4 ≈ Drive Uninit** sit directly below the two you want. (§4)
 
 ---
 
@@ -66,7 +103,8 @@ struct seg { char magic[4]="​.SEG"; u32 file_offset_of_data; u32 data_len; u32
 /* next header sits at file_offset_of_data + data_len; chain ends with 0xffffffff */
 ```
 
-Parser: `scratchpad/sn200/segparse.py` (in the session scratchpad).
+Parser: `tools/sn200-fw/segparse.py`; `tools/sn200-fw/unpack.py` turns an image into flat
+per-processor memory images in one step.
 
 Segment layout (KNGND122):
 
@@ -90,12 +128,128 @@ the bulk of code + rodata.
 - No ARC (`push_s blink`/`pop_s blink`/`j_s [blink]` ≈ 1 hit each = noise), no
   ARM Thumb (`bx lr` = 0 hits), no MIPS.
 
-Ghidra 12.1.2 ships an `Xtensa` processor module, so these load natively.
-Flat images (gaps zero-filled) were generated per-proc into `scratchpad/sn200/flat/`.
-
 Sixteen Xtensa cores + a separate `FCC` (Flash Channel Controller) core, connected by a
 message-passing fabric (`StarMgr: MsgId, Qid, srcNode, thisNode, dstMgr, srcMgr, Handle,
 cmd/rsp, dstQIdx`), matching the "Star" NoC naming throughout the string table.
+
+#### ⚠ The cores use FLIX (VLIW), and Ghidra cannot decode them
+
+**PROVEN — do not trust Ghidra on these images.** Ghidra 12.1.2 ships an `Xtensa` module
+and will happily load them, but that module treats `op0 = 0xE` as a 3-byte `FLIX`
+pseudo-op and then **desynchronises the entire instruction stream**. Decompiler output is
+garbage (`FUN_7ffa6b18` → `flix(); halt_baddata();`).
+
+Correct instruction-length model, validated statistically against `retw.n` and `entry`
+anchors across both PROC8 images:
+
+| model | `retw.n` landings, 0x30000000 image | 0x7ff80000 image |
+|---|---|---|
+| all-3-byte (what Ghidra does) | 61/194 (0.31) | 333/578 (0.58) |
+| **op0 ∈ {0xE, 0xF} ⇒ 8-byte bundle** | **194/194 (1.000)** | **561/578 (0.971)** |
+
+So: `op0` 0x8–0xD = 2-byte density instructions, other 0x0–0xD = 3-byte core,
+**0xE/0xF = 8-byte FLIX bundle**.
+
+FLIX field layout — **now fully recovered and implemented in `xdis.py`**. Both formats
+are `[fmt:4][slot A:24][slot B…]`.
+
+**Slot A (both formats) is an ordinary 24-bit core instruction with its `op0` field
+relocated to bits 24–27.** Everything else stays where the core ISA puts it:
+
+```
+slotA = ((q>>24)&0xF) | (((q>>4)&0xF)<<4) | (((q>>8)&0xF)<<8)
+                      | (((q>>12)&0xF)<<12) | (((q>>16)&0xFF)<<16)
+        i.e.  op0@24-27, t@4-7, s@8-11, r@12-15, imm8@16-23
+```
+
+Verified on `movi`, `l32i`, `s32i`, `l8ui` and `l32r` (the last resolves through the log
+ABI, which is a strong independent check).
+
+**Format 0xF slot B is a conditional branch (36 bits):**
+
+```
+r@28-31   s@32-35   disp = SIGNED 18-bit @36-53   opcode k = bits 55-63
+target = bundle_addr + 4 + disp
+```
+
+`k` is a 1-based index into the branch mnemonics sorted alphabetically — the 20 that carry
+an `r` field first, then the four compare-against-zero forms:
+
+```
+1 ball  2 bany  3 bbc  4 bbci  5 bbs  6 bbsi  7 beq  8 beqi  9 bge  a bgei  b bgeu
+c bgeui d blt  e blti  f bltu 10 bltui 11 bnall 12 bne 13 bnei 14 bnone
+15 beqz 16 bgez 17 bltz 18 bnez
+```
+
+`r` is the `t` register for the register forms and a **B4CONST index** for the immediate
+forms. B4CONST has no 9, which is exactly why the compiler emits `movi a9,9; beq a3,a9` —
+and that pattern is what produced the phantom duplicate constants in the earlier,
+superseded whitelist reading.
+
+**Format 0xE slot B**, with `bits 46-47` selecting the class:
+
+```
+= 3  -> j, signed 18-bit disp @28-45
+= 2, bits 40-45 == 0x00 -> movi a{28-31}, imm8@32-39
+= 2, bits 40-45 == 0x23 -> mov  a{28-31}, a{36-39}
+bits 48-63 = a third 16-bit slot; 0xC090 is its nop
+```
+
+> Superseded: an earlier pass described the branch displacement as **12 bits at 36–47**.
+> It is **18 bits at 36–53**; bits 48–53 are the sign extension, which is why the 12-bit
+> model appeared to work on forward branches and failed on backward ones. The
+> "~20-bit field at bits 28–47 for unconditional jumps" was likewise the format-0xE `j`
+> at 28–45.
+
+A working hand-rolled disassembler and a log cross-referencer live in
+**`tools/sn200-fw/`**. `capstone` 5.0.9 has no Xtensa support and capstone 6 is not on
+PyPI, so hand decoding was the only route.
+
+```sh
+python3 tools/sn200-fw/unpack.py KNGND122.bin ~/sn200fw     # tar + flat memory images
+export SN200_FW=~/sn200fw
+python3 tools/sn200-fw/drv.py 300336c6 300336f5             # disassemble a range
+python3 tools/sn200-fw/logmap3.py 2933                      # find code by StrId
+python3 tools/sn200-fw/logmap3.py 'Post Crash'              # ...or by regex on the text
+```
+
+`drv.py` annotates every `l32r` with the literal it loads, decoding log descriptors
+inline; for FLIX bundles it prints the raw 64 bits plus the candidate `s0l32r=` and
+`b12=` targets.
+
+### The log-call ABI — **PROVEN**
+
+StrIds are neither `movi` immediates nor bare 32-bit literals, which is why naive scans
+find nothing. They are packed into a 32-bit **log descriptor** in the `l32r` literal pool:
+
+```
+descriptor u32 = (StrId << 16) | (level << 8) | nargs
+```
+
+- `level` measured over all 18 images, counting only descriptors an `l32r` genuinely loads:
+  **`0x60` ×1782** (admin/main code), **`0x20` ×398**, **`0x40` ×397** (overlay/OAM code),
+  `0x00` ×372, everything else ≤13 and noise.
+  **`0x20` is the ASSERT/FATAL level** — see §12.
+  **Exclude `0x00` when scanning**: a descriptor with level 0 and nargs 0 is just a small
+  aligned integer, and admitting it drops nargs-vs-format agreement from 99.87% to 98.51%
+  with every added mismatch being a level-0 hit.
+- `nargs` = printf vararg count, and **the emitter masks it to 4 bits** (`extui a9,a9,0,4`),
+  so the maximum is 15 — which is exactly the widest format string in the table
+  (StrId 3189/3190, `Outstanding Trim …`).
+
+**Cross-validated**: across all 18 images, `nargs` agrees with the printf conversion count
+of the string its StrId resolves to for **1584 of 1586** referenced descriptors (99.87%).
+Regression test: `tools/sn200-fw/tests/test_strtab.py::test_nargs_matches_format`.
+
+Call convention: `l32r a10, <descriptor>` then `call8 <logfn>`, extra args in a11, a12, …
+
+⚠ **An *emitted* record's descriptor has bit 31 set** (`descriptor | 0x80000000`); the
+literal in the constant pool does not. Reusing the firmware-image decode on dump data
+therefore yields StrId `0x8000|N` and finds nothing. See §12.
+
+Log functions: **`0x7ffb45a8`** (main image), **`0x3002b8e0`** (overlay bank).
+
+This is the key that makes "find any handler by its log message" mechanical.
 
 ### String table
 **PROVEN.** `StringTable.csv.gz` → 195 545 bytes, 3617 lines for KNGND122.
@@ -128,7 +282,7 @@ string array used by `SYS: %s` at boot:
 | 9 | 3038 | **`POST CRASH Startup`** |
 | 10 | 3039 | `Invalid marker` |
 
-and a parallel human-readable set at lines 1266–1275:
+and a parallel human-readable set at StrIds 1264–1274:
 `SYS: Normal startup` / `SYS: PFAIL startup` / `SYS: Drive re-init` /
 `SYS: Drive re-init to factory defaults` / `SYS: First time startup` /
 `SYS: ERROR - Shutdown started but never finished` /
@@ -138,7 +292,8 @@ and a parallel human-readable set at lines 1266–1275:
 `SYS: Bad startup marker (%08X)`.
 
 **INFERRED — the marker enum and the `SYS: %s` startup-reason enum are 1:1 parallel**, with
-the reason array (StrIds 1265–1274) indexed by a distinct *startup type*:
+the reason array (StrIds 1264–1273, with 1274 `SYS: Bad startup marker (%08X)` as the
+out-of-range case) indexed by a distinct *startup type*:
 
 | marker | → startup type | `SYS:` text |
 |---|---|---|
@@ -153,12 +308,17 @@ the reason array (StrIds 1265–1274) indexed by a distinct *startup type*:
 | 8 READONLY Startup requested | 8 | Read-only startup |
 | 9 POST CRASH Startup | 9 | Post Crash startup |
 
-**Caveat, unresolved.** The `0xFF/0x0004` VUC returns a *startup type* in CDW0 byte 1, and
-`libdmi_core` treats **6** as diagnostic mode on the GallantFox path but **7** on newer
-Omaha firmware (`omc_resolve_device_status`). Neither 6 nor 7 is `Post Crash startup` (9)
-in the table above, so the VUC's enum is **not** the same enum — it shifted between
-product generations, which is exactly the discrepancy `omc_resolve_device_status` exists
-to paper over. Do not assume the VUC value indexes the `SYS:` array.
+**RESOLVED — the VUC's value is a different enum, and it is a real global.** The
+`0xFF/0x0004` VUC returns a *startup type* in CDW0 byte 1, read from the PROC8 global
+**`0x7ff87c64`** (literal `0x7ffa09b0`). **`6` is Post Crash / diagnostic mode** — it is
+the only constant the firmware ever compares that global against, at
+`0x7ffa98a6`, `0x7ffa9aaa`, `0x7ffac9aa`, `0x7ffb2518`, plus the admin gate `0x7ffa6b1b`.
+`0` is First Startup (`0x7ffac7d9: bnez a9` → else log StrId 1550 `Admin: First Startup`).
+`libdmi_core`'s `gf_is_diagnostic_mode_trace` @ `0x42d10` tests `startup_type == 6`.
+
+So this enum is **not** the `SYS:` startup-reason array (where Post Crash is index 9). Do
+not index one with the other. The `== 7` variant in `omc_resolve_device_status` applies
+only to Hitachi-branded firmware (`FR[0]=='H'`), not to `KNGND1xx` — see §11.
 
 **PROVEN — the crash-section detector.** StrId 3042: `SYS: Detected a CRASH or PFCRASH
 section.` sits immediately after `SYS: Found an incompatible SA` and
@@ -244,7 +404,55 @@ i.e. the erase is **not** self-completing; a controller restart is part of the d
 
 ## 4. Why the crash erase "succeeds" but does nothing — and what it really does
 
-### The answer
+### The answer — now **PROVEN** in the disassembly
+
+The OAM erase handler is at **`0x3003353c`** in PROC8's overlay bank (`entry a1,0x30`,
+extends to `0x30033821`; literal pool `0x3003334c..0x30033440`). The
+`OAM READ RAW SA CMD` handler is at **`0x30033824`**. The whole `0x30033xxx` block is the
+`Admin_VUC_*` overlay family.
+
+**The Crash Dump path is the only one that does extra work on success:**
+
+```asm
+300335ca: l32i   a11,[a12+0x188]
+300335cd: beqz   a11, 0x30033704      ; success jumps FORWARD, not to the common exit
+300335d0: l32r   a10, <LOG 1634 "Erase to Crash Dump failed">
+...
+30033704: l32r   a14, 0x30033350      ; -> global 0x7ff87c64
+30033707: l32i.n a14, a14, 0
+30033709: <FLIX x3>
+30033721: call8  0x30030aa0           ; SECOND operation
+30033724: <FLIX>
+          ; falls through to a status check whose failure logs StrId 2933
+          ; "OAM ERASE CMD: Schedule reinit after crash dump erase failed."
+```
+
+So: **erase crash dump → on success perform a second operation ("schedule reinit") → if
+*that* fails, log 2933.** The PFail path (check block `0x300335a3`) has **no** second
+step. That is the asymmetry, and it confirms the model below.
+
+The eight status-check blocks, each `l32i aX,[a12+0x188]; beqz aX,<ok>; l32r a10,<LOG>;
+call8 0x3002b8e0; j 0x3003357d` (**PROVEN**):
+
+| addr | StrId | message | success → |
+|---|---|---|---|
+| `0x30033571` | 1628 | Erase to system area 0 failed | `0x300335bf` (common) |
+| `0x300335a3` | 1635 | Erase to PFail Crash Dump failed | `0x300335bf` |
+| `0x300335b1` | 2933 | **Schedule reinit after crash dump erase failed** | `0x300335bf` |
+| `0x300335ca` | 1634 | Erase to Crash Dump failed | **`0x30033704`** |
+| `0x300335d9` | 1633 | Drive Uninit failed | `0x300335bf` |
+| `0x300335e8` | 1632 | Erase to SBL EEPROM failed | `0x300335bf` |
+| `0x30033634` | 1631 | Erase to BIST Status failed | `0x300335bf` |
+| `0x30033643` | 1630 | Erase to BIST Script failed | **`0x3003372c`** (chains to a 2nd erase) |
+| `0x30033652` | 1629 | Erase to bad block table 0 failed | `0x300335bf` |
+
+**Still not established:** whether the completion status is taken from the erase result or
+forced to Success. The common tail at `0x3003357d` ORs a constant
+(`a9 = 0x7ffbc221`, from pool `0x30033368`) into the completion status word, and the
+success and failure paths converge there — *consistent with* "returns Success regardless",
+but not proven.
+
+### Why it looks like a no-op
 
 **INFERRED, high confidence.** The two erases are not the same kind of operation:
 
@@ -277,8 +485,8 @@ Chain of evidence:
    requested` (4) (PROVEN), whose startup handlers are `SYS: Drive re-init` and
    `SYS: Drive re-init to factory defaults` (PROVEN).
 3. The OAM erase family also contains a sub-command literally named **`Drive Uninit`**
-   (PROVEN, StrId 1634 `OAM ERASE CMD: Drive Uninit failed.`), sitting immediately
-   adjacent to the two crash-dump erases in the same switch.
+   (PROVEN, StrId 1633 `OAM ERASE CMD: Drive Uninit failed.`), in the same switch as the
+   two crash-dump erases — re-initialisation is a first-class operation of this command.
 4. On sea1-hv-2 the drive came back **healthy at full capacity with a completely zeroed
    namespace** — no GPT, zeros at every offset sampled to 3 TB — while `nuse == nsze`.
 
@@ -290,7 +498,7 @@ recovery.** The erase-then-power-cycle procedure *is* a wipe, dressed up as a du
 If a future SN200 is latched and the data matters, this is the key decision point — see
 "Actionable recovery options".
 
-### Open question: the sub-command numbering is NOT confirmed, and probing it is dangerous
+### Sub-command numbering: 5 and 6 are confirmed, the rest is unknown and probing is dangerous
 
 The OAM erase failure strings are contiguous in this order (**PROVEN**, StrIds 1628–1636):
 
@@ -309,19 +517,57 @@ The OAM erase failure strings are contiguous in this order (**PROVEN**, StrIds 1
 If that order were the sub-command order starting at 0, then crash = 6 and pfail = 7 —
 **off by one from the values that are known to work** (5 and 6).
 
-**Resolved: the string order is NOT the sub-command order.** `libdmi_core.so` proves
-`gf_nvme_clear_crash_dump` = cmd 3 / sub **5** and `gf_nvme_clear_pfail_dump` = cmd 3 /
-sub **6**. And the SN150 (`KMGNP131`) string table settles why the order is misleading —
-it contains a *longer, differently ordered* variant of the same block:
+**Resolved: there are seven sub-commands (0–6) but eight failure messages.** The switch is
+at `0x300336c6` (**PROVEN**):
 
-```
-Erase to system area 0 / system area 1 / bad block table 0 / bad block table 1 /
-BIST script / SBL EEPROM / Received Bad Erase sub-cmd / BIST Script / BIST Status /
-Crash Dump / PFail Crash Dump
+```asm
+300336c6: l8ui a11, a12, 0x8d      ; a11 = erase sub-command
+300336c9: beqz a11,      0x30033772   ; sub 0
+300336cc: beqi a11, 1,   0x30033795   ; sub 1
+300336d4: beqi a11, 2,   0x300337b8   ; sub 2
+300336dc: beqi a11, 3,   0x30033661   ; sub 3  <- DIFFERENT shape, different primitive
+300336df: beqi a11, 4,   0x300337db   ; sub 4
+300336e7: beqi a11, 5,   0x300337fe   ; sub 5
+300336ef: beqi a11, 6,   0x3003374f   ; sub 6
+300336f2: l32r a10, <LOG 1636 "Received Bad Erase sub-cmd: %d">
 ```
 
-i.e. these strings are ordered by source-file appearance across *two* generations of the
-switch, not by case value. Do not derive sub-command numbers from them.
+Cases 0, 1, 2, 4, 5, 6 are structurally identical 0x23-byte blocks (3 FLIX bundles of arg
+setup + `call8 0x30030aa0` — the erase primitive + 1 FLIX bundle). Case 3 is different: it
+calls `0x30031d10` twice, a *second* erase primitive (EEPROM rather than flash).
+
+**INFERRED (moderate confidence) — the mapping.** From the string order, the fact that one
+sub-command must cover both BIST Script *and* BIST Status (the `0x30033643` → `0x3003372c`
+chain), and that sub 3 uses the EEPROM primitive:
+
+| sub | CDW12 | target |
+|---|---|---|
+| 0 | 0x0003 | system area 0 |
+| 1 | 0x0103 | bad block table 0 |
+| 2 | 0x0203 | BIST Script **+** BIST Status (chained) |
+| 3 | 0x0303 | ☠ **SBL EEPROM** — *different primitive; erasing this bricks the drive* |
+| 4 | 0x0403 | ☠ **Drive Uninit** |
+| **5** | **0x0503** | **Crash Dump** ✔ agrees with the field result |
+| **6** | **0x0603** | **PFail Crash Dump** ✔ agrees with the field result |
+
+This agrees with `libdmi_core` (`gf_nvme_clear_crash_dump` = cmd 3 / sub 5,
+`gf_nvme_clear_pfail_dump` = sub 6) and with the observed behaviour.
+**It is *not* the case that Drive Uninit is sub 5.**
+
+*Caveat:* the mapping is inferred from ordering, not from a decoded control-flow edge —
+each case body's trailing FLIX bundle decoded to a constant target for all bodies, so
+either they converge on a shared post-erase dispatcher or the 20-bit jump field reading is
+wrong. Each body does `l32r` a distinct pointer immediately after its erase call
+(`sub0→0x7ffbc239`, `sub1→0x7ffbc31a`, `sub2→0x7ffbc30b`, `sub4→0x7ffbc2a1`,
+`sub5→0x7ffbc292`, `sub6→0x7ffbc26b`, plus `0x30033709→0x7ffbc279`,
+`0x3003372c→0x7ffbc2fc`). **Those addresses lie outside every PROC8 segment** (PROC8 ends
+at `0x7ffbb064`) — the same `0x7ffbc1xx–0x7ffbe6xx` range that appears as "handler
+pointers" in the E6 descriptor table. Resolving that region would settle the mapping
+definitively; it is the main remaining blocker.
+
+For contrast, the SN150 (`KMGNP131`) string table has a *longer, differently ordered*
+variant of the same block (`system area 0/1`, `bad block table 0/1`, …), confirming these
+strings are ordered by source appearance across two generations, not by case value.
 
 > **SAFETY.** Do **not** sweep the `cmd 3` sub-command space looking for other functions.
 > Adjacent sub-commands include **`Erase to SBL EEPROM`** (erases the secondary boot
@@ -397,10 +643,239 @@ and did not help. Two readings, both consistent:
 2. The earlier `remove`/`rescan` attempts may not have been made *after* firing the
    `0x0503` scheduling VUC, in which case there was no pending reinit to run.
 
-So the durable, high-confidence conclusion here is the **diagnosis**, not a new cure: the
-loop is sustained by `UNEXSTRT`, and no in-band reset that omits `CC.SHN` can ever break
-it. Whether `CC.SHN` + `CC.EN` cycling is *sufficient* remains open, and is worth one
-cheap experiment (see Actionable option 1) because it costs nothing.
+So the durable, high-confidence conclusion here is the **diagnosis**, not a cure.
+
+> **⚠ Superseded in part by §6a.** `CC.SHN` is **necessary but not sufficient**. The CLEAN
+> marker is written by the System Area writer (PROC6 `0x7ffbba61`) only when the SA/L2P
+> save *completes* — not by the NVMe shutdown handler, which writes only marker 5
+> (`Normal Shutdown STARTED`). A shutdown that returns while the flush is still in flight
+> leaves marker 5, and markers 5/6/7 all land in the same "never finished" handler.
+> In Post Crash Startup the System Area may not even be loaded, so the flush that would
+> write CLEAN plausibly cannot run at all. Treat unbind→bind as a cheap experiment, not
+> as a fix.
+
+## 6a. The startup-marker machinery, traced in code (PROC0)
+
+*Added after the second field latch. This section supersedes guesswork in §2.*
+
+### Marker representation — **PROVEN**
+
+Startup markers are the constants **`0x8000000N`**, where `N` is the index into the marker
+enum of §2. All ten exist as literals in PROC0's pool:
+
+| marker | value | literal | meaning |
+|---|---|---|---|
+| 0 | `0x80000000` | `0x7ff825a0` | No previous marker found |
+| 1 | `0x80000001` | `0x7ff83470` | CLEAN shutdown |
+| 2 | `0x80000002` | `0x7ff83218` | PFAIL shutdown |
+| 3 | `0x80000003` | `0x7ff82b50` | Drive REINIT requested |
+| 4 | `0x80000004` | `0x7ff82b4c` | FACTORY drive REINIT requested |
+| 5 | `0x80000005` | `0x7ff83230` | Normal Shutdown STARTED |
+| 6 | `0x80000006` | `0x7ff830ec` | PFAIL Shutdown STARTED |
+| 7 | `0x80000007` | `0x7ff830f4` | PFAIL Shutdown TIMEOUT |
+| 8 | `0x80000008` | `0x7ff83478` | READONLY Startup requested |
+| 9 | `0x80000009` | `0x7ff83474` | POST CRASH Startup |
+
+(PROC12 `0x7ffa7d70..0x7ffa801c` loads all ten in sequence — that is the marker→string
+lookup, not a decision point. Ignore it.)
+
+### The evaluator — **PROVEN**, PROC0 `0x7ffaad80..0x7ffaaf3e`
+
+Two-slot marker state, base register `a7`: **`[a7+0]` is the effective marker**,
+**`[a7+0xf4]` is a pending/override slot**. At `0x7ffaae1e`:
+
+```asm
+7ffaae1e: l32i   a11, a7, 0xf4
+7ffaae21: s32i.n a11, a7, 0x0      ; pending -> effective
+```
+
+The dispatch chain is `0x7ffaae69..0x7ffaaed3`: it loads marker 1, 4, 5, 6, 7, 9, 8 in
+turn and compares, falling through at `0x7ffaaede` to
+`SYS: Bad startup marker (%08X)` (StrId 1274).
+
+### ⚠ The marker written at shutdown is **OVERRIDDEN at boot** — this is the crux
+
+**PROVEN.** Four sibling blocks in the same function each log a System-Area condition and
+then immediately load a marker constant to store:
+
+| addr | logged condition | StrId | marker loaded | evidence |
+|---|---|---|---|---|
+| `0x7ffaadaa` → `0x7ffaadb0` | `SYS: Found an incompatible SA` | 3040 | **3** REINIT | store is in the FLIX at `0x7ffaadb3` |
+| `0x7ffaae5e` → `0x7ffaae64` | `SYS: Detected CellCare mismatch` | 1263 | **3** REINIT | **explicit `s32i.n a11,a7,0x0` at `0x7ffaae67`** |
+| `0x7ffaaef1` → `0x7ffaaef7` | `SYS: Detected an erased SysArea.` | 3041 | **3** REINIT | store is in the FLIX at `0x7ffaaefa` |
+| `0x7ffaaf02` → `0x7ffaaf08` | **`SYS: Detected a CRASH or PFCRASH section.`** | 3042 | **9 POST CRASH** | store is in the FLIX at `0x7ffaaf0b` |
+
+The CellCare block proves the *shape* (`l32r <marker>` immediately followed by
+`s32i.n a11,a7,0x0`); the other three are byte-for-byte the same shape with the store
+inside an undecoded FLIX bundle. **INFERRED, very high confidence** that all four store.
+
+**Consequence — and this is the answer to the contradiction:**
+
+> The presence of a crash section forces `POST CRASH Startup` **regardless of what the
+> previous shutdown recorded**. A clean shutdown does not protect you. And the predicate is
+> a *single* test covering **both** sections — the firmware's own wording is
+> "a CRASH **or** PFCRASH section".
+>
+> **Therefore the PFCRASH (pfail) section alone is sufficient to latch the drive into
+> Post Crash Startup. No deallocate is required. No crash dump is required.**
+
+`SYS: ERROR - Previous shutdown failed to save System Area` (StrId 1262) is gated
+separately at `0x7ffaae13` (`l32i.n a10,a14,0x4; beqi a10,4,skip`) — a state field must
+equal 4 for the previous shutdown to count as having saved the System Area. So "shut down
+cleanly" and "saved the System Area" are **two different conditions**.
+
+### ⚠ How a CLEAN shutdown is actually recorded — **PROVEN, and it corrects §6**
+
+The CLEAN marker has **exactly one producer in the whole firmware**, and it is the System
+Area writer (PROC6 = SAM/BlockMgr), *not* the NVMe shutdown handler:
+
+```asm
+7ffbba52: l32i   a8, a2, 0x68        ; shutdown type
+7ffbba55: l32r   a13, 0x7ffa2280     ; = 0x80000002  PFAIL shutdown
+7ffbba58: l32r   a14, 0x7ffa2278     ; -> 0x7ff8bbd0 System Area header
+7ffbba5b: addi   a8, a8, -2
+7ffbba5e: moveqz a13, a15, a8        ; a13 = (type == 2) ? 0x80000001 : 0x80000002
+7ffbba61: s32i.n a13, a14, 0x3c      ; <-- the persisted SysAreaMarker
+```
+
+`a15` was loaded with `0x80000001` (CLEAN) by the FLIX at `0x7ffbba48`. So **markers 1
+(CLEAN) and 2 (PFAIL shutdown) are written by the same instruction**, and both mean the
+same thing: *the System Area save completed*. They differ only in which shutdown type got
+there.
+
+Meanwhile PROC0's shutdown state machine (`0x7ffa8c58..0x7ffa8e60`) writes only
+**marker 5 = `Normal Shutdown STARTED`** (`0x7ffa8dca` loads `0x7ff83230`, `call8
+0x7ffb4fec` at `0x7ffa8dda`). SAM overwrites 5 with 1 only once the save finishes — which
+is exactly what "started but never finished" means.
+
+> **Correction to §6.** `CC.SHN` + `CSTS.SHST=10b` is **necessary but NOT sufficient** for
+> a clean boot. The drive must also complete the System Area / L2P flush. An NVMe shutdown
+> that returns promptly while the flush is still in flight leaves marker 5, which the boot
+> path reports as `SYS: ERROR - Shutdown started but never finished`.
+>
+> Markers **5, 6 and 7 all dispatch to the same handler body at `0x7ffaaf6b`.**
+
+WD corroborates that every graceful shutdown arms the PFAIL monitor: *"When a shutdown is
+issued, internally the firmware will invoke a thread to monitor PFAIL (power fail) during
+shutdown."* (KNGND122 release notes.)
+
+### Marker → handler dispatch — **PROVEN** (b12 branch targets)
+
+| marker | handler |
+|---|---|
+| 1 CLEAN shutdown | `0x7ffaaf85` |
+| 2 PFAIL shutdown | `0x7ffaaf8d` |
+| 3 Drive REINIT requested | `0x7ffaaf63` |
+| 4 FACTORY REINIT | `0x7ffaafc0` |
+| **5 / 6 / 7** | **all → `0x7ffaaf6b`** (shared "never finished / timed out" body) |
+| 8 READONLY Startup | `0x7ffaaff5` |
+| 9 POST CRASH Startup | `0x7ffabd01` |
+| else | `0x7ffaaede` → `SYS: Bad startup marker (%08X)` + `break.n` |
+
+### Two more overrides nobody had considered — **PROVEN**
+
+```asm
+7ffaae45: l32i.n a11, a7, 0x0
+7ffaae47: bne    a11, a6, 0x7ffaae69
+7ffaae4a: l32r   a10, <LOG 3519 "SYS: Unexpected empty System Area.">
+7ffaae50: j      0x7ffaaf08          ; -> FORCED to marker 9, POST CRASH
+```
+
+**An empty System Area alone produces Post Crash Startup**, with no crash section, no
+power event and no link event. And a CellCare mismatch (`0x7ffaae5e`→`0x7ffaae64`→
+`s32i.n a11,a7,0x0`) **silently arms marker 3 — the data-destroying REINIT** — on its own.
+
+Note also: `SYS: PFAIL time = ...` (StrId 1257) and `SYS: PFAIL power = ... mW` (1258)
+have **no reference in any image** — compiled out. Do not expect them in a dump.
+`Unable to get context to submit breadcrumbs for PFAIL shutdown` (StrId 3580) is **not**
+in the PFAIL path at all; it lives in `PCIe_PfailShutdown` (PROC9 `0x7ffaed23`) — another
+case where string adjacency would have misled.
+
+### Operational consequence: probe *which* section is armed before clearing
+
+The two clears are not equivalent (§4): `0x0603` (pfail) is synchronous and schedules
+nothing; `0x0503` (crash) schedules the destructive re-init. If a latch was caused by the
+**pfail** section only, then clearing pfail alone should clear the boot predicate — with
+**no re-init and no wipe**.
+
+```sh
+nvme admin-passthru /dev/nvmeX --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0320 --data-len=8 -r -b | od -A d -t x4  # CRASH
+nvme admin-passthru /dev/nvmeX --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0520 --data-len=8 -r -b | od -A d -t x4  # PFCRASH
+```
+
+**This is the single highest-value measurement available on a latched drive**, and it was
+not taken before either recovery. See "Actionable recovery options".
+
+## 6b. REFUTED: "startup type 6 == boot marker 6 == PFAIL Shutdown STARTED"
+
+A hypothesis was raised that the `0xFF/CDW12 0x0004` probe's `byte[1] = 0x06` is an index
+into the **boot-marker** name table (where index 6 is `PFAIL Shutdown STARTED`), which
+would mean the drive is reporting an interrupted power-fail rather than "diagnostic mode".
+
+**REFUTED from code. PROVEN.** Three independent lines:
+
+**1. A `BEQI` cannot compare against a marker constant.** The readers of the startup-type
+global `0x7ff87c64` compare it with `beqi`:
+
+```
+7ffa98a6: 81 a5 e7   l32r   a13, 0x7ffa09b0     ; -> 0x7ff87c64  (startup type)
+7ffa98a9: d8 0d      l32i.n a13, a13, 0
+7ffa98ab: 26 6d d8   beqi   a13, 6, 0x7ffa9887  ; r=6 s=13 imm8=-40
+```
+
+Xtensa `BEQI` takes its comparand from **B4CONST** = `{-1,1,2,3,4,5,6,7,8,10,12,16,32,64,
+128,256}` — the field is a 4-bit *index*, and the largest representable value is **256**.
+Boot markers are **`0x80000001..0x80000009`** (§6a, literals located). **It is structurally
+impossible for these instructions to be testing a boot marker.** Same result at
+`0x7ffa9aaf` (`beqi a14, 6, 0x7ffa9a8b`) and `0x7ffac9af` (`beqi a10, 6, 0x7ffac95c`).
+
+Decode validated on a known answer: `0x7ffa6b38: 16 f3 1b` decodes as
+`beqz a3, 0x7ffa6cfb` — and `0x7ffa6cfb` is exactly the independently-established
+convergence point of the admin gate's opcode chain.
+
+**2. `0` in this enum is First Startup, not "No previous marker found".**
+`0x7ffac7d9: l32r a9,->0x7ff87c64; bnez a9, 0x7ffac82f; l32r a10,<LOG 1550 "Admin: First
+Startup">`. A Post Crash boot takes the non-zero branch and logs
+`Admin: Normal Startup 0x6`.
+
+**3. The claimed corroboration was my own error.** The "`expected == 7` for `HUSMR…`"
+argument rested on reading Identify offset `0x40` as Model Number. It is **Firmware
+Revision** (MN is offset `0x18`). For `FR = KNGND1xx`, `FR[0] != 'H'`, so `expected`
+stays **6** and *matches* the drive. See the retraction in §11.
+
+**INFERRED — what enum 6 actually is.** The `STARTUP` string array (StrIds 303–309) is
+`FIRST STARTUP(0), NORMAL STARTUP(1), RECOVERY STARTUP(2), READ ONLY STARTUP(3),
+FIRMWARE UPDATE STARTUP(4), FAST STARTUP(5), INVALID(6)`. Index 0 = `FIRST STARTUP` matches
+observation 2 exactly, which makes **6 = `INVALID`** — i.e. the drive never established a
+valid startup type. `libdmi_core` labels that state "diagnostic mode"
+(`gf_is_diagnostic_mode` @ `0x42c90` tests `== 6`). Three enums are in play and must not be
+conflated:
+
+| enum | values | where |
+|---|---|---|
+| **boot marker** (persisted) | `0x8000000N`, N = 0..10 | SA header `+0x3c`, PROC0 `[a7+0]` |
+| **`SYS:` startup reason** (log only) | 0..9, StrIds 1264–1273 | PROC0 banner |
+| **startup type** (what the VUC returns) | small ints, 0 = FIRST … 6 = INVALID | PROC8 global `0x7ff87c64` |
+
+### What survives — and it matters
+
+The **physical** half of the hypothesis is untouched by this refutation, and is
+independently *strengthened* by §8: PFAIL is a genuine **hardware brownout interrupt**
+(PROC0 ISR `0x7ffa82dc`, IRQ bit 16), fed by the VMON rail monitor, not by anything on the
+PCIe side. A U.2 connector carries **12 V and the PCIe lanes in one plug**, so a marginal
+cable produces real rail droop and therefore **real PFAIL events** — no firmware bug
+required. And a whole-device deallocate is a massive parallel NAND operation, i.e. a peak
+current event, which is a coherent reason a `mkfs` in particular would trip a marginal
+supply. That reframes the deallocate correlation as **power**, not TRIM semantics.
+
+What the code does *not* support is the final step: markers 5/6/7 all dispatch to the same
+"never finished" handler at `0x7ffaaf6b`, **not** to the Post Crash handler `0x7ffabd01`
+(§6a). So an interrupted PFAIL by itself still does not produce Post Crash Startup — it
+must additionally leave a crash/pfcrash section or an unsaved System Area behind. The
+routes in §8 remain as documented.
+
+**Bottom line: the enum-index argument is wrong, but the cable indictment stands** — on
+better evidence than the hypothesis used. See "Keep or bin?".
 
 ## 7. The self-sustaining mechanism: UNEXSTRT
 
@@ -423,6 +898,41 @@ Consequences (**INFERRED**, but this string admits no other reading):
   *clean* one, i.e. the host must perform a proper NVMe shutdown (write `CC.SHN=01`,
   poll `CSTS.SHST` until `10b`) before power is removed, so the boot marker becomes
   `CLEAN shutdown` rather than `No previous marker found`/`UNEXSTRT`.
+
+### Where the UNEXSTRT write lives — **PARTIAL**
+
+**PROVEN.** The log descriptor for StrId 3520 is at `0x7ff83420` in PROC0. The only
+credible reference under standard `l32r` PC-rounding is the FLIX bundle at
+**`0x7ffaac59`**, and the log call fires at **`0x7ffaac74`**. That sits inside the
+function `entry a1,0x20` @ **`0x7ffaac30`** — which is the *same* function that contains
+the whole marker-override chain out to `0x7ffaaf3e` (confirmed with
+`xref.py PROC0 7ffaaf02 --fn`). So the UNEXSTRT stamp and the crash-section marker
+override are two blocks of one master startup-evaluation routine.
+
+**PROVEN — the write is a byte-level header edit**, immediately before the log:
+
+```asm
+7ffaac53: l8ui a8, a12, 0x0     ; read a header byte
+7ffaac56: movi a11, 254         ; 0xFE  = ~1  -> clear bit 0 ?
+7ffaac59: <FLIX>                ; slot0 l32r -> 0x7ff83420 (the UNEXSTRT log descriptor)
+7ffaac61: <FLIX>
+7ffaac69: <FLIX>
+7ffaac71: s8i  a8, a12, 0x0     ; write it back
+7ffaac74: call8 0x7ffb5398      ; log "SYS: UNEXSTRT detected, writing UNEXSTRT stub header to crash area"
+```
+
+**UNKNOWN — and this is the most important open question in the whole document.**
+Whether this block is *gated*, and on what. Three FLIX bundles at `0x7ffaac3b`,
+`0x7ffaac43`, `0x7ffaac4b` sit between the function entry and the byte edit, and their
+branch fields are not reliably decoded yet. It cannot be unconditional: if every
+unexpected start stamped the crash area, **every** SN200 that ever lost power would latch
+permanently, which is plainly not the case in the field. There is a gate; we have not
+found it.
+
+**INFERRED (from the firmware's own wording, high confidence) — UNEXSTRT targets the
+CRASH section, not PFCRASH.** The string says "writing UNEXSTRT stub header **to crash
+area**", and the EEPROM section named `Crash Dump` (index 11) is the crash area — the same
+section `CDW12 0x0503` clears. Not yet confirmed at instruction level.
 
 **PROVEN — version attribution.** `UNEXSTRT` appears in **KNGND110 and KNGND122 but not
 KNGND100**. It was introduced alongside the OM-6850 fix ("Added check startup to
@@ -505,7 +1015,120 @@ host-recoverable.
   NumOfHostLbaRemained %d … startTicks %d now %d` — a **timeout watchdog specifically for
   trim/deallocate**, printed when a trim outlives its deadline.
 
-### Conclusion (**INFERRED**, high confidence)
+### ⚠ Second field latch (2026-08-03) refutes "deallocate is necessary"
+
+Timeline, same drive, same day:
+
+1. Recovered by `0x0603` + `0x0503` + cold power cycle held 126 s. Came back `live`,
+   full 7.68 TB, `nuse == nsze`, 0 media errors, **empty namespace**.
+2. `queue/discard_max_bytes=0` set via udev, then the *exact* original trigger replayed:
+   `sgdisk` + `mkfs.xfs` + 512 MiB write + remount + md5 verify.
+   **Zero controller resets. mkfs finished in 1 second.** Drive stayed live.
+3. Talos booted with the volume enabled; node healthy and Ready.
+   (Talos most likely *adopted* the pre-created filesystem rather than running its own
+   mkfs — **not confirmed**, and it matters: if Talos never issued a mkfs, step 3 is not
+   evidence that discard suppression works under Talos.)
+4. `ForceOff` on the **running** system, then power on.
+5. POST: `UEFI0067: A PCIe link training failure is observed in Bus:174 Dev:3 F:0 and the
+   link is disabled`, halt at F1. Bus 174 = `0xAE` = the `ae:03.0` downstream port.
+   iDRAC SEL: "A fatal error was detected on a component at bus 174 device 3 function 0".
+6. After a further power cycle: latched again, `state=resetting`, no namespace.
+
+**Latch #2 involved no mkfs and no large DISCARD.** The bay's U.2 cable is known flaky.
+
+### Verdict on the four competing models
+
+| model | verdict | basis |
+|---|---|---|
+| **A. DISCARD-triggered** | **REFUTED as necessary; retained as one sufficient cause** | Latch #2 had no deallocate. But WD's OM-6588/6836/6850/7044 are real and match latch #1. Step 2 also shows that with discard suppressed the identical workload is harmless — 1-second mkfs, zero resets. |
+| **B. UNEXSTRT** | **PLAUSIBLE, NOT PROVEN** | The mechanism exists (StrId 3520, code at `0x7ffaac30`) but its gate is undecoded and **which section it stubs is UNKNOWN** (§7). Cannot be unconditional or every SN200 would brick on power loss. |
+| **C. PFAIL / unclean power-off** | ⚠ **DOWNGRADED — a clean pfail does NOT produce Post Crash** | See below. A `ForceOff` that completes its hold-up sequence writes marker **2 = `PFAIL shutdown`** and boots as `SYS: PFAIL startup`. That is a *normal, designed* path, not the latched state. |
+| **D. Link loss during operation** | ✅ **CONFIRMED as a route — but via a HANG, not via PFAIL** | PROVEN that PCIe cannot reach the PFAIL object. But WD documents link-down → hang → diagnostic mode repeatedly, and marks it **"Drive Recovery: Unable to recover."** |
+| **E. System-Area condition, no external event** | **NEW — PROVEN mechanism, previously unconsidered** | `SYS: Unexpected empty System Area.` also forces marker 9, and `SYS: Detected CellCare mismatch` silently arms marker 3 (REINIT). Neither needs a power or link event. |
+
+### Why model C is downgraded — **PROVEN**
+
+PFAIL is a **hardware brownout interrupt**, and it has exactly one producer in the entire
+firmware. PROC0 `0x7ffa8428` (`SYS: Enable PFAIL monitoring`, StrId 1211) installs an ISR
+at **`0x7ffa82dc`** into MMIO vector slot `0x82A60148` and enables **IRQ bit 16**
+(`0x00010000`) on `0x82A70000`. The ISR only latches:
+
+```asm
+7ffa82dc: entry a1,0x20
+7ffa82e7: l32r  a11,0x7ff830c0    ; PFAIL monitor object @ 0x7ff8cd80
+7ffa82ec: s32i.n a13,a11,0x2c     ; pfailPending  = 1
+7ffa82ee: s32i.n a13,a11,0x20     ; pfailAsserted = 1
+7ffa82f0: s32i.n a12,a11,0x1c     ; startTicks
+```
+
+The monitor thread (`0x7ffa8313..0x7ffa8425`) then runs a deadline of
+`0x7ff830e0 = 0x61A8 = 25000` units, and writes:
+- **marker 6** `PFAIL Shutdown STARTED` at `0x7ffa83e7` (loads `0x7ff830ec`, `call8 0x7ffb4fec`)
+- **marker 7** `PFAIL Shutdown TIMEOUT` at `0x7ffa840a` (loads `0x7ff830f4`), after logging
+  `SYS: PFAIL timeout is expired` at `0x7ffa835b`
+
+and on success, **SAM** writes marker **2**.
+
+**None of markers 2/6/7 is `POST CRASH Startup`.** So an unclean power-off, by itself,
+produces `SYS: PFAIL startup` — a designed, non-latching outcome. For a `ForceOff` to
+latch the drive it must *additionally* leave a crash/pfcrash section or an empty System
+Area behind.
+
+### Why model D is confirmed — **PROVEN (code) + WD (docs)**
+
+`PCIe_PfailShutdown` (PROC9 `0x7ffaecf0`) is a **consumer** of a PFail event, not a
+producer: its single caller is PROC9 `0x7ffa443d`, it takes no voltage/link input, and its
+only decisions are on per-port shutdown state. Every PCIe attention handler in PROC9
+(`Link down detected` `0x7ffa4e45`, `PerstLinkDown = TRUE` `0x7ffa4ebc`, `FRSTA`
+`0x7ffa4fc1`, `Fundamental Reset` `0x7ffa50c5`, `Hot Reset` `0x7ffa521d`) only sets flags
+and bumps counters. **None can write the PFAIL object** — it is PROC0-local at
+`0x7ff8cd80`, reachable only from the ISR. WD confirms the two are independent sources:
+OM-6697 says *"when both **a link down and a Pfail interrupt** occur at exactly the same
+time…"*.
+
+But link loss reaches diagnostic mode by hanging the drive. WD, KNGND122, category
+"Reset", Severity High, found at Customer:
+
+> *"A race condition exists when a **PCIe uncorrectable error occurs with a host link
+> down** that causes the Completion Queue messages to go into autodisable mode. The
+> firmware timeouts waiting for the response from the hardware and **leads to a drive
+> hang**."* — **Drive Recovery: Unable to recover.**
+
+plus *"When a **link down occurs between the Queue Manager and Queue Engines enable
+sequence** … resulting in a hang … **crashed/diagnostic mode**"*, the REFCLK entry
+(*"if the REFCLK goes away around the same time as a Link Down/Link Training occurs, both
+clocks become invalid"*), *"In the reset path for **Link Down Reset caused by PERST**, the
+reset handler never gets to the point where CSTS is cleared"*, and the KNGND100
+**Will Not Fix**: *"The device may not link up on systems that fail to provide proper
+PERST signaling."*
+
+A hang → logic trap → crash dump written → **CRASH** section → marker 9.
+
+*(Caveat on issue IDs: the release-note PDFs interleave `ID:` and `Title:` across block
+boundaries and two independent extractions disagree on some ID↔title pairings — notably
+REFCLK, read as OM-6613 by one and OM-6386 by the other. **Cite these by title, not by
+ID.** The quoted text itself is verbatim in both extractions.)*
+
+### The unifying mechanism — **PROVEN (§6a)**
+
+The boot-time predicate is `SYS: Detected a CRASH or PFCRASH section.` → force marker 9.
+**Two separate tests** (PROC0 `0x7ffaae35` and `0x7ffaae3d`, one per section) branch to the
+**same** log and the **same** forced marker. So the models are not rivals — they are
+different ways of arming *one of two* sections that feed *one* predicate:
+
+- Model A arms **CRASH** (a firmware assert writes a real crash dump).
+- Model D arms **CRASH** (a hang → logic trap → crash dump).
+- Model C arms **PFCRASH**, but only when the pfail sequence *fails to complete*.
+- Model B arms one of them with a stub header (which, UNKNOWN).
+- Model E bypasses the sections entirely: `SYS: Unexpected empty System Area.` at
+  `0x7ffaae4a` **jumps directly to `0x7ffaaf08`** — the same forced marker 9.
+
+**This is why the two clears behave differently and why it matters clinically:** clearing
+PFCRASH (`0x0603`) is synchronous and harmless; clearing CRASH (`0x0503`) schedules the
+destructive re-init. A drive latched only by PFCRASH should be recoverable **without a
+wipe** — nobody has ever checked which section was armed before firing both.
+
+### Conclusion on the original trigger (**INFERRED**, high confidence)
 
 `mkfs.xfs` on a 7.68 TB namespace issues a whole-device Dataset Management / Deallocate.
 On this ASIC that is the exact workload class WD's own FIT tests
@@ -641,7 +1264,7 @@ NSID is always 0 unless noted.
 | 23 | `gf_nvme_ns_delete` | 0xD8 | 0 | 0x0000 | none | NSID = target |
 | 24 | `gf_nvme_ns_create_modify` | 0xD9 | 0x80 | 0x0000 | w 0x200 | |
 | 25 | `om_nvme_ns_resize` | 0xD9 | 4 | 0x0001 | w 0x10 | |
-| 26 | `gf_nvme_ns_status` | 0xDC | 0 | 0x0000 | none | |
+| 26 | ☠ `gf_nvme_ns_status` — **misnomer, it is ns ATTACH/DETACH** | 0xDC | 0 | 0x0000 | none | NSID = target, **CDW13 = 0 attach / 1 detach**. Do not fire exploratively. See §10a. |
 | 27 | ☢ `hgst_nvme_secure_purge` | **0xDD** | 0 | 0x0000 | none | **irreversible full wipe** |
 | 28 | `hgst_nvme_get_secure_purge_state` | 0xDE | 0x0C | 0x0000 | r 0x30 | safe, read-only |
 | 29 | `hgst_nvme_log_dump` (size) | **0xE6** | 2 | `(mode<<8)` | r 8 | size = **big-endian** u32 at bytes 4..7 |
@@ -667,42 +1290,160 @@ nvme admin-passthru /dev/nvme7 --opcode=0xE6 -n 0 --cdw10=2     --cdw11=0 --cdw1
 nvme admin-passthru /dev/nvme7 --opcode=0xE6 -n 0 --cdw10=0x400 --cdw11=2 --cdw12=0 --data-len=4096 -r
 ```
 
-### There is no reinit / exit-diagnostic VUC — **PROVEN negative result**
+### There is no reinit / exit-diagnostic VUC — **PROVEN negative, now exhaustive**
 
-All 21 `*_cmds` dispatch tables in `.data` were enumerated and the command-id enum decoded
-(`HDME_CMD_ENUMS_enum_strs` @ `0x2de280`, **value = 23000 + index**). The enum *names*
-`HDME_CMD_EXIT_MODE`(23051), `SET_MODE`(23041), `GET_MODE`(23015), `WRITE_MARKER`(23046),
-`ERASE_FA_DATA`, `READ_FA_DATA`, `RUN_TDD`, `TRANSLATE_L2P/P2L`, `READ/WRITE_SYSTEM_FILE`
-all exist but **appear in zero dispatch tables** — dead API surface shared with other WD
-tools. SN200's `omc_cmds` @ `0x2e7de0` supports only `GET_INFO, GET_STATE,
-GET_STATISTICS, LOCATE, MANAGE_NAMESPACES, MANAGE_UEFI, SANITIZE, SECURE_ERASE` plus
-inherited base commands, and notably **no `RESET_TO_DEFAULTS`** (that exists only on the
-SN100/150 `gfc_cmds`).
+**28 dispatch tables** (not 21), entry stride **56 bytes**
+`{u64 cmd_id, u64, fn *validate, u64, u64, fn *schema/exec, u64}`, each registered by
+exactly one `*_class_ctor`. Command ids come from `HDME_CMD_ENUMS_enum_strs` @ `0x2de280`
+(size `0x270` = **78 entries**, ids 23000–23077), with JSON names in
+`HDME_CMD_ENUMS_desc_strs` @ `0x2e4940`.
 
-Also **PROVEN red herrings**:
-- "Drive uninit" in `dm-cli` (`HDMS_UNINITIALIZED`) is `nvmec_prepare_for_removal` — pure
-  host-side PCIe hot-remove via sysfs, not a device command. It is unrelated to the
-  firmware's `Drive Uninit` OAM erase sub-command.
-- "reset controller" in the library is the Linux `NVME_IOCTL_RESET` ioctl, not a VUC.
-- No `BE_TMODE`, no `kill`, no boot-marker writer, no clear-assert anywhere in
-  `libdmi_core`, `libied`, `libetd`, `libe6text`, `libau_utils`, `libcu`.
+**Exhaustiveness proof:** every 4-byte-aligned `u64` in `.data`, `.data.rel.ro` and
+`.rodata` was scanned for values in `[23000, 23078)`. **Zero hits outside the 28 tables.**
+There is no unparsed table.
 
-The only generic escape hatch is `nvmec_raw_passthru` @ `0x524d0` /
-`nvmens_raw_passthru` @ `0x5fe10`, which accept a **64-byte raw NVMe command blob** from
-JSON and hand it to `nvme_send_and_check_cmd`. Not wired into any dispatch table in this
-build.
+**28 of 78 ids are dispatched; 50 are orphans** — and each orphan id occurs **zero** times
+anywhere in `.text`/`.rodata`/`.data`/`.data.rel.ro`, and appears in no other binary
+(`dm-cli`, `etd`, `libied`, `libetd`, `libcu`, `libe6text`, `libau_utils`). So
+`EXIT_MODE`(23051, JSON `"exit-mode"`), `SET_MODE`(23041), `WRITE_MARKER`(23046),
+`GET_MODE`(23015) are **dead API surface: the handler functions are not in the binary.**
+
+**They cannot be unlocked.** `base_dev_cmd_map_build` @ `0x810f0` / `base_dev_get_cmd` @
+`0x81bc0`: dispatch is a `GHashTable` keyed by command *name*, populated **only** by
+walking each class's `cmds[]` up the inheritance chain (`class+0x08` = table,
+`class+0x10` = count, both set in the class ctor). There is no second insertion site, no
+runtime registration, and no flag that adds entries.
+
+**Correction — SN200 inherits `gfc_cmds`.** Walking the type structs
+(`type+0x00` name, `type+0x08` parent):
+`OmahaController@0x2e7d60 → GallantFoxControllerType@0x2e5f00 → HGSTNVMeControllerType@0x2e6c20 → NVMeControllerType@0x2e7740 → BaseDeviceType@0x2e8d80`.
+So SN200's effective set is 22 commands and **does** include `reset-to-defaults`(23032),
+`resize`(23033), `secure-purge`(23039). An earlier claim here that `RESET_TO_DEFAULTS` is
+SN100/150-only was **wrong**. It changes nothing, because:
+
+### The tool-side diagnostic-mode lock — **PROVEN**
+
+`gf_is_diagnostic_mode` @ `0x42c90` issues `0xFF`/CDW12 `0x0004` and returns `-2023`
+(`HDMS_DEV_DIAGNOSTIC_MODE`) iff **startup type == 6**. Seven callers hard-refuse on it:
+`gfc_validate_configure_smart`, `gfc_validate_get_statistics`, `gfc_mng_ns_validate`,
+`gfc_validate_reset_to_defaults`, `gfc_validate_resize`, `omc_mng_ns_validate`,
+`gfc_resolve_device_status`. **`capture-diagnostics` is the only command with no
+diag-mode gate** — which is exactly why it is the only one that still runs.
+
+And `gfc_reset_to_defaults` @ `0x41d60` would not help anyway: locate-LED off → Get/Set
+Feature 0x04 → `clear_smart_threshold` → `nvmec_mng_pwr_reset` →
+**`gf_nvme_drive_resize(default_capacity)`** (`0xCC`/`0x0003`) → `NVME_IOCTL_RESET`.
+**No marker write, no mode change, and the resize step makes it mildly destructive.**
+(`issue_nvme_reset_real` @ `0x87520`: type 1/5 → `NVME_IOCTL_RESET` `0x4E44`,
+type 4 → `NVME_IOCTL_SUBSYS_RESET` `0x4E45`, type 2 → deliberate no-op. Both are resets
+without `CC.SHN` ⇒ `UNEXSTRT`, §7.)
+
+### Raw passthru — **PROVEN unreachable in this build**
+
+- `nvmens_raw_passthru` @ `0x5fe10` is the real JSON escape hatch — schema
+  `{"command": <blob, exactly 0x40 bytes>, "timeout": int, "data": <blob>,
+  "response_size": int}` → `{"response","status","dword0"}`; wrong length → `-1003`. It is
+  in **no** dispatch table, **no** vtable, and has **zero** code references.
+- `nvmec_raw_passthru` @ `0x524d0` **is** installed into `NVMeControllerType+0x238`
+  (at `0x516b1`) but **no site ever calls `*0x238`**. Dead slot.
+- `.dynsym` exports only 102 symbols (`dmi_run`, `dmi_ctx_*`, `dmi_json_*`, `hdm_*`,
+  miniz). Neither is exported, so `dlsym` cannot reach them either.
+
+### Auth / unlock — nothing that helps (**PROVEN**)
+
+- `psid_revert` @ `0x30290` has exactly one caller, `atad_configure_security` — and
+  `CONFIGURE_SECURITY`(23072) appears **only in `atad_cmds`**, i.e. ATA devices.
+  Not reachable for any NVMe device.
+- `nvme_security_send_real` @ `0x8fe90` has **zero callers**;
+  `nvme_security_receive_real` @ `0x8fd40` is used only for read-only TCG discovery.
+- `Admin_VUC_Enable` / "VUC Control disabled" are firmware-side only, and that gate
+  (StrId 1805) is **separate** from the Post-Crash gate (StrId 1804) in the same checker.
+  Un-gating VUCs would not lift the Post-Crash rejection.
+
+### Namespace re-attach — reachable, but the firmware refuses. **High-value negative.**
+
+`omc_mng_ns` @ `0x6b010` dispatches `list/create/attach/delete/detach/resize`; `attach` →
+`nvmec_mng_ns_attach` @ `0x5b220` → `nvme_ns_atchmt_real` @ `0x8f940`:
+opcode **`0x15`**, NSID = target, `CDW10 = sel & 0xF` (0 attach / 1 detach), 4096-byte
+controller-ID list data-out. Blocked host-side by `gf_is_diagnostic_mode`.
+
+Bypassing the tool does not help: `Admin_NamespaceAttachment`'s own errors (StrIds
+2007–2020) include **`The LBN Translation Table is invalid.`** (2008),
+`The Device is in Read-Only mode` (2007), `NS %d not allocated.` (2012).
+**INFERRED, high confidence:** the namespace is not merely detached — it is
+*un-attachable* because the LBN translation table is invalid, which is the definition of
+the crash state. `attach-ns` is safe but will not work.
+
+### Firmware side — the complete admin/VUC surface
+
+All 82 `Admin_*` symbols in the KNGND122 string table were enumerated. **There is no
+`Admin_Vuc*` that exits diagnostic mode, writes a startup marker, requests a startup type,
+or forces a re-init.** The only writer of `Drive REINIT requested` is the second call
+inside the crash-dump erase case (`0x30033704`–`0x30033724`), and it is scheduling-only.
+`Admin_SanitizeExitFailureMode` is the only "exit … mode" in the whole firmware and it is
+sanitize-specific.
 
 After a successful clear, `cap_diags_end` returns `HDMS_SHUTDOWN_REQUIRED` (−6002) — WD's
-own tooling expects a **power cycle**, consistent with there being no exit command at all.
+own tooling expects a **power cycle**.
+
+> ### Verdict: power cycling is structural
+> There is no host-sendable command in this stack that exits Post Crash Startup, sets or
+> clears a startup marker, or forces a synchronous re-init. The escape hatch was compiled
+> out of the shipped library, and the drive's own attach handler explains why the
+> namespace cannot come back.
+
+### ⚠ The one untested avenue: NVMe-MI out-of-band (PROC9)
+
+**PROVEN — the library has none of this; the firmware has all of it.** No MCTP/SMBus/I²C/
+VDM/MI code exists in `libdmi_core`, `dm-cli`, `etd`, `libetd`, `libcu`, `libe6text`,
+`libau_utils` (`libied` is an offline log-page decoder; its `i2c_*` hits are OpenSSL
+ASN.1 helpers).
+
+**PROC9 is the NVMe-MI / MCTP / SMBus processor** — 126 MI/MCTP log descriptors versus
+≤26 in any other core. Confirmed literals in its pool:
+
+| literal | StrId | text |
+|---|---|---|
+| `0x7ffa1708` | 164 | **`MI: Initiating an NVM subystem reset`** |
+| `0x7ffa1728` | 211 | `MI: Startup complete.` |
+| `0x7ffa1790` | 172 | `MI: Invalid admin cmd opcode %x` |
+| `0x7ffa179c` | 171 | `MI: unhandled admin cmd opcode %x` |
+| `0x7ffa1a94` | 212 | `MI: NVMe-MI: MI_AdminCmdHandler signaled` |
+| `0x7ffa1b1c` | 224 | `MI: NVMe-MI: MI_PCIECmdHandler ACCESS DENIED` |
+
+Handlers present: `MI_ControlPrimitiveHandler`, `MI_AdminCmdHandler`,
+`MI_GetHealthStatusCmdHandler`, `MI_ReadMiDataStructureCmdHandler`,
+`MI_ConfigurationGet/SetCmdHandler`, `MI_VpdReadWriteCmdHandler`, `MI_PCIECmdHandler`
+(PCIe config read/write), plus a full MCTP control stack. The `MCTP-%s:` format strings are
+fed by the literals **`SMB`** and **`PCIE`** — **MCTP runs on both SMBus and PCIe VDM.**
+
+Why this matters here: **SMBus is independent of the PCIe link.** After `UEFI0067`
+disabled the link, MI is the only path that could still reach the controller.
+
+- `MI: Initiating an NVM subystem reset` is a real out-of-band controller restart.
+  **Confidence it exits Post Crash: low** — it is a reset without `CC.SHN`, i.e. another
+  `UNEXSTRT` (§7). Non-destructive.
+- **`MI_AdminCmdHandler` is an admin-command tunnel with an opcode filter**
+  (`unhandled` vs `Invalid`). Per the NVMe-MI spec the tunnel allows only a defined
+  subset, and vendor opcodes like `0xFF` are normally **not** in it. **The actual
+  whitelist is UNKNOWN** — the PROC9 log call sites did not resolve with the
+  PROC8-calibrated `l32r` formula. **If `0xFF` were permitted, `0x0503`/`0x0603` could be
+  issued over SMBus with no PCIe link at all.** This is the single best remaining research
+  target.
+- `MI_PCIECmdHandler` can read/write PCIe config space out-of-band — the only way to
+  inspect the drive's own config registers while the link is down.
+
+Practical requirement: a BMC or SMBus master on the drive's SMBCLK/SMBDAT
+(PCIe edge connector for an HHHL card). Chassis-dependent; unverified for this host.
 
 ### Status code decoding — **PROVEN**
 
 `nvme_decode_status` @ `0x8d050`: `sc = s & 0xFF`, `sct = (s>>8) & 7`, `more = (s>>13)&1`,
 `dnr = (s>>14)&1`.
 
-**`0x7D3` (SCT=7 vendor specific, SC=0xD3) is not decoded anywhere.** `nvme_check_success`
-@ `0x8d6a0` handles SCT 0/1/2 only; SCT 3–7 fall through to a generic `-3`. There is no
-vendor status table in the library.
+**SCT=7 statuses are not decoded by the main path.** `nvme_check_success` @ `0x8d6a0`
+handles SCT 0/1/2 only; SCT 3–7 fall through to a generic `-3`. There is no vendor status
+table in the library.
 
 Vendor status codes *are* recognised in `gf_nvme_check_status` @ `0x8aef0`, which ignores
 SCT and switches on SC alone:
@@ -749,32 +1490,231 @@ Status-code numbering key: `HDMS_x = −(base + index)`, bases `ARG_ERR`=1000, `
 - OAM commands (non-erase): `Read Raw Section` (with
   `OAM READ RAW SA CMD: Read of System Area journal from EEPROM failed.`) and `Kill`.
 
-### The three admin rejection gates
+### The admin rejection gate — **PROVEN, located at `0x7ffa6b18`**
 
-**PROVEN** — three consecutive checks in the admin command handler, in this order:
+There is a **single unified** "is this admin command allowed right now" checker in the
+main image, handling every restriction reason (StrIds 1804 Post Crash, 1805 VUC Control
+disabled, 1806 purge phase, 3370 sanitize):
 
+```asm
+7ffa6b18: entry a1, 0x20
+7ffa6b1b: l32r  a8, <ptr 0x7ff87c64>; l32i.n a8, a8, 0   ; global startup/mode state
+7ffa6b38: beqz  a3, 0x7ffa6cfb                           ; a3 = admin opcode
+7ffa6b3b..7ffa6bc9: long chain of `beqi a3, K, 0x7ffa6cfb`
+                    interleaved with movi a9,9 / movi a14,236 / movi a8,255 / movi a9,202
+...
+7ffa6cfb: <converged label>
+7ffa6d05: beqz  a9, 0x7ffa6bd9
+7ffa6d08: l32r  a10, 0x7ffa0d9c        ; = LOG StrId 1804 (Post Crash reject)
+7ffa6d10: call8 0x7ffb45a8             ; Log_Printf_StrIdDesc
+7ffa6d13: l32r  a9,  0x7ffa0da0        ; = 0x8F8A0000
+7ffa6d16: or    a2,  a5, a9            ; return status
+7ffa6d19: retw.n
 ```
-StrId 1804  Admin cmd rejected due to Post Crash startup mode: 0x%x   -> status 0x7d3
-StrId 1805  Admin cmd restricted by VUC Control disabled: 0x%x
-StrId 1806  Admin cmd restricted by purge phase 0x%x: 0x%x
-```
 
-The Post Crash gate is first and is what returns SCT=7 / SC=0xD3.
+#### ⚠ Correction: the Post Crash rejection status is **0x7C5**, not 0x7D3
+
+**PROVEN.** The returned constant is `0x8F8A0000`. In the CQE, DW3 carries the status
+field in bits 17..31, so `0x8F8A0000 >> 17 = 0x47C5`: **DNR=1, SCT=7 (vendor specific),
+SC=0xC5**.
+
+This ties out perfectly with `libdmi_core`, whose only vendor status decoder
+(`gf_nvme_check_status` @ `0x8aef0`) maps **SC `0xC5` → `HDMS_DEV_DIAGNOSTIC_MODE`**.
+
+The previously recorded `0x7d3` comes from the **error-log entry for the async event**
+(`sqid: 65535, cmdid: 0xffff`), which is a different thing from the admin-command
+rejection. Both are SCT=7; the SCs differ (`0xD3` for the AEN, `0xC5` for the gate).
+
+Other rejection constants proven in the same function:
+- purge phase (LOG 1806 @ `0x7ffa6c55`) returns `0x00180000` → SCT=0, SC=0x0C (Busy).
+- VUC Control disabled (LOG 1805) descriptor is at `0x7ffa0da4`, in the same function.
+
+#### The whitelist — **RESOLVED, and it is an ALLOW-list**
+
+Superseded reading: an earlier pass extracted the constants `0, 1, 2, 4, 5, 6, 8, 10, 10,
+12, 16, 12, 128, 8, 32, 10, 32, 256` and could not settle the polarity. Those constants
+were wrong (the duplicates came from a truncated displacement field) **and the polarity was
+inverted**. The correct decode is below; see also `docs/sn200-crash-dump-retrieval.md` §1.5.
+
+A matched opcode jumps to `0x7ffa6cfb`, which sets `a9 = 0` and jumps *past* the
+`movi.n a9,1`; `beqz a9` then continues to the next gate. Anything that falls off the end
+of the chain reaches `0x7ffa6bd1` (`a9 = 1`) → log StrId 1804 → `0x8F8A0000`.
+**Matching means allowed.**
+
+**PROVEN — the complete exempt set while latched in Post Crash Startup:**
+
+| opcode | name | condition |
+|---|---|---|
+| 0x00, 0x01, 0x04, 0x05 | Delete/Create I/O SQ, CQ | unconditional |
+| 0x02 | Get Log Page | unconditional |
+| 0x06 | Identify | unconditional |
+| 0x08 | Abort | unconditional |
+| 0x09 / 0x0A | Set / Get Features | unconditional |
+| 0x0C | Async Event Request | unconditional |
+| 0x10 / 0x11 | Firmware Commit / Image Download | unconditional |
+| **0xC6** | crash-dump / string-table / drive-log VUC | **only if cmd byte ∈ {0x20, 0x30}** |
+| 0xCA | vendor | only for sub-values `2,3,4,8,0x0D,0x0E,0x0F,0x10,0x11,0x13,0x21,0x32` |
+| 0xE6 | log-dump VUC | unconditional |
+| 0xEC | vendor | unconditional |
+| 0xFF | clear-dump / sys-init-done VUC | unconditional |
+
+Everything else returns `0x8F8A0000` → SCT 7, SC 0xC5, DNR. Rejected includes `0xCC`,
+`0xD4`, `0xD8`–`0xDF` (so `0xDD` secure purge cannot even be issued while latched),
+`0x0D`/`0x15` namespace management, `0x80` Format, `0x81`/`0x82` Security, `0x84` Sanitize.
+
+So **the whole crash-dump retrieval path survives the latch** — every command it uses is
+`0xC6` with CDW12 low byte `0x20`. Conversely **`0xFF` is exempt and unconditional**: the
+commands that wipe the drive are fully reachable, with no firmware safety net.
+
+The gate byte is read from the command context at `+0x38`. That offset is PROVEN; that it
+is `CDW12[7:0]` is **INFERRED** (it is the only reading consistent with `{0x20, 0x30}` and
+with every real `0xC6` VUC in `libdmi_core`).
+
+There are **four independent gates in series**: Post Crash → VUC Control (StrId 1805,
+`byte [0x7ff8f140+0x9d]`, returns `0x80020000` = SC 0x01) → purge phase (StrId 1806,
+`0x00180000` = SC 0x0C) → sanitize (StrId 3370). `0xC6` cmd `0x20` passes the VUC-Control
+gate as well, by the same `{0x20, 0x30}` test at `0x7ffa6bdf`.
+
+**Firmware Commit is not an escape hatch — PROVEN.** `0x10` is accepted while latched, but
+Commit Action `0b011` (activate immediately without reset) is unimplemented: the overlay
+handler does `extui a8,a10,3,2` (only 2 bits) then `blti a8,3,<handler>`, so CA=3 falls
+straight through to LOG 2188 `Firmware Activate Invalid Activation Action` and returns
+`0xC0040000`. The activate path's own strings (790/791/792 `Subsystem Restart Required` /
+`Conventional Reset required` / `Controller Restart Required to activate firmware`,
+`FwActivateNextStartup`) all demand a reset.
 
 ### A clean, standard-command state probe
 
-**PROVEN (from WD's release notes, OM-6402):**
+WD's release note OM-6402 says:
 
 > Added new field **"Post Crash Mode (Byte 3072)"** at the start of the Vendor Specific
 > area in the Identify Controller structure.
 
-So a plain `nvme id-ctrl` (opcode 06h, CNS=1) exposes the post-crash state at **byte
-3072** of the 4096-byte Identify Controller structure — no vendor passthru needed.
-Added in KNGND110.
+**UNKNOWN whether this is actually populated on KNGND122.** No StrId mentions it, the only
+`3072` immediates in PROC8 (`0x7ffa350e`, `0x7ffad451`) are false positives inside FLIX
+bundles, and `libdmi_core` **never reads offset `0xC00`** — its only Identify-Controller
+vendor reads are `0xC09`, `0xC60`–`0xC67` and `0xC68`–`0xC6F`. Still worth one command:
 
 ```sh
-nvme id-ctrl /dev/nvme7 -b | od -A d -t x1 -j 3072 -N 16
+nvme id-ctrl /dev/nvme7 -b | od -A d -t x1 -j 3072 -N 32
 ```
+
+The reliable state probe remains the VUC `0xFF / CDW12 0x0004`, whose CDW0 byte 1 is the
+startup-type global `0x7ff87c64` (**6 = diagnostic**, §2).
+
+## 10a. Is the namespace SUPPRESSED or WIPED in Post Crash Startup?
+
+**Answer: SUPPRESSED. INFERRED, moderate-to-high confidence.** Post Crash Startup is a
+*quarantine posture*, not a rebuild. Every startup-type-keyed branch found for the
+Post Crash value is a **skip**; every rebuild path is keyed to *other* startup types.
+
+**PROVEN — there is no post-crash namespace teardown.** AdminMgr startup is one large
+continuation-passing function at **`0x7ffac398`**. Its startup-type branch:
+
+```asm
+7ffac7d9: l32r a9, ->0x7ff87c64     ; startup type
+7ffac7de: bnez a9, 0x7ffac82f       ; anything non-zero (including 6) -> "normal"
+7ffac7e1: l32r a10, <LOG 1550 "Admin: First Startup">
+7ffac82f: l32r ..., <LOG 1552 "Admin: Normal Startup 0x%x">
+```
+
+A Post Crash boot therefore logs **`Admin: Normal Startup 0x6`** and follows the ordinary
+chain — there is no special namespace destruction.
+
+**PROVEN — `Admin_NamespaceStartup` = `0x7ffad364`** (StrIds 1967–1975 and 2951 all live in
+`0x7ffad364..0x7ffadb1f`; its address is taken at `0x7ffac3ce`, `0x7ffac7e9`, `0x7ffafd0f`,
+the first of which is *unconditional*, before the type branch). It loads and validates the
+persistent **LBN Translation Table** header, invalidates it only on specific
+self-consistency failures (StrIds 1968/1969/1970/1972), and **creates** namespaces
+(StrId 1975 @ `0x7ffadac6`) only down paths gated on startup type **0**
+(`beqz` at `0x7ffad938` and `0x7ffadb05`) or a pending resize. **None of the
+invalidate/recreate paths is keyed to type 6.**
+
+**PROVEN — the one real Post-Crash early-out is a skip**, in the Admin System Area family
+at `0x7ffb247c`:
+
+```asm
+7ffb2518: l32r  a12, ->0x7ff87c64
+7ffb251b: l32i.n a12, a12, 0
+7ffb251d: beqi  a12, 6, 0x7ffb24f1   ; Post Crash -> jump straight to the tail
+7ffb2522: call8 0x7ffb1fe4           ; the System Area work, SKIPPED in mode 6
+```
+
+**PROVEN — capacity/geometry change is gated to two startup types and traps otherwise**
+(`0x7ffac43f`): on a pending resize, the code compares the startup type against exactly two
+constants and otherwise logs StrId 3283 `AdminMgr: Unexpected startup state 0x%08x for
+resize 0x%08x` followed by `break.n` (a trap). **INFERRED** (the constants are inside
+undecoded FLIX bundles) those two are the re-init types. This is direct structural support
+for "re-init is the mode that rebuilds the namespace table and capacity, and Post Crash is
+not".
+
+### ⚠ But "suppressed" does not mean "your data is intact"
+
+Three separate reasons to be careful:
+
+1. The **crash that caused the latch** may itself have corrupted the L2P — OM-6588 is
+   literally *"Drives failed to restore L2P table after large deallocate and a pfail …
+   metadata corruption"*. Suppression says nothing about what happened before it.
+2. **`0x0503` schedules the re-init** (§4), and re-init *is* the rebuild mode. Once fired,
+   the question is moot.
+3. **While latched you cannot observe the media at all.** The reported "GPT + XFS are
+   GONE" after latch #2 is **not** established — with no namespace presented there is
+   nothing to read. The correct statement is "no namespace is presented". Whether the
+   filesystem survived is **UNKNOWN** and only observable after a recovery that does not
+   run a re-init.
+
+### `unvmcap == 0` — the evidence you hoped for is **UNKNOWN**
+
+**PROVEN:** the Identify Controller response is a **pre-built 4096-byte RAM buffer**,
+`memcpy`'d wholesale by the Identify handler `0x7ffab518` at `0x7ffab638..0x7ffab649`
+(`l32r a12, 0x7ffa1268 = 0x1000`; src/dst from `[a5+0x84]`/`[a5+0x80]`;
+`call8 0x7ffba674`). So `TNVMCAP`/`UNVMCAP` are patched into that buffer elsewhere, not
+computed per command. **The writer was not found.**
+
+**PROVEN:** the *Identify Namespace* builder `0x7ffaaf90` (StrIds 2021/2022 at
+`0x7ffab113`/`0x7ffab1e4`) writes only offsets `0x00`–`0x7c` — NSZE/NCAP/NUSE, NGUID at
+`0x68`, EUI64 at `0x78` — computed live from the namespace record.
+
+**INFERRED, not proven:** `unvmcap` most likely derives from the LBN Translation Table's
+`numFreeRegions × regionSz` (StrId 605 `hdr: signature… numFreeRegions:%d numValidRegions:%d
+regionSz:0x%x…` is the only representation of unallocated space in this firmware). If so,
+`unvmcap == 0` means `numFreeRegions == 0`, i.e. the regions are **still booked to a
+namespace record** — the namespace table survived. Treat as a hypothesis. To resume: find
+the writer of the identify buffer via the pointer pair `[cmdctx+0x80]`/`[cmdctx+0x84]` at
+`0x7ffab63b`, or bracket the AdminMgr startup step `0x7ffb2538` (literal `0x7ffa1520`,
+loaded at `0x7ffac3b0`/`0x7ffac83d`).
+
+### Read-only probes worth running (cheap, non-destructive)
+
+```sh
+nvme id-ctrl /dev/nvmeN -b | od -A d -t x1 -j 3072 -N 32   # OM-6402 "Post Crash Mode" field
+nvme id-ctrl /dev/nvmeN -b | od -A d -t x2 -j 516  -N 2    # NN (number of namespaces)
+nvme admin-passthru /dev/nvmeN --opcode=0x06 --cdw10=0x10 --data-len=4096 -r   # CNS 0x10 allocated NSID list
+nvme id-ns /dev/nvmeN -n 1 -b | od -A d -t x8 -j 392 -N 16 # WD's "record exists" qword
+```
+
+The Identify handler `0x7ffab518` does dispatch CNS `0x10`–`0x13` (`movi.n a10,16` @
+`0x7ffab5c6`, `17` @ `0x7ffab8c7`, `18` @ `0x7ffab8e1`, `19` @ `0x7ffab8eb`), so the
+allocated-NSID list is reachable. **`unvmcap: 0` and an empty allocated-NSID list are
+mutually inconsistent** — whichever is stale is highly informative.
+
+Caveats: **byte 3072 is UNKNOWN on this drive** — no StrId mentions it and `libdmi_core`
+never reads offset `0xC00` (its only Identify-Controller vendor reads are `0xC09`
+`_gf_get_vendor_serial` @ `0x3e170`, `0xC60`–`0xC67` `gfc_get_uefi_version` @ `0x3a540`,
+`0xC68`–`0xC6F` `gfc_get_sbl_version` @ `0x3a4e0`). And **`id-ns` byte 392 is a
+positive-only test**: the SN200 builder writes only `0x00`–`0x7c`, so a zero there proves
+nothing; only a non-zero value is informative.
+
+### ☠ `gf_nvme_ns_status` (opcode 0xDC) is misnamed — do NOT fire it
+
+**PROVEN.** `gf_nvme_ns_status_real` @ `0x8b1b0` sends opcode `0xDC`, NSID = target,
+CDW12 = 0, **CDW13 = 0 (attach) / 1 (detach)**, and is called only from `gfc_ns_attach`
+@ `0x400a0` and `gfc_ns_detach` @ `0x3fef0`. It is a namespace **attach/detach** command,
+not a status query, and it returns no flags. Correcting §10's table accordingly.
+
+The real status discriminator is host-side, `gfc_get_ns_status_internal` @ `0x3fab0`:
+`NCAP != 0` → `24001 Active`; else `*(u64*)(idns+0x188) != 0` → `24002 Inactive` (exists,
+detached); else → `24000 Invalid` (does not exist).
 
 ## 11. Is retrieving the E6 dump a firmware precondition for the erase?
 
@@ -810,20 +1750,36 @@ command is a bare `(*vuc_simple)(dev, 0xFF, 3, 5, 0,0,0,0,0,0)` — no preceding
 token, no sequence number. `nvme admin-passthru --opcode=0xFF --cdw12=0x0503` is byte-for-
 byte what the tool sends.
 
-### A second, sharper reason `dm-cli` never clears on *this* model
+### ⚠ RETRACTED: the claimed "second silent failure reason" was wrong
 
-**PROVEN, and this is new.** `hgst_nvmec_hitachi_block_point_chg_fw()` tests
-`IDCTRL.MN[0]=='H' && ((MN[3]+0xBF) & 0xFF) >= 5`. For `HUSMR7676BDP3Y1`, `MN[3]=='M'`
-(0x4D), so `(0x4D+0xBF)&0xFF = 0x0C = 12 ≥ 5` → **true**, so `expected = 7`.
+An earlier revision of this document claimed `hgst_nvmec_hitachi_block_point_chg_fw()`
+tests the **Model Number** and therefore forced `expected = 7` on `HUSMR7676BDP3Y1`,
+silently discarding the retrieval result. **That was incorrect.** Decompiled directly:
 
-But the drive reports startup type **6** (`0x00000601`). `expected != startup_type`, so
-`crash_rc` is **never** overwritten and stays at the `-2008` sentinel. In
-`cap_diags_end` that hits the `else if (crash_rc != -2008)` branch — which is **false** —
-so the clear is skipped **silently, with no message at all**.
+```c
+bool hgst_nvmec_hitachi_block_point_chg_fw(long idctrl) {
+  hdm_struct_str(idctrl + 0x40, 8, &s, &len, 0);      // offset 0x40, length 8
+  if (*s == 'H') return 4 < (byte)(s[3] + 0xbf);
+  return false;
+}
+```
 
-So `dm-cli` fails to clear this drive for two independent reasons: the 6.7 MB E6 pull
-cannot finish inside the 5 s window, *and* a model/firmware heuristic mismatch means the
-retrieval result is discarded even if it did. Neither is a drive-side restriction.
+Identify Controller offset **`0x40`, length 8, is `FR` (Firmware Revision)** — not `MN`
+(which is offset `0x18`, length 40). This drive's `FR` is `KNGND1xx`, so `FR[0] == 'K'`,
+the test returns **false**, `expected` stays **6**, and the drive reports **6** — the gate
+**matches**. (The predicate itself means "Hitachi-branded firmware, revision letter ≥ F".)
+
+**Corrected conclusion: there is exactly ONE reason `dm-cli` fails to clear — the 6.7 MB
+E6 pull cannot complete inside the ~5 s window.** The retrieval returns a non-zero `rc`,
+that `rc` *is* committed to `crash_rc`, and `cap_diags_end` then takes the
+`else if (crash_rc != -2008)` branch and prints
+`"Crash dump not retrieved successfully, not cleared"` — the message operators actually
+see. Simpler than the retracted story, and consistent with the field reports.
+
+`omc_resolve_device_status` @ `0x674b0` likewise falls through to
+`gfc_resolve_device_status` @ `0x3b0b0` for this drive, which tests `startup_type == 6`
+→ `HDMS_DEV_DIAGNOSTIC_MODE` (3004). Types 6 and 7 collapse to one bucket; there is no
+device-level "hidden vs destroyed" distinction anywhere in the library.
 
 ### Firmware-side corroboration
 
@@ -848,14 +1804,163 @@ replaying a standard NVMe command.
 
 ---
 
+## 12. The log record on media, and what an "assert" actually is
+
+Companion document: **`docs/sn200-crash-dump-retrieval.md`** — the retrieval + decode
+tooling, the full `0xC6` encoding, and the safe operating procedure.
+
+### The record — **PROVEN** from `Log_Emit`
+
+`Log_Emit` is per-image: PROC8 `0x7ffb45a8`, with byte-identical copies at PROC6
+`0x7ffbc738`, PROC9 `0x7ffba9d8`, PROC13 `0x7ffb9700`, PROC14 `0x7ffaf470`. The overlay
+bank's `0x3002b8e0` is a thunk. PROC0's copy (`0x7ffb0d80`) is the readable one — it uses
+plain 3-byte encodings where PROC8 hides the same stores in FLIX bundles.
+
+```asm
+7ffb45f4: s32i.n a9,a1,0x8      ; record+0x08 = descriptor
+7ffb45f6: rsr    a11,234        ; CCOUNT, the Xtensa cycle counter
+7ffb461a: s32i   a11,a1,0x10    ; record+0x10 = timestamp
+7ffb463d: loop   a0,0x7ffb4674  ; vararg copy, trip count = nargs
+7ffb4665: s32i.n a8,a12,0x14    ; args from record+0x14, stride 4
+7ffb4669: extui  a9,a9,0,4      ; nargs is FOUR bits
+
+; PROC0, in the clear:
+7ffb0dcf: l32r   a10,0x7ff825a0 ; 0x80000000
+7ffb0dd2: or     a10,a3,a10
+7ffb0dd5: s32i.n a10,a1,0x8     ; descriptor | 0x80000000
+```
+
+```c
+struct fw_log_record {
+    u32 hdr_a;      /* 0x00  pre-filled, content unknown            */
+    u32 hdr_b;      /* 0x04  pre-filled, content unknown            */
+    u32 desc;       /* 0x08  0x80000000 | (StrId<<16) | (level<<8) | nargs */
+    u32 hdr_d;      /* 0x0c  pre-filled, content unknown            */
+    u32 timestamp;  /* 0x10  raw CCOUNT -- CYCLES, NOT WALL TIME    */
+    u32 arg[nargs]; /* 0x14  raw 32-bit words, no type tags         */
+};                  /* length = 0x14 + 4*nargs  -- VARIABLE         */
+```
+
+No core id is stamped — there is no `rsr … PRID` anywhere in `Log_Emit`. **INFERRED**: the
+collector attributes a core from *which per-core ring* the record came out of. The ring
+writer (PROC8 `0x7ffb4868`) has 1023 slots; the rings are BSS, so runtime addresses and
+sizes are not statically recoverable.
+
+### `%s` arguments are StrIds — **PROVEN**
+
+The firmware cannot put a string in a log record. Where it needs one it emits a `%s`
+format and passes **the StrId as the argument word**. StrIds 1277–1282 (the per-section
+state trichotomy of §2) appear as descriptors *nowhere in any image*; they are reached at
+runtime as `1277 + 3*section + state` and printed through StrId 1275 (`%s`). Same trick
+for the boot-marker names (3029–3039) and the shutdown types (310–314).
+
+### There is no assert record type — **PROVEN**
+
+The assert idiom is:
+
+```asm
+l32r  a10, <log descriptor>
+call8 <Log_Emit>
+break.n                        ; 2d f0 -- Xtensa BREAK, becomes "LOGIC TRAP"
+```
+
+Exhaustive scan of all 18 images: **520 `break.n` sites, 418 (80%) immediately preceded by
+a `callN`**, and wherever the target resolved it was that image's `Log_Emit` — 24/24 in
+PROC8, 21/21 in PROC0. Examples:
+
+```
+PROC8 7ffa6ed9  StrId 1821 lvl 0x20  This is a generated logic trap
+PROC8 7ffac46b  StrId 3283 lvl 0x20  AdminMgr: Unexpected startup state 0x%08x for resize 0x%08x
+PROC0 7ffaaee1  StrId 1274 lvl 0x20  SYS: Bad startup marker (%08X)
+PROC0 7ffb3f3a  StrId   48 lvl 0x20  STK: Overflow detected
+```
+
+So **`level == 0x20` is the assert level, and the StrId of that record is the entire
+assert identity.** There is no `__FILE__`/`__LINE__` mechanism and no assert format string
+in the table. `LOGIC TRAP` (StrId 313) is the shutdown-cause byte the exception path
+writes *after* the BREAK, not a distinct record format.
+
+### Breadcrumbs — **PROVEN**
+
+Reader at PROC0 `0x7ffaab28`: **24 slots × 8 raw ASCII bytes** (192 B) at `0x7ff8c8f4`,
+printed via StrId 1259 `SYS: Bread crumbs: %c%c%c%c%c%c%c%c`; FCC's slot is dumped
+separately in hex (StrId 1260). Boot/shutdown context at `0x7ff8c7ec`: `+0x00` effective
+startup marker `0x8000000N`, `+0x0c` PFAIL duration µs, `+0x14` userCapacityGB, `+0xf4`
+pending/override marker, `+0xfc` shutdown duration µs, `+0x108` the breadcrumb array.
+
+### The E6 section-descriptor table — **PROVEN**
+
+PROC8 `0x7ff80570`, 40 entries of stride **0x24**, walked by `Admin_BuildE6Entry`
+(overflow logs StrId 2950). Fields: `char tag[8]` · `u8 rsvd[3]` · `u8 source_id` ·
+`u32 handler` · `u8 flagA/flagB/flagC` · `u8 cmd_class` (1=Identify 2=GetFeatures
+3=GetLogPage 4=ReservationReport 0=internal) · `u32 length` (bytes) · `u32 cdw10` ·
+`u32 elem_size` · `u32 code`. Verified: `L_LOGX01` len `0x4000`, cdw10 `0x0fff0001` →
+LID 1, NUMD 0xFFF = 0x1000 dwords = 0x4000 B ✓.
+
+The four blobs have **null handler and zero length**, confirming a dedicated VUC path:
+
+```
+0x7ff80570  "STRTBL  "  handler=0  len=0  code=0x06
+0x7ff80594  "CRSHDMP "  handler=0  len=0  code=0x04
+0x7ff805b8  "PFCRDMP "  handler=0  len=0  code=0x05
+0x7ff805dc  "DRVLOG  "  handler=0  len=0  code=0x0a
+```
+
+> Correction: the firmware tag is **`PFCRDMP `**. `PCRSHDMP` is the *host-side* E6 entry
+> name `libdmi_core` writes. Different names, same section.
+
+### What is still unknown
+
+The crash dump's own **container header** — magic, version, length, CRC, section table.
+Only one bit is proven: the UNEXSTRT path (`0x7ffaac43`) edits a staging buffer at
+`0x7ff9ff60`, clearing **bit 0 of byte 0** (`movi a11,254`; `s8i`), evidently the
+"header valid/complete" flag whose clearing produces the *invalid* third state.
+
+The reason it resisted analysis is worth recording: **the crash-dump writer emits no log
+messages at all.** The only crash-dump strings are erase failures, state reports, size
+probes and the UNEXSTRT stub — consistent with the dump being written by the PFAIL/trap
+handler with logging disabled. The string-table-to-code technique that cracked everything
+else has no purchase on a path that logs nothing. An exhaustive 8-char-ASCII scan of all
+18 images found **no dump eyecatcher** outside the E6 manifest.
+
+**The `libied.so` ELF/NOTE assert-dump format does NOT apply to the SN200** — it belongs
+to an A53+R5 product (its CPU names are `FTP-0/1/2`/`HIP`/`FM-x`, it parses ARM CP15
+`dfsr`/`ifsr`/`dfar`/`ifar`, its E6 entry names have zero overlap with Omaha's, and
+`ied_decode_assert_dump` has zero call sites anywhere in the dm-cli package). Do not write
+an ELF parser for SN200 data.
+
+---
+
 ## Actionable recovery options
 
 Ranked by confidence. **Read the data-loss warning first.**
 
 **Recommended order of operations on a live latched drive:**
-`2` (get an unlimited window) → `3` (read state + pull the crash dump) → `1` (erase, then
-clean shutdown, then restart) → `4` (cold power cycle) — accepting that everything from
-step 1 onward is destructive. Options 5 and 6 are research leads, not procedures.
+**`0` (find out WHICH section is armed — do this first, always)** → `2` (get an unlimited
+window) → `3` (read state + pull the crash dump) → `1` (erase, then clean shutdown, then
+restart) → `4` (cold power cycle) — accepting that everything from step 1 onward is
+destructive. Options 5–7 are research leads, not procedures.
+
+### 0. Determine which section is armed — **PROVEN encodings, do this before anything else**
+
+§6a proves the boot predicate is `CRASH **or** PFCRASH`, and §4 proves the two clears are
+not equivalent: `0x0603` (pfail) is **synchronous and schedules nothing**, `0x0503` (crash)
+**schedules the destructive re-init**. So:
+
+```sh
+nvme admin-passthru /dev/nvmeX --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0320 --data-len=8 -r -b | od -A d -t x4  # CRASH
+nvme admin-passthru /dev/nvmeX --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0520 --data-len=8 -r -b | od -A d -t x4  # PFCRASH
+```
+
+| result | meaning | action |
+|---|---|---|
+| PFCRASH non-zero, **CRASH zero** | latched by a power-fail event only | fire **only `0x0603`**. It is synchronous, schedules no re-init — **a non-destructive recovery may be possible.** |
+| CRASH non-zero | a real assert (or an UNEXSTRT stub) is latched | clearing it requires `0x0503`, which schedules the re-init → **expect a wipe** |
+| both non-zero | both | clear pfail first, re-probe, and decide |
+
+**This measurement was never taken before either recovery on sea1-hv-2.** Both times
+`0x0503` was fired blind, which guarantees the destructive path even if only PFCRASH was
+armed. It is the single cheapest, highest-information action available.
 
 > ### ⚠ The standard "recovery" is a wipe
 > Firing `CDW12 0x0503` schedules a **drive re-init** (§4). On sea1-hv-2 this returned the
@@ -902,21 +2007,34 @@ E6 dump retrieval feasible, and it removes all the 5-second-window gymnastics.
 
 ### 3. Read state, and actually retrieve the crash dump — **PROVEN encodings**
 ```sh
-nvme id-ctrl /dev/nvme7 -b | od -A d -t x1 -j 3072 -N 16   # Post Crash Mode field (KNGND110+)
-nvme admin-passthru /dev/nvme7 --opcode=0xff -n 0 --cdw12=0x0004   # startup type in CDW0 byte1
+nvme admin-passthru /dev/nvme7 --opcode=0xff -n 0 --cdw12=0x0004   # startup type in CDW0 byte1; 6 = diagnostic
+nvme id-ctrl /dev/nvme7 -b | od -A d -t x1 -j 3072 -N 32           # OM-6402 field; may be unpopulated
+nvme id-ctrl /dev/nvme7 -b | od -A d -t x2 -j 516  -N 2            # NN
+nvme admin-passthru /dev/nvme7 --opcode=0x06 --cdw10=0x10 --data-len=4096 -r  # CNS 0x10 allocated NSIDs
 ```
-With an unlimited window (option 2) the dump is genuinely retrievable — `dm-cli` is not
-required, and neither is its broken gate:
+The crash dump's own `SYS:` line distinguishes *why* it latched — deallocate assert vs
+hang vs empty System Area — which no host-side symptom can. Pull it before clearing.
+**This is now a script, and option 2 is no longer a prerequisite.** The body read takes a
+dword offset in **CDW13** (§10), so the dump can be pulled in chunks small enough to finish
+inside the 5 s window, and reads are PROVEN side-effect-free so a resumable pull is exactly
+as safe as a single-shot one:
+
 ```sh
-nvme admin-passthru /dev/nvme7 --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0320 --data-len=8 -r   # size
-nvme admin-passthru /dev/nvme7 --opcode=0xC6 -n 0 --cdw10=0x4000 --cdw12=0x0420 \
-     --data-len=65536 -r > crash.part                                                        # body
-nvme admin-passthru /dev/nvme7 --opcode=0xC6 -n 0 --cdw10=2 --cdw12=0x0120 --data-len=8 -r   # strtbl size
-nvme admin-passthru /dev/nvme7 --opcode=0xC6 -n 0 --cdw12=0x0220 --cdw10=<sz/4> --data-len=<sz> -r
+cd tools/sn200-fw
+sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvme7   # stock kernel
+sudo ./pull-crash-dump.sh --section all --single-shot     /dev/nvme7   # unlimited window
+./decode-crash-dump.py sn200-dump-*/crash.bin --string-table sn200-dump-*/strtbl.bin
 ```
-The on-drive string table (`0x0220`) decodes the dump, and matches
-`StringTable.csv` from the matching firmware image. Doing this *before* clearing would
-tell you exactly which assert fired.
+
+> ☠ **Do not use `nvme wdc get-crash-dump`.** PROVEN from nvme-cli
+> `wdc_do_crash_dump()`: on a successful read it automatically issues `0xFF`/`0x0503` to
+> clear the dump — which schedules the REINIT that wipes the namespace. `dm-cli`'s
+> capture-diagnostics flow does the same. The script above cannot emit `0xFF` at all.
+
+Full encoding, provenance, the recovered log-record format and the step-by-step procedure
+are in **`docs/sn200-crash-dump-retrieval.md`**. The on-drive string table (`0x0220`)
+decodes the dump and is guaranteed to match the running firmware; prefer it over the
+image's copy, since StrIds are not stable across revisions.
 
 ### 4. The known-working (destructive) sequence — **PROVEN, but it wipes the drive**
 ```sh
@@ -926,20 +2044,55 @@ nvme admin-passthru /dev/nvme7 --opcode=0xff --namespace-id=0 --cdw10=0 --cdw12=
 ```
 Expect a healthy drive with a zeroed namespace.
 
+### 4a. Things that will NOT work — **PROVEN, do not spend time on these**
+| candidate | why not |
+|---|---|
+| `EXIT_MODE` / `SET_MODE` / `WRITE_MARKER` VUCs | handler functions are **not in any shipped binary**; cannot be unlocked (§10) |
+| `dm-cli reset-to-defaults` | refused by `gfc_validate_reset_to_defaults` at startup type 6; and it *resizes capacity* — mildly destructive |
+| `nvme attach-ns` (opcode `0x15`) | firmware refuses: `Admin_NamespaceAttachment: The LBN Translation Table is invalid.` Safe, but useless |
+| `nvme-cli` raw passthru via `dm-cli` JSON | `nvmens_raw_passthru` is in no table, no vtable, unexported |
+| PSID revert / Security Send | PSID path is **ATA-only**; `nvme_security_send_real` has zero callers |
+| NSSR / FLR / SBR / link-disable | resets without `CC.SHN` ⇒ `UNEXSTRT` (§7) |
+
+### 4b. NVMe-MI over SMBus — **the one untested avenue, SPECULATIVE**
+PROC9 implements a full NVMe-MI/MCTP stack on **both** SMBus and PCIe VDM, including
+`MI: Initiating an NVM subystem reset` and an `MI_AdminCmdHandler` tunnel. **SMBus is
+independent of the PCIe link**, so this is the only path that survives the `UEFI0067`
+link-disable. Whether the tunnel passes vendor opcode `0xFF` is **UNKNOWN**. Requires a
+BMC or SMBus master on the card's SMBCLK/SMBDAT. Worth investigating before binning the
+drive, because it is the only remaining unknown.
+
 ### 5. Try to steer the startup marker to READ ONLY instead of REINIT — **SPECULATIVE**
 Marker 8 (`READONLY Startup requested` → `SYS: Read-only startup` → `READ ONLY STARTUP`)
 exists and would plausibly bring the drive up with L2P intact and no writes. No VUC that
 sets this marker has been identified. Would need the OAM command table from
 `libdmi_core.so` / PROC8 disassembly to pursue.
 
-### 6. `Read Raw Section` OAM command — **SPECULATIVE**
+### 6. UART debug console — **SPECULATIVE, hardware access required**
+**PROVEN that it exists.** PROC0 (the boot/SBL processor) carries a full interactive
+command shell with the prompt `DiagMgr> `, built-in commands
+`Help`, `Mode <mode>`, `Load [<command-group>]` ("Makes a new group of commands
+available"), `GPRS`, `I2CErase`, `LogicTrap`, `SBL` ("Go into SBL diagnostic mode"),
+`Channel Info - PCIE`, plus a UART driver (`Sending suspicious value 0x%x to UART`,
+ANSI/CSI escape handling). PROC0 also holds the EEPROM section tags `FRMW`, `DRVC`,
+`SLOT`, `CLOG` and the image names `SBL.bin`, `SBLPATCH.bin`, `DCPATCH.bin`,
+`DCVUCPATCH.bin`, `BIST.bin`, `SECURITY.bin`, `DriveConfig.bin`.
+
+This is the natural place to set a boot marker or force a read-only startup — the
+`Load` command implies whole additional command groups beyond the eight built-ins. But it
+needs physical UART pins on the HHHL card, which are not documented in the product
+manuals shipped in the package.
+
+### 7. `Read Raw Section` OAM command — **SPECULATIVE**
 An OAM command named `Read Raw Section` exists (`OAM READ RAW SA CMD: Read of System Area
 journal from EEPROM failed.`). If reachable in Post Crash mode it would allow dumping the
 System Area / journal for offline analysis without erasing anything. Encoding unknown.
 
 ### Do NOT
-- **Do not sweep the `cmd 3` sub-command space.** Adjacent sub-commands include
-  `Erase to SBL EEPROM` (hard brick) and `Drive Uninit`. See the warning in §4.
+- ☠ **Do not sweep the `cmd 3` sub-command space.** Valid range is 0–6 and the two
+  immediately below the ones you want are the dangerous ones: **sub 3 ≈ Erase SBL EEPROM**
+  (`CDW12 0x0303` — erases the secondary boot loader, hard brick) and **sub 4 ≈ Drive
+  Uninit** (`0x0403`). Only 5 and 6 are safe-ish. See §4.
 - ☢ **Never issue opcode `0xDD`** (`hgst_nvme_secure_purge`). It is a bare
   fire-and-forget command with no confirmation argument and it destroys everything.
   Its status counterpart `0xDE` (CDW10=0x0C, 48-byte read) is safe and read-only.
@@ -947,10 +2100,100 @@ System Area / journal for offline analysis without erasing anything. Encoding un
   (OM-6588/6697/6836/6850/7044) were already fixed in KNGND110.
 - Never `nvme format` / `sanitize` / `wdc purge` / `delete-ns`.
 
+### Open questions / where to dig next
+
+Ranked by value. All are now *mechanical* rather than exploratory — the ISA and the log
+ABI are cracked (§1).
+
+0. **The PROC9 NVMe-MI admin-command whitelist.** The only unexplored path that could work
+   with the PCIe link down. Find `MI_AdminCmdHandler`'s opcode filter (the sites logging
+   StrIds 171/172, literals `0x7ffa179c`/`0x7ffa1790`) and determine whether vendor opcode
+   `0xFF` passes. If it does, `0x0603`/`0x0503` become issuable over SMBus. **Promoted to
+   the top.**
+1. **The unmapped `0x7ffbc1xx–0x7ffbe6xx` region.** Nothing in any PROC8 segment covers
+   it (PROC8 ends at `0x7ffbb064`), yet the erase case bodies and the E6 descriptor table
+   both point into it. It is either shared DDR at runtime or lives in another firmware
+   member. Resolving it settles the sub-command → target mapping definitively. **Biggest
+   blocker.**
+2. ~~**The Post Crash admin whitelist.**~~ **DONE** — it is an allow-list, fully decoded
+   in §10, and the FLIX branch model is now implemented in `xdis.py` (§1). `0xC6` with
+   cmd byte `0x20` is exempt, so crash-dump retrieval works while latched.
+3. **The reinit marker write.** The call site is known (`0x30033704`–`0x30033724`, the
+   second `call8 0x30030aa0`), but not the marker value or its storage. The global at
+   **`0x7ff87c64`** is the prime suspect — it is read both here (compared `bnei a10,128`
+   at `0x30033500`) and at the top of the admin gate (`0x7ffa6b1b`). Finding the write
+   would show whether marker 8 (`READONLY Startup requested`) can be set instead of 3.
+4. **Whether the completion status is forced to Success** regardless of erase result
+   (the common tail at `0x3003357d`).
+4a. **The crash dump's container header** — magic/version/length/CRC/section table (§12).
+   The one place the log-message-to-code technique cannot reach, because the dump writer
+   emits no log messages. Needs a correct Tensilica TIE/FLIX config for these cores.
+   The decoder in `tools/sn200-fw/` works around this by deriving the record framing from
+   the data rather than assuming a header.
+5. **Whether `FAST STARTUP` consumes the `Drive REINIT requested` marker** — decides
+   whether a cold power cycle is genuinely mandatory (§6).
+
+Working environment: PROC8 is loaded in Ghidra as `Xtensa:LE:32:default` —
+`/sn200/PROC8_7ff80000.bin` @ `0x7ff80000` and `/sn200/PROC8_30000000.bin` @
+`0x30000000` (the overlay bank with the `Admin_VUC_*_OVL0xx` functions). Renamed:
+`0x7ffa6b18` → `Admin_CheckCmdAllowed_gate`, `0x7ffb45a8` → `Log_Printf_StrIdDesc`.
+**But use the hand-rolled disassembler, not Ghidra** (§1). Ghidra MCP tools silently
+ignore `program_path` and act on the *current* program — `switch_program` first.
+The E6 section-descriptor table is at `0x7ff80570`, 0x24-byte entries of
+`char tag[8]` + 7 u32.
+
+### Keep or bin? — the engineering verdict
+
+**The drive is probably not the primary fault. The bay is — and the evidence for that got
+*stronger*, not weaker, once the PFAIL path was traced.**
+
+Evidence, in order of strength:
+1. **PROVEN (§6a):** the boot predicate is `CRASH or PFCRASH` (two tests, one outcome) →
+   force `POST CRASH Startup`, overriding whatever the shutdown recorded.
+2. **PROVEN (§8):** an unclean power-off *by itself* does **not** produce this state. PFAIL
+   is a designed hold-up sequence whose outcomes are markers 2 / 6 / 7 — none of which is
+   Post Crash. So the `ForceOff` alone does not explain latch #2.
+3. **PROVEN (§8):** a PCIe link drop cannot reach the PFAIL object — but WD documents
+   link-down → hang → **crashed/diagnostic mode** four separate ways, and marks the
+   flagship case **"Drive Recovery: Unable to recover."** That is the mechanism that fits.
+4. **Field:** POST reported an actual link-training failure on that exact port
+   (`UEFI0067`, bus 174 = `0xAE` = `ae:03.0`), and iDRAC logged a fatal component error
+   there. The owner already knows the cable is flaky.
+5. **Field:** with discard suppressed, the original trigger workload ran clean —
+   1-second mkfs, zero resets.
+
+Putting 2 and 3 together: the `ForceOff` is probably *not* what latched it. The marginal
+link is. That reframes the fix from "stop doing unclean shutdowns" to "**fix the
+interconnect**".
+
+So: **replace the U.2 cable / move the drive to a known-good bay before writing the drive
+off.** If it latches again on good cabling with discard suppressed, then bin it. Until
+then the observations are fully explained by a marginal interconnect repeatedly inducing
+pfail events on a drive whose firmware treats any pfail residue as a reason to hide the
+namespace.
+
+Cost asymmetry favours testing: the drive has 0 media errors and full capacity, the cable
+is cheap, and the failure mode is non-destructive to hardware.
+
+**Caveat, stated plainly:** the firmware offers no host-side way to make this drive
+*tolerant* of unclean power loss. If the deployment cannot guarantee clean shutdowns and
+a solid interconnect, this model will keep doing this — it is a design property, not a
+defect that can be configured away.
+
 ### Prevention
-The trigger is large deallocate/TRIM (§8). Until a drive is known to be on KNGND122:
+The trigger is large deallocate/TRIM (§8) **and** unclean power/link loss (§8, models
+C/D). Until a drive is known to be on KNGND122:
 - `mkfs.xfs -K` (skip the whole-device discard), `mkfs.ext4 -E nodiscard`
 - mount without `discard`; avoid `fstrim` on the whole device, or run it in small chunks
 - LVM: `issue_discards = 0`; ceph: avoid `bdev_enable_discard`
 - Never combine heavy deallocate workloads with controller resets or power cycling.
+- Suppress discard at the block layer so *nothing* can issue one, rather than relying on
+  per-tool flags — a udev rule setting `ATTR{queue/discard_max_bytes}="0"` covers
+  filesystems, LVM, ceph and anything else in one place. **Verified effective in the
+  field:** the workload that caused latch #1 ran clean afterwards.
+- Treat unclean power-off as a hazard, not an inconvenience: always `nvme` shutdown or at
+  minimum unbind the driver (which issues `CC.SHN`) before cutting power, and never
+  `ForceOff` a running node with this drive attached.
+- Fix marginal U.2 cabling *before* deploying data on it. A flaky bay is not a
+  performance problem on this drive, it is a data-availability problem.
 

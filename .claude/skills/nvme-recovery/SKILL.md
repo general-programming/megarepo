@@ -139,10 +139,17 @@ echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/unbind
 echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/bind
 ```
 
-**A warm reboot is not a power cycle.** It does not drop rail power, so it will
-not clear a latched internal error. Only a true `ForceOff` → wait ≥30s → `On`
-does. On a ceph host this takes the OSDs down — confirm the cluster tolerates
-it first, `noout` alone is not sufficient.
+**`unbind` is the only one of these that is a CLEAN stop.** It issues `CC.SHN`
+and waits for `CSTS.SHST`; every other entry above drops `CC.EN` or the link
+without it. On firmware that latches on an unfinished shutdown (see the SN200
+section) those resets are themselves the fault condition, so escalating through
+the ladder can make things worse rather than better. Prefer `unbind`/`bind`.
+
+**A warm reboot is not a power cycle** — it does not drop rail power. But do
+not reach for `ForceOff` reflexively either: an abrupt power cut is an unclean
+stop and can *cause* the latched state on drives that record shutdown
+completion. On a ceph host it also takes the OSDs down — confirm the cluster
+tolerates it first, `noout` alone is not sufficient.
 
 ## HGST / WDC Ultrastar SN200: "Post Crash Startup" lockup
 
@@ -150,13 +157,67 @@ Model `HUSMR7676BDP3Y1`, firmware `KNGND1xx`. Procedure below is what actually
 worked, not what the forum posts say. Full firmware teardown:
 `docs/sn200-firmware-re.md`.
 
-**Trigger: large deallocate/TRIM, not power cycling.** WD's own release notes
-name it — OM-6588 "Drives failed to restore L2P table after large deallocate
-and a pfail", OM-6850 "Drive in crashed state following Power Cycle, Controller
-Reset, and Deallocate Test", OM-6836, OM-7044. A whole-device TRIM (e.g.
-`mkfs.xfs` on 7.68 TB) races the L2P journal flush. **Prevent it:** `mkfs.xfs -K`,
-`mkfs.ext4 -E nodiscard`, mount without `discard`, LVM `issue_discards = 0`, no
-whole-device `fstrim`.
+**The latch is an UNFINISHED SHUTDOWN, not TRIM.** Two independent firmware
+teardowns agree (`docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`).
+The drive keeps a shutdown marker; a 16-bit table at PROC0 `0x7ff81180` maps it
+to 11 values. Markers **5/6/7** — `Normal Shutdown STARTED`, `PFAIL Shutdown
+STARTED`, `PFAIL Shutdown TIMEOUT` — all mean *began and never finished*, and
+all converge on one handler that writes an `UNEXSTRT` stub into the crash area.
+From then on `SYS: Detected a CRASH or PFCRASH section.` forces the post-crash
+state on **every** boot. That is the latch.
+
+The state probe's byte[1] == **6** is a *different* enum — it really does mean
+diagnostic mode. `7ffaac95: extui a10,a5,0,3` masks the startup type to 3 bits
+(7 reachable values); the marker enum has 11. WD's own
+`gf_is_diagnostic_mode` tests `== 6` → `HDMS_DEV_DIAGNOSTIC_MODE`. Do not
+conflate the two enums — the marker table is indexed separately at PROC0
+`0x7ff81180`.
+
+(The `== 7` variant in `libdmi_core.so` is gated on **Firmware Revision**, not
+model: `FR[0]=='H' && FR[3]>'E'`. `KNGND122` starts with 'K', so the `== 6`
+path applies here.)
+
+Two consequences that overturn the obvious readings:
+
+- **A completed power loss is harmless.** If the hold-up sequence finishes it
+  writes marker 2 and the drive boots normally. This is why SN200s do not all
+  brick on power loss — only *interrupted* saves latch.
+- **TRIM is a provocation, not the mechanism.** No deallocate/L2P/journal state
+  is consulted in the decision anywhere. A large deallocate can *cause* a
+  shutdown to not finish, which is why WD's errata (OM-6588 "…after large
+  deallocate and a pfail", OM-6836/6850/7044) are real — but suppressing
+  discard does not make the drive safe, it only removes one provocation.
+
+Still worth suppressing discard on a suspect drive — `mkfs.xfs -K`,
+`mkfs.ext4 -E nodiscard`, no `discard` mount option, LVM `issue_discards = 0`,
+no whole-device `fstrim` — just do not mistake it for a fix.
+
+**A marginal U.2 cable is one fault with two faces, and it is the likeliest
+cause.** U.2 carries `PC12V`/`ATX12V` as well as the PCIe lanes, and the drive
+monitors both rails via `I2C_DEVICE_VMON`. A high-resistance connector gives
+link-training failures on the signal pins *and* I²R rail droop on the power
+pins. The droop is a **genuine brownout**: PFAIL starts, cannot finish, marker
+5/6/7, UNEXSTRT, Post Crash. That is a complete traced chain from bad cable to
+latch **with no firmware bug required**.
+
+There is no code path from LINKDOWN/PERST to PFAIL (PFAIL lives in PROC0, PCIe
+in PROC9) — the two are correlated siblings of one physical fault, not cause
+and effect. But a disabled port also means `CC.SHN` can never be delivered, so
+the next stop is unavoidably unclean.
+
+**This is why a whole-device TRIM latches it: current, not semantics.** A
+whole-device deallocate is the drive's peak-current workload (map invalidate →
+GC → NAND erase) — the one most likely to sag a bad connector. Suppressing
+discard removes the *load*, which is why it appeared to work; it does not
+exonerate discard semantics and it does not make a marginal cable safe.
+
+**Before binning such a drive**, move it to a different bay/cable and retest
+under peak load. Two measurements decide it:
+- **VCAP health** — `VCAP has failed, drive is in write protect mode` is a
+  distinct posture. Degraded hold-up capacitors mean it latches in *any* bay,
+  which does justify binning.
+- **Which section is armed** — `0xC6 cdw12=0x0320` (CLOG) vs `0x0520` (PFCL).
+  PFCL-only confirms power-fail origin and may allow the harmless `0x0603`.
 
 Symptoms, all together:
 
@@ -199,7 +260,28 @@ That is why no in-band reset works: `nvme reset`, NSSR, FLR, SBR and link-disabl
 all drop `CC.EN` or the link without first issuing `CC.SHN`, so each one is
 another "unexpected start".
 
+### Get the crash dump FIRST — there is a script
+
+Before anything that changes drive state, pull the dump. It names the assert
+that actually fired. Reads are PROVEN side-effect-free and `0xC6` cmd `0x20` is
+in the Post-Crash admin allow-list, so this works while latched:
+
+```sh
+cd tools/sn200-fw
+sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvmeN
+./decode-crash-dump.py sn200-dump-*/crash.bin --string-table sn200-dump-*/strtbl.bin
+```
+
+Re-run the same command line to resume after a reset. Full procedure and
+provenance: `docs/sn200-crash-dump-retrieval.md`.
+
 ### The trap
+
+☠ **Never run `nvme wdc get-crash-dump`.** On a successful read it
+automatically issues `0xFF`/`0x0503` to clear the dump (nvme-cli
+`wdc_do_crash_dump()` → `wdc_do_clear_dump()`), and that schedules the REINIT
+that **zeroes the namespace**. The vendor tool wipes the drive as a matter of
+course. Use `pull-crash-dump.sh`, which cannot emit `0xFF` at all.
 
 `dm-cli` / `nvme wdc get-crash-dump` **retrieve then clear**, and skip the
 clear if retrieval failed (`"Crash dump not retrieved successfully, not
@@ -264,8 +346,24 @@ It took 175-408 polls per command in practice.
 /root/fire.sh nvme admin-passthru /dev/nvme7 --opcode=0xff --namespace-id=0 \
   --cdw10=0 --cdw12=0x0603 --data-len=0    # pfail dump
 
-# 4. cold power cycle, OFF for >=90s. A warm reboot NEVER clears this.
+# 4. A CLEAN STOP, then restart. This is the step everyone gets wrong.
+#    `unbind` is the ONLY host action that issues CC.SHN and waits for
+#    CSTS.SHST. Every other reset (nvme reset, NSSR, FLR, SBR, link-disable,
+#    warm reboot) stops the controller WITHOUT CC.SHN and is therefore itself
+#    another unfinished shutdown, which re-arms the marker.
+echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/unbind
+sleep 10
+echo 0000:b2:00.0 > /sys/bus/pci/drivers/nvme/bind
+#    Fall back to a cold power cycle (OFF >=90s) only if that fails.
 ```
+
+**Check WHICH section is armed before firing anything.** `0x0320` probes the
+crash section, `0x0520` the pfail section. `0x0603` (pfail) clears
+synchronously and appears harmless; `0x0503` (crash) schedules a **drive
+re-init** that rebuilds the L2P and is the step suspected of zeroing the
+namespace. If only the pfail section is armed, `0x0603` alone may recover the
+drive with no re-init and no wipe. Firing both blind — as was done on
+sea1-hv-2 — may destroy data unnecessarily.
 
 **The clear returns Success but the size probe still reads non-zero.** That is
 expected — the erase is *scheduled* and completes on the next startup. Do not
