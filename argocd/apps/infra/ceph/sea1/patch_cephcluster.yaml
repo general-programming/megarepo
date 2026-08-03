@@ -38,12 +38,12 @@ spec:
     # but it MUST already be set before that flag ever flips, because there is
     # no value of mon.count that avoids the removal condition once a Rook mon
     # coexists with these.
-    externalMonIDs:
-      - sea1-hv-0
-      # sea1-hv-1, sea1-hv-2 drained 2026-08-03 (ceph orch apply mon --placement=...).
-      # Names are removed here only AFTER the mon is gone from the monmap --
-      # doing it the other way round un-shields a mon that still exists and
-      # re-arms the removal at health.go:250.
+    # All three cephadm mons drained 2026-08-03; quorum is now d,e,f, entirely
+    # Rook-managed on the Talos workers. Kept (empty) as documentation of what
+    # this field is for: any future coexistence must repopulate it BEFORE a
+    # foreign mon exists. Names are only ever removed from here AFTER the mon
+    # is gone from the monmap -- the reverse order un-shields a live mon.
+    externalMonIDs: []
   cephVersion:
     # All 35 daemons on sea1 are 20.2.1 tentacle. The 19.2.3 squid visible on
     # the hypervisors is Proxmox's host CLI package, not the cluster.
