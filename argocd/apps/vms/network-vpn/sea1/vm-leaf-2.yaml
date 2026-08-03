@@ -1,0 +1,132 @@
+# sea1-vpn-leaf-2, built from scratch rather than migrated -- there is no
+# Proxmox VM to copy from.
+#
+# It comes up PASSIVE: barf's definition carries no vrrp and no nat, so it
+# peers and forwards but holds no gateway address. Promotion is a separate,
+# reversible change once it has proven itself against leaf-1.
+#
+# Addresses (barf network.yml): eth0 2602:fa6d:10:ffff::f06/116 +
+# 199.255.18.163/32, eth1 10.3.2.2/23, dum0 2602:fa6d:f:aaaa::f0a/128 +
+# 10.255.2.10/32. MACs are the NetBox reservations for VM 120.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: leaf-2-root
+  namespace: network-vpn
+spec:
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 32Gi
+---
+# Installer media. The VyOS ISO is dd'd into this volume from a hypervisor,
+# which avoids needing a container registry to host a containerDisk or CDI to
+# upload through. Delete this claim and the cdrom disk below once the install
+# has been written to leaf-2-root -- leaving it attached means an interrupted
+# boot can land back in the installer, which on a router reads as a hardware
+# fault rather than a boot-order mistake.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: leaf-2-installer
+  namespace: network-vpn
+spec:
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: sea1-vpn-leaf-2
+  namespace: network-vpn
+spec:
+  # Halted until the ISO has been written into leaf-2-installer.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: sea1-vpn-leaf-2
+        vpn-layer: leaf
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          # Hard within the leaf layer: leaf-1 and leaf-2 exist to survive
+          # losing a node, which they cannot do while sharing one.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: vpn-layer
+                    operator: In
+                    values:
+                      - leaf
+              topologyKey: kubernetes.io/hostname
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: vpn-layer
+                      operator: Exists
+                topologyKey: kubernetes.io/hostname
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 4
+        memory:
+          guest: 2Gi
+        # No firmware.bootloader: SeaBIOS, matching the rest of the VyOS
+        # fleet. KubeVirt defaults to BIOS when it is unset.
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                bus: scsi
+              bootOrder: 2
+            - name: installer
+              cdrom:
+                bus: sata
+                readonly: true
+              bootOrder: 1
+          # MACs match the NetBox reservations on VM 120, so kea hands out
+          # 10.3.2.2 and the upstream route for 199.255.18.163/32 lands here.
+          # VyOS pins interfaces by hw-id once barf deploys its config.
+          interfaces:
+            - name: external
+              bridge: {}
+              macAddress: "BC:24:11:1E:AF:02"
+            - name: internal
+              bridge: {}
+              macAddress: "BC:24:11:1E:AF:12"
+      networks:
+        - name: external
+          multus:
+            networkName: br0-lan
+        - name: internal
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: leaf-2-root
+        - name: installer
+          persistentVolumeClaim:
+            claimName: leaf-2-installer
