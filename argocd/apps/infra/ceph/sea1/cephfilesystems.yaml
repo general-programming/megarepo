@@ -51,10 +51,113 @@ spec:
         requiredDuringSchedulingIgnoredDuringExecution:
           - labelSelector:
               matchExpressions:
-                - key: app
+                # Scoped to THIS filesystem. A cluster-wide app=rook-ceph-mds
+                # selector would cap all MDS at one per node -- 3 filesystems
+                # x 2 daemons needs 6 pods across 3 lan-bridge nodes.
+                - key: rook_file_system
                   operator: In
                   values:
-                    - rook-ceph-mds
+                    - cephfs
+            topologyKey: kubernetes.io/hostname
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: generalprogramming.org/lan-bridge
+                  operator: In
+                  values:
+                    - "true"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 5Gi
+      limits:
+        memory: 8Gi
+---
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: k8s-cephfs
+  namespace: ceph
+spec:
+  preservePoolNames: true
+  preserveFilesystemOnDelete: true
+  preservePoolsOnDelete: true
+  metadataPool:
+    name: k8s-cephfs_metadata
+    replicated:
+      size: 3
+      requireSafeReplicaSize: true
+  dataPools:
+    - name: k8s-cephfs_data
+      replicated:
+        size: 3
+        requireSafeReplicaSize: true
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
+    placement:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                # Scoped to THIS filesystem. A cluster-wide app=rook-ceph-mds
+                # selector would cap all MDS at one per node -- 3 filesystems
+                # x 2 daemons needs 6 pods across 3 lan-bridge nodes.
+                - key: rook_file_system
+                  operator: In
+                  values:
+                    - k8s-cephfs
+            topologyKey: kubernetes.io/hostname
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: generalprogramming.org/lan-bridge
+                  operator: In
+                  values:
+                    - "true"
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 5Gi
+      limits:
+        memory: 8Gi
+---
+apiVersion: ceph.rook.io/v1
+kind: CephFilesystem
+metadata:
+  name: tmpim
+  namespace: ceph
+spec:
+  preservePoolNames: true
+  preserveFilesystemOnDelete: true
+  preservePoolsOnDelete: true
+  metadataPool:
+    name: tmpim_metadata
+    replicated:
+      size: 3
+      requireSafeReplicaSize: true
+  dataPools:
+    - name: tmpim_data
+      replicated:
+        size: 3
+        requireSafeReplicaSize: true
+  metadataServer:
+    activeCount: 1
+    activeStandby: true
+    placement:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                # Scoped to THIS filesystem. A cluster-wide app=rook-ceph-mds
+                # selector would cap all MDS at one per node -- 3 filesystems
+                # x 2 daemons needs 6 pods across 3 lan-bridge nodes.
+                - key: rook_file_system
+                  operator: In
+                  values:
+                    - tmpim
             topologyKey: kubernetes.io/hostname
       nodeAffinity:
         requiredDuringSchedulingIgnoredDuringExecution:
