@@ -4,3 +4,5 @@ resources:
   - ../base
   - ceph_secret.yaml
   - ceph_configmap.yaml
+patches:
+  - path: patch_cephcluster.yaml

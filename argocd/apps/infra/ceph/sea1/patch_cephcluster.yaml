@@ -1,0 +1,28 @@
+---
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: ceph-external
+  # namespace is required for the patch to match -- unlike the cluster-scoped
+  # StorageClass patch, a namespaced target needs it to resolve.
+  namespace: ceph
+spec:
+  mon:
+    # The cephadm-managed mons of THIS cluster. Rook's health checker removes
+    # any mon in quorum that is not its own (health.go:250); externalMonIDs is
+    # what shields them, by stripping them out of the quorum status before that
+    # check runs (reconcileExternalMons, health.go:222).
+    #
+    # Inert while external.enable is true -- checkHealth returns early on the
+    # external branch (health.go:181-199) and never reaches the removal loop --
+    # but it MUST already be set before that flag ever flips, because there is
+    # no value of mon.count that avoids the removal condition once a Rook mon
+    # coexists with these.
+    externalMonIDs:
+      - sea1-hv-0
+      - sea1-hv-1
+      - sea1-hv-2
+  cephVersion:
+    # All 35 daemons on sea1 are 20.2.1 tentacle. The 19.2.3 squid visible on
+    # the hypervisors is Proxmox's host CLI package, not the cluster.
+    image: quay.io/ceph/ceph:v20.2.1

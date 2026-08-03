@@ -1,0 +1,12 @@
+---
+apiVersion: ceph.rook.io/v1
+kind: CephCluster
+metadata:
+  name: ceph-external
+  namespace: ceph
+spec:
+  cephVersion:
+    # Matches the live fmt2 cluster (fsid 85c77000-...): all daemons are 20.2.2
+    # tentacle. Must never be older than the cluster -- this is what Rook's mons
+    # would run if this cluster is ever flipped to converged mode.
+    image: quay.io/ceph/ceph:v20.2.2

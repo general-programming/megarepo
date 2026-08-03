@@ -8,15 +8,22 @@ spec:
     enable: true
   crashCollector:
     disable: true
+  # NB: spec.mon.externalMonIDs is per-cluster (the mon names differ) and lives
+  # in each overlay's patch_cephcluster.yaml, not here.
   healthCheck:
     daemonHealth:
       mon:
+        # NB: `disabled` is dead -- Rook never reads it. Only `interval` and
+        # `timeout` are consumed. Do not rely on it to stop mon removal.
         disabled: false
         interval: 45s
   dataDirHostPath: /var/lib/rook
   # providing an image is required, if you want to create other CRs (rgw, mds, nfs)
-  # In latest Rook release we dont need to provide cephVersion we can skip this one.
+  # Inert while external.enable is true (Rook runs no daemons), but this is the
+  # image Rook's mons run the moment a cluster flips to converged mode -- so it
+  # must never be older than the live cluster. Both clusters are tentacle
+  # (sea1 20.2.1, fmt2 20.2.2); each overlay pins its exact version.
   cephVersion:
-    image: quay.io/ceph/ceph:v19.2.0
+    image: quay.io/ceph/ceph:v20.2.1
   # skip upgrade checks for external
   skipUpgradeChecks: true

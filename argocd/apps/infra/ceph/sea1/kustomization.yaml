@@ -6,3 +6,4 @@ resources:
   - ceph_configmap.yaml
 patches:
   - path: patch_storageclass.yaml
+  - path: patch_cephcluster.yaml

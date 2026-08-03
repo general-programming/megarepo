@@ -8,5 +8,11 @@ data:
     [{"clusterID":"ceph","monitors":["[2602:fa6d:10:ffff::101]:6789","[2602:fa6d:10:ffff::102]:6789","[2602:fa6d:10:ffff::103]:6789"],"namespace":""}]
   data: >-
     sea1-hv-0=[2602:fa6d:10:ffff::101]:6789,sea1-hv-1=[2602:fa6d:10:ffff::102]:6789,sea1-hv-2=[2602:fa6d:10:ffff::103]:6789
+  # Everything in `data` loads as an INTERNAL mon (cluster_info.go:302-377);
+  # this key is the only thing that demotes them to external (:364-373). Left
+  # empty, a flip to converged mode makes Rook adopt the cephadm mons as its
+  # own, build Deployments for them pointing at Proxmox addresses, and fail
+  # over real mons on any blip. Keep in sync with spec.mon.externalMonIDs.
+  externalMons: sea1-hv-0,sea1-hv-1,sea1-hv-2
   mapping: '{"node":{}}'
   maxMonId: '2'
