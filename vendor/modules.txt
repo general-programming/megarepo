@@ -182,7 +182,7 @@ github.com/mitchellh/mapstructure
 github.com/muesli/cancelreader
 # github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2
 ## explicit
-# github.com/redis/go-redis/v9 v9.21.0
+# github.com/redis/go-redis/v9 v9.22.0
 ## explicit; go 1.24
 github.com/redis/go-redis/v9
 github.com/redis/go-redis/v9/auth
