@@ -497,6 +497,48 @@ hosts:
       - set high-availability vrrp group internal vrid 10
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
+  # Second sea1 leaf, built from scratch rather than migrated. Deliberately
+  # has NO vrrp and NO nat: it joins the fabric as a passive BGP participant
+  # first and only takes gateway duties once proven. Adding those two blocks,
+  # mirroring sea1-vpn-leaf-1 with a lower vrrp priority, is what promotes it.
+  #
+  # Shares ASN 4280805534 with sea1-vpn-leaf-1, matching how the sea1 spines
+  # share 4280805529 and the fmt2 leaves share 4280805526.
+  #
+  # The loopback breaks the usual convention of mirroring the LAN suffix
+  # (leaf-1 ffff::f01/aaaa::f01, spine-1 ffff::f02/aaaa::f02): aaaa::f06 is
+  # already held by sea21-hv-egg-irl, and the upstream route for
+  # 199.255.18.163/32 is already pointed at ffff::f06, so the LAN address is
+  # fixed and the loopback moves instead.
+  sea1-vpn-leaf-2:
+    id: 18
+    asn: 4280805534
+    management: 2602:fa6d:f:aaaa::f0a
+    type: vyos
+    role: vpn
+    site: sea
+    cloudinit: true
+    interfaces:
+      - name: dum0
+        description: underlay loopback
+        addresses:
+          - 2602:fa6d:f:aaaa::f0a/128
+          - 10.255.2.10/32
+        management: true
+      - name: eth0
+        description: external
+        addresses:
+          - 2602:fa6d:10:ffff::f06/116
+          - 199.255.18.163/32
+        ipv6_autoconf: true
+      - name: eth1
+        description: internal
+        address: 10.3.2.2/23
+    nameservers:
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
+    networks:
+      - 10.3.2.0/23
 links:
   fmt2-vpn-leaf-1:
     fmt2-vpn-spine-1: {}     # rotated to derived port + pair keys
@@ -509,6 +551,11 @@ links:
     sea1-vpn-spine-1: {}
     sea1-vpn-spine-2: {}
   sea69-acc-v-a-1:
+    fmt2-vpn-spine-1: {}
+    fmt2-vpn-spine-2: {}
+    sea1-vpn-spine-1: {}
+    sea1-vpn-spine-2: {}
+  sea1-vpn-leaf-2:
     fmt2-vpn-spine-1: {}
     fmt2-vpn-spine-2: {}
     sea1-vpn-spine-1: {}
