@@ -158,9 +158,13 @@ nodes:
     userVolumes: &k8s-worker-nvme-volumes
       - name: data
         provisioning:
+          # The size guard is load-bearing on bare metal: these hosts carry
+          # seven 2TB SSDPE2KX020T8 NVMe reserved for Rook OSDs alongside the
+          # 7.68TB HUSMR7676BDP3Y1. A bare transport=="nvme" match would let
+          # Talos format an OSD disk.
           diskSelector:
-            match: disk.transport == "nvme"
-          minSize: 50GiB
+            match: disk.transport == "nvme" && disk.size > 5000000000000u
+          minSize: 500GiB
         filesystem:
           type: xfs
   - <<: *k8s-worker-nvme
@@ -298,12 +302,15 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
-  - # Raise kubelet max pods per node from the Talos default of 110 to 135 (+25)
+  - # Raise kubelet max pods from the Talos default of 110. 200 leaves room to
+    # absorb a whole node's workload during a drain, and for the bare-metal
+    # nodes which have far more RAM than the VMs. Flannel gives each node a
+    # /24, so ~250 is the hard ceiling.
     |-
     machine:
       kubelet:
         extraConfig:
-          maxPods: 135
+          maxPods: 200
   - # Encrypt system disk with TPM
     |-
     machine:

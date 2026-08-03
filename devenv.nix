@@ -56,6 +56,7 @@ in
     coder
     git
     talosctl
+    talhelper
     kubevirt
     # machine provisioning (nix/justfile)
     attic-client

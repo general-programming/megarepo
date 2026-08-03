@@ -1,0 +1,55 @@
+# Talos cluster lifecycle. Clusters are talhelper-managed: talconfig.yaml +
+# talsecret.sops.yaml render into <cluster>/clusterconfig/.
+#
+#   just gen sea1                       # render clusterconfig/ from talconfig.yaml
+#   just diff sea1 sea1-k8s-2           # dry-run one node, show the config diff
+#   just diff-all sea1                  # dry-run every node
+#   just apply sea1 sea1-k8s-2          # apply to one node
+#   just apply-all sea1                 # apply to every node, one at a time
+#   just kubeconfig sea1                # fetch a kubeconfig
+#   just upgrade sea1 sea1-k8s-2        # reboots the node -- drain it first
+#
+# Always `just diff` before `just apply`. talhelper has silently dropped fields
+# before (bridgePort.master in v3.1.15), so the generated config is the source
+# of truth, not talconfig.yaml.
+
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+default:
+    @just --list
+
+# Render clusterconfig/ from talconfig.yaml. Validates disk selectors and CEL.
+gen cluster:
+    cd {{cluster}} && talhelper genconfig
+
+# Show what applying would change on one node. Never mutates.
+diff cluster node:
+    cd {{cluster}} && talhelper gencommand apply --node {{node}} --extra-flags=--dry-run | bash
+
+# Dry-run every node.
+diff-all cluster:
+    cd {{cluster}} && talhelper gencommand apply --extra-flags=--dry-run | bash
+
+# Apply one node's config.
+apply cluster node:
+    cd {{cluster}} && talhelper gencommand apply --node {{node}} | bash
+
+# Apply to every node in sequence, stopping at the first failure.
+apply-all cluster:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{cluster}}
+    talhelper gencommand apply | while read -r cmd; do
+        [ -z "$cmd" ] && continue
+        echo "=== $cmd"
+        bash -c "$cmd"
+        sleep 10
+    done
+
+# Fetch a kubeconfig from a control-plane node.
+kubeconfig cluster out="./kubeconfig":
+    cd {{cluster}} && talosctl --talosconfig=./clusterconfig/talosconfig kubeconfig {{out}} --force
+
+# Upgrade Talos on one node. Reboots it -- drain first.
+upgrade cluster node:
+    cd {{cluster}} && talhelper gencommand upgrade --node {{node}} | bash
