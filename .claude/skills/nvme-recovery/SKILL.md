@@ -46,6 +46,31 @@ Read these two together — they decide everything:
   **Data is intact.** Do not format.
 - `unvmcap` == `tnvmcap` → capacity really is unallocated (namespace deleted).
 
+### Drive absent from the bus entirely = cabling, not firmware
+
+`lspci` not listing the device at all is a **different fault** from the
+diagnostic-mode lockup, and no amount of VUC work will fix it. Check the
+host console / iDRAC before assuming firmware:
+
+```
+UEFI0067: A PCIe link training failure is observed in Bus:174 Dev:3 F:0
+          and the link is disabled.
+```
+
+Bus is **decimal** — 174 = `0xAE` = the `ae:03.0` bridge. BIOS disables the port,
+so the drive cannot appear no matter what the OS does. Corresponding SEL entry:
+"A fatal error was detected on a component at bus 174 device 3 function 0".
+Intermittent across boots ⇒ suspect the NVMe cable/riser, and note the drive may
+come back on the very next power cycle, which makes it look like a firmware win.
+
+Two consequences on a headless box:
+
+- **Set BIOS `ErrPrompt` to Disabled** (`/redfish/v1/Systems/System.Embedded.1/Bios/Settings`,
+  `{"Attributes":{"ErrPrompt":"Disabled"},"@Redfish.SettingsApplyTime":{"ApplyTime":"OnReset"}}`).
+  Otherwise POST halts forever at "F1 to Continue" with no console attached.
+- **F1 continues with the link still disabled** — the drive stays absent. Only a
+  power cycle retries link training.
+
 ### Split the fault: link vs. controller
 
 Clean `LnkSta: Speed 8GT/s, Width x4`, `DevSta: CorrErr- FatalErr-`, all
@@ -153,10 +178,15 @@ string table (every `*.bin` is an uncompressed tar containing
 
 ```
 Admin_NotifyHandler: Sending Persistent Internal Error async event on Post Crash Startup.
-Admin cmd rejected due to Post Crash startup mode: 0x%x      <- this is status 0x7d3 / SC=0xD3
+Admin cmd rejected due to Post Crash startup mode: 0x%x
 SYS: Detected a CRASH or PFCRASH section.
 OAM ERASE CMD: Schedule reinit after crash dump erase failed.
 ```
+
+Two different vendor statuses, don't conflate them: admin commands rejected by the
+Post Crash gate return **`0x7c5`** (SCT=7 SC=0xC5, `HDMS_DEV_DIAGNOSTIC_MODE`; the
+firmware returns the raw constant `0x8F8A0000`). The **`0x7d3`** you see is on the
+*error-log entry for the async event* (`sqid: 65535 cmdid: 0xffff`).
 
 The drive is refusing admin commands to protect a crash dump, and **erasing
 that dump is what schedules the reinit out of the mode**. `CSTS=0x1` (RDY set,
@@ -319,9 +349,10 @@ Plan for total loss of whatever was on it; treat any survival as a bonus.
 - Never `nvme format`, `sanitize`, `wdc purge`, or `delete-ns`. On this drive
   the raw purge is opcode `0xDD`, fire-and-forget with no confirmation argument;
   `0xDE` (`--cdw10=0x0C --data-len=48 -r`) is the safe status counterpart.
-- **Do not sweep the `cmd 3` sub-command space.** Neighbours in that switch
-  include `Erase to SBL EEPROM` (hard brick) and `Drive Uninit`. The order of
-  the `OAM ERASE CMD:` strings is *not* the case order — don't infer from it.
+- **Do not sweep the `cmd 3` sub-command space.** Valid range is 0-6 and the two
+  directly below the ones you want are the dangerous ones: sub 3 ~ Erase SBL
+  EEPROM (`0x0303`, hard brick) and sub 4 ~ Drive Uninit (`0x0403`). Only 5 and
+  6 are safe. The `OAM ERASE CMD:` string order is *not* the case order.
 - Never flash SN150 `KMGNP*` images to an SN200 — different ASIC.
 
 ### Firmware package facts
@@ -334,9 +365,21 @@ Images are plain uncompressed tar: `FWHEADER.bin`, `PROC0..15.bin`, `FCC.bin`,
 
 `PROC*.bin` are Tensilica **Xtensa** LE images (16 cores + an `FCC` core) in a
 `.BIN`/`.SEG` container: 16-byte headers `{"​.SEG", abs_data_offset, len,
-load_addr}` chained until `0xffffffff`. Load in Ghidra 12+ as
-`Xtensa:LE:32:default`. `StringTable.csv` line N is **StrId N-1**; the format
-strings are not in the images, only ids.
+load_addr}` chained until `0xffffffff`. PROC8 is the Admin/host processor.
+
+**Ghidra cannot disassemble these** — the cores use FLIX (VLIW) 8-byte bundles
+and Ghidra's Xtensa module desyncs on them, so its decompiler output is garbage.
+Use `tools/sn200-fw/` instead:
+
+```sh
+python3 tools/sn200-fw/unpack.py KNGND122.bin ~/sn200fw
+export SN200_FW=~/sn200fw
+python3 tools/sn200-fw/logmap3.py 'Post Crash'   # find code by log message
+python3 tools/sn200-fw/drv.py 300336c6 300336f5  # disassemble a range
+```
+
+`StringTable.csv` line N is **StrId N-1**. Format strings are not in the images;
+the firmware logs a descriptor `(StrId<<16)|(level<<8)|nargs` loaded by `l32r`.
 
 ## Sources
 
