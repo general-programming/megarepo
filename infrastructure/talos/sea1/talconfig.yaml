@@ -422,6 +422,25 @@ nodes:
               kubeReserved:
                 cpu: 2000m
                 memory: 8Gi
+      - # Refuse DISCARD on the 7.68T HGST SN200.
+        #
+        # A large deallocate races the drive's L2P journal flush and drops it
+        # into "Post Crash Startup" -- it stops presenting a namespace, the
+        # kernel reset-loops it, udevd's queue never drains and KUBELET NEVER
+        # STARTS. WD errata OM-6588/6836/6850/7044; see docs/sn200-firmware-re.md.
+        #
+        # Talos exposes no mkfs flags, so `mkfs.xfs -K` is not reachable from
+        # config -- but zeroing discard_max_bytes makes the kernel refuse the
+        # discard, and mkfs/fstrim then skip TRIM instead of wedging the drive.
+        # This is what makes the `data` userVolume survivable on this disk.
+        #
+        # Matched on MODEL, never on kernel name: nvmeN numbering is not stable
+        # and a KERNEL=="nvme7n1" rule could land on a ceph OSD after a reorder.
+        |-
+        machine:
+          udev:
+            rules:
+              - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
   - hostname: sea1-k8s-103-0
     patches:
       - *vm-tpm-luks
