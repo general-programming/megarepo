@@ -43,6 +43,9 @@ forever. Ship an empty `kustomization.yaml` with `resources: []`.
 - `ceph-rbd-retain` StorageClass — `reclaimPolicy: Retain`,
   `imageFeatures: layering`
 
+Building a guest from an ISO instead of migrating one — plus driving the
+serial console with `virtctl` — is in **`iso-install.md`** beside this file.
+
 ## Migrating a Proxmox guest
 
 ### 1. Survey before touching anything
