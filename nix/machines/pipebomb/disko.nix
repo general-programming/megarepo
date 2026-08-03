@@ -10,6 +10,11 @@
 { ... }:
 
 {
+  # 26.11 default; the pool stays importable without -f as long as the hostid
+  # matches the last importer, which is always this same machine. Set here
+  # rather than inherited, since modules/disk/zfs-single.nix is not imported.
+  boot.zfs.forceImportRoot = false;
+
   disko.devices = {
     disk.disk0 = {
       device = "/dev/sda";
