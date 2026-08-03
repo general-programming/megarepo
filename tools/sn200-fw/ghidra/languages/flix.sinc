@@ -1,0 +1,43 @@
+# FLIX (Flexible Length Instruction eXtension) is an Xtensa processor extension
+# that allows variable-length, multi-op instructions from 4 to 16 bytes. The
+# format is chosen per-core by the TIE config, so there is no generic decode.
+#
+# This file is specialised for the HGST/WDC Ultrastar SN200 controller
+# (PROC0..PROC15 firmware images), where the bundle width was determined
+# empirically to be 8 bytes for both reserved opcodes op0=0xE and op0=0xF.
+# See docs/xtensa-flix-decoding.md for the evidence.
+#
+# Stock Ghidra decodes these as a 3-byte opaque `FLIX` pseudo-instruction, which
+# desynchronises the instruction stream and fabricates instructions out of
+# bundle payload. Getting the LENGTH right is what fixes that.
+
+@if ENDIAN == "little"
+
+# 64-bit FLIX bundle. op0 occupies the low nibble of the first byte.
+define token flixtok(64)
+    flix_op0    = (0,3)
+    flix_op0h   = (1,3)
+    flix_lo     = (0,31)
+    flix_hi     = (32,63)
+;
+
+@else
+
+define token flixtok(64)
+    flix_op0    = (60,63)
+    flix_op0h   = (60,62)
+    flix_lo     = (32,63)
+    flix_hi     = (0,31)
+;
+
+@endif
+
+# Opaque: the per-slot operation encoding is config-specific and has not been
+# recovered. The bundle is presented as a single pseudo-op of the correct
+# length so the surrounding instruction stream stays in sync.
+define pcodeop flix_bundle;
+
+# flix_op0h == 0b111 matches both op0=0xE and op0=0xF.
+:flix.8 flix_hi^","^flix_lo is flix_op0h=7 & flix_hi & flix_lo {
+	flix_bundle(flix_hi:4, flix_lo:4);
+}
