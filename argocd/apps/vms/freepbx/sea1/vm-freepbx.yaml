@@ -10,7 +10,7 @@ apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: freepbx-root
-  namespace: virt
+  namespace: freepbx
 spec:
   storageClassName: ceph-rbd
   # Block, not filesystem: this is a raw guest disk, not a mounted volume. The
@@ -26,7 +26,7 @@ apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: freepbx
-  namespace: virt
+  namespace: freepbx
 spec:
   # Halted until the PVC has been populated from the old RBD image -- ArgoCD
   # would otherwise boot the VM off an empty disk the moment the PVC appeared.

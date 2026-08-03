@@ -1,0 +1,72 @@
+# KubeVirt guests. One Application -- and therefore one namespace -- per VM,
+# so each gets its own isolation, quota and netpol scope, and can be deleted
+# without touching its neighbours.
+#
+# One project for the whole category rather than one per VM: an AppProject is a
+# policy and trust boundary (which repos, destinations and resource kinds an
+# app may use, plus RBAC), so a project per VM would just be N copies of an
+# identical policy. VMs belonging to a different owner should go under that
+# owner's project instead, the way erin-apps works.
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-options: PruneLast=true
+    argocd.argoproj.io/sync-wave: "-2"
+  name: vms
+  namespace: argocd
+spec:
+  clusterResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  description: KubeVirt guests
+  destinations:
+    - namespace: '*'
+      server: '*'
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+  sourceRepos:
+    - '*'
+
+---
+apiVersion: argoproj.io/v1alpha1
+kind: ApplicationSet
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  name: vms
+  namespace: argocd
+spec:
+  generators:
+    - matrix:
+        generators:
+          - clusters: {}
+          - git:
+              repoURL: git@github.com:general-programming/megarepo.git
+              revision: HEAD
+              directories:
+                - path: argocd/apps/vms/*
+  syncPolicy: {}
+  template:
+    metadata:
+      name: '{{path.basename}}'
+    spec:
+      project: "vms"
+      source:
+        repoURL: git@github.com:general-programming/megarepo.git
+        targetRevision: HEAD
+        path: '{{path}}/{{name}}'
+      destination:
+        server: '{{server}}'
+        namespace: '{{path.basename}}'
+      syncPolicy:
+        automated:
+          prune: true
+          selfHeal: true
+          allowEmpty: true
+        syncOptions:
+          - allowEmpty=true
+          # Each VM carries its own Namespace manifest; this only covers the
+          # first sync, before that object exists.
+          - CreateNamespace=true

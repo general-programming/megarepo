@@ -1,0 +1,11 @@
+# Lives with the VM rather than in the shared namespace app, so everything
+# belonging to this guest can be created or deleted as one unit.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: freepbx
+  labels:
+    kubernetes.io/metadata.name: freepbx
+    # virt-launcher needs it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest

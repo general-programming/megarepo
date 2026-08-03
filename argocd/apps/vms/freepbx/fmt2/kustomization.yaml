@@ -1,0 +1,5 @@
+# Intentionally empty: freepbx is a sea1 guest. The overlay still has to exist,
+# or the fmt2 Application resolves to a missing path and sits in Unknown.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
