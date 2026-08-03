@@ -49,8 +49,7 @@ metadata:
   name: sea1-vpn-leaf-2
   namespace: network-vpn
 spec:
-  # Halted until the ISO has been written into leaf-2-installer.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
