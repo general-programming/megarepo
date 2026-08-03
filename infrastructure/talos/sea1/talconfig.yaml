@@ -13,10 +13,28 @@ nodes:
     ipAddress: "10.3.2.16"
     installDisk: /dev/sda
     controlPlane: true
-    # DHCP supplied these; pinned here because both families are now static.
+    # Public resolvers, deliberately: sea1-core must not be on the boot path,
+    # or a cold start deadlocks once it becomes a guest of this cluster. Every
+    # name a node resolves while booting is public -- the API endpoint
+    # kube.sea1.generalprogramming.org, time.cloudflare.com, discovery.talos.dev
+    # and the registries -- and etcd peers by IP, so nothing here needs the
+    # internal zones.
+    #
+    # Internal names still work for pods: CoreDNS routes generalprogramming.org,
+    # the NetBox reverse zones and .consul straight to sea1-core
+    # (argocd/apps/infra/coredns/sea1). Nothing in this cluster bypasses
+    # CoreDNS -- every hostNetwork pod is ClusterFirstWithHostNet or
+    # ClusterFirst.
+    #
+    # Do NOT append sea1-core as an extra entry here. Talos hostDNS forwards
+    # with a random upstream policy, and NXDOMAIN is a valid answer that never
+    # triggers failover, so mixing an internal-authoritative resolver with a
+    # public one makes internal lookups succeed only some of the time.
     nameservers: &k8s-cp-dns
-      - 10.3.2.6
-      - 2602:fa6d:10:ffff::f00
+      - 1.1.1.1
+      - 1.0.0.1
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
     networkInterfaces:
       - deviceSelector:
           driver: virtio_net
@@ -72,9 +90,12 @@ nodes:
     # that actually have br0, so Multus and LAN-attached VMs can select them.
     nodeLabels: &k8s-worker-nvme-labels
       generalprogramming.org/lan-bridge: "true"
+    # Same reasoning as the control planes above: public only, no sea1-core.
     nameservers: &k8s-worker-nvme-dns
-      - 10.3.2.6
-      - 2602:fa6d:10:ffff::f00
+      - 1.1.1.1
+      - 1.0.0.1
+      - 2606:4700:4700::1111
+      - 2606:4700:4700::1001
     networkInterfaces:
       # MTU stays on the port too: a bridge cannot exceed its members, so
       # leaving this at the 1500 default would silently cap br0.
