@@ -14,7 +14,28 @@ spec:
           enabled: false
         client:
           enabled: true
-          exposeGossipPorts: true
+          # The sea1 servers (the HVs) bind a concrete IPv6 address, so a v6-bound
+          # socket cannot sendto() a v4 peer -- ENETUNREACH. The chart used to
+          # advertise status.hostIP, which is v4 in this v4-primary dual-stack
+          # cluster, so every UDP liveness probe between the k8s clients and the
+          # rest of the DC failed and members flapped constantly. TCP still worked,
+          # which is why the pool looked "alive" while failure detection did not.
+          #
+          # hostNetwork puts the agent in the node's netns so it can see the node's
+          # global v6 and advertise it. On the pod network the only v6 is the ULA
+          # fd40:10:244::/56, which is not routable to 2602:fa6d:10:ffff::/116.
+          hostNetwork: true
+          dnsPolicy: ClusterFirstWithHostNet
+          # Redundant under hostNetwork, and it is what pinned ADVERTISE_IP to v4.
+          exposeGossipPorts: false
+          extraEnvironmentVars:
+            # The chart sets ADVERTISE_IP from a fieldRef earlier in the env list;
+            # Kubernetes takes the last duplicate, so this wins without forking the
+            # chart. go-sockaddr classifies the ULA as private and 2602::/2620:: as
+            # public; consul evaluates the template per-agent. limit 1 guards against
+            # a node ever holding two globals (the template must resolve to exactly
+            # one address or the agent refuses to start).
+            ADVERTISE_IP: '{{ GetPublicInterfaces | include "type" "IPv6" | sort "address" | limit 1 | attr "address" }}'
           join:
             - consul.service.consul
             # fallback to HVs if DNS is broke
