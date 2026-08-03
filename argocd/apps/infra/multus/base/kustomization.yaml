@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - upstream/multus-daemonset-thick.yaml
+images:
+  # Upstream ships the floating `snapshot-thick` tag, which would silently
+  # roll this DaemonSet forward on every node restart. Pin it to the release
+  # the vendored manifest came from.
+  - name: ghcr.io/k8snetworkplumbingwg/multus-cni
+    newTag: v4.3.0-thick

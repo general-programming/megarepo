@@ -1,0 +1,26 @@
+# Multus runs with multusConfigFile: auto, so on every node it lands on it
+# generates 00-multus.conf and becomes the primary CNI, delegating to
+# flannel. If that generation goes wrong, new pods on that node stop getting
+# networking. Confine it to one node until it is proven, then delete this
+# patch to let it run fleet-wide.
+#
+# sea1-k8s-2 is the canary: on the sea1 LAN (so it can host the eventual
+# bridge test), not the cordoned sea1-k8s-1, and not the wobscale one-off
+# sea1-k8s-103-0 which lives on a different subnet entirely.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-multus-ds
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - sea1-k8s-2
