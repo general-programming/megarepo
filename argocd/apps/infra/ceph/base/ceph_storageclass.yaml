@@ -87,10 +87,12 @@ metadata:
   name: ceph-rbd-retain
   annotations:
     # StorageClass parameters are immutable, so editing imageFeatures fails a
-    # normal apply. Replace deletes and recreates it, which is safe: existing
-    # PVs reference the class by name but do not need it to exist, and only
-    # new provisioning reads it.
-    argocd.argoproj.io/sync-options: Replace=true
+    # normal apply. Replace=true on its own is not enough either -- that is
+    # `kubectl replace`, which hits the same immutability error. Force=true is
+    # what makes ArgoCD delete and recreate. Safe here: existing PVs reference
+    # the class by name but do not need it to exist, and only new provisioning
+    # reads it.
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 provisioner: ceph.rbd.csi.ceph.com
 parameters:
   clusterID: ceph
