@@ -28,7 +28,7 @@ metadata:
   name: freepbx
   namespace: freepbx
 spec:
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
