@@ -56,6 +56,43 @@ because the cable may simply have trained that time.
 not recover the drive and coincided with it leaving the PCIe bus entirely.
 Whether the reboots caused that or the cable did is **not established**.
 
+## THE CABLE IS NOT THE ROOT CAUSE — fleet-wide incidence
+
+**Owner reports this lockup has occurred on EVERY host they own that uses an
+SN200.** Multiple hosts, multiple cables, multiple chassis, multiple bays.
+
+That refutes the marginal-U.2-cable explanation as root cause. A per-host
+physical fault cannot produce a fleet-wide pattern; the only common factor is
+the drive model. The cable on sea1-hv-2 is real (UEFI0067 link-training
+failures are logged) but is at most an **aggravator on that one host**, and it
+made the evidence there ambiguous.
+
+The traced mechanism is unaffected — unfinished shutdown → markers 5/6/7 →
+`UNEXSTRT` stub → `Detected a CRASH or PFCRASH section` forces post-crash on
+every boot. What changes is *what makes the shutdown fail to finish*: it must be
+intrinsic to the SN200.
+
+### Leading hypothesis: VCAP / hold-up capacitor degradation
+
+`VCAP has failed, drive is in write protect mode` (StrId 662) exists as a
+distinct firmware posture. A batch of same-age SN200s whose power-loss-
+protection capacitors have aged out would mean every power event starts a PFAIL
+save that cannot complete inside a shrinking hold-up budget → marker 6/7 →
+latch. This explains:
+
+- fleet-wide incidence across unrelated hosts
+- correlation with power events
+- why peak-current workloads (whole-device deallocate) make it worse — a weak
+  cap sags fastest under load
+- why it needs no cable fault and no per-host cause
+
+**Decisive measurement, not yet taken:** read VCAP/hold-up capacitor health on
+several SN200s. If degraded fleet-wide, these drives are at end of life and no
+firmware remedy exists — `KNGND122` (2020) is the newest image that exists.
+
+Competing explanation still open: a genuine firmware defect where the shutdown
+save does not complete under some condition common to all these hosts.
+
 ## Marker 0x06 — my reframing was WRONG, "diagnostic mode" was right
 
 **Retracted.** I proposed that byte[1]==6 meant "PFAIL Shutdown STARTED" rather

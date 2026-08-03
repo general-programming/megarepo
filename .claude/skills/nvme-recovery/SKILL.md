@@ -192,18 +192,24 @@ Still worth suppressing discard on a suspect drive — `mkfs.xfs -K`,
 `mkfs.ext4 -E nodiscard`, no `discard` mount option, LVM `issue_discards = 0`,
 no whole-device `fstrim` — just do not mistake it for a fix.
 
-**A marginal U.2 cable is one fault with two faces, and it is the likeliest
-cause.** U.2 carries `PC12V`/`ATX12V` as well as the PCIe lanes, and the drive
-monitors both rails via `I2C_DEVICE_VMON`. A high-resistance connector gives
-link-training failures on the signal pins *and* I²R rail droop on the power
-pins. The droop is a **genuine brownout**: PFAIL starts, cannot finish, marker
-5/6/7, UNEXSTRT, Post Crash. That is a complete traced chain from bad cable to
-latch **with no firmware bug required**.
+**Suspect the drive, not the cable — this is fleet-wide.** It has been observed
+on every host using an SN200, across different cables, bays and chassis. A
+marginal U.2 cable can aggravate it (U.2 carries `PC12V`/`ATX12V`, monitored via
+`I2C_DEVICE_VMON`, and a high-resistance connector gives both link-training
+failures and I²R rail droop) but cannot explain fleet-wide incidence.
+
+**Leading hypothesis: aged power-loss-protection capacitors.** `VCAP has failed,
+drive is in write protect mode` is a distinct firmware posture. A batch of
+same-age drives with degraded hold-up caps means every power event starts a
+PFAIL save that cannot finish inside the shrinking budget → marker 6/7 → latch.
+That fits the correlation with power events, and fits why peak-current
+workloads make it worse — a weak cap sags fastest under load. **Measure VCAP
+health before deciding to keep or bin.** `KNGND122` (2020) is the newest
+firmware that exists, so a defect persisting there has no fix.
 
 There is no code path from LINKDOWN/PERST to PFAIL (PFAIL lives in PROC0, PCIe
-in PROC9) — the two are correlated siblings of one physical fault, not cause
-and effect. But a disabled port also means `CC.SHN` can never be delivered, so
-the next stop is unavoidably unclean.
+in PROC9). A disabled port does still guarantee an unclean stop, since `CC.SHN`
+can never be delivered.
 
 **This is why a whole-device TRIM latches it: current, not semantics.** A
 whole-device deallocate is the drive's peak-current workload (map invalidate →
