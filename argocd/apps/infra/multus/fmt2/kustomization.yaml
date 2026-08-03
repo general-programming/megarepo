@@ -1,0 +1,11 @@
+# Intentionally empty: multus is sea1-only for now.
+#
+# The infra ApplicationSet is a matrix of clusters x app directories, so every
+# app directory gets an Application on every cluster. Without this overlay the
+# fmt2 Application resolves to a path that does not exist and sits permanently
+# in Unknown/ComparisonError -- which is exactly what five fmt2-only apps are
+# currently doing to sea1. allowEmpty is already set on the ApplicationSet, so
+# an empty overlay syncs cleanly with zero resources.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
