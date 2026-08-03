@@ -47,10 +47,10 @@ as a hardware fault rather than a boot-order mistake.
 
 An installer is interactive, so the serial console is the whole job.
 
-`virtctl console <vm> -n <ns>` is the tool. It is **not** in this repo's
-toolchain — install it from the KubeVirt release matching the cluster
-(`kubectl -n kubevirt get kubevirt kubevirt -o jsonpath='{.status.observedKubeVirtVersion}'`),
-or run it from a pod with the same version.
+`virtctl console <vm> -n <ns>` is the tool, and it ships in the devenv — the
+nixpkgs attribute is `kubevirt`, not `virtctl`. Keep it aligned with the
+cluster (`kubectl -n kubevirt get kubevirt kubevirt -o jsonpath='{.status.observedKubeVirtVersion}'`);
+a client that drifts from virt-api fails obscurely rather than cleanly.
 
 ```bash
 virtctl console sea1-vpn-leaf-2 -n network-vpn      # ctrl-] to detach
