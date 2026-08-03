@@ -1,0 +1,13 @@
+# NetworkAttachmentDefinitions are namespaced, so each VM namespace carries its
+# own rather than reaching cross-namespace into virt/. Six lines is cheaper
+# than the coupling.
+#
+# No IPAM: the guest addresses itself.
+
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: br0-lan
+  namespace: sea1-ipa
+spec:
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","ipam":{}}'

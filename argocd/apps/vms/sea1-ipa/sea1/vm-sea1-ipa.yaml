@@ -1,0 +1,92 @@
+# FreeIPA, migrated off Proxmox VM 113 on sea1-hv-1.
+#
+# One of three replicas -- ipa-fremont-donut (10.65.67.14) and sea420-ipa-1
+# (10.3.0.4) were both confirmed serving Kerberos, LDAP and HTTPS before this
+# was touched, so taking it down does not break authentication.
+#
+# It does not serve DNS (port 53 closed), so unlike sea1-core there is no
+# bootstrap dependency to worry about.
+#
+# Rollback: pool/vm-113-disk-1@pre-kubevirt (protected snapshot) and VM 113
+# left defined but stopped on the hypervisor.
+---
+# RWX Block from the start, so the guest is live-migratable without the second
+# PVC-and-copy dance freepbx needed. RWX is only about the migration handover;
+# the guest filesystem stays single-writer.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sea1-ipa-root
+  namespace: sea1-ipa
+spec:
+  # Retain, so removing the claim leaves the image intact.
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 32Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: sea1-ipa
+  namespace: sea1-ipa
+spec:
+  # Halted until the PVC is populated from pool/vm-113-disk-1.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: sea1-ipa
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+      # Drain migrates instead of killing. Kerberos tolerates a reboot far
+      # worse than a pause -- tickets survive a live migration untouched.
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 2Gi
+        firmware:
+          # Preserved from the Proxmox smbios1 uuid.
+          uuid: f867f962-8fbb-40b6-8d46-a23ade540748
+          bootloader:
+            efi:
+              # KubeVirt supplies a fresh OVMF NVRAM, so the old boot entry is
+              # gone; the guest boots via the removable fallback path, which is
+              # added to its ESP before first boot.
+              secureBoot: false
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                # Matches Proxmox's virtio-scsi-single.
+                bus: scsi
+          interfaces:
+            - name: lan
+              bridge: {}
+              # FreeIPA binds its identity to hostname and address, so the MAC
+              # is carried over to keep 10.3.2.15 and the guest's own NIC name
+              # (ens18 here, pinned by a .link file on the image).
+              macAddress: "BC:24:11:FC:B9:D9"
+      networks:
+        - name: lan
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: sea1-ipa-root
