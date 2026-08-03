@@ -151,6 +151,15 @@ on the image and blocks `rbd rm` later.
 These live on the image you copied **to**. Re-copying from the source loses
 them; that bit once already.
 
+> **Copy once, boot once.** Re-copying after the guest has run rolls it back
+> in time. Harmless for a stateless box, corrupting for anything that
+> replicates — it cost a FreeIPA replication agreement (`Missing data
+> encountered`, peer RUV ahead of the restored changelog, fixed only by
+> `ipa-replica-manage re-initialize --from=<healthy peer>`). If you must
+> redo a guest (renaming its namespace, say), destroy the first attempt
+> *before* it ever boots, or plan to re-initialize it against its peers
+> afterwards.
+
 **EFI.** KubeVirt supplies a *fresh* OVMF NVRAM, so any guest that booted
 from a vendor path plus an NVRAM entry fails at
 `No bootable option or device was found`. Mount the ESP (partition 1) and
@@ -209,6 +218,11 @@ kubectl -n <ns> get vmi <name> -o jsonpath='{.status.interfaces}'
 
 Then reachability from a throwaway pod (`kubectl run ... --image=busybox:1.36`)
 for each address and service port the guest is supposed to serve.
+
+Ports answering is not validation. Get inside and check the service's own
+health — for clustered ones, that its peers still accept it. `vssh` may fail
+on non-fleet guests (its CA certs exhaust `MaxAuthTries`); plain
+`ssh -o BatchMode=yes root@<ip>` usually works where vssh does not.
 
 Leave the Proxmox VM **defined but stopped** and the `@pre-kubevirt` snapshot
 in place for at least a week.
