@@ -46,6 +46,21 @@ nodes:
         routes: &k8s-cp-routes
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+          # Standby, not primary. These were never bridged, so accept_ra was
+          # never reconciled away and they still hold an RA-learned default --
+          # working by inheritance, which is exactly the state the workers were
+          # in right up until it silently stopped.
+          #
+          # The metric matters. At the default 1024 this collides with the RA
+          # route and the kernel rejects it EEXIST, which leaves
+          # network.RouteSpecController crash-looping on retry -- verified on
+          # cp-0. At 2048 it installs alongside as a lower-priority backup: RA
+          # keeps winning while it works, and this takes over if it ever stops.
+          # The workers do not need the offset, having no RA route to collide
+          # with.
+          - network: "::/0"
+            gateway: "2602:fa6d:10:ffff::1"
+            metric: 2048
   - <<: *k8s-cp
     hostname: sea1-k8s-cp-1
     ipAddress: "10.3.2.17"
