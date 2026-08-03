@@ -1,0 +1,109 @@
+# sea1-vpn-spine-1, migrated off Proxmox VM 101 on sea1-hv-1.
+#
+# VyOS, the riskier half of the sea1 spine pair. It is the only spine holding
+# wg51911 -> sea420-acc-v-hv2 up; spine-2's session to that peer has never
+# come up. So this migration briefly costs sea420-acc-v-hv2 its sea1 spine
+# path, which was accepted deliberately rather than discovered.
+#
+# barf reports CONFIG CONSISTENT: yes, so the running config matches
+# network.yml exactly and this guest is reproducible from git either way.
+#
+# Rollback: pool/vm-101-disk-0@pre-kubevirt (protected) and VM 111 left
+# defined but stopped on the hypervisor.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: spine-1-root
+  namespace: network-vpn
+spec:
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 32Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: sea1-vpn-spine-1
+  namespace: network-vpn
+spec:
+  # Halted until the PVC is populated from pool/vm-101-disk-0.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: sea1-vpn-spine-1
+        # Drives the anti-affinity below. Layer, not hostname, so the rule
+        # keeps holding as more spines or leaves are added.
+        vpn-layer: spine
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+        podAntiAffinity:
+          # Hard, not preferred: two spines sharing a hypervisor defeats the
+          # point of having two. Three bridged nodes and two spines leaves one
+          # node free, so a live migration still has somewhere to land.
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: vpn-layer
+                    operator: In
+                    values:
+                      - spine
+              topologyKey: kubernetes.io/hostname
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          cores: 2
+        memory:
+          guest: 2Gi
+        firmware:
+          uuid: 2c1a5bed-3e73-488b-839e-cc02683660ac
+          # No bootloader stanza on purpose. Unlike freepbx and freeipa this
+          # guest is SeaBIOS -- Proxmox set no bios: ovmf and no efidisk -- and
+          # KubeVirt defaults to BIOS when firmware.bootloader is unset. None
+          # of the EFI fallback work those two needed applies here.
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                bus: scsi
+          # Two NICs, both onto the same LAN bridge, matching Proxmox where
+          # net0 and net1 were both on vmbr0.
+          #
+          # VyOS pins both by hw-id in config.boot (eth0 -> 7b:20:5c,
+          # eth1 -> 86:64:93), so preserving the addresses binds them
+          # correctly whatever PCI order KubeVirt hands out. Without those
+          # pins, a swap would silently put the external config on the
+          # internal port.
+          interfaces:
+            - name: external
+              bridge: {}
+              macAddress: "BC:24:11:7B:20:5C"
+            - name: internal
+              bridge: {}
+              macAddress: "BC:24:11:86:64:93"
+      networks:
+        - name: external
+          multus:
+            networkName: br0-lan
+        - name: internal
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: spine-1-root
