@@ -3,4 +3,4 @@ kind: Kustomization
 resources:
   - namespace.yaml
   - nad-br0-lan.yaml
-  - vm-sea1-ipa.yaml
+  - vm-freeipa.yaml

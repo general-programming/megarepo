@@ -1,4 +1,6 @@
-# FreeIPA, migrated off Proxmox VM 113 on sea1-hv-1.
+# FreeIPA, migrated off Proxmox VM 113 on sea1-hv-1. The guest keeps its own
+# hostname (sea1-ipa.generalprogramming.org); these object names are the
+# service, not the host.
 #
 # One of three replicas -- ipa-fremont-donut (10.65.67.14) and sea420-ipa-1
 # (10.3.0.4) were both confirmed serving Kerberos, LDAP and HTTPS before this
@@ -16,8 +18,8 @@
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: sea1-ipa-root
-  namespace: sea1-ipa
+  name: freeipa-root
+  namespace: freeipa
 spec:
   # Retain, so removing the claim leaves the image intact.
   storageClassName: ceph-rbd-retain
@@ -31,15 +33,16 @@ spec:
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
-  name: sea1-ipa
-  namespace: sea1-ipa
+  name: freeipa
+  namespace: freeipa
 spec:
 
-  runStrategy: Always
+  # Halted until the PVC is populated from pool/vm-113-disk-1.
+  runStrategy: Halted
   template:
     metadata:
       labels:
-        kubevirt.io/vm: sea1-ipa
+        kubevirt.io/vm: freeipa
     spec:
       affinity:
         nodeAffinity:
@@ -89,4 +92,4 @@ spec:
       volumes:
         - name: rootdisk
           persistentVolumeClaim:
-            claimName: sea1-ipa-root
+            claimName: freeipa-root
