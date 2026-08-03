@@ -1,0 +1,24 @@
+apiVersion: kubevirt.io/v1
+kind: KubeVirt
+metadata:
+  name: kubevirt
+  namespace: kubevirt
+  annotations:
+    # The CRD ships in the same kustomization; without a later wave the first
+    # sync tries to apply this before the CRD is established and errors out.
+    argocd.argoproj.io/sync-wave: "1"
+spec:
+  certificateRotateStrategy: {}
+  configuration:
+    developerConfiguration:
+      # Nested virt is live: the workers run `cpu: host` on hypervisors with
+      # kvm_amd nested=Y, and /dev/kvm is present on the Talos nodes. Leaving
+      # useEmulation unset keeps QEMU on hardware virt -- if it ever silently
+      # flips to TCG emulation, VMs still boot but run ~20x slower.
+      useEmulation: false
+  # imagePullPolicy/imageTag intentionally unset: virt-operator then pins every
+  # component to its own version, so bumping the vendored operator manifest is
+  # the single source of truth for the KubeVirt version.
+  workloadUpdateStrategy:
+    workloadUpdateMethods:
+      - LiveMigrate
