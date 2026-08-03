@@ -37,8 +37,7 @@ metadata:
   namespace: freeipa
 spec:
 
-  # Halted until the PVC is populated from pool/vm-113-disk-1.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
