@@ -281,6 +281,31 @@ kubectl -n <ns> get vmim <vm>-migrate -o jsonpath='{.status.phase}'
 kubectl -n <ns> get vmi <vm> -o jsonpath='{.status.nodeName}'
 ```
 
+## Migrating the guest the cluster depends on
+
+If the guest routes the cluster's traffic, GitOps cannot start it — **GitHub
+is IPv4-only**, so while the v4 gateway is down ArgoCD cannot fetch the commit
+that would bring it back. Push from your workstation still works; the *cluster*
+is the side that cannot pull.
+
+Break the deadlock by applying that one manifest directly
+(`kubectl apply -f <vm>.yaml`) over a path that does not depend on the guest,
+then let ArgoCD adopt it once connectivity returns — it reconciles clean,
+since the object already matches git.
+
+Before starting, prove the out-of-band path rather than assuming it:
+
+```bash
+vssh localadmin@<hv-v6-addr> hostname                     # hypervisor
+sed 's|server: https://.*|server: https://[<cp-v6>]:6443|' ~/.kube/config-<c> > /tmp/kc-v6
+KUBECONFIG=/tmp/kc-v6 kubectl get nodes                   # API (cert carries the node's v6 SAN)
+talosctl -n <cp-v6> -e <cp-v6> version                    # Talos
+```
+
+Expect degraded-but-working DNS during the window: Talos hostDNS picks
+upstreams at random, so with v4 dead roughly half of queries stall until they
+retry against a v6 resolver.
+
 ## ArgoCD traps
 
 - **`prune: false` on the `vms` project is deliberate.** A pruned VM takes its
