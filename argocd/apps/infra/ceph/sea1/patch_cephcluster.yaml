@@ -41,7 +41,10 @@ spec:
     externalMonIDs:
       - sea1-hv-0
       - sea1-hv-1
-      - sea1-hv-2
+      # sea1-hv-2 drained 2026-08-03 (ceph orch apply mon --placement=...).
+      # Names are removed here only AFTER the mon is gone from the monmap --
+      # doing it the other way round un-shields a mon that still exists and
+      # re-arms the removal at health.go:250.
   cephVersion:
     # All 35 daemons on sea1 are 20.2.1 tentacle. The 19.2.3 squid visible on
     # the hypervisors is Proxmox's host CLI package, not the cluster.
