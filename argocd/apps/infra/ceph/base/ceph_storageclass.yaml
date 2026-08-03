@@ -74,6 +74,13 @@ allowVolumeExpansion: true
 # worst case is a manual reattach instead of data loss.
 #
 # Pairs with prune: false on the vms AppProject; both layers are deliberate.
+#
+# imageFeatures is deliberately just layering, unlike the other classes here.
+# KubeVirt live migration needs ReadWriteMany, which means the image is mapped
+# on the source and target nodes at once, and object-map/fast-diff/journaling
+# all depend on exclusive-lock -- which serialises access and stalls I/O when
+# two clients hold the image. Only one QEMU writes at a time during a
+# migration handover, so dropping the lock is safe here and required for RWX.
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
@@ -83,7 +90,7 @@ parameters:
   clusterID: ceph
   pool: k8s-rbd
   imageFormat: '2'
-  imageFeatures: layering,fast-diff,object-map,deep-flatten,exclusive-lock
+  imageFeatures: layering
   csi.storage.k8s.io/provisioner-secret-name: rook-csi-rbd-provisioner
   csi.storage.k8s.io/provisioner-secret-namespace: ceph
   csi.storage.k8s.io/controller-expand-secret-name: rook-csi-rbd-provisioner

@@ -6,6 +6,9 @@
 # is a protected snapshot kept as the rollback, and VM 911 is left defined but
 # stopped on the hypervisor as a second one.
 ---
+# Superseded by freepbx-root-rwx below, kept as the rollback disk. Not deleted
+# on purpose: it holds the known-good state from the Proxmox migration, and the
+# vms project no longer prunes.
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -22,13 +25,36 @@ spec:
     requests:
       storage: 64Gi
 ---
+# The live disk. ReadWriteMany because live migration maps the image on the
+# source and target nodes simultaneously during handover -- RWO makes the VMI
+# report LiveMigratable=False, which is what the original claim did. Access
+# modes are immutable on a bound claim, hence a second PVC and a copy rather
+# than an edit.
+#
+# RWX here is only about the handover; the guest filesystem is still
+# single-writer, since exactly one QEMU is running the VM at any moment.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: freepbx-root-rwx
+  namespace: freepbx
+spec:
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 64Gi
+---
 apiVersion: kubevirt.io/v1
 kind: VirtualMachine
 metadata:
   name: freepbx
   namespace: freepbx
 spec:
-  runStrategy: Always
+  # Halted while the disk is copied onto the RWX claim.
+  runStrategy: Halted
   template:
     metadata:
       labels:
