@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"math"
 	"path"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/general-programming/megarepo/go/common/pytext"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/progress"
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 )
 
@@ -271,17 +273,29 @@ func (u *Updater) Execute(ctx context.Context, plan *Plan) (string, error) {
 	}
 
 	// Not a device write, but after the gates so a refusal costs no bandwidth.
+	fmt.Fprintf(out, "%sfetching the %s image (a ~700MB download unless it is already cached)\n", prefix, plan.TargetVersion)
 	imagePath, size, err := u.Provider.Download(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%s: downloading image: %w", plan.Hostname, err)
+		return "", fmt.Errorf("%s: downloading the %s image: %w", plan.Hostname, plan.TargetVersion, err)
+	}
+	if imagePath != "" {
+		fmt.Fprintf(out, "%simage ready: %s (%s)\n", prefix, filepath.Base(imagePath), progress.Bytes(size))
 	}
 	signature, err := u.Provider.DownloadSignature(ctx)
 	if err != nil {
-		return "", fmt.Errorf("%s: downloading image signature: %w", plan.Hostname, err)
+		return "", fmt.Errorf("%s: downloading the %s image signature: %w", plan.Hostname, plan.TargetVersion, err)
+	}
+	if signature != "" {
+		fmt.Fprintf(out, "%ssignature ready: %s\n", prefix, filepath.Base(signature))
+	}
+	if imagePath != "" {
+		fmt.Fprintf(out, "%spublishing the image to the firmware mirror\n", prefix)
+	} else {
+		fmt.Fprintf(out, "%snothing to fetch or mirror: the image URL was given on the command line\n", prefix)
 	}
 	url, err := u.Mirror.Publish(ctx, imagePath, signature)
 	if err != nil {
-		return "", fmt.Errorf("%s: mirroring image: %w", plan.Hostname, err)
+		return "", fmt.Errorf("%s: mirroring the %s image: %w", plan.Hostname, plan.TargetVersion, err)
 	}
 	fmt.Fprintf(out, "%simage mirrored at %s\n", prefix, url)
 
@@ -352,7 +366,7 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	defer func() { _ = conn.Close() }()
 
 	if plan.InstallNeeded {
-		fmt.Fprintf(out, "%srunning pre-checks\n", prefix)
+		fmt.Fprintf(out, "%srunning pre-checks on the device (needs %d MiB free on /, no unsaved config)\n", prefix, requiredMB)
 		_, ok, err := conn.RunScript(ctx, sshx.ScriptRequest{
 			Name:       "barf-precheck.sh",
 			Content:    sshx.PrecheckScript(requiredMB, "/"),
@@ -377,7 +391,7 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 			}
 		}
 
-		fmt.Fprintf(out, "%sinstalling image from %s\n", prefix, url)
+		fmt.Fprintf(out, "%sinstalling %s on the device; it downloads %s itself now\n", prefix, version, url)
 		_, ok, err = conn.RunScript(ctx, sshx.ScriptRequest{
 			Name:       "barf-install.sh",
 			Content:    sshx.InstallScript(url, version),
@@ -394,7 +408,11 @@ func (u *Updater) installAndReboot(ctx context.Context, plan *Plan, url string, 
 	}
 
 	drainWait := plan.DrainWait
-	fmt.Fprintf(out, "%slaunching detached drain+reboot\n", prefix)
+	drainNote := "no BGP drain (no ASN), straight to REBOOT"
+	if plan.DrainBGP {
+		drainNote = "BGP shutdown, " + HumanDuration(drainWait) + " drain, then REBOOT"
+	}
+	fmt.Fprintf(out, "%slaunching the detached drain+reboot: %s\n", prefix, drainNote)
 	logPath, err := conn.RunDetached(ctx, "barf-reboot.sh",
 		sshx.DrainAndRebootScript(version, drainWaitSeconds(drainWait), plan.DrainBGP))
 	if err != nil {

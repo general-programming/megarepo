@@ -11,6 +11,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/progress"
 )
 
 // VaultSecretPath holds the mirror's S3 API credentials, Python's VAULT_SECRET
@@ -210,17 +212,23 @@ func (m *Mirror) ObjectSize(ctx context.Context, key string) (size int64, found 
 
 // Upload publishes a local file under the mirror's prefix, skipping the
 // transfer when a same-size copy is there and verifying the size afterwards.
+// Byte progress goes to the Sink on ctx: the upload moves the same ~700MB the
+// download did and was equally silent.
 func (m *Mirror) Upload(ctx context.Context, local string) error {
 	info, err := os.Stat(local)
 	if err != nil {
 		return fmt.Errorf("firmware: stat %s: %w", local, err)
 	}
 	size := info.Size()
-	key := m.Key(filepath.Base(local))
+	name := filepath.Base(local)
+	key := m.Key(name)
+	sink := progress.FromContext(ctx)
+	transfer := progress.Transfer{Op: progress.OpUpload, Name: name, Total: size, URL: m.PublicURL(name)}
 
 	if existing, found, err := m.ObjectSize(ctx, key); err != nil {
 		return err
 	} else if found && existing == size {
+		sink.Skip(transfer, "the mirror already has these bytes")
 		return nil
 	}
 
@@ -234,23 +242,34 @@ func (m *Mirror) Upload(ctx context.Context, local string) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, target, f)
+	// The counter wraps the body the transport reads from, so bytes are
+	// reported as they go out on the wire and nothing else is changed.
+	sink.Start(transfer)
+	body := progress.NewReader(f, sink)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPut, target, body)
 	if err != nil {
+		sink.Finish(0, err)
 		return err
 	}
 	req.ContentLength = size
 	if err := signV4(req, m.creds, mirrorRegion, "s3", unsignedPayload, m.now()); err != nil {
+		sink.Finish(body.N(), err)
 		return err
 	}
 
 	resp, err := m.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("firmware: PUT %s: %w", key, err)
+		sink.Finish(body.N(), err)
+		return fmt.Errorf("firmware: PUT %s to %s: failed after %s of %s: %w",
+			key, m.endpoint, progress.Bytes(body.N()), progress.Bytes(size), err)
 	}
 	_ = resp.Body.Close()
 	if resp.StatusCode/100 != 2 {
-		return fmt.Errorf("firmware: PUT %s: %s", key, resp.Status)
+		statusErr := fmt.Errorf("firmware: PUT %s to %s: %s", key, m.endpoint, resp.Status)
+		sink.Finish(body.N(), statusErr)
+		return statusErr
 	}
+	sink.Finish(body.N(), nil)
 
 	mirrored, found, err := m.ObjectSize(ctx, key)
 	if err != nil {

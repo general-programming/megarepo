@@ -11,6 +11,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/general-programming/megarepo/go/pkg/barf/progress"
 )
 
 // Asset is one downloadable release artifact.
@@ -241,14 +243,19 @@ func (v *VyOS) Signature(ctx context.Context) (Asset, bool, error) {
 
 // Download implements Provider. A cached file of the expected size is reused;
 // a short download is discarded rather than left as a valid-looking entry.
+// Byte progress goes to the Sink on ctx, if any; every failure names the URL
+// and how far it got, so a stall is never mistaken for a hung server.
 func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 	if a.URL == "" {
 		return "", fmt.Errorf("firmware: asset %q has no download URL", a.Name)
 	}
 	dir := v.cacheDir()
 	target := filepath.Join(dir, a.Name)
+	sink := progress.FromContext(ctx)
+	transfer := progress.Transfer{Op: progress.OpDownload, Name: a.Name, Total: a.Size, URL: a.URL}
 
 	if info, err := os.Stat(target); err == nil && info.Size() == a.Size {
+		sink.Skip(transfer, "already in the local cache at "+target)
 		return target, nil
 	}
 
@@ -262,11 +269,15 @@ func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 	}
 	resp, err := v.downloadClient().Do(req)
 	if err != nil {
-		return "", fmt.Errorf("firmware: downloading %s: %w", a.Name, err)
+		return "", fmt.Errorf("firmware: downloading %s from %s: %w", a.Name, a.URL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("firmware: downloading %s: %s", a.Name, resp.Status)
+		return "", fmt.Errorf("firmware: downloading %s from %s: %s", a.Name, a.URL, resp.Status)
+	}
+	// An unknown asset size still gets a progress line if the server declares one.
+	if transfer.Total <= 0 && resp.ContentLength > 0 {
+		transfer.Total = resp.ContentLength
 	}
 
 	// The scratch file MUST be unique: a deterministic "<name>.partial" lets
@@ -279,20 +290,31 @@ func (v *VyOS) Download(ctx context.Context, a Asset) (string, error) {
 	partial := f.Name()
 	// CreateTemp makes the file 0600; the mirror may serve the cache.
 	_ = f.Chmod(0o644)
-	written, copyErr := io.Copy(f, resp.Body)
+
+	// The counter wraps the FILE, not the body: it reports bytes that actually
+	// landed on disk, and passes them through untouched.
+	sink.Start(transfer)
+	written, copyErr := io.Copy(progress.NewWriter(f, sink), resp.Body)
 	closeErr := f.Close()
 	if copyErr != nil {
+		sink.Finish(written, copyErr)
 		_ = os.Remove(partial)
-		return "", fmt.Errorf("firmware: downloading %s: %w", a.Name, copyErr)
+		return "", fmt.Errorf("firmware: downloading %s from %s: failed after %s of %s: %w",
+			a.Name, a.URL, progress.Bytes(written), progress.Bytes(a.Size), copyErr)
 	}
 	if closeErr != nil {
+		sink.Finish(written, closeErr)
 		_ = os.Remove(partial)
 		return "", fmt.Errorf("firmware: writing %s: %w", partial, closeErr)
 	}
 	if a.Size > 0 && written != a.Size {
+		short := fmt.Errorf("firmware: short download for %s from %s: got %d bytes, want %d",
+			a.Name, a.URL, written, a.Size)
+		sink.Finish(written, short)
 		_ = os.Remove(partial)
-		return "", fmt.Errorf("firmware: short download for %s: got %d bytes, want %d", a.Name, written, a.Size)
+		return "", short
 	}
+	sink.Finish(written, nil)
 	// Rename is atomic within the directory: no reader sees a half-written mix.
 	if err := os.Rename(partial, target); err != nil {
 		_ = os.Remove(partial)

@@ -17,6 +17,7 @@ import (
 
 	"github.com/general-programming/megarepo/go/pkg/barf/lifecycle"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/progress"
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 )
 
@@ -752,6 +753,80 @@ func TestDeviceUpdateAllRunsTheWholeFleet(t *testing.T) {
 	}
 	if !strings.Contains(out, "sea1-leaf-0") {
 		t.Fatalf("the announcement did not name the hosts:\n%s", out)
+	}
+}
+
+// TestDeviceUpdateNarratesEveryPhase: the run is minutes long and reboots
+// production kit, so no phase may be silent.
+func TestDeviceUpdateNarratesEveryPhase(t *testing.T) {
+	d := fleetHarness(t)
+
+	if err := d.run(t, "device", "update", "sea1-leaf-0", "--yes", "--image-url", imageURL); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	out := d.out.String()
+	for _, want := range []string{
+		"image source: --image-url " + imageURL,
+		"[sea1-leaf-0] resolving the running version, the latest release and fleet redundancy",
+		"[sea1-leaf-0] fetching the " + newVersion + " image",
+		"[sea1-leaf-0] image mirrored at " + imageURL,
+		"[sea1-leaf-0] running pre-checks on the device",
+		"[sea1-leaf-0] installing " + newVersion + " on the device; it downloads " + imageURL,
+		"[sea1-leaf-0] launching the detached drain+reboot: BGP shutdown,",
+		"[sea1-leaf-0] device rebooting",
+		"[sea1-leaf-0] waiting for the device to come alive",
+	} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("update output never said %q:\n%s", want, out)
+		}
+	}
+	// Nothing may emit ANSI: the harness is not a terminal.
+	if strings.ContainsAny(out, "\x1b") {
+		t.Fatalf("non-terminal output must be ANSI-free:\n%q", out)
+	}
+}
+
+// TestProgressSinkFollowsTheTerminal is the piping guarantee at the wiring
+// level: --plain and non-terminals never get in-place redraws.
+func TestProgressSinkFollowsTheTerminal(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		interactive bool
+	}{{"terminal", true}, {"plain or piped", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			var buf bytes.Buffer
+			o := &Options{Out: &buf}
+			o.SetInteractive(tc.interactive)
+
+			opts := o.progressOptions("sea1-leaf-0")
+			if opts.Terminal != tc.interactive {
+				t.Fatalf("Terminal = %v, want %v", opts.Terminal, tc.interactive)
+			}
+			if opts.Prefix != "[sea1-leaf-0] " {
+				t.Fatalf("prefix = %q", opts.Prefix)
+			}
+
+			sink := o.progressSink("sea1-leaf-0")
+			sink.Start(progress.Transfer{Op: progress.OpDownload, Name: "image.iso", Total: 1000})
+			sink.Finish(1000, nil)
+			got := buf.String()
+			if !strings.Contains(got, "[sea1-leaf-0] downloading image.iso") ||
+				!strings.Contains(got, "[sea1-leaf-0] downloaded image.iso") {
+				t.Fatalf("sink output = %q", got)
+			}
+			if !tc.interactive && strings.ContainsAny(got, "\r\x1b") {
+				t.Fatalf("plain output must be ANSI/CR free: %q", got)
+			}
+		})
+	}
+}
+
+// A --plain run must stay ANSI-free even attached to a terminal.
+func TestDeviceUpdatePlainStaysAnsiFree(t *testing.T) {
+	var buf bytes.Buffer
+	o := &Options{Out: &buf, Plain: true}
+	if o.progressOptions("sea1-leaf-0").Terminal {
+		t.Fatal("--plain must never redraw in place")
 	}
 }
 

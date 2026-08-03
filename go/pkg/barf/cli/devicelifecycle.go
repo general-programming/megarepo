@@ -18,6 +18,7 @@ import (
 	"github.com/general-programming/megarepo/go/pkg/barf/firmware"
 	"github.com/general-programming/megarepo/go/pkg/barf/lifecycle"
 	"github.com/general-programming/megarepo/go/pkg/barf/model"
+	"github.com/general-programming/megarepo/go/pkg/barf/progress"
 	"github.com/general-programming/megarepo/go/pkg/barf/sshx"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -426,6 +427,12 @@ func runDeviceUpdate(ctx context.Context, o *Options, targets []string, f update
 	if err != nil {
 		return err
 	}
+	if f.imageURL != "" {
+		o.printf("image source: --image-url %s (no download, no mirror upload)\n", f.imageURL)
+	} else {
+		o.printf("image source: the latest %s release, cached under %s and mirrored for the devices\n",
+			strings.ToLower(hosts[0].DeviceType), firmware.CacheDir())
+	}
 	credentials, err := newSupertechCredentials()
 	if err != nil {
 		return fmt.Errorf("resolving the shared SSH account: %w", err)
@@ -555,7 +562,9 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 	o := r.o
 
 	// The planning client is read-only, so deciding cannot change the device.
-	// The redundancy check runs NOW: any older verdict is stale.
+	// The redundancy check runs NOW: any older verdict is stale. It talks to
+	// the device, the release feed and every other device, so say so first.
+	o.printf("[%s] resolving the running version, the latest release and fleet redundancy\n", host.Hostname)
 	planner, err := r.newUpdater(ctx, host, false)
 	if err != nil {
 		return "", err
@@ -614,7 +623,9 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 	if err != nil {
 		return "", err
 	}
-	result, err := executor.Execute(ctx, plan)
+	// Byte progress for the image download and the mirror upload rides the
+	// context down into firmware, which must not know what a terminal is.
+	result, err := executor.Execute(progress.WithSink(ctx, o.progressSink(plan.Hostname)), plan)
 	if err != nil {
 		return "", err
 	}
@@ -623,6 +634,23 @@ func (r *updateRun) one(ctx context.Context, host *model.Host, gate writeGate, a
 		return resultForcedUpdated, nil
 	}
 	return result, nil
+}
+
+// progressSink renders byte transfers for one device, tagged with its
+// hostname so it reads like every other line of the run. In-place redraws
+// happen ONLY on a real terminal: --plain and piped output get throttled,
+// newline-delimited lines instead of a smear of control characters.
+func (o *Options) progressSink(hostname string) progress.Sink {
+	return progress.NewReporter(o.Out, o.progressOptions(hostname))
+}
+
+// progressOptions is split out so the terminal/plain decision is testable
+// without a pty.
+func (o *Options) progressOptions(hostname string) progress.Options {
+	return progress.Options{
+		Prefix:   "[" + hostname + "] ",
+		Terminal: o.interactive(),
+	}
 }
 
 // newFleetProbe builds the liveness probe backing one redundancy check.

@@ -109,10 +109,11 @@ func (f *fakeSSH) recorded() []string {
 }
 
 type fakeProvider struct {
-	latest    string
-	published string
-	mu        sync.Mutex
-	downloads int
+	latest      string
+	published   string
+	downloadErr error
+	mu          sync.Mutex
+	downloads   int
 }
 
 func (p *fakeProvider) LatestVersion(context.Context) (string, error) { return p.latest, nil }
@@ -124,6 +125,9 @@ func (p *fakeProvider) Download(context.Context) (string, int64, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.downloads++
+	if p.downloadErr != nil {
+		return "", 0, p.downloadErr
+	}
 	return "/tmp/image.iso", 900 << 20, nil
 }
 
@@ -586,5 +590,53 @@ func TestVersionFromURL(t *testing.T) {
 		if got := VersionFromURL(in); got != want {
 			t.Fatalf("VersionFromURL(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+// TestExecuteNarratesTheStagingPhases: a download and a mirror upload of
+// ~700MB each used to happen with no output at all, so a slow transfer looked
+// like a hang. Every phase now names itself, with the version and the size.
+func TestExecuteNarratesTheStagingPhases(t *testing.T) {
+	var out bytes.Buffer
+	updater, _, _, _ := newUpdater(t, Options{AllowWrites: true, Out: &out})
+
+	plan, err := updater.BuildPlan(context.Background())
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	if _, err := updater.Execute(context.Background(), plan); err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	got := out.String()
+	for _, want := range []string{
+		"[sea1-leaf-0] fetching the 2026.06.30-0048-rolling image",
+		"[sea1-leaf-0] image ready: image.iso (900.0 MiB)",
+		"[sea1-leaf-0] publishing the image to the firmware mirror",
+		"[sea1-leaf-0] image mirrored at https://mirror.invalid/",
+		"[sea1-leaf-0] running pre-checks on the device (needs 2048 MiB free on /",
+		"[sea1-leaf-0] installing 2026.06.30-0048-rolling on the device",
+		"[sea1-leaf-0] launching the detached drain+reboot: BGP shutdown, 5s drain, then REBOOT",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("Execute never said %q:\n%s", want, got)
+		}
+	}
+}
+
+// TestExecuteDownloadFailureNamesTheVersion keeps the failure legible when the
+// transfer, not the device, is what broke.
+func TestExecuteDownloadFailureNamesTheVersion(t *testing.T) {
+	var out bytes.Buffer
+	updater, _, _, provider := newUpdater(t, Options{AllowWrites: true, Out: &out})
+	plan, err := updater.BuildPlan(context.Background())
+	if err != nil {
+		t.Fatalf("build plan: %v", err)
+	}
+	provider.downloadErr = errors.New("context deadline exceeded while reading body")
+
+	if _, err := updater.Execute(context.Background(), plan); err == nil ||
+		!strings.Contains(err.Error(), "downloading the 2026.06.30-0048-rolling image") {
+		t.Fatalf("error = %v", err)
 	}
 }
