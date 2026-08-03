@@ -160,7 +160,11 @@ them; that bit once already.
 > *before* it ever boots, or plan to re-initialize it against its peers
 > afterwards.
 
-**EFI.** KubeVirt supplies a *fresh* OVMF NVRAM, so any guest that booted
+**EFI** — only when `qm config` shows `bios: ovmf`. A SeaBIOS guest (no
+`bios:` line, no `efidisk`) needs nothing at all: leave `firmware.bootloader`
+unset and KubeVirt defaults to BIOS.
+
+KubeVirt supplies a *fresh* OVMF NVRAM, so any guest that booted
 from a vendor path plus an NVRAM entry fails at
 `No bootable option or device was found`. Mount the ESP (partition 1) and
 ensure the removable-media path exists **with grub beside it** — shim
@@ -177,6 +181,13 @@ Debian ships no `EFI/BOOT` at all. Fedora ships `BOOTX64.EFI` + `fbx64.efi`
 but *not* `grubx64.efi`, so it falls through to `fbx64.efi`, which recreates
 an NVRAM entry and reboots — and KubeVirt's NVRAM does not persist, so that
 repeats on every start. Copying grub in makes it deterministic.
+
+**Multi-NIC guests**: declare the interfaces in the same order as Proxmox's
+`net0`, `net1`, … and preserve every MAC. Check first whether the guest pins
+them itself — VyOS carries `hw-id` per interface in `config.boot`, which binds
+`eth0`/`eth1` by MAC regardless of PCI order and removes the risk entirely.
+Without such a pin, a swap silently puts the external config on the internal
+port.
 
 **NIC renaming.** The card lands on a different PCI slot, so a guest whose
 config is keyed to an interface name comes up with **no network and no
@@ -219,10 +230,23 @@ kubectl -n <ns> get vmi <name> -o jsonpath='{.status.interfaces}'
 Then reachability from a throwaway pod (`kubectl run ... --image=busybox:1.36`)
 for each address and service port the guest is supposed to serve.
 
-Ports answering is not validation. Get inside and check the service's own
-health — for clustered ones, that its peers still accept it. `vssh` may fail
-on non-fleet guests (its CA certs exhaust `MaxAuthTries`); plain
-`ssh -o BatchMode=yes root@<ip>` usually works where vssh does not.
+Ports answering is not validation, and neither is a status string — a
+FreeIPA agreement read `Replica acquired successfully` for seven days while
+dead. **Capture the service's own health before you shut the guest down**, so
+"after" has something to equal. For a barf-managed VyOS device that is
+`show bgp summary` per neighbour with prefix counts; the migration is good
+when every session returns with the same counts.
+
+That baseline also catches asymmetry the migration did not cause: it is how
+sea1-vpn-spine-1 turned out to be the only spine holding a peer up, making it
+the riskier half of a "redundant" pair.
+
+`vssh` may fail on non-fleet guests (its CA certs exhaust `MaxAuthTries`);
+plain `ssh -o BatchMode=yes root@<ip>` usually works where vssh does not. For
+network devices use barf — `go run ./go/cmd/barf` from the repo root (it was
+ported from Python; `.venv/bin/barf` is a stale shim). `barf status` gives
+uptime, version and config drift, and piping a command into
+`barf device ssh <host>` works for read-only queries.
 
 Leave the Proxmox VM **defined but stopped** and the `@pre-kubevirt` snapshot
 in place for at least a week.
