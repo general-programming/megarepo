@@ -4,6 +4,9 @@ namespace: victoriametrics
 resources:
   - ../base
   - alerts-ceph-deadman.yaml
+  # fmt2-only: Loki runs here, so only this cluster's vmselect has the metrics
+  # these alerts query. Evaluated in sea1, LokiAbsent could never be satisfied.
+  - alerts-loki.yaml
   - scrape-smartctl.yaml
   - cluster.yaml
   - vmagent.yaml

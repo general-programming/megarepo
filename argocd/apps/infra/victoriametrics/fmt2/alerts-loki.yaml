@@ -1,0 +1,51 @@
+---
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: loki-alerts
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: loki
+      interval: 30s
+      rules:
+        - alert: LokiDown
+          expr: up{namespace="loki", pod=~"loki-.*"} == 0
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki component {{ $labels.pod }} is down"
+            description: "Unscrapeable for 10m."
+
+        - alert: LokiAbsent
+          expr: absent(loki_build_info)
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Loki instances are reporting metrics"
+            description: "All components stopped reporting for 15m; fleet-wide ingest is likely down."
+
+        - alert: LokiRequestErrors
+          expr: |
+            100 * (
+              sum by (route) (rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]))
+              /
+              sum by (route) (rate(loki_request_duration_seconds_count[5m]))
+            ) > 5
+          for: 15m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Loki route {{ $labels.route }} is returning 5xx"
+            description: "{{ $value | humanize }}% of requests failing with 5xx over 5m."
+
+        - alert: LokiPanics
+          expr: increase(loki_panic_total[10m]) > 0
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Loki panicked on {{ $labels.pod }}"
+            description: "{{ $value }} panics recorded in the last 10m."

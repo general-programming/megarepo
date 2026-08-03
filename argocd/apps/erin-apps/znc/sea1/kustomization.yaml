@@ -1,0 +1,12 @@
+# Intentionally empty: znc is fmt2-only.
+#
+# The ApplicationSet is a matrix of clusters x app directories, so every app
+# directory gets an Application on every cluster. Without this overlay the sea1
+# Application resolves to a path that does not exist and sits permanently in
+# Unknown/ComparisonError -- which also trips ArgoCDApplicationOutOfSync, since
+# that alert matches sync_status != Synced and Unknown is not Synced.
+# allowEmpty is set on the ApplicationSet, so an empty overlay syncs cleanly
+# with zero resources.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []

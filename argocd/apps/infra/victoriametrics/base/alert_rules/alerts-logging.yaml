@@ -59,17 +59,23 @@ spec:
             summary: "Alloy on {{ $labels.pod }} is dropping entries ({{ $labels.reason }})"
             description: "Dropped {{ $value | humanize }} entries in 15m, reason \"{{ $labels.reason }}\". Gone for good."
 
+        # A ratio, not `> 0`. The sea1 -> fmt2 link drops a steady ~1% of
+        # pushes, which Alloy just retries, so any absolute threshold fires
+        # forever. Aggregating away status_code is what makes the denominator
+        # the pod's whole push volume.
         - alert: AlloyWriteErrors
           expr: |
-            sum by (pod, status_code) (
-              rate(loki_write_request_duration_seconds_count{status_code!~"2.."}[10m])
-            ) > 0
+            100 * (
+              sum by (pod) (rate(loki_write_request_duration_seconds_count{status_code!~"2.."}[10m]))
+              /
+              sum by (pod) (rate(loki_write_request_duration_seconds_count[10m]))
+            ) > 5
           for: 15m
           labels:
             severity: warning
           annotations:
-            summary: "Alloy on {{ $labels.pod }} is failing to push to Loki (status {{ $labels.status_code }})"
-            description: "Pushes returning {{ $labels.status_code }}. -1 means the connection failed, i.e. the cross-site link dropped."
+            summary: "Alloy on {{ $labels.pod }} is failing to push to Loki"
+            description: "{{ $value | humanize }}% of pushes are non-2xx over 10m. Status -1 means the connection failed outright, i.e. the cross-site link dropped."
 
         # Sustained retries mean the WAL is draining slower than it fills.
         - alert: AlloyBacklogGrowing
@@ -99,46 +105,3 @@ spec:
             summary: "Alloy on {{ $labels.pod }} has unhealthy components"
             description: "{{ $value }} components in state \"{{ $labels.health_type }}\"."
 
-    - name: loki
-      interval: 30s
-      rules:
-        - alert: LokiDown
-          expr: up{namespace="loki", pod=~"loki-.*"} == 0
-          for: 10m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Loki component {{ $labels.pod }} is down"
-            description: "Unscrapeable for 10m."
-
-        - alert: LokiAbsent
-          expr: absent(loki_build_info)
-          for: 15m
-          labels:
-            severity: critical
-          annotations:
-            summary: "No Loki instances are reporting metrics"
-            description: "All components stopped reporting for 15m; fleet-wide ingest is likely down."
-
-        - alert: LokiRequestErrors
-          expr: |
-            100 * (
-              sum by (route) (rate(loki_request_duration_seconds_count{status_code=~"5.."}[5m]))
-              /
-              sum by (route) (rate(loki_request_duration_seconds_count[5m]))
-            ) > 5
-          for: 15m
-          labels:
-            severity: warning
-          annotations:
-            summary: "Loki route {{ $labels.route }} is returning 5xx"
-            description: "{{ $value | humanize }}% of requests failing with 5xx over 5m."
-
-        - alert: LokiPanics
-          expr: increase(loki_panic_total[10m]) > 0
-          for: 0m
-          labels:
-            severity: critical
-          annotations:
-            summary: "Loki panicked on {{ $labels.pod }}"
-            description: "{{ $value }} panics recorded in the last 10m."
