@@ -1,0 +1,26 @@
+# Multus only belongs where br0 exists. Confining it to the bridged nodes is
+# not just tidiness: the bridge CNI plugin *creates* a bridge if the named one
+# is missing, so a LAN-attached VM landing on a node without br0 would come up
+# silently attached to an empty, uplink-less bridge and simply never get DHCP.
+# With Multus absent there instead, the pod fails to start outright, which is
+# a far better failure mode than a VM that looks healthy and isn't reachable.
+#
+# sea1-k8s-103-0 is deliberately excluded: it sits in the wobscale rack on
+# 10.3.6.0/27, so bridging it would attach VMs to the wrong L2 entirely.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: kube-multus-ds
+  namespace: kube-system
+spec:
+  template:
+    spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"

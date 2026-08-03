@@ -21,6 +21,7 @@ resources:
   - mariadb-operator.yaml
   - clickhouse-operator.yaml
   - shared-db.yaml
+  - virt.yaml
 
   # apps
   - akvorado.yaml
