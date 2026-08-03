@@ -28,10 +28,7 @@ metadata:
   name: freepbx
   namespace: freepbx
 spec:
-  # Halted until the PVC has been populated from the old RBD image -- ArgoCD
-  # would otherwise boot the VM off an empty disk the moment the PVC appeared.
-  # Flipped to Always in the follow-up commit.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
