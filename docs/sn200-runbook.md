@@ -49,10 +49,16 @@ Close the gap when the data on these two is replicated or evacuated — not befo
 | **Orderly OS shutdown via UPS, not a delayed power cut** | Cuts the dominant exposure. **But not a guarantee** — a normal `CC.SHN` can hang in the GC wait (§3), and `CSTS.SHST` may not even wait for the System Area save | moderate |
 | **Keep firmware at `KNGND122` and fill every writable slot** | It closed the PFAIL-monitor defect. `KNGND100`/`112` have more open. Filling slots stops an accidental activation landing on an older image | high |
 | **Do not hammer a latched drive with admin commands** | A 50-chunk read wedged a Talos node: kernel alive, `apid`/`kubelet` dead, 7 OSDs down, ceph 33% degraded | learned the hard way |
+| **Suppress iDRAC's NVMe-MI traffic to the SN200** — `PCIeVDM.1.FQDDDenyList = Disk.Bay.3:Enclosure.Internal.0-1` | The one decoded fault was in an NVMe-MI handler on PROC9, and iDRAC **is** the thing driving it (`DeviceSidebandProtocol = NVMe-MI1.0`, PROVEN live). The knob is real, per-device and reversible | **speculative — do not do this yet.** MI-channel failures (`CTL137`) also occur on drives that never latched, so the causal link is unproven. **Measure first**: `docs/sn200-bmc-mitigation.md` §6 |
 
-Prevention that is **not** established: anything BMC-related. The one decoded
-fault was on **PROC9, the NVMe-MI/SMBus management processor**, which the host
-does not control — so host-side mitigations may not touch that path at all.
+On the BMC lever, in one paragraph: `docs/sn200-bmc-mitigation.md` establishes
+that iDRAC9 speaks NVMe-MI 1.0 to these drives, that **all nine logged
+`CTL137` management-comms failures across three R640s are against the SN200 and
+none against 21 Intel P4510s in the same bays**, and that a per-device off
+switch exists and is at default. It also establishes that `CTL137` fires on
+never-latched drives, so the switch is **not** shown to prevent anything. Run
+the §6 measurement before spending a maintenance window on it — one of its four
+outcomes kills the idea outright, cheaply.
 
 ---
 
