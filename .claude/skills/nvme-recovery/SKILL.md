@@ -243,7 +243,30 @@ defect above open. `KNGND110` and `KNGND122` are in the firmware zip already.
 `KNGND122` (Feb 2021) is the last firmware ever released — and it was *still*
 fixing this class (*"the PFAIL monitor thread is added again … a hang occurs
 during the shutdown process"*, recovery: unable to recover). A drive already on
-`KNGND122` that still latches has no fix available.
+`KNGND122` that still latches has no fix available. Externally verified — see
+`docs/sn200-firmware-availability.md` for the full search and every revision
+string.
+
+**The `FR` string encodes the OEM branch**, `K<asic><oem><branch><level>`:
+`KNGN` generic WD, `KNCC` Cisco, `KNEC`/`KNEG` Dell EMC arrays, `KNGW`
+unidentified, `KTGN` WD IntelliFlash. A drive on a foreign branch **rejects**
+`KNGND*.bin` with `Device firmware version is not compatible with this
+operation` — a clean refusal, but do not force it. Cisco's ceiling is
+`KNCCD122`: same level, no extra fix, so extracting it from a HUU ISO buys
+nothing. Dell EMC's ceiling is `KNECD116` — *below* the fix level, with no
+`122`-level `KNEC` image ever published.
+
+`KNGND110.bin` and `KNGND110+sblpatch+k.bin` in the zip are **byte-identical**
+(`7210283c…ccff2`, 2 009 856 B). There is no plain `KNGND110`; the innocuous
+name in `firmwares/` is the SBL-patching image, which writes every slot and
+destroys the fallback. Do not flash it.
+
+`KNGND122.bin` is a *packaged bundle* (`FWHEADER.bin`, `PROC0-15.bin`,
+`SECURITY.bin`, `FCC.bin`, `StringTable.csv.gz`), so `hdm manage-firmware
+--load` rejects it as an invalid image. Use `nvme fw-download` / `nvme
+fw-commit`. Also read `nvme fw-log` before condemning a drive — slots often
+hold different images, and activating a good slot has recovered drives that
+looked dead.
 
 ### The measurement that would settle a capacitor concern
 
