@@ -232,6 +232,39 @@ tests early-return outside BIST (`VCAP: Not in BIST mode, message ignored`).
 separately documents *"PCIe uncorrectable error with a host link down → drive
 hang"* with **"Drive Recovery: Unable to recover."**
 
+### Firmware activation clears the latch — no vendor commands needed
+
+**Proven on sea1-hv-2, 2026-08-04.** A latched drive was recovered with only
+standard NVMe commands:
+
+```sh
+nvme fw-log /dev/nvme7                          # find a slot holding a good image
+nvme fw-commit /dev/nvme7 --slot=5 --action=2   # CA=2 = activate EXISTING image
+# then a cold power cycle -- frmw bit4=0 means no activate-without-reset
+```
+
+The controlled comparison matters: after the same latch, a **bare cold power
+cycle left it still latched**. Adding the `CA=2` activation cleared it. So the
+activation is doing the work, not the power cycle.
+
+Expect this sequence during the activation:
+```
+controller capabilities changed, reset may be required to take effect.
+Device not ready; aborting initialisation, CSTS=0x0
+Disabling device after reset failure: -19
+```
+`state=dead` at that point is expected, not a brick — the pending activation
+completes on the next power cycle.
+
+**It is still destructive.** The media came back fully zeroed (every offset
+sampled from 1 MiB to 1 TiB). So this replaces `0x0503` as the recovery of
+choice — same data outcome, but no vendor commands, no risk of a typo landing
+on `Erase to SBL EEPROM` or `Drive Uninit`, and no dependence on the VUC gate.
+Pull the crash dump first if you want the evidence.
+
+Slot 1 is read-only (`frmw` bit 0), so a factory image always survives and this
+cannot leave the drive without a bootable slot.
+
 ### First thing to check on any SN200: the firmware revision
 
 ```sh

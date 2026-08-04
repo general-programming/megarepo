@@ -189,3 +189,43 @@ drive with a **zeroed namespace** — `0x0503` schedules a re-init that rebuilds
 the L2P. There is currently no known non-destructive recovery. `percentage_used`
 is 16%, media errors 0, so the NAND itself is healthy; the problem is entirely
 firmware state plus, apparently, a marginal physical link.
+
+## Recovery via firmware activation — proven 2026-08-04
+
+Latched drive recovered with **standard NVMe commands only**, no VUC:
+
+| Step | Result |
+|---|---|
+| latch #2 (abrupt ForceOff of running host) | `state=resetting`, no namespace |
+| **bare cold power cycle** | **still latched** — this is the control |
+| `nvme fw-commit --slot=5 --action=2` (activate existing image) | `Success committing firmware action:2 slot:5` |
+| drive during activation | `controller capabilities changed` → `CSTS=0x0` → `state=dead` |
+| cold power cycle | **RECOVERED**: `state=live`, namespace present, **0 resets**, `afi 0x44 → 0x55` |
+
+`afi` moving 0x44 → 0x55 confirms slot 5 actually activated. Health after:
+`fr KNGND122`, `tnvmcap` full, `unvmcap 0`, 0 media errors, 0 critical warnings.
+
+**The bare cold cycle failing first is what makes this a finding** rather than a
+coincidence — the activation is doing the work, not the power cycle.
+
+**Still destructive.** Media zeroed at every offset sampled 1 MiB → 1 TiB, and
+the GPT+XFS written during the earlier no-discard test were gone. So firmware
+activation appears to trigger the same re-init that `0x0503` schedules.
+
+**Why prefer it over `0x0503` anyway:** identical data outcome, but it uses only
+spec-defined commands — no vendor opcodes, no exposure to `Erase to SBL EEPROM`
+(permanent brick) or `Drive Uninit` sitting one digit away, and no dependence on
+the Post-Crash allow-list. Slot 1 being read-only guarantees a bootable image
+survives regardless.
+
+### Slot layout found on this drive
+
+```
+afi 0x44 (slot 4 active)   frs1 KNGND112 [READ-ONLY]   frs4 KNGND122
+                           frs2 KNGND112               frs5 KNGND122
+                           frs3 KNGND112
+```
+
+Three of five slots held `KNGND112` — an **undocumented** revision with no
+release notes and no binary in the firmware zip. Worth checking across the fleet
+and upgrading slots 2/3, since any future activation of those lands on it.
