@@ -155,7 +155,34 @@ Two results that were previously INFERRED and are now **PROVEN**:
 still INFERRED: that selection happens in PROC0, in a slot-B ALU sub-opcode
 this spec does not decode.)*
 
-### 3.3 The boot marker dispatch — executed for every marker value
+### 3.3 The `0xCA` family — the whole jump table, executed
+
+`sn200_oracle.py --ca` runs the 67-entry dispatch once per command byte,
+supplying only the indirect-jump target the executed arithmetic computed, and
+reads the handler pointer and overlay index back off the arm's own stores.
+**39 of 67 entries are implemented** (published tables said 37 while listing
+39 rows), and the gate's twelve survivors are all among them.
+
+Three results the executed version gets right that reads did not:
+
+- **`0x0F` raw block erase ignores `CDW12[15:8]` — CONFIRMED.** All 256 values
+  give a byte-identical trace, and the byte is never addressed in the handler
+  body. The hand scan in `sn200-dangerous-commands.md` §2.3 reached this by a
+  different route; two methods, one answer.
+- **`0x10`/`0x0210` — the "harmless probe" is not one.** Sub 2 takes the *same*
+  first-entry arm as sub 1 and diverges only after the host data transfer. And
+  the `minu` clamp idiom does not occur anywhere in the write handler: there is
+  no absolute length bound, which was an open question rather than a finding.
+- **Two published identities are wrong.** `0x20` is not a second
+  `VUC_ERASE_PWR_CHAR` arm and `0x0C` is not the erase-count census — both
+  string sets belong to their neighbours (`0x12`, `0x0B`) once attribution is
+  bounded by the handler entry the dispatcher actually selected.
+
+Five allow-listed command bytes are reported **UNKNOWN**, not "probably fine";
+two of them (`0x04`, `0x13`) acquire the flash-operation lock.
+`docs/sn200-ca-dispatch.md`.
+
+### 3.4 The boot marker dispatch — executed for every marker value
 
 `0x7ffaae69` run once per marker `0x8000000N`:
 
@@ -180,13 +207,18 @@ Marker 8 landing on the *same* arm as marker 1 is the executable form of
 > cannot alias a real marker; the marker-0 route is therefore not characterised
 > here.
 
-### 3.4 Triage script self-validation
+### 3.5 Triage script self-validation
 
 `tests/test_oracle.py::test_triage_script_only_sends_read_only_vendor_commands`
 parses every `0xFF` encoding `sn200-triage.sh` actually emits and requires the
 oracle — i.e. the firmware — to classify each as read-only. The script no
 longer carries a hand-maintained allow-list of "safe" encodings; adding a
 command without checking it fails in CI rather than on a drive.
+
+`test_triage_script_never_emits_a_0xca_command_at_all` is the blanket form of
+the same idea. No `0xCA` encoding is cleared, so rather than classify them the
+test forbids the opcode outright — and `is_read_only()` deliberately does not
+model `0xCA`, so there is no way to argue an exception past it.
 
 ---
 
@@ -276,10 +308,11 @@ Other limits, each of them a way to be wrong if ignored:
 
 ## 5. Where this should go next
 
-- The `0xCA` sub-list is now enumerated but not *classified*: 12 admitted
-  sub-opcodes, two of which (`0x0f` raw NAND erase, `0x10` raw page write)
-  destroy a drive on one well-formed command. Running each through its handler
-  the way §3.2 does for `0xFF` is the obvious next target.
+- ~~The `0xCA` sub-list is enumerated but not classified~~ — **done**, §3.3 and
+  `docs/sn200-ca-dispatch.md`. What is left there is the *leaves*:
+  `0x7ffb3f4c`, `0x7ffb42cc`, `0x7ffb5e04`, `0x7ffb7184`, `0x7ffbab2c`,
+  `0x7ffb3dd0`. Walking those in the main image is what would turn the five
+  allow-listed UNKNOWNs into answers.
 - `0xC6`/`0x30` is admitted by the gate and remains unidentified. The oracle
   proves reachability; it does not yet walk the handler.
 - `0xE6` and `0xEC` are admitted on the opcode alone and have never been walked.

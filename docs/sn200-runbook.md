@@ -334,8 +334,10 @@ the post-crash allow-list**, along with `Admin_VucFlashLogicalToPhysical`
 (`0xCA`/`0x0000`). Those two are the only `0xCA` sub-values below `0x02` and the
 only two that understand LBAs; everything the allow-list admits works in
 *physical* addresses. What is left is `0xCA`/`0x03` raw page read at **640 bytes
-per command** — ~1.2×10¹⁰ commands for 7.68 TB, on a controller resetting every
-~5 s, with no L2P to reassemble any of it. See `sn200-vuc-flash-read.md`.
+per command** — the clamp is now executed rather than read (`sn200_oracle.py`
+runs the `minu` and gets 640) — ~1.2×10¹⁰ commands for 7.68 TB, on a controller
+resetting every ~5 s, with no L2P to reassemble any of it. See
+`sn200-vuc-flash-read.md` and `sn200-ca-dispatch.md`.
 
 So "power it down and leave it" is not caution for its own sake — it is the
 only option that keeps the UART route alive.
@@ -349,8 +351,12 @@ cost; its only real advantage is using no vendor opcodes.
 
 | Command | Effect |
 |---|---|
-| `0xCA` `CDW12[7:0]=0x0F` | NAND block erase — `CDW12[15:8]` is *ignored*, no harmless sub-value |
-| `0xCA` `CDW12=0x0010`/`0x0110` | raw page write |
+| `0xCA` `CDW12[7:0]=0x0F` | NAND block erase — `CDW12[15:8]` is *ignored*, no harmless sub-value. **Confirmed by execution:** all 256 sub-byte values give an identical trace, and a busy drive queues the erase rather than refusing it |
+| `0xCA` `CDW12=0x0010`/`0x0110` | raw page write. **Confirmed by execution:** no absolute length bound exists at all, only `CDW10*4 == bytes transferred` |
+| `0xCA` `CDW12=0x0210` | *not* a safe probe — same first-entry arm as `0x0110`, same host data transfer, diverges only afterwards |
+| `0xCA` `CDW12[7:0]=0x12` | `VUC_ERASE_PWR_CHAR` — erases blocks. Not allow-listed, but one nibble from `0x10`/`0x11`/`0x13`/`0x32` |
+| `0xCA` `CDW12[7:0]=0x39`/`0x3B` | NAND-die SET Features / test-mode register write. Not allow-listed; each one value from its own getter (`0x38`/`0x3A`) |
+| `0xCA` **anything else** | No `0xCA` encoding is cleared. Eleven of the twelve command bytes a latched drive accepts are one hex digit from something that destroys media; five of them are unidentified and two of those take the flash-operation lock. `sn200-ca-dispatch.md` |
 | `0xFF` `CDW12=0x0403` | Drive Uninit — **no startup-type gate at all**, sets FACTORY re-init |
 | `0xFF` `CDW12=0x0303` | **Writes** one byte into SBL EEPROM section 13 (the string says "Erase"; the verb is a write) — permanent brick |
 | `0xFF` `CDW12=0x0003` | Erase System Area 0 — the boot-marker record. **One nibble from the `0x0004` probe.** Also poisons the SBL `LOAD_N_GO` escape: an erased marker fails the `0xC0000000` mask test at `0x7ffaae53` and is rewritten as REINIT. |
@@ -403,6 +409,7 @@ Best-effort order when you must power something down:
 | `tools/sn200-fw/check-latch-state.sh` | read-only triage |
 | `tools/sn200-fw/pull-crash-dump.sh` | dump retrieval; **cannot** emit `0xFF`, enforced by test |
 | `tools/sn200-fw/decode-crash-dump.py` | decode records against the string table |
+| `tools/sn200-fw/sn200_oracle.py` | ask the firmware what an encoding does — `--gate`, `--ff`, `--ca`, `--ca --danger`. Executes PROC8's own dispatch; touches no hardware |
 | `tools/sn200-fw/fill-fw-slots.sh` | fill writable slots with `KNGND122`; `CA=0` only, never slot 0/1 |
 | `tools/sn200-fw/nvme-debug-pod.yaml` | privileged pod — full NVMe admin access from Talos, which has no shell |
 | `tools/nvme-noreset/` | patched `nvme-core`: suppress the reset loop, force `discard_max_bytes=0`, and raise the admin transfer cap. **Diagnostics boot only** |

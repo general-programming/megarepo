@@ -14,7 +14,9 @@ overturned several of them), `docs/sn200-independent-re.md`,
 `docs/sn200-firmware-flashing.md`, `docs/sn200-readonly-startup.md`,
 `docs/sn200-logic-escapes.md`, `docs/sn200-field-evidence.md`,
 `.claude/skills/nvme-recovery/SKILL.md`, and `tools/sn200-fw/{pull-crash-dump.sh,
-check-latch-state.sh,fill-fw-slots.sh}`.
+check-latch-state.sh,fill-fw-slots.sh}`. The `0xCA` rows are additionally
+re-derived by execution in `docs/sn200-ca-dispatch.md`
+(`sn200_oracle.py --ca`), which is the authority for that family.
 
 Labels: **PROVEN** (read directly off the instruction stream or off a live
 drive), **INFERRED** (follows from proven facts plus one named assumption),
@@ -98,9 +100,12 @@ selector-*grade* dangerous despite not being a selector.
 
 | command | encoding | effect |
 |---|---|---|
-| ☠ Raw NAND block erase | `0xCA`, `CDW12[7:0] = 0x0F`, **any** `CDW12[15:8]`, `CDW13 = <flash addr>` | PROVEN: erases a physical NAND block at the address in `CDW13`. **`CDW12[15:8]` is completely ignored on this path** — exhaustive scan of the whole erase coroutine (overlay 31, `0x3003dbe0`–`0x3003dd38`) found no `l8ui` of `ctx+0x39` anywhere in it. There is **no harmless sub-value.** Reachable on a latched drive with no unlock: `0x0F` is one of the 12 allow-listed `0xCA` sub-values. Unrecoverable data loss. |
-| ☠ Raw NAND page write / program | `0xCA`, `CDW12 = 0x0010` (`Flash_WritePageRaw`, SLC/MLC selected by an internal `b0` flag, not by the host) or `0x0110` (`Flash_ProgNANDPageRaw`), `CDW10 = <len dwords>`, `CDW13 = <flash addr>`, data-out | PROVEN: writes host-supplied data, including spare/ECC bytes, directly to a NAND page. Reachable while latched (`0x10` is allow-listed). No absolute transfer-length bound was found on this path beyond a `CDW10*4 == bytes_transferred` consistency check (the raw-*read* family's 640-byte clamp does **not** apply here). |
-| ⚠ (adjacent, not itself destructive but one keystroke away) | `0xCA`, `CDW12 = 0x0210` | Fetches the `Flash_ProgNANDPage` result dword. Does not program anything, but shares the same entry coroutine as `0x0010`/`0x0110`. Do not use as a "probe" — the entire `CDW12[7:0]=0x10` family should be treated as off-limits. |
+| ☠ Raw NAND block erase | `0xCA`, `CDW12[7:0] = 0x0F`, **any** `CDW12[15:8]`, `CDW13 = <flash addr>` | PROVEN: erases a physical NAND block at the address in `CDW13`. **`CDW12[15:8]` is completely ignored on this path.** **CONFIRMED BY EXECUTION 2026-08-04** (`sn200_oracle.py --ca`): all **256** values of the sub byte produce a byte-identical instruction trace through the erase coroutine, and the byte is never addressed anywhere in the handler body — two independent methods, same answer. There is **no harmless sub-value.** A busy drive does not refuse it: on a contended flash-op lock the coroutine yields and *retries* the acquire. Reachable on a latched drive with no unlock: `0x0F` is one of the 12 allow-listed `0xCA` sub-values. Unrecoverable data loss. |
+| ☠ Raw NAND page write / program | `0xCA`, `CDW12 = 0x0010` (`Flash_WritePageRaw`, SLC/MLC selected by an internal `b0` flag, not by the host) or `0x0110` (`Flash_ProgNANDPageRaw`), `CDW10 = <len dwords>`, `CDW13 = <flash addr>`, data-out | PROVEN: writes host-supplied data, including spare/ECC bytes, directly to a NAND page. Reachable while latched (`0x10` is allow-listed). **CONFIRMED BY EXECUTION 2026-08-04: there is no absolute transfer-length bound at all** — the `minu` clamp idiom does not occur anywhere in the 1572-byte handler body (the raw-*read* family's 640-byte clamp is `0x03`'s alone). The only bound is the `CDW10*4 == bytes_transferred` consistency check. |
+| ⚠ (**part of the write path**, not merely adjacent) | `0xCA`, `CDW12 = 0x0210` | Fetches the `Flash_ProgNANDPage` result dword. **Downgraded from "adjacent" 2026-08-04:** executed, sub `2` takes the **same first-entry arm as sub `1`**, sets up the same host→DDR data-in transfer, and only parts company at `0x3003d744` *after* the transfer, then acquires the flash-operation lock and calls a flash helper before storing its dword. It is not a safe probe of this command byte. The entire `CDW12[7:0]=0x10` family is off-limits. |
+| ☢ NAND-chip SET Features | `0xCA`, `CDW12[7:0] = 0x39` | Writes an ONFI feature address **on the NAND die itself** (`VUC: Set Features addr 0x%02x: 0x%08x`). Not NVMe Set Features. **Not** allow-listed — healthy-drive only. One value from `0x38`, the getter. Not a documented, bounded operation; nothing establishes a die survives an arbitrary one. |
+| ☢ Flash test-mode register write | `0xCA`, `CDW12[7:0] = 0x3B` | `Admin_VucFlashSetTestModeRegister_OVL026` — read-modify-write of a NAND die test register (`flash addr / reg addr / mask / originalValue / newValue`). **Not** allow-listed. One value from `0x3A`, the getter. |
+| ☢ `VUC_ERASE_PWR_CHAR` | `0xCA`, `CDW12[7:0] = 0x12` | Erase power characterisation — **this arm erases blocks** (`VUC_ERASE_PWR_CHAR is doing erasure now, can NOT accept VUC_ERASE_PWR_CHAR again!`). **Not** allow-listed, but it sits one nibble from `0x10`, `0x11`, `0x13`, `0x22`, `0x32` and `0x42`. **Correction 2026-08-04: `0x20` is NOT a second `ERASE_PWR_CHAR` arm** — both strings belong to `0x12`, one inside its own confirmed extent; `0x20`'s 1060-byte body carries no string at all and is unidentified. |
 | ☠ Drive Uninit | `0xFF`, `CDW12 = 0x0403` (cmd `0x03` sub `4`) | Posts re-init verb `0x25` with parameter 1 → selects the **FACTORY** re-init marker (marker 4). **No startup-type gate at all** — unlike sub 5, whose reinit-scheduling is guarded by `bnei a14,6`, sub 4 jumps straight to the post at `0x300337e3` unconditionally. Allow-listed while latched. One hex nibble from `0x0503`. |
 | ☠ Erase to SBL EEPROM | `0xFF`, `CDW12 = 0x0303` (cmd `0x03` sub `3`) | **PROVEN by execution 2026-08-04** (`sn200_oracle.py --ff`; was UNKNOWN until the lifter learned to step over this arm's reserved-space opcodes — `sn200-tie-opcodes.md` §5): posts **verb `1` (section write)** against **section `13`, the SBL EEPROM**, and reaches the OAM enqueue `0x30030aa0`. Its completion handler logs StrId 1632 `"OAM ERASE CMD: Erase to SBL EEPROM failed"`, corroborating the section independently of the field decode. It is a **two-stage coroutine**: stage 1 (`0x30033661`) fills a 64-byte buffer at `ctx+0x178` via `0x30031d10` and yields; stage 2 (`0x300335f7`) builds and enqueues the request. **The earlier claim that it "calls `0x30031d10` directly, not `0x30030aa0`" was wrong — it calls both.** "Permanent brick" remains INFERRED, from the SBL's role in boot. Sub `3` is allow-listed while latched. |
 | ☢ Start Secure Purge | `0xDD` | Whole-drive crypto erase, fire-and-forget, **no confirmation argument**. **Rejected while latched** — it is the one command in this table that a latched drive actually refuses (`0x7C5`, via the separate *sanitize* gate at `0x7ffa6cb0`, not the Post-Crash gate). Never type it regardless; a drive that is not latched will execute it. Its status counterpart `0xDE` (`CDW10=0x0C`, 48-byte read, `-r`) is safe and read-only. |
@@ -109,9 +114,16 @@ selector-*grade* dangerous despite not being a selector.
 ### UNKNOWN — do not send
 
 Everything not positively identified above. Explicitly, from the allow-listed
-surface: `0xCA` sub-values `0x04`, `0x11`, `0x21`, `0x32` (allow-listed, carry
-no destructive log strings, but `0x11` and `0x21` carry **no log strings at
-all** — unaudited, not proven clean); `0xC6`/`0x20` sub-commands `7` and `8`
+surface: `0xCA` command bytes **`0x04`, `0x11`, `0x13`, `0x21`, `0x32`** — the
+complete set of latched-reachable `0xCA` values with **no log string in the
+handler body**, enumerated by execution 2026-08-04 (`sn200-ca-dispatch.md` §4).
+`0x13` joins this list; it was previously described as "flash UID length" /
+"flash reset family", and neither attribution survives a per-handler string
+scan. Two of the five — **`0x04` and `0x13` — acquire the flash-operation
+lock**, the same one the erase and program handlers take, so they are flash
+operations rather than DDR table reads. `0x11` hands `CDW13` (a raw physical
+flash address) to `0x7ffb3f4c`, the same helper the block-erase arm calls.
+Unaudited, not proven clean; `0xC6`/`0x20` sub-commands `7` and `8`
 (71808-byte producer arms, one of which mutates a DRAM counter);
 **`0xC6` command byte `0x30`, all seven sub-commands `0x0030`–`0x0630`** —
 admitted by the post-crash gate and **identified 2026-08-04**
@@ -166,6 +178,11 @@ this is the single most important operational fact in this document:**
   explicitly given.**
 - `0x0F` and `0x10` are also `15` and `16` decimal — exactly the numbers a
   `for i in range(...)` loop counter produces early.
+- **Enumerated mechanically 2026-08-04** (`sn200_oracle.py --ca --danger`):
+  **eleven of the twelve `0xCA` command bytes a latched drive accepts are a
+  single hex digit from something that destroys media.** `0x21` is the only
+  one that is not. `0x32` is one digit from **four** (`0x12`, `0x37`, `0x39`,
+  `0x3B`). Full table in `sn200-ca-dispatch.md` §5.
 - `0x0403` (Drive Uninit — ungated, allow-listed, sets FACTORY reinit) is
   **one hex nibble** from `0x0503` (the crash-dump clear used in every
   documented recovery). A single mistyped digit in a shell history recall

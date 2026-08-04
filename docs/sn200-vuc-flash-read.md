@@ -250,15 +250,15 @@ Jump table `0x7ffa760e`, 3 bytes/entry, index = `CDW12[7:0]`.
 | `0x01` | `0x7ffbd11c` | `0x30036494` | **`Admin_VucFlashRead`** (read one LBA, L2P) | **no** |
 | `0x02` | `0x7ffbc2a8` | OVL028 | unidentified | yes |
 | `0x03` | `0x7ffbdab0` | `0x30036e28` | raw physical page read (`Flash_ReadRawData` / `Flash_ReadCacheData`), 640-byte clamp at `0x30037039` (`movi a11,640 / minu a10,a10,a11`) | yes |
-| `0x04` | `0x7ffbccec` | OVL029 | unidentified | yes |
+| `0x04` | `0x7ffbccec` | `0x3003a2e4` | unidentified — and it **acquires the flash-operation lock**, so it is a flash operation, not a DDR read | yes |
 | `0x08` | `0x7ffbc5f0` | `0x30035968` | `Admin_VucFlashVirtualToPhysical` — pure `remu`/`quou`/`mull` over the geometry tables at `0x7ff821b0`/`0x7ff82110`, result to `ctx+0x54`, **no media access at all** | yes |
-| `0x0D` | `0x7ffbcb48` | OVL028 | flash UID / lot-ID family | yes |
+| `0x0D` | `0x7ffbcb48` | `0x30039100` | `Admin_VucFlashReset_OVL028` — its own string, executed attribution (`sn200-ca-dispatch.md`). "flash UID / lot-ID family" was a neighbour's string | yes |
 | `0x0E` | `0x7ffbcd1c` | OVL028 | `Admin_VucFlashReadStatus` | yes |
 | `0x0F` | `0x7ffbdf28` | `0x3003dbe0` | ☠ raw NAND **block erase** | yes |
 | `0x10` | `0x7ffbd904` | `0x3003d5bc` | ☠ raw NAND **page write / program** | yes |
 | `0x11` | `0x7ffbc670` | `0x300359e8` | 26-byte stub | yes |
 | `0x12` | `0x7ffbd108` | OVL030 | unidentified | no |
-| `0x13` | `0x7ffbce34` | OVL028 | flash reset / status family | yes |
+| `0x13` | `0x7ffbce34` | `0x300393ec` | **UNKNOWN** — 524-byte body, no log string of its own, but it **acquires the flash-operation lock** and calls the `CDW13` address helper. "flash reset / status family" and "flash UID length" were both neighbours' strings (`sn200-ca-dispatch.md` §4.1) | yes |
 | `0x21` | `0x7ffbcaa8` | OVL030 | unidentified | yes |
 
 `0x14`–`0x1F` and `0x22`–`0x2F` all jump to the invalid-command tail
@@ -296,10 +296,13 @@ raw physical page read**. Assess it without optimism:
   and then unwinding whatever compression/scrambling/XOR-parity the data path
   applies. Nothing in this teardown has established those formats.
 
-**SPECULATIVE and not recommended:** `0x02`, `0x04`, `0x21` are allow-listed,
-carry no log strings, and are unidentified. It is *conceivable* one is a bulk
-read. It is equally conceivable one writes. They sit in the same opcode family
-as a block erase; do not probe them on the live drive.
+**SPECULATIVE and not recommended:** the allow-listed, unidentified command
+bytes are `0x04`, `0x11`, `0x13`, `0x21`, `0x32` — the executed list
+(`sn200-ca-dispatch.md` §4); `0x02` is off it, being `Admin_VucFlashUID_OVL028`
+by its own strings. It is *conceivable* one of the five is a bulk read. It is
+equally conceivable one writes, and `0x04` and `0x13` demonstrably take the
+flash-operation lock. They sit in the same opcode family as a block erase; do
+not probe them on the live drive.
 
 **The route out is unchanged.** Boot marker `8` (`READ ONLY`) still passes the
 gate ungated with the L2P intact, still has no firmware writer, and still needs

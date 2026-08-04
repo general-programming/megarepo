@@ -229,8 +229,11 @@ Bounds-checked and dispatched at `0x7ffa75e1`:
 7ffa7604: add.n a8,a8,a9
 ```
 
-The table at `0x7ffa760e` holds 67 three-byte `j` instructions. **37 of the 67
-are implemented**; the rest jump to the common default `0x7ffa78e3`.
+The table at `0x7ffa760e` holds 67 three-byte `j` instructions. **39 of the 67
+are implemented** — this said 37 while listing 39 rows; the two inline arms
+`0x05`/`0x06` load no overlay handler and were dropped from the count. Executed
+count from `sn200_oracle.py --ca` (`sn200-ca-dispatch.md` §1.1). The rest jump
+to the common default `0x7ffa78e3`.
 
 | `CDW12[7:0]` | handler (runtime → static) | ovl | identity / evidence |
 |---|---|---|---|
@@ -245,7 +248,7 @@ are implemented**; the rest jump to the common default `0x7ffa78e3`.
 | `0x09` | `0x7ffbc08c` → `0x3003de04` | 32 | **UNKNOWN** — 123-byte stub |
 | `0x0A` | `0x7ffbc2d8` → `0x3003e050` | 32 | **UNKNOWN** — 125 bytes, no strings in the function or its body |
 | `0x0B` | `0x7ffbd32c` → `0x3003b8a4` | 30 | erase-count scan (own strings: "Scan Erase Count End", blockset census) |
-| `0x0C` | `0x7ffbd1c4` → `0x3003b73c` | 30 | erase-count / blockset census (min/max/avg user + sys erase counts) ¹ |
+| `0x0C` | `0x7ffbd1c4` → `0x3003b73c` | 30 | **UNKNOWN** — 360-byte body, no strings. ⚠ **Corrected 2026-08-04:** this row said "erase-count / blockset census"; all fourteen census strings are in `0x0B`'s body (`sn200-ca-dispatch.md` §2.3) |
 | `0x0D` | `0x7ffbcb48` → `0x30039100` | 28 | `Admin_VucFlashReset_OVL028` ¹ |
 | `0x0E` | `0x7ffbcd1c` → `0x300392d4` | 28 | `Admin_VucFlashReadStatus_OVL028` ¹ (corroborated by `sn200-command-reference.md` §3) |
 | `0x0F` | `0x7ffbdf28` → `0x3003dbe0` | 31 | ☠ raw NAND **block erase** |
@@ -253,7 +256,7 @@ are implemented**; the rest jump to the common default `0x7ffa78e3`.
 | `0x11` | `0x7ffbc670` → `0x300359e8` | 26 | 26-byte stub: `l32i a10,ctx+0x13c` (CDW13) → `call 0x3002d2c4` → store to `ctx+0x154`. Benign, confirms the existing "four-instruction stub" reading |
 | `0x12` | `0x7ffbd108` → `0x3003b680` | 30 | `VUC_ERASE_PWR_CHAR` — **erase power characterisation; this arm performs erases** |
 | `0x13` | `0x7ffbce34` → `0x300393ec` | 28 | **UNKNOWN** — 64-byte stub |
-| `0x20` | `0x7ffbcce4` → `0x3003b25c` | 30 | `VUC_ERASE_PWR_CHAR` ¹ — **this family erases blocks** |
+| `0x20` | `0x7ffbcce4` → `0x3003b25c` | 30 | **UNKNOWN** — 1060-byte body, no strings. ⚠ **Corrected 2026-08-04:** this row said `VUC_ERASE_PWR_CHAR` ¹; both of those strings are in `0x12`'s body, one inside `0x12`'s own confirmed extent (`sn200-ca-dispatch.md` §2.3). The method warning below predicted this exact mislabel |
 | `0x21` | `0x7ffbcaa8` → `0x3003b020` | 30 | **UNKNOWN** — 108 bytes, no own strings; same overlay as `0x12` |
 | `0x22` | `0x7ffbc0e8` → `0x30037da0` | 27 | soft-LDPC read histogram ¹ |
 | `0x25` | `0x7ffbc2fc` → `0x30037fb4` | 27 | `Admin_VucFlashSLDPCHistoryHistogram_OVL027` |
@@ -287,12 +290,14 @@ Not implemented: `0x07`, `0x14`–`0x1F`, `0x23`, `0x24`, `0x27`–`0x31`, `0x3C
   SET-features).** `0x39` writes an ONFI feature address on the flash die
   itself. Same hazard shape as `0x0E`/`0x0F`/`0x10`, in a part of the table
   nobody had looked at. Neither is allow-listed.
-- ⚠ **`0x12` and `0x20` are `VUC_ERASE_PWR_CHAR` arms** — the strings ("is doing
-  erasure now, can NOT accept `VUC_ERASE_PWR_CHAR` again") say this family
-  **erases blocks** as part of a power-characterisation sweep. `0x12` is
-  *directly adjacent to `0x13`, which IS on the Post-Crash allow-list*. `0x21`
-  sits in the same overlay and has no strings of its own — unidentified, and
-  it **is** allow-listed. Do not walk this neighbourhood.
+- ⚠ **`0x12` is a `VUC_ERASE_PWR_CHAR` arm** — the strings ("is doing erasure
+  now, can NOT accept `VUC_ERASE_PWR_CHAR` again") say it **erases blocks** as
+  part of a power-characterisation sweep. `0x12` is *directly adjacent to
+  `0x13`, which IS on the Post-Crash allow-list*. `0x20` and `0x21` sit in the
+  same overlay and have no strings of their own — both unidentified, and `0x21`
+  **is** allow-listed. Do not walk this neighbourhood. **Corrected 2026-08-04:**
+  an earlier revision called `0x20` a second `ERASE_PWR_CHAR` arm; per-handler
+  attribution puts both strings under `0x12` alone.
 
 Cross-check against the Post-Crash allow-list `{0x02, 0x03, 0x04, 0x08, 0x0D,
 0x0E, 0x0F, 0x10, 0x11, 0x13, 0x21, 0x32}`: **every one of those twelve is

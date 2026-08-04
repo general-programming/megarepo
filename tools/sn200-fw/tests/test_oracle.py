@@ -185,6 +185,154 @@ def test_0303_walk_still_steps_over_undecoded_instructions():
 
 
 # --------------------------------------------------------------------------
+# the 0xCA surface -- the family that holds the two drive-destroying commands
+# --------------------------------------------------------------------------
+
+
+def test_ca_jump_table_implements_thirty_nine_of_sixty_seven():
+    """The dispatcher, executed once per command byte.
+
+    Published tables said 37; the executed table says 39, because the two
+    inline arms 0x05/0x06 load no overlay handler and were miscounted.
+    """
+    t = oracle.ca_table()
+    assert len(t) == 39
+    assert set(t) == {
+        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0A,
+        0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x12, 0x13, 0x20,
+        0x21, 0x22, 0x25, 0x26, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37,
+        0x38, 0x39, 0x3A, 0x3B, 0x3E, 0x3F, 0x40, 0x41, 0x42,
+    }  # fmt: skip
+    assert all(sub < oracle.CA_TABLE_LEN for sub in t)
+
+
+def test_ca_gate_allow_list_contains_no_dead_command_byte():
+    """Every value a latched drive still accepts routes to a real handler."""
+    _, sub = oracle.gate_allow_list()
+    assert sub[0xCA] <= set(oracle.ca_table())
+
+
+def test_ca_0x33_and_0x37_differ_only_in_the_overlay():
+    """A runtime handler pointer does not identify code on its own.
+
+    Both arms load 0x7ffbc68c. Reading the pointer without the overlay index
+    the same arm stores would merge the wafer-lot-ID reader with the
+    multiplane write/erase handler.
+    """
+    a, b = oracle.ca_table()[0x33], oracle.ca_table()[0x37]
+    assert a.handler_rt == b.handler_rt == 0x7FFBC68C
+    assert (a.overlay, a.static) == (28, 0x30038C44)
+    assert (b.overlay, b.static) == (26, 0x30035A04)
+
+
+def test_ca_0f_block_erase_has_no_harmless_sub_value():
+    """CONFIRMED by execution, not by reading: CDW12[15:8] is ignored.
+
+    All 256 values of the sub byte produce a byte-identical instruction trace
+    through the erase coroutine, and the byte is never even addressed anywhere
+    in the handler body. Every well-formed 0xCA/0x0F erases a NAND block.
+    """
+    r = oracle.ca_classify(0x0F)
+    assert r.classification == oracle.DESTRUCTIVE
+    assert r.gate_admitted
+    assert r.reads_sub_byte is False
+    assert oracle.ca_erase_ignores_sub_byte()
+
+
+def test_ca_10_page_program_reads_the_sub_byte_and_accepts_three_values():
+    """CONFIRMED: 0x0010/0x0110 program, 0x0210 shares their coroutine.
+
+    Sub 2 takes the SAME first-entry arm as sub 1 and only parts company after
+    the host->DDR transfer, so "it merely fetches a result dword" is true of
+    where it ends up and false of how it gets there.
+    """
+    r = oracle.ca_classify(0x10)
+    assert r.classification == oracle.DESTRUCTIVE
+    assert r.gate_admitted
+    assert r.reads_sub_byte is True
+    arms = oracle.ca_write_sub_arms()
+    assert arms[0] == oracle.CA_WRITE_ARM_0
+    assert arms[1] == arms[2] == oracle.CA_WRITE_ARM_12
+    assert arms[3] == arms[0xFF] == oracle.CA_WRITE_ARM_REJECT
+
+
+def test_ca_raw_read_clamps_to_640_bytes_and_the_writers_do_not():
+    """The clamp the recovery estimate rests on, executed.
+
+    0xCA/0x03 asks for anything and gets 640 bytes. Neither 0x0F nor 0x10
+    contains the clamp idiom at all -- the write path has no absolute length
+    bound, only a CDW10*4 == bytes-transferred consistency check.
+    """
+    assert oracle.ca_rawread_clamp(request=0x10000) == 640
+    assert oracle.ca_has_length_clamp(0x03)
+    assert not oracle.ca_has_length_clamp(0x10)
+    assert not oracle.ca_has_length_clamp(0x0F)
+
+
+def test_ca_erase_pwr_char_is_0x12_alone():
+    """0x12 owns the VUC_ERASE_PWR_CHAR strings; 0x20 has none of its own.
+
+    Published tables label 0x20 VUC_ERASE_PWR_CHAR too. Attributed to the
+    handler bodies the dispatcher actually selects, both strings land in
+    0x12's body and 0x20's 1060-byte body carries no string at all -- so 0x20
+    is unidentified, not a second erase arm.
+    """
+    twelve = oracle.ca_classify(0x12)
+    assert twelve.classification == oracle.DESTRUCTIVE
+    assert any("ERASE_PWR_CHAR" in s for _, _, s in twelve.strings)
+    twenty = oracle.ca_classify(0x20)
+    assert twenty.strings == []
+    assert twenty.classification == oracle.UNKNOWN
+
+
+def test_ca_nand_get_set_pairs_are_one_value_apart():
+    """0x38/0x39 (ONFI features) and 0x3A/0x3B (test-mode register).
+
+    The getter of each pair is one keystroke from a writer of NAND die
+    configuration. Neither writer is on the Post-Crash allow-list, so this is
+    a healthy-drive hazard.
+    """
+    for getter, setter in ((0x38, 0x39), (0x3A, 0x3B)):
+        assert oracle.ca_classify(getter).classification == oracle.READ_ONLY
+        assert oracle.ca_classify(setter).classification == oracle.CATASTROPHIC
+        assert not oracle.ca_classify(setter).gate_admitted
+        assert (setter, "nibble") in oracle.ca_neighbours(getter)
+
+
+def test_ca_allow_listed_unknowns_are_reported_as_unknown():
+    """The discipline that solved 0xFF/0x0303: say UNKNOWN, do not guess.
+
+    These five are reachable on a latched drive and carry no log string in
+    their handler bodies. Two of them take the flash-operation lock, so they
+    are not inert either.
+    """
+    unknown = {
+        s
+        for s, r in oracle.ca_surface().items()
+        if r.classification == oracle.UNKNOWN and r.gate_admitted
+    }
+    assert unknown == {0x04, 0x11, 0x13, 0x21, 0x32}
+    assert oracle.ca_classify(0x04).takes_flash_lock
+    assert oracle.ca_classify(0x13).takes_flash_lock
+    # 0x11's only callee is the helper the block-erase arm hands CDW13 to.
+    assert oracle.ca_classify(0x11).calls == [oracle.FLASH_ADDR_HELPER]
+    assert oracle.FLASH_ADDR_HELPER in oracle.ca_classify(0x0F).calls
+
+
+def test_ca_every_allow_listed_sub_has_a_dangerous_one_nibble_neighbour():
+    """Mechanically enumerated instead of discovered one incident at a time.
+
+    Of the twelve command bytes a latched drive accepts, only 0x21 has no
+    destructive neighbour a single hex digit away.
+    """
+    _, sub = oracle.gate_allow_list()
+    without = {s for s in sub[0xCA] if not oracle.ca_neighbours(s)}
+    assert without == {0x21}
+    assert (0x0F, "nibble") in oracle.ca_neighbours(0x03)
+    assert (0x10, "+-1") in oracle.ca_neighbours(0x0F)
+
+
+# --------------------------------------------------------------------------
 # the boot marker dispatch (PROC0)
 # --------------------------------------------------------------------------
 
@@ -240,24 +388,35 @@ def test_read_only_marker_8_takes_the_clean_boot_arm():
 # --------------------------------------------------------------------------
 
 
-def _triage_ff_encodings() -> set[int]:
-    """Every 0xFF CDW12 sn200-triage.sh actually sends."""
+TRIAGE = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sn200-triage.sh"
+)
+
+
+def _triage_lines() -> list[str]:
+    """sn200-triage.sh with shell line continuations joined, so one
+    admin-passthru invocation is one line."""
     import re
 
-    path = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "sn200-triage.sh"
-    )
-    with open(path) as f:
-        text = f.read()
-    # join shell line continuations so one invocation is one line
-    joined = re.sub(r"\\\n\s*", " ", text)
+    with open(TRIAGE) as f:
+        return re.sub(r"\\\n\s*", " ", f.read()).splitlines()
+
+
+def _triage_encodings(opcode: int) -> set[int]:
+    """Every CDW12 sn200-triage.sh sends with this opcode."""
+    import re
+
     out = set()
-    for line in joined.splitlines():
-        if "--opcode=0xff" not in line.lower():
+    for line in _triage_lines():
+        if f"--opcode=0x{opcode:02x}" not in line.lower():
             continue
         for c in re.finditer(r"--cdw12=0x([0-9a-fA-F]+)", line):
             out.add(int(c.group(1), 16))
     return out
+
+
+def _triage_ff_encodings() -> set[int]:
+    return _triage_encodings(0xFF)
 
 
 def test_triage_script_only_sends_read_only_vendor_commands():
@@ -272,3 +431,22 @@ def test_triage_script_only_sends_read_only_vendor_commands():
     for cdw12 in sorted(sent):
         ok, why = oracle.is_read_only(0xFF, cdw12)
         assert ok, f"sn200-triage.sh sends 0xFF cdw12={cdw12:#06x}, which is {why}"
+
+
+def test_triage_script_never_emits_a_0xca_command_at_all():
+    """0xCA must stay off the triage script by construction, not by luck.
+
+    Twelve 0xCA command bytes survive the Post-Crash gate, so they are exactly
+    the ones a latched-drive script could reach; two of them destroy the drive
+    on one well-formed command and five more are unidentified. No 0xCA
+    encoding is cleared, so the rule is a blanket one: the script does not
+    emit this opcode. `is_read_only` deliberately does not model 0xCA, so
+    there is no way to argue an exception past this test.
+    """
+    assert _triage_encodings(0xCA) == set()
+    for line in _triage_lines():
+        low = line.lower()
+        assert "--opcode=0xca" not in low, f"sn200-triage.sh emits 0xCA: {line.strip()}"
+        assert "opcode=202" not in low, f"sn200-triage.sh emits 0xCA: {line.strip()}"
+    ok, why = oracle.is_read_only(0xCA, 0x0003)
+    assert not ok and "not modelled" in why

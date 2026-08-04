@@ -1,24 +1,32 @@
 """Answer "what does this NVMe command do?" by executing the firmware's own dispatch.
 
 Every answer here comes from running p-code lifted out of `PROC8`, not from a
-table someone typed. Two questions per encoding:
+table someone typed. Three questions per encoding:
 
   * does the Post-Crash gate (`Admin_CheckCmdAllowed` 0x7ffa6b18) admit it?
   * for `0xFF`, which handler runs, and which EEPROM verb/section does it post?
+  * for `0xCA`, which of the 67 jump-table arms runs, in which overlay, and
+    what does the handler's own code say it touches?
 
     SN200_FW=~/sn200fw python3 sn200_oracle.py --gate           # gate allow-list
     SN200_FW=~/sn200fw python3 sn200_oracle.py --ff             # 0xFF CDW12 map
+    SN200_FW=~/sn200fw python3 sn200_oracle.py --ca             # 0xCA family map
+    SN200_FW=~/sn200fw python3 sn200_oracle.py --ca --danger    # operator table
     SN200_FW=~/sn200fw python3 sn200_oracle.py --check ff:0x0004 c6:0x0320
 """
 
 from __future__ import annotations
 
 import argparse
+import os
+import re
 import sys
 from dataclasses import dataclass, field
 from functools import lru_cache
 
 import pcode
+import sn200_strtab as strtab
+from pypcode import OpCode
 
 # --- PROC8 addresses, all runtime -----------------------------------------
 GATE = 0x7FFA6B18  # Admin_CheckCmdAllowed
@@ -318,6 +326,505 @@ def ff_surface() -> dict[int, FfResult]:
 
 
 # --------------------------------------------------------------------------
+# the 0xCA surface
+# --------------------------------------------------------------------------
+#
+# 0xCA is dispatched through a 67-entry jump table of three-byte `j` slots.
+# Each arm loads a *runtime* handler pointer (in the 0x7ffbc000 overlay
+# window) and stores an overlay index into the request object, then falls into
+# a common enqueue. Runtime pointers alone do not identify code -- two arms
+# (0x33 and 0x37) load the SAME pointer and differ only in the overlay -- so
+# both halves are read back and the static address is resolved through the
+# overlay descriptor table.
+
+CA_DISPATCH = 0x7FFA75E1  # l32i.n a12,a1,0x24 ; l8ui a12,a12,0x38
+CA_TABLE = 0x7FFA760E  # 67 x 3-byte `j`
+CA_TABLE_LEN = 67
+CA_ENQUEUE = 0x7FFA6E89  # common tail for overlay handlers
+CA_ENQUEUE_RESIDENT = 0x7FFA6E6C  # tail for the two inline arms (0x05/0x06)
+CA_REJECT = 0x7FFA78E3  # "Admin cmd not supported" default arm
+
+# Scratch layout for the dispatcher run. `a6` points at a word holding the
+# request object; the arms store the overlay index at request+0x20.
+CA_OBJ = 0x7FF99000
+CA_REQ = CA_OBJ + 0x200
+CA_CTX = 0x7FF90000
+CA_STACK = 0x7FF98000
+
+# Command-context byte offsets, from docs/sn200-dangerous-commands.md 4.2.
+CTX_CDW12_LO = 0x38  # the 0xCA command byte, and the gate's sub-list key
+CTX_CDW12_HI = 0x39  # the sub-command byte
+# The coroutine object is ctx-0x100, so the same two bytes are at +0x138/+0x139
+# there. Handlers reach them through a base register already advanced by 0x40,
+# which is why the *instruction* displacement is 0xf8/0xf9 and not 0x38/0x39 --
+# both forms have to be recognised when scanning for a read of the sub byte.
+OBJ_CDW12_LO, OBJ_CDW12_HI = 0x138, 0x139
+IMM_CDW12_HI = (CTX_CDW12_HI, 0xF9)
+
+# 0x0F (raw block erase) and 0x10 (raw page program), overlay 31.
+CA_ERASE_ENTRY = 0x3003DBE0
+CA_WRITE_ENTRY = 0x3003D5BC
+CA_RAWREAD_ENTRY = 0x30036E28
+CA_RAWREAD_CLAMP = 0x30037039  # minu a10,a10,a11 with a11 = 640
+
+_STRTAB_REV = os.environ.get("SN200_REV", "KNGND122")
+
+
+@lru_cache(maxsize=1)
+def _strings() -> strtab.StringTable | None:
+    for name in ("StringTable.csv.gz", "StringTable.csv"):
+        p = os.path.join(pcode.FW_DIR, "fw", _STRTAB_REV, name)
+        if os.path.exists(p):
+            return strtab.StringTable.load(p)
+    return None
+
+
+@dataclass
+class CaDispatch:
+    """What PROC8's own jump table does with one CDW12[7:0] value."""
+
+    sub: int
+    arm: int | None = None  # the 3-byte `j` slot's target
+    handler_rt: int | None = None  # runtime pointer, 0x7ffbc000 window
+    overlay: int | None = None
+    static: int | None = None
+    resident: bool = False
+    calls: list[int] = field(default_factory=list)
+
+    @property
+    def implemented(self) -> bool:
+        return self.arm is not None
+
+
+def ca_dispatch(sub: int) -> CaDispatch:
+    """Run the real dispatcher for one command byte and read out where it goes.
+
+    The jump itself is an indirect `jx` whose FLIX slot the spec does not
+    decode, so the target is taken from `a0` -- which the *executed*
+    `addx2`/`add.n`/`l32r` sequence computed -- and then entered. Everything
+    else, including the handler pointer and overlay index, is read off stores
+    and registers the arm's own instructions produced.
+    """
+    img = _img("PROC8")
+    d = CaDispatch(sub=sub)
+    e = pcode.Emu(img, on_opaque="skip")
+    e.setreg("a1", CA_STACK)
+    e.poke(CA_STACK + 0x24, CA_CTX)
+    e.poke(CA_CTX + CTX_CDW12_LO, sub, 1)
+    e.setreg("a6", CA_OBJ)
+    e.poke(CA_OBJ, CA_REQ)
+    e.setreg("a7", CA_REQ)
+    end = e.run(CA_DISPATCH, stop_at=(CA_TABLE, CA_REJECT), max_steps=2000)
+    if end == CA_REJECT:
+        return d
+    d.arm = e.getreg("a0")
+    if d.arm != CA_TABLE + 3 * sub:
+        raise AssertionError(f"0xCA sub {sub:#x}: table index came out {d.arm:#x}")
+    e.stores.clear()
+    end = e.run(
+        d.arm,
+        stop_at=(CA_ENQUEUE, CA_ENQUEUE_RESIDENT, CA_REJECT),
+        max_steps=2000,
+        stop_on_call=True,
+    )
+    if end == CA_REJECT:
+        d.arm = None
+        return d
+    d.calls = list(e.calls)
+    ovl = [v for a, _, v in e.stores if a == CA_REQ + 0x20]
+    # Arms differ in which register they park the handler pointer in (0x22,
+    # 0x25, 0x26 and 0x32 use a9 where the rest use a13), so take whichever
+    # register the arm left holding an overlay-window address rather than
+    # naming one.
+    hs = {
+        v
+        for v in e.regs.values()
+        if pcode.OVERLAY_WINDOW <= v < pcode.OVERLAY_WINDOW + 0x4000
+    }
+    if not hs or not ovl:
+        d.resident = True
+        return d
+    d.handler_rt = sorted(hs)[0]
+    d.overlay = ovl[0]
+    _, _, src2 = img.overlay_descriptors()[d.overlay]
+    d.static = src2 + (d.handler_rt - pcode.OVERLAY_WINDOW)
+    return d
+
+
+@lru_cache(maxsize=1)
+def ca_table() -> dict[int, CaDispatch]:
+    """Every implemented CDW12[7:0], executed. 67 entries in, 37 out."""
+    out = {}
+    for sub in range(CA_TABLE_LEN):
+        d = ca_dispatch(sub)
+        if d.implemented:
+            out[sub] = d
+    return out
+
+
+def _overlay_end(overlay: int) -> int:
+    _, ln, src2 = _img("PROC8").overlay_descriptors()[overlay]
+    return src2 + ln
+
+
+def ca_body(sub: int) -> tuple[int, int] | None:
+    """[entry, next handler entry in the same overlay) -- the coroutine body.
+
+    These handlers are 26-to-120-byte coroutine trampolines whose resume
+    bodies follow them, so the confirmed function extent is far too small and
+    a fixed byte window is far too large (that mistake produced a published
+    table calling 0xCA/0x11 a Multiplane Write). Bounding by the next handler
+    entry is an ordering argument, not a containment one: treat attributions
+    from this range as INFERRED.
+    """
+    d = ca_table().get(sub)
+    if d is None or d.static is None:
+        return None
+    end = _overlay_end(d.overlay)
+    later = sorted(
+        o.static
+        for o in ca_table().values()
+        if o.overlay == d.overlay and o.static and o.static > d.static
+    )
+    if later:
+        end = min(later[0], end)
+    return d.static, end
+
+
+def _insn_len_from_op0(byte0: int) -> int:
+    """Xtensa fixes instruction length from op0 alone; used to step over a
+    byte range SLEIGH cannot decode without losing alignment."""
+    op0 = byte0 & 0xF
+    if op0 in (8, 9, 12, 13):
+        return 2
+    if op0 in (14, 15):
+        return 8
+    return 3
+
+
+def _sweep(start: int, end: int):
+    """Yield lifted instructions over [start, end), keeping byte alignment."""
+    img = _img("PROC8")
+    pc = start
+    while pc < end:
+        try:
+            i = pcode.lift(img, pc)[0]
+        except Exception:
+            pc += _insn_len_from_op0(img.read(pc, 1)[0])
+            continue
+        yield i
+        pc += i.length
+
+
+def ca_log_strings(sub: int) -> list[tuple[int, int, str]]:
+    """(site, StrId, text) for every log descriptor the handler body loads.
+
+    A descriptor is `(StrId << 16) | (level << 8) | nargs`; the scan takes any
+    `l32r` whose literal decodes as one, which is how every other tool here
+    attributes strings.
+    """
+    tab = _strings()
+    rng = ca_body(sub)
+    if tab is None or rng is None:
+        return []
+    img = _img("PROC8")
+    out = []
+    for i in _sweep(*rng):
+        for o in i.ops:
+            if o.opcode not in (OpCode.LOAD, OpCode.COPY):
+                continue
+            v = o.inputs[-1]
+            if v.space.name != "ram":
+                continue
+            try:
+                w = img.word(v.offset)
+            except KeyError:
+                continue
+            d = strtab.LogDescriptor.unpack(w)
+            if d.level not in strtab.KNOWN_LEVELS or d.nargs > strtab.MAX_NARGS:
+                continue
+            if not tab.plausible(d.str_id):
+                continue
+            out.append((i.addr, d.str_id, tab.text(d.str_id)))
+    return out
+
+
+# Main-image callees worth naming, as *runtime* addresses. Overlay code is
+# linked for execution at 0x7ffbc000, so a callN displacement read out of the
+# static image is wrong by the overlay delta and must be corrected before it
+# names anything (docs/sn200-oam-dispatch.md 1.1).
+FLASH_OP_LOCK = 0x7FFB42CC  # acquire the flash-operation lock
+FLASH_ADDR_HELPER = 0x7FFB3F4C  # takes CDW13; shared by 0x11 and the erase arm
+LOG_EMIT = 0x7FFB45A8
+
+
+def ca_calls(sub: int) -> list[int]:
+    """Runtime call targets statically reachable from the handler entry.
+
+    A LOWER BOUND, and it must be read as one: these handlers yield and resume
+    through `jx`, and the walk does not follow an indirect jump. Presence of a
+    callee is evidence; absence is not.
+    """
+    d = ca_table().get(sub)
+    if d is None or d.static is None:
+        return []
+    img = _img("PROC8")
+    delta = img.overlay_delta(d.overlay)
+    return sorted({c + delta for c in pcode.walk(img, d.static, limit=1500).calls})
+
+
+def ca_reads_sub_byte(sub: int) -> bool | None:
+    """Does this handler's body reference CDW12[15:8] at all?
+
+    Mechanical, over the lifted instruction stream: an access to the sub byte
+    has to materialise the constant 0x39 (from the context) or 0xf9 (from the
+    coroutine object) in an address computation. False means there is no
+    "harmless sub-value" -- every CDW12[15:8] does the same thing.
+    """
+    rng = ca_body(sub)
+    if rng is None:
+        return None
+    for i in _sweep(*rng):
+        for o in i.ops:
+            if o.opcode not in (OpCode.LOAD, OpCode.STORE, OpCode.INT_ADD):
+                continue
+            for v in o.inputs:
+                if v.space.name == "const" and v.offset in IMM_CDW12_HI:
+                    return True
+    return False
+
+
+# Keyword rules over the handler's own log strings, in priority order. The
+# firmware names what it is about to do; nothing else in this family is a
+# reliable signal, and "no destructive string" is not evidence of safety.
+_CA_RULES = (
+    (
+        DESTRUCTIVE,
+        re.compile(
+            r"VUC Erase|Multiplane Erase|Multiplane Write|WritePageRaw"
+            r"|ProgNANDPage|erasure",
+            re.I,
+        ),
+    ),
+    (CATASTROPHIC, re.compile(r"Set Features addr|SetTestModeRegister", re.I)),
+    (MUTATES, re.compile(r"VucFlashReset", re.I)),
+    (
+        READ_ONLY,
+        re.compile(
+            r"Read|\bGet|UID|Histogram|Lot ID|LotID|ToPhysical|Status"
+            r"|Erase Count|FuseRom|MT Info",
+            re.I,
+        ),
+    ),
+)
+
+
+@dataclass
+class CaResult:
+    sub: int
+    dispatch: CaDispatch
+    strings: list[tuple[int, int, str]] = field(default_factory=list)
+    reads_sub_byte: bool | None = None
+    body: tuple[int, int] | None = None
+    calls: list[int] = field(default_factory=list)
+    classification: str = UNKNOWN
+    evidence: str = "none"
+    note: str = ""
+
+    @property
+    def gate_admitted(self) -> bool:
+        return gate_admits(0xCA, self.sub)
+
+    @property
+    def takes_flash_lock(self) -> bool:
+        """Does the handler acquire the flash-operation lock?
+
+        Not a verdict, but it separates "touches the media" from "reads a
+        table in DDR", which is the distinction that matters for the arms with
+        no log strings at all.
+        """
+        return FLASH_OP_LOCK in self.calls
+
+    def describe(self) -> str:
+        bits = []
+        if self.dispatch.resident:
+            bits.append(f"resident arm {self.dispatch.arm:#x}, no overlay")
+        elif self.dispatch.static:
+            bits.append(
+                f"ovl {self.dispatch.overlay} "
+                f"{self.dispatch.handler_rt:#x} -> {self.dispatch.static:#x}"
+            )
+        if self.takes_flash_lock:
+            bits.append("takes the flash-op lock")
+        if self.note:
+            bits.append(self.note)
+        if self.strings:
+            bits.append(self.strings[0][2][:64])
+        elif not self.dispatch.resident:
+            bits.append("no log string in its body")
+        return "; ".join(bits)
+
+
+# Results this file establishes by executing the handler rather than by
+# reading a log string; see ca_erase_ignores_sub_byte() and friends.
+_CA_NOTES = {
+    0x0F: "raw NAND BLOCK ERASE; CDW12[15:8] ignored (executed)",
+    0x10: "raw NAND PAGE WRITE/PROGRAM; subs 0/1 program, 2 fetches a result",
+    0x03: "raw page read, clamped to 640 bytes at 0x30037039 (executed)",
+    0x37: "Multiplane Write + Multiplane Erase",
+    0x12: "VUC_ERASE_PWR_CHAR -- this arm erases blocks",
+    0x39: "NAND-chip (ONFI) SET FEATURES, not NVMe Set Features",
+    0x3B: "writes a NAND die test-mode register",
+}
+
+
+def ca_classify(sub: int) -> CaResult:
+    d = ca_table().get(sub)
+    if d is None:
+        return CaResult(sub=sub, dispatch=CaDispatch(sub=sub), classification=INERT)
+    r = CaResult(sub=sub, dispatch=d, note=_CA_NOTES.get(sub, ""))
+    if d.resident:
+        r.note = r.note or (
+            "inline arm: calls 0x7ffa915c(%d), 0x7ffa9168, result to req+0x154"
+            % (1 if sub == 0x05 else 0)
+        )
+        return r
+    r.body = ca_body(sub)
+    r.strings = ca_log_strings(sub)
+    r.reads_sub_byte = ca_reads_sub_byte(sub)
+    r.calls = ca_calls(sub)
+    blob = " | ".join(s for _, _, s in r.strings)
+    for cls, rx in _CA_RULES:
+        if rx.search(blob):
+            r.classification = cls
+            r.evidence = "log strings in the handler body"
+            break
+    else:
+        r.evidence = "none -- no log string in the handler body"
+    return r
+
+
+def ca_surface() -> dict[int, CaResult]:
+    return {sub: ca_classify(sub) for sub in ca_table()}
+
+
+CA_DANGEROUS = (DESTRUCTIVE, CATASTROPHIC)
+
+
+def ca_neighbours(sub: int) -> list[tuple[int, str]]:
+    """Implemented, known-destructive command bytes a typo away from `sub`.
+
+    Two relations, both of which have already produced real incidents in this
+    family:
+
+      * `nibble` -- one hex digit differs. This is the mistyped-command case
+        (`0xFF` `0x0003` beside the `0x0004` probe, `0xC6` `0x__20` beside
+        `0x__30`).
+      * `+-1` -- the command bytes are consecutive integers, which is how they
+        appear in a loop counter. `0x0F` and `0x10` are 15 and 16.
+    """
+    out = []
+    for other, r in ca_surface().items():
+        if other == sub or r.classification not in CA_DANGEROUS:
+            continue
+        if (sub ^ other) & 0xF0 == 0 or (sub ^ other) & 0x0F == 0:
+            out.append((other, "nibble"))
+        elif abs(sub - other) == 1:
+            out.append((other, "+-1"))
+    return sorted(out)
+
+
+# --------------------------------------------------------------------------
+# the two commands that destroy a drive, executed rather than read
+# --------------------------------------------------------------------------
+
+
+def _run_erase(sub_byte: int, cdw13: int = 1) -> tuple[tuple[int, ...], list[int]]:
+    """Run the 0x0F coroutine's first entry with one CDW12[15:8] value.
+
+    `cdw13` is the physical flash address; the validity helper at 0x30033d00
+    is not entered, so leaving its result register holding the address makes
+    the `beqi a10,1` check pass and the erase arm is the one that runs.
+    """
+    img = _img("PROC8")
+    e = pcode.Emu(img, on_opaque="skip")
+    e.setreg("a1", STACK)
+    e.setreg("a2", REQ)
+    e.poke(REQ + 0x18, 0)  # no saved resume PC == first entry
+    e.poke(REQ + 0x13C, cdw13)  # CDW13, the raw flash address
+    e.poke(REQ + OBJ_CDW12_HI, sub_byte, 1)
+    e.run(CA_ERASE_ENTRY, max_steps=4000)
+    return tuple(e.trace), list(e.calls)
+
+
+def ca_erase_ignores_sub_byte() -> bool:
+    """PROVEN-by-execution: no CDW12[15:8] changes what 0xCA/0x0F does.
+
+    Every one of the 256 values produces a byte-identical instruction trace,
+    and `ca_reads_sub_byte(0x0f)` shows the byte is never even addressed. There
+    is no harmless sub-value of the raw block erase.
+    """
+    base, _ = _run_erase(0)
+    return all(_run_erase(b)[0] == base for b in range(256))
+
+
+# The 0x10 coroutine's first-entry sub dispatch: `beqz.n` / `beqi 1` / `beqi 2`
+# at 0x3003db1f..0x3003db24, falling through to the invalid-field tail.
+CA_WRITE_SUB_DISPATCH = 0x3003DB1F
+CA_WRITE_ARM_0 = 0x3003DB57
+CA_WRITE_ARM_12 = 0x3003DB38
+CA_WRITE_ARM_REJECT = 0x3003D936
+
+
+def ca_write_sub_arms(subs=(0, 1, 2, 3, 0xFF)) -> dict[int, int]:
+    """{CDW12[15:8]: which arm the 0x10 coroutine's first entry selects}.
+
+    0/1/2 are accepted and >= 3 falls into the invalid-field tail. Sub 2 takes
+    the *same* first-entry arm as sub 1 -- it only parts company after the
+    host->DDR transfer -- which is why 0x0210 is not a separate command but a
+    late branch inside the program path.
+    """
+    img = _img("PROC8")
+    out = {}
+    for b in subs:
+        e = pcode.Emu(img, on_opaque="skip")
+        e.setreg("a1", STACK)
+        e.setreg("a2", REQ)
+        e.setreg("a5", REQ)
+        e.poke(REQ + 0x18, 0)  # no saved resume PC == first entry
+        e.poke(REQ + OBJ_CDW12_HI, b, 1)
+        e.run(
+            CA_WRITE_ENTRY,
+            stop_at=(CA_WRITE_ARM_0, CA_WRITE_ARM_12, CA_WRITE_ARM_REJECT),
+            max_steps=800,
+        )
+        out[b] = e.pc
+    return out
+
+
+def ca_rawread_clamp(request: int = 0x10000) -> int | None:
+    """Execute the 0xCA/0x03 length clamp and report what it lets through.
+
+    Runs the bundle that materialises the bound and the `minu` that applies
+    it, with an absurd requested length in a10, and returns what survives.
+    """
+    img = _img("PROC8")
+    e = pcode.Emu(img, on_opaque="skip")
+    e.setreg("a1", STACK)
+    e.setreg("a10", request)
+    e.run(CA_RAWREAD_CLAMP - 8, stop_at=(CA_RAWREAD_CLAMP + 3,), max_steps=8)
+    if "minu" not in pcode.lift(img, CA_RAWREAD_CLAMP)[0].text:
+        return None
+    return e.getreg("a10")
+
+
+def ca_has_length_clamp(sub: int) -> bool:
+    """Is there any `minu` -- the firmware's clamp idiom -- in this body?"""
+    rng = ca_body(sub)
+    return bool(rng) and any("minu" in i.text for i in _sweep(*rng))
+
+
+# --------------------------------------------------------------------------
 # the read-only assertion the triage script depends on
 # --------------------------------------------------------------------------
 
@@ -352,6 +859,14 @@ def main(argv=None) -> int:
         "--ff", action="store_true", help="enumerate the 0xFF CDW12 surface"
     )
     ap.add_argument(
+        "--ca", action="store_true", help="enumerate the 0xCA command-byte surface"
+    )
+    ap.add_argument(
+        "--danger",
+        action="store_true",
+        help="with --ca, print the operator danger table instead",
+    )
+    ap.add_argument(
         "--check", nargs="*", metavar="OP:CDW12", help="classify specific encodings"
     )
     a = ap.parse_args(argv)
@@ -375,11 +890,36 @@ def main(argv=None) -> int:
         print(
             f"\n{len(surface)} valid encodings; every other CDW12 is rejected with no side effect."
         )
+    if a.ca:
+        surface = ca_surface()
+        gated = {s for s in range(256) if gate_admits(0xCA, s)}
+        if a.danger:
+            print(
+                f"{'CDW12[7:0]':>10}  {'latched':<8} {'class':<13} nearest dangerous neighbour"
+            )
+            for sub, r in sorted(surface.items()):
+                nb = ca_neighbours(sub)
+                print(
+                    f"      0x{sub:02x}  {'ADMITTED' if sub in gated else '-':<8} "
+                    f"{r.classification:<13} "
+                    + (" ".join(f"0x{n:02x}({k})" for n, k in nb) if nb else "-")
+                )
+        else:
+            print(f"{'CDW12[7:0]':>10}  {'latched':<8} {'class':<13} detail")
+            for sub, r in sorted(surface.items()):
+                print(
+                    f"      0x{sub:02x}  {'ADMITTED' if sub in gated else '-':<8} "
+                    f"{r.classification:<13} {r.describe()}"
+                )
+            print(
+                f"\n{len(surface)} of {CA_TABLE_LEN} jump-table entries are implemented; "
+                f"{len(gated & set(surface))} are admitted on a latched drive."
+            )
     for spec in a.check or []:
         op, _, c = spec.partition(":")
         ok, why = is_read_only(int(op, 16), int(c, 16))
         print(f"{spec}: {'READ-ONLY' if ok else 'NOT PROVEN READ-ONLY'} -- {why}")
-    if not (a.gate or a.ff or a.check):
+    if not (a.gate or a.ff or a.ca or a.check):
         ap.print_help()
     return 0
 
