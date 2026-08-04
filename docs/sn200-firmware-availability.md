@@ -257,10 +257,13 @@ converts "not published publicly" into "does not exist."
   where to find the newer firmware? KNGND110"* and gets **no answer**. Trust: medium.
 - **Level1Techs**, ["HGST/WDC Ultrastar SN200 Recovery from Persistent Internal Error / Diagnostic State"](https://forum.level1techs.com/t/hgst-wdc-ultrastar-sn200-recovery-from-persistent-internal-error-diagnostic-state/250303)
   — operator on `KNGND110` tried and **failed** to load `KNGND122.bin` via the
-  HDM workflow, because `KNGND122.bin` is a *packaged bundle* (`FWHEADER.bin`,
-  `PROC0-15.bin`, `SECURITY.bin`, `FCC.bin`, `StringTable.csv.gz`) that
-  `hdm manage-firmware --load` rejects as an invalid image. **The actual fix was
-  activating a different existing firmware slot** (slots 2/3/4), not a new image.
+  HDM workflow. **The actual fix was activating a different existing firmware
+  slot** (slots 2/3/4), not a new image.
+  → *Corrected since:* the bundle format is **not** why HDM refused it. WD's own
+  `nvmec_fw_img_dl` never parses the file — it ships every byte verbatim at
+  dword offset 0. Whatever rejected it was host-side (or the read-only-slot
+  refusal, misread), and `nvme fw-download` bypasses it entirely. See
+  `docs/sn200-firmware-flashing.md` §2.
   → Worth reading `nvme fw-log` on all five drives before writing any of them
   off. Trust: medium-high.
 - **virtualbytes.io**, ["VMware Cloud Foundation 9.x: Fixing WD HGST Ultrastar DC SN200 NVMe Drives Stuck in Diagnostic Mode"](https://virtualbytes.io/vmware-cloud-foundation-9-x-fixing-wd-hgst-ultrastar-dc-sn200-nvme-drives-stuck-in-diagnostic-mode-orange-led-blinking/),

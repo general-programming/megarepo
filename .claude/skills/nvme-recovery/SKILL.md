@@ -294,12 +294,43 @@ nothing. Dell EMC's ceiling is `KNECD116` — *below* the fix level, with no
 name in `firmwares/` is the SBL-patching image, which writes every slot and
 destroys the fallback. Do not flash it.
 
-`KNGND122.bin` is a *packaged bundle* (`FWHEADER.bin`, `PROC0-15.bin`,
-`SECURITY.bin`, `FCC.bin`, `StringTable.csv.gz`), so `hdm manage-firmware
---load` rejects it as an invalid image. Use `nvme fw-download` / `nvme
-fw-commit`. Also read `nvme fw-log` before condemning a drive — slots often
-hold different images, and activating a good slot has recovered drives that
-looked dead.
+Also read `nvme fw-log` before condemning a drive — slots often hold different
+images, and activating a good slot has recovered drives that looked dead.
+
+### Flashing: 5 slots, slot 1 read-only, send the bundle raw
+
+Full procedure and provenance: `docs/sn200-firmware-flashing.md`. Tool:
+`tools/sn200-fw/fill-fw-slots.sh`.
+
+- `frmw = 0x0b` → **5 slots, slot 1 read-only, no activation without reset**.
+  Writable slots are **2–5**. Confirmed three ways: the spec decode, WD's
+  `nvmec_get_fw_num_slots` (`sar 1; and 7` / `and 1`), and the firmware's own
+  commit handler, which rejects `FS = 1` on the image-replacing path with
+  `Firmware Activate Invalid Slot`.
+- **`FS = 0` is accepted** — the range check is `FS <= slot_count`, and per spec
+  0 means "the controller chooses". `nvme fw-commit` defaults `--slot` to 0.
+  Always pass an explicit slot.
+- **`KNGND122.bin` goes on the wire verbatim, whole file, unpadded.** WD's own
+  `nvmec_fw_img_dl` does `hdm_load_file` → round size up to a *dword* → one
+  `fw-download` at offset 0, falling back to 4096-byte pages with a short final
+  transfer (`1762048 % 4096 == 768`). It never parses the bundle. Do not extract
+  it; do not pad it (`*_padded.bin` is a Windows storport artefact — padding
+  moves the 256-byte trailer off EOF). Any `hdm --load` rejection is host-side;
+  `nvme fw-download` bypasses it.
+- **Commit actions: 0, 1, 2 implemented; 3 is not.** The handler reads only two
+  bits (`extui a8,a10,3,2; blti a8,3`), so CA=3 → `0xC0040000` (Generic, Invalid
+  Field) and **CA 4/5/6 silently alias onto 0/1/2** — never pass `--bpid`.
+  **CA=0 ("replace slot, do not activate") is the safe one**: no activation, no
+  reset, active slot untouched.
+- **Activation on a dual-port drive needs an NVM subsystem reset**, not a
+  controller reset: the handler branches on port count and returns SC `0x10`
+  (`Dual Port: Subsystem reset required`) vs SC `0x0B` (`Conventional reset
+  required`). Since every in-band reset here is an unclean stop, activate by
+  clean OS shutdown + cold power cycle, never `nvme reset`/`subsystem-reset`.
+- **Download/commit is locked to one PCIe port** — StrId 2970 `Firmware Commit
+  called from wrong port`, SC `0x13` Firmware Activation Prohibited. On a
+  dual-pathed drive use the same `/dev/nvmeN` node throughout.
+- Re-download before every commit; nothing guarantees the buffer survives one.
 
 ### The measurement that would settle a capacitor concern
 
@@ -624,11 +655,25 @@ Plan for total loss of whatever was on it; treat any survival as a bonus.
 
 ### Firmware package facts
 
-Images are plain uncompressed tar: `FWHEADER.bin`, `PROC0..15.bin`, `FCC.bin`,
-`StringTable.csv.gz`, `SECURITY.bin`. Nothing is encrypted or per-image signed
-(`SECURITY.bin` is byte-identical across all revisions). Version order:
-`KNGNP100` -> `KNGND100` -> `KNGND110` -> `KNGND122`. Slot targeting is a host-side
-`Firmware Commit (0x10)` parameter, not encoded in the image.
+Images are plain uncompressed tar: `FWHEADER.bin` (64 B, revision string at file
+offset 512), `PROC0..15.bin`, `FCC.bin`, `StringTable.csv.gz`, `SECURITY.bin` —
+then **ONE** end-of-archive zero block (not the usual two) and a **256-byte
+high-entropy trailer at EOF-256**, different per revision. `SECURITY.bin` is
+byte-identical across all revisions, so the trailer is the per-image signature.
+
+**Bytes 508–511 of every ustar header hold a little-endian CRC-32/MPEG-2**
+(poly `0x04C11DB7`, init `0xFFFFFFFF`, no reflection, no final XOR) of that
+member's data — standard tar leaves them zero. Verified 61/61 members across
+`KNGND100`/`110`/`122`. The drive parses the tar; it is not an opaque blob.
+
+`KNGND110.bin` carries a **21st member `SBLPATCH.bin`** that `KNGND122.bin` does
+not. That is the machine-checkable tell for the `+sblpatch+k` image (which
+writes every slot including the read-only one and updates the SBL — never flash
+it). `tools/sn200-fw/fill-fw-slots.sh` refuses on it.
+
+Version order: `KNGNP100` -> `KNGND100` -> `KNGND110` -> `KNGND122`. Slot
+targeting is a host-side `Firmware Commit (0x10)` parameter, not encoded in the
+image.
 
 `PROC*.bin` are Tensilica **Xtensa** LE images (16 cores + an `FCC` core) in a
 `.BIN`/`.SEG` container: 16-byte headers `{"​.SEG", abs_data_offset, len,
