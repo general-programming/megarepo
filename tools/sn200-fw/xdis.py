@@ -119,8 +119,9 @@ def dis(d, pc, base):
         if op0 == 0xA:
             return 2, "add.n a%d,a%d,a%d" % (r, s_, t)
         if op0 == 0xB:
-            i = r if r else -1
-            return 2, "addi.n a%d,a%d,%d" % (t, s_, i)
+            # RRRN: dest is r, src is s, immediate is t (t==0 means -1).
+            i = t if t else -1
+            return 2, "addi.n a%d,a%d,%d" % (r, s_, i)
         if op0 == 0xC:
             if t & 8:
                 imm = s(((t & 3) << 4) | r, 6) if False else 0
@@ -179,9 +180,20 @@ def dis(d, pc, base):
                 sB = "?Balu sub=%x a%d,a%d,a%d" % (sub, t, sr, rr)
         else:
             sB = "?B %04x" % ((q >> 28) & 0x3FFFF)
-        sC = (
-            "" if ((q >> 48) & 0xFFFF) == 0xC090 else "; ?C %04x" % ((q >> 48) & 0xFFFF)
-        )
+        # Slot C (bits 48-63). Class 0xC = `movi at, imm8` with t@56-59, imm8@48-55.
+        # PROVEN statistically over all 18 images: nibble 56-59 is uniformly spread
+        # over a1..a15 (a0 only in the canonical NOP 0xC090) while nibble 52-55 is
+        # not register-shaped. Confirmed semantically at 0x7ffaad0c (PROC0), where
+        # `?C cb00` supplies the 0 fill byte to the 256-byte memset of the crash
+        # header buffer, and at 0x7ffa6b28 (PROC8), where `?C cb0d` supplies the
+        # opcode constant 0x0D that the sibling routine at 0x7ffa6db4 spells out.
+        c = (q >> 48) & 0xFFFF
+        if c == 0xC090:
+            sC = ""
+        elif (c >> 12) == 0xC:
+            sC = "; movi a%d,%d" % ((c >> 8) & 0xF, c & 0xFF)
+        else:
+            sC = "; ?C %04x" % c
         return 8, "{ %-32s; %-22s%s}" % (flix_slotA(q, pc), sB, sC)
     if False:
         q = int.from_bytes(d[o : o + 8], "little")

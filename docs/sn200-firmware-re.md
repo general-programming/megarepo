@@ -1972,6 +1972,282 @@ an ELF parser for SN200 data.
 
 ---
 
+## 12. Re-verification with corrected FLIX decoding (2026-08-03)
+
+Everything in §1–§11 above was written against a **broken disassembler**. Ghidra's stock
+`flix.sinc` modelled a FLIX bundle as 3 bytes when it is **8**, so Ghidra resumed decoding
+5 bytes inside every bundle and emitted plausible-but-fabricated instructions; ~50% of
+executable bytes were affected. The fix is `tools/sn200-fw/ghidra/install.sh`, and
+`tools/sn200-fw/xdis.py` now decodes bundle slots A and B directly.
+
+This section re-derives the load-bearing claims from a **synced** instruction stream. Where
+a conclusion changes, it is flagged **⚠ OVERTURNS**.
+
+### 12.0 The fix is active, and the old fabrication is reproducible — **PROVEN**
+
+Ghidra now emits `flix.8` (length 8) at `0x30033546`. Forcing a decode at every byte offset
+in that range reproduces the old fabrications exactly:
+
+```
+30033546  flix.8  0xc7008178, 0xb1ff862e   len 8   <- the real instruction
+30033549  l32r    a11, 0x30013b2c          len 3   } all three are
+3003354d  bnall   0x30033576, a15, a12     len 3   } bundle payload,
+30033553  add.s   f8, f0, f0               len 3   } not instructions
+```
+
+**⚠ OVERTURNS:** the `bnall` at `0x3003354d`, previously cited as evidence, is bytes
+`c7 cf 25` straddling the tail of the bundle at `0x30033546` and the head of the next
+bundle at `0x3003354e`. It never existed. The `add.s` beside it is a floating-point op in
+integer control code — the classic tell. Any prior claim resting on an instruction inside
+`0x30033547..0x3003354d` is void.
+
+Independent sanity check: `disany.py PROC0 7ffaac30 …` now decodes the entire startup
+function with **no address gaps**, every `l32r` landing on a real literal, and every branch
+target landing on a real boundary.
+
+### 12.1 The boot latch — **PROVEN**, and the masks are now read directly
+
+Disassembled from the enclosing `entry` at `0x7ffaac30` (starting mid-function desyncs the
+stream — this is how the earlier reading went wrong):
+
+```asm
+7ffaae28: l32r a12,0x7ff826b8            ; -> 0x7ff9ff60   (boot-state struct)
+7ffaae2b: l32i.n a12,a12,0x4             ; a12 = BOOT MODE
+7ffaae2d: { l8ui a9,a5,0x0 ; beqi a12,4,0x7ffaae53 }   ; a5 = 0x7ff8b4f8; mode 4 -> SKIP
+7ffaae35: { sync/extw ; ball a9,mask 0x1,0x7ffaaf02 }  ; bit 0 armed -> Post Crash
+7ffaae3d: { sync/extw ; ball a9,mask 0x4,0x7ffaaf02 }  ; bit 2 armed -> Post Crash
+7ffaae45: l32i.n a11,a7,0x0
+7ffaae47: bne a11,a6,0x7ffaae69
+7ffaae4a: l32r a10,0x7ff83468            ; LOG 3519 "SYS: Unexpected empty System Area."
+...
+7ffaaf02: l32r a10,0x7ff83484            ; LOG 3042 "SYS: Detected a CRASH or PFCRASH section."
+7ffaaf08: l32r a11,0x7ff83474            ; = 0x80000009
+7ffaaf0b: { s32i a11,a7,0x0 ; j 0x7ffaae69 }
+```
+
+Confirms: two single-bit `ball` tests, **bit 0** and **bit 2** (not bit 1), both forcing
+marker 9. The `ball`/`bany` immediate-mask reading is correct.
+
+**⚠ OVERTURNS a supporting argument (not the conclusion).** The bit→section naming in
+`docs/sn200-nondestructive-recovery.md` §2 was derived from the section-state manager at
+`0x7ffab010`. Those are **different objects**:
+
+| literal | value | used by |
+|---|---|---|
+| `*(0x7ff829a8)` | **`0x7ff8b4f8`** | the boot latch (`0x7ffaac38` → a5) |
+| `*(0x7ff826d8)` | **`0x7ff8d200`** | the section-state manager (`0x7ffab01d` → a5) |
+
+So "bit 0 = CRASH, bit 2 = PFCRASH" is **INFERRED** (an inference carried across two
+distinct byte-sized objects), not PROVEN. It remains the best reading — see §12.2 — but it
+should not be quoted as proven.
+
+### 12.2 The latch is self-sustaining, and marker 9 is what sustains it — **PROVEN**
+
+The marker-9 dispatch edge is `0x7ffaaecb: { sync/extw ; beq a11,a14,0x7ffaad01 }` with
+`a14 = 0x80000009`. **`0x7ffaad01` is the UNEXSTRT stub writer.**
+
+```asm
+7ffaad01: l8ui a14,a5,0x0                                  ; same byte, a5 = 0x7ff8b4f8
+7ffaad04: { sync/extw ; ball a14,mask 0x1,0x7ffaac82 }      ; bit 0 SET -> skip the stub
+...                                                          ; bit 0 CLEAR -> write it
+7ffaad1a: l32r a8,0x7ff82888   ; = 0x48444300  ("HDC\0", BE)
+7ffaad17: l32r a9,0x7ff83440   ; = 0x00020100  (version)
+7ffaad45: l32r a14,0x7ff83448  ; = 0x53545254  ("STRT", BE)
+7ffaad48: l32r a15,0x7ff83444  ; = 0x554e4558  ("UNEX", BE)
+7ffaad4b: s32i a15,a5,0x48     ; "UNEX"
+7ffaad4e: s32i a14,a5,0x4c     ; "STRT"
+7ffaad51: l32r a10,0x7ff825f8  ; -> 0x7ff85364  (the CRASH section handle)
+```
+
+So the loop is closed: **marker 9 → if the crash section is empty, stamp an `UNEXSTRT`
+stub into it → next boot's bit-0 test fires → marker 9 again.** A bare power cycle cannot
+break it, which is exactly what the field control showed.
+
+Note `0x7ff8b4f8` serves both roles — byte `+0` is the section-state byte the latch tests,
+and `+0x08 … +0x4c` is the crash-header staging buffer the stub is built in. That resolves
+the apparent contradiction between §5 and §5.1 of the non-destructive-recovery doc: it is
+one struct, not two.
+
+### 12.3 The erase dispatcher, re-read cleanly — **PROVEN**
+
+Sub-command switch at `0x300336c6` (`l8ui a11,a12,0x8d`). Each arm writes an EEPROM
+section id into **`[req+0x11c]`**:
+
+| sub | arm | `[req+0x11c]` |
+|---|---|---|
+| 0 | `0x30033772` | 6 (System Area) |
+| 1 | `0x30033795` | 3 (Bad Block list) |
+| 2 | `0x300337b8` | 9 (BIST Status) |
+| 3 | `0x30033661` | — (SBL EEPROM, inline block) |
+| 4 | `0x300337db` | — (Drive Uninit) |
+| **5** | `0x300337fe` | **`0x0b` Crash Dump** |
+| **6** | `0x3003374f` | **`0x0a` PFail Crash Dump** |
+
+Confirms sub 5 → `0x0b` and sub 6 → `0x0a`.
+
+Only the **crash** arm does extra work on success:
+
+```asm
+300335cd: beqz a11,0x30033704            ; status == 0 (success) -> schedule
+300335d0: l32r a10,0x3003337c            ; LOG 1634 "Erase to Crash Dump failed."
+...
+30033704: l32r a14,0x30033350            ; -> 0x7ff87c64  (startup type)
+30033707: l32i.n a14,a14,0x0
+30033709: { sync/extw ; bnei a14,6,0x300335bf }   ; != 6 -> skip the schedule
+30033711: { s32i a7,a12,0x128 ; movi a15,37 }
+30033719: { s32i a15,a12,0x118 ; mov a11,a6 }     ; [req+0x118] = 37 = 0x25
+30033721: call8 0x30030aa0
+```
+
+Confirms the `bnei a14,6` gate. **Refines a prior hedge:** `0x25` goes into **`[req+0x118]`
+(the verb field)** and `[req+0x11c]` (the section-id field) is **never written** on this
+path — so `0x25` is definitively *not* an erase of a 38th section. It is a distinct verb.
+
+### 12.4 The boot-marker setter and its producers — **PROVEN, new**
+
+`0x7ffa84c8` is the **boot-marker setter**. It takes the requested marker in `[a2+0x18]`:
+
+```asm
+7ffa84dd: { l32r a11,0x7ff82b50 ; mov a0,a9 }        ; a11 = 0x80000003 REINIT
+7ffa851b: l32i.n a10,a2,0x18                          ; requested marker
+7ffa851d: { l32r a12,0x7ff82b4c ; beq a10,a11,0x7ffa8528 }   ; a12 = 0x80000004 FACTORY
+7ffa8525: bne a10,a12,0x7ffa8535
+7ffa8528: l32r a10,0x7ff83130   ; LOG 1338 "SYS: Scheduling drive re-init on next startup"
+7ffa852e: movi.n a13,1
+7ffa8530: s8i a13,a7,0x0        ; a7 = *(0x7ff82ba0) = 0x7ff8cdb4 — "reinit pending" flag
+```
+
+**Marker 3 and marker 4 are treated identically by the setter** — both log StrId 1338 and
+both set the same pending flag. Whatever distinguishes REINIT from FACTORY REINIT happens
+at boot, not at scheduling time.
+
+Two producers post to it (both via `l32r a11,0x7ff82b54` → `0x7ffa84c8`, then
+`call8 0x7ffb32f8`):
+
+- **`0x7ffa4306`** (inside `0x7ffa3e48`) — selects between `0x80000004` and `0x80000003`
+  from a request parameter at `[a2+0x54]`, then `s32i a9,a5,0x18`. This is the OAM/VUC
+  "schedule reinit" service, i.e. the far end of the `0x25` verb from §12.3.
+- **`0x7ffabccf`** — see §12.5.
+
+A rate-limit gate exists at `0x7ffa46b1`: while the startup type is 6, if the pending flag
+at `0x7ff8cdb4` is already set the request is rejected.
+
+### 12.5 ⚠ Why a firmware activation clears the latch — **PROVEN, and it OVERTURNS the prior prediction**
+
+`docs/sn200-independent-re.md` §6.2 predicted, "INFERRED, high confidence", that a firmware
+commit **cannot** clear the latch ("It cannot undo the stub"). The field result refuted
+that. Here is the code.
+
+**(a) The firmware-download/activate handler writes boot marker 3.** PROC0 `0x7ffabbf0`:
+
+```asm
+7ffabcb7: l32r a10,0x7ff8365c            ; LOG 1366 "SYS: Firmware download flags %08X"
+7ffabcc3: l32i a9,a2,0x78                ; the flags word
+7ffabcc6: bbci a9,0,0x7ffabd22           ; flags bit 0 clear -> skip
+7ffabccc: l32r a11,0x7ff82b54            ; -> 0x7ffa84c8  (the marker setter)
+7ffabccf: { l32r a12,0x7ff82b50 ; movi a13,0 }   ; a12 = 0x80000003  REINIT
+7ffabcdb: { s32i a12,a2,0x18 ; mov a10,a2 }      ; requested marker = 3
+7ffabce3: call8 0x7ffb32f8
+```
+
+**A firmware activation schedules a Drive REINIT.** That is the single most important
+sentence in this section.
+
+**(b) A LOAD_N_GO boot bypasses the crash-section test entirely.** The boot-mode enum is
+**PROVEN** at `0x7ffb4850`:
+
+```asm
+7ffb4850: l32i.n a11,a2,0x4
+7ffb4852: { sync/extw ; beqi a11,1,0x7ffb49a4 }   ; 1 -> "Firmware Boot Mode : WARM BOOT, DDR (Slot %d)"
+7ffb485a: beqz a11,0x7ffb49b0                     ; 0 -> "... COLD BOOT, EEPROM (Slot %d)"
+7ffb485d: { sync/extw ; beqi a11,4,0x7ffb499b }   ; 4 -> "... LOAD_N_GO"
+7ffb4865: l32r a10,0x7ff83f18                     ; else "... Unknown state (%d)"
+```
+
+`[struct+4]` here is the same field the startup path reads at `0x7ffaae2b`
+(`*(0x7ff826b8) = 0x7ff9ff60`, offset `+4`). Therefore:
+
+- `0x7ffaae2d`'s `beqi a12,4,0x7ffaae53` — **boot mode 4 (LOAD_N_GO) jumps past both `ball`
+  tests and past the empty-System-Area test.** The latch does not fire.
+- `0x7ffaaf6b` (the markers 5/6/7 handler) does `bnei a15,4,0x7ffaacea` on the same field,
+  and the mode-4 arm is StrId 3043 **"SYS: Load-n-go boot override of failed shutdown."**
+
+So there *is* a boot path that ignores the crash sections, and it is the one a firmware
+activation takes.
+
+**The reconstructed sequence** (INFERRED from (a)+(b), consistent with every field
+observation):
+
+1. `fw-commit --slot=5 --action=2` → the handler at `0x7ffabbf0` writes boot marker **3**,
+   then the controller performs its own FWA shutdown and re-init reset (StrIds 921/922).
+   The host sees `controller capabilities changed`, `CSTS=0x0`, `state=dead`.
+2. That internal restart comes up **LOAD_N_GO (mode 4)** → the crash/pfcrash predicate is
+   skipped → the stored marker 3 is honoured → the drive performs a **Drive REINIT**, which
+   reinitialises the System Area and mapping structures and leaves the crash sections
+   erased.
+3. The cold power cycle then boots normally (mode 0, COLD BOOT/EEPROM). Bit 0 and bit 2 are
+   now clear, so nothing forces marker 9. `state=live`, namespace present, `afi 0x44→0x55`.
+4. The media is zeroed — **because step 2 ran the re-init**, not because of the power cycle.
+
+This explains the control cleanly: a **bare** cold power cycle is boot mode 0 with no
+marker 3 and no bypass, so it changes nothing. Adding the activation supplies both.
+
+**Consequence:** firmware activation is **not** a gentler alternative to `0xFF/0x0503`. It
+reaches the *same* destructive re-init by a different door — and it does so
+**unconditionally**, without the `bnei a14,6` gate that at least in principle limits
+`0x0503`. Its only genuine advantages are the ones already recorded in the skill: it uses
+spec-defined commands, so there is no chance of a typo landing on `Erase to SBL EEPROM` or
+`Drive Uninit`, and it does not depend on the Post-Crash allow-list.
+
+### 12.6 ⚠ Boot marker 8 "READONLY Startup requested" is dead code — **PROVEN**
+
+Scanned all 18 flat images for every literal-pool word equal to a marker constant and every
+reference to it, counting **both** plain 3-byte `l32r` and `l32r` hidden in FLIX slot A
+(bits 8–23, base-ISA formula) — the latter is what a naive byte scan misses.
+
+| marker | literal | references |
+|---|---|---|
+| CLEAN (1) | PROC0 `0x7ff83470` | `0x7ffaae69` (dispatch) · PROC6 `0x7ffb5a72`, `0x7ffbba48` (**writer**) |
+| REINIT (3) | PROC0 `0x7ff82b50` | `0x7ffa430c`, `0x7ffabccf` (**writers**) · `0x7ffaadb0`, `0x7ffaae64`, `0x7ffaaef7` (**boot forcers**) · `0x7ffa84dd`, `0x7ffaae74` (compares) |
+| FACTORY (4) | PROC0 `0x7ff82b4c` | `0x7ffa4306` (**writer**) · `0x7ffa851d`, `0x7ffaae8c` (compares) |
+| POSTCRASH (9) | PROC0 `0x7ff83474` | `0x7ffaaf08` (**boot forcer**) · `0x7ffaaec8` (compare) |
+| **READONLY (8)** | PROC0 `0x7ff83478` | **`0x7ffaaed3` only** — the dispatch comparison |
+
+`0x80000008` has **exactly one reference in the entire firmware**, and it is the `beq` in
+the dispatch chain that decides whether to branch to the handler at `0x7ffaaff5`. There is
+no producer anywhere. (The only other candidate, PROC12 `0x7ffa7d70`, is a false positive:
+`0x7ffa7d6d` is a `retw.n` and the bytes after it are a literal pool, not code.)
+`0x80000008` is also outside `movi`'s immediate range, so it cannot be materialised without
+a literal load.
+
+**Verdict: marker 8 is unreachable.** The handler at `0x7ffaaff5` is bookkeeping only
+(`{ movi a11,1272 ; j 0x7ffaac8a }`, StrId 1272 `SYS: Read-only startup`). **There is no
+read-only-with-L2P-intact startup path to reach**, and the "SPECULATIVE but worth pursuing"
+note in §6 of this document — that setting marker 8 might give a read-only recovery — is
+now closed as **not pursuable**.
+
+### 12.7 What is still NOT proven about data destruction
+
+Stated plainly, because it is the decision-critical gap and it is *narrower* than before
+but still open:
+
+- **PROVEN:** marker 3 is scheduled by both `0xFF/0x0503`-on-a-latched-drive and by a
+  firmware activation.
+- **PROVEN:** PROC0's marker-3 boot handler (`0x7ffaaf63` → `0x7ffaaf7d` → `0x7ffaac8a`) is
+  **pure bookkeeping** — it records a startup reason and continues. The destructive work,
+  if any, is downstream of PROC0's startup function and was not located in this pass.
+- **NOT PROVEN:** the specific routine that reinitialises the L2P / mapping tables. No
+  `Format`/`Uninit`/L2P-rebuild call has been traced to the marker-3 boot path.
+- **Field-established (not code-established):** the media comes back **fully zeroed** after
+  both routes. Two independent recoveries, sampled 1 MiB → 3 TB.
+
+So the honest verdict is: **the re-init destroys user data — treat it as certain
+operationally — but the destruction is proven from the field, not yet from the code.** The
+code proves the *scheduling*, the *trigger conditions* and the *bypass*; it does not yet
+show the erase itself. Do not describe the destruction as "PROVEN in the disassembly".
+
+---
+
 ## Actionable recovery options
 
 Ranked by confidence. **Read the data-loss warning first.**

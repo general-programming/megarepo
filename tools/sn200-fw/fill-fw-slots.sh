@@ -114,8 +114,35 @@ filesize() { python3 -c 'import os,sys;print(os.path.getsize(sys.argv[1]))' "$1"
 # jsonq <python expr over `d`> -- reads the JSON document on stdin.
 # `python3 -c`, not a heredoc: a heredoc would eat the stdin we are piping in.
 JSONQ_PY='
-import json, sys
+import json, re, sys
 d = json.load(sys.stdin)
+# nvme-cli >=2.x nests the payload under the device name and uses long field
+# names ("Firmware Rev Slot 2": "3617007620172762699 (KNGND122)"); older
+# builds emit flat frs1..frs7 / afi. Normalise both to frsN + afi so the rest
+# of the script does not care which nvme-cli it is talking to.
+if len(d) == 1 and isinstance(next(iter(d.values())), dict):
+    inner = next(iter(d.values()))
+    if any("Firmware Rev" in k or k.startswith("frs") for k in inner):
+        d = inner
+norm = {}
+for k, v in d.items():
+    m = re.match(r"^(?:frs(\d+)|Firmware Rev Slot (\d+))$", k)
+    if m:
+        n = m.group(1) or m.group(2)
+        s = str(v)
+        # value may be "<decimal> (KNGND122)", a bare revision, or a u64 blob
+        rev = re.search(r"\(([^)]*)\)", s)
+        if rev:
+            s = rev.group(1)
+        elif s.isdigit():
+            try:
+                s = int(s).to_bytes(8, "little").decode("ascii", "ignore")
+            except Exception:
+                pass
+        norm["frs" + n] = s.strip()
+    elif k == "afi" or "Active Firmware Slot" in k:
+        norm["afi"] = int(v)
+d = {**d, **norm}
 try:
     print(eval(sys.argv[1]))
 except Exception:
@@ -224,8 +251,14 @@ if [[ $DRY_RUN -eq 0 ]]; then
 		printf '    slot %d : %s\n' "$i" "${v:-<empty>}"
 	done
 
-	if (( NEXT != 0 )); then
-		echo "    !! an activation to slot $NEXT is already pending." >&2
+	# AFI bits 6:4 name the slot to activate at next reset; 0 means "nothing
+	# pending". Some drives instead leave it equal to the ACTIVE slot after an
+	# activation has already completed -- that is not a pending change, it is
+	# the drive restating the status quo, and refusing on it is a false
+	# positive. Only a next-reset slot that differs from the active one is a
+	# genuine pending activation.
+	if (( NEXT != 0 && NEXT != ACTIVE )); then
+		echo "    !! an activation to slot $NEXT is pending (active is $ACTIVE)." >&2
 		echo "    !! Resolve that before rewriting slots. Stopping." >&2
 		exit 3
 	fi
@@ -298,9 +331,15 @@ for s in "${targets[@]}"; do
 		echo "    !! slot $s reads '$got', expected $WANT_REV" >&2
 		exit 5
 	fi
-	if (( (afi2 & 7) != ACTIVE )) || (( ((afi2 >> 4) & 7) != 0 )); then
-		echo "    !! afi moved (active/next changed). A commit action other than" >&2
-		echo "    !! 0 was applied. STOP and investigate before touching another drive." >&2
+	# CA=0 must not change the active slot, nor introduce a pending activation
+	# to a DIFFERENT slot. A next-reset field equal to the active slot is the
+	# drive restating the status quo (see the note at the pre-flight check) and
+	# is not evidence that a different commit action was applied.
+	next2=$(( (afi2 >> 4) & 7 ))
+	if (( (afi2 & 7) != ACTIVE )) || (( next2 != 0 && next2 != ACTIVE )); then
+		echo "    !! afi moved (active $ACTIVE -> $((afi2 & 7)), next-reset $next2)." >&2
+		echo "    !! A commit action other than 0 was applied." >&2
+		echo "    !! STOP and investigate before touching another drive." >&2
 		exit 5
 	fi
 done
