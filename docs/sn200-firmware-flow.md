@@ -141,11 +141,19 @@ backstop for the lost-interrupt defect above. Its poll loop is provably
 unbounded while `[0x7ff95678] != 0`, and no incrementer for that word exists in
 either PROC8 image; whether it is ever entered non-zero is INFERRED.
 
-**Exposure scales with workload — provably.** Fixed 25 ms budget against live
-counters: outstanding NAND writes, write-buffer entries, in-use command
-contexts, pending V2P, broken deallocates, plus a CellCare save. A busy drive
-latches; an idle one doesn't. This is why a whole-device TRIM appeared causal —
-it is the peak-current, peak-dirty-state workload, not a special code path.
+**Exposure scales with workload — INFERRED, and the original argument for it was
+wrong.** The claim was "fixed 25 ms budget against live counters, therefore a
+busy drive latches". Red-teaming killed the *because*: **the 25 ms enforces
+nothing.** At expiry the monitor submits marker 7 and exits, and nothing
+downstream reads the deadline — so if the work takes 40 ms and the rails hold
+50 ms, PROC6 still writes `0x80000002` over the breadcrumb and the drive boots
+clean. Exceeding 25 ms is by itself harmless.
+
+The real constraint is **hold-up energy**, which appears nowhere in the firmware
+and has never been measured on these drives. Workload scaling may well be true —
+more dirty state means a longer save means a greater chance of running out of
+hold-up — but it rests on an unmeasured physical quantity, not on the timer.
+Treat it as a plausible model, not a proven one.
 
 **`CC.SHN` is necessary but not sufficient.** The NVMe shutdown path writes only
 marker 5; CLEAN comes from a *different* routine after the flush completes. An

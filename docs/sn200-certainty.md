@@ -3,7 +3,45 @@
 An explicit confidence audit, written because "we are confident" is not the same
 as "we checked". Every claim below is graded, and the ungraded gaps are named.
 
-## The root cause — PROVEN, by four independent routes
+> ## ⚠ RED-TEAM RESULT — read this before the rest
+>
+> An agent was tasked with **refuting** this document. Seven attacks, **three
+> landed**. See `sn200-red-team.md`. The corrections are folded in below, but in
+> summary:
+>
+> 1. **The 25 ms is not a budget and enforces nothing (PROVEN).** At expiry the
+>    monitor submits marker 7 and exits; *nothing downstream reads the deadline*.
+>    If the work takes 40 ms and the rails hold 50 ms, PROC6 still writes
+>    `0x80000002` **over** the marker-7 breadcrumb and the drive boots clean.
+>    Exceeding 25 ms is by itself harmless. The real constraint is **hold-up
+>    energy**, which appears nowhere in the firmware and has never been measured
+>    on these drives. "Workload scaling is PROVEN" was a non-sequitur and is
+>    downgraded to INFERRED.
+> 2. **Leg 4 was misread and is actually counter-evidence (PROVEN header).**
+>    There are two mutually exclusive producers: stub = version `0x00020100` +
+>    `"UNEXSTRT"` at `+0x40`; full fault dump = `0x00020200`. Our retrieved dump
+>    is `0x00020200` with `+0x40` **zero** — the *full-dump* writer. So that
+>    drive's CLOG was armed by a **genuine fault**, not by the claimed
+>    unfinished-shutdown stamp. The log inside it even records `SYS: PFAIL
+>    startup`, emitted only by the marker-2 handler, i.e. the *preceding
+>    shutdown completed* in 6.4 ms — a fault **after** a successful recovery.
+> 3. **The field pattern is not simply "power events" (partial).** Row 2 of
+>    `sn200-field-evidence.md` — `mkfs.xfs` with discard on a healthy, running
+>    drive — latched it with no power event and no shutdown, and the model has
+>    no path to markers 5/6/7 without a type-3 request or a PFAIL edge. WD's
+>    OM-6850 root cause is *"small loss of usable media … over time, this leads
+>    to a crash"* — attrition→assert, which fits the full-dump header better.
+>    And "five drives" is one batch, one owner, one rack, one workload.
+>
+> **The attack that failed closed our biggest gap:** the disputed 5/6/7 → latch
+> edge **does exist**, proven instruction-by-instruction
+> (`0x7ffaaea7/b2/bd` → `0x7ffaaf6b` → `bnei a15,4` → `0x7ffaacea` → falls
+> through to `0x7ffaad01`). The earlier "branches past the UNEXSTRT block" worry
+> was a mis-identification — there are two blocks. That part of the claim is
+> **stronger** than stated: 5/6/7 reaches mode 6 on both arms, so the crash
+> section is not even required for the first latch.
+
+## The root cause — was claimed PROVEN by four routes; leg 4 is retracted
 
 The drive latches because **a shutdown began and did not finish**.
 

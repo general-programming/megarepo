@@ -149,8 +149,16 @@ the ladder can make things worse. Prefer `unbind`/`bind`.
 SN200 the NVMe shutdown path writes only marker 5 `Normal Shutdown STARTED`;
 the CLEAN marker is written by a *different* routine once the System Area /
 L2P flush actually completes. A shutdown that is acknowledged but whose flush
-does not finish still lands in the "never finished" handler. Allow time after
-`unbind` and do not assume a returned ioctl means the drive is safe to cut.
+does not finish still lands in the "never finished" handler.
+
+⚠ **Worse than that, and this undercuts the usual advice:** the marker-5 submit
+at PROC0 `0x7ffa8dca` jumps straight into `SYS: Returning shutdown completion`,
+and `ShutdownReq --> SAM` is only reached **afterwards**. If that string is the
+host-visible `CC.SHN` completion — INFERRED, not yet proven — then **waiting for
+`CSTS.SHST=10b` does not wait for the System Area save at all.** The standard
+"issue `CC.SHN`, wait for `SHST`, then cut power" ritual would therefore *not*
+guarantee the save finished. Allow real time after `unbind`, and treat a
+completed shutdown handshake as necessary rather than sufficient.
 
 **A warm reboot is not a power cycle** — it does not drop rail power. But do
 not reach for `ForceOff` reflexively either: an abrupt power cut is an unclean
