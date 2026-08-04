@@ -32,6 +32,99 @@ from sn200_dump import (
 )
 from sn200_strtab import StringTable
 
+import sn200_container
+
+
+def decode_container(data: bytes, table: StringTable, args) -> int:
+    """The blob carries the CDH container magic, so the framing is known and
+    does not need deriving. See docs/sn200-crash-dump-retrieval.md §4.3."""
+    print("-- container ---------------------------------------------------------")
+    print(
+        "  CDH crash dump, version 0x%08x, FWREV %s"
+        % (
+            sn200_container.container_version(data),
+            sn200_container.container_fwrev(data),
+        )
+    )
+    cov = sn200_container.coverage(data)
+    blocks = sn200_container.parse_container(data, table)
+    print(
+        "  %d log blocks, cores present: %s"
+        % (cov["blocks"], cov["cores_present"] or "none")
+    )
+
+    ok = sn200_container.hash_matches(blocks, table)
+    if ok is False:
+        print("  !! block HASHVAL does not match the string table's. The table is")
+        print("     for a different firmware revision; every message below is WRONG.")
+    elif ok:
+        print("  HASHVAL 0x%08x matches the string table" % table.hashval)
+
+    if len(data) < cov["bytes_for_16_cores"]:
+        print(
+            "  !! TRUNCATED. All 16 cores need 0x%x bytes; this blob has 0x%x."
+            % (cov["bytes_for_16_cores"], len(data))
+        )
+        print(
+            "     Cores above %d are absent, and an assert on one of them"
+            % cov["highest_complete_core"]
+        )
+        print("     cannot be found here no matter how the data is parsed.")
+    print()
+
+    records = [r for b in blocks for r in b.records]
+    asserts = [r for r in records if r.is_assert]
+    print("-- records -----------------------------------------------------------")
+    print(
+        "  %d records across %d blocks; assert-level (0x20): %d"
+        % (len(records), len(blocks), len(asserts))
+    )
+    print()
+    if asserts:
+        print("  *** THE ASSERT ***")
+        for r in asserts:
+            print("  core%d StrId %d: %s" % (r.core, r.str_id, r.text))
+        print()
+    elif records:
+        print("  No assert-level record is present. Every record here is")
+        print("  informational. If the drive is latched, the firing assert is")
+        print("  somewhere this blob does not reach.")
+        print()
+
+    if not args.asserts_only:
+        for b in blocks:
+            print(
+                "== block @%05x  core%d flags%x  index %d  serial %d  (%d records)"
+                % (b.offset, b.core, b.flags, b.index, b.serial, len(b.records))
+            )
+            for r in b.records:
+                print(
+                    "  %05x #%-3d lvl%02x id%-4d ts=%08x %s%s"
+                    % (
+                        r.offset,
+                        r.index,
+                        r.level,
+                        r.str_id,
+                        r.ccount,
+                        r.text,
+                        "   *** ASSERT ***" if r.is_assert else "",
+                    )
+                )
+    if args.json:
+        with open(args.json, "w") as f:
+            json.dump(
+                {
+                    "container": "CDH",
+                    "fwrev": sn200_container.container_fwrev(data),
+                    "coverage": cov,
+                    "records": [vars(r) for r in records],
+                },
+                f,
+                indent=2,
+                default=str,
+            )
+    return 0
+
 
 def hexdump(data: bytes, base: int = 0, limit: int = 256) -> str:
     out = []
@@ -104,6 +197,9 @@ def main() -> int:
     print("-- first 256 bytes ---------------------------------------------------")
     print(hexdump(data))
     print()
+
+    if sn200_container.is_container(data) and args.mode != "scan":
+        return decode_container(data, table, args)
 
     layout = None
     chain_len = 0

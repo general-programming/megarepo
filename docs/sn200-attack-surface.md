@@ -89,9 +89,11 @@ section handles `0x7ff85364` / `0x7ff85374` appear as literals in **PROC0's imag
 only** — 50 `l32r` sites in PROC0, zero in PROC8 or any other core. The
 `0x7ff8xxxx` range is per-core local memory, not a shared window: every
 processor has its own image based at `0x7ff80000`. A write primitive on PROC8
-therefore cannot reach PROC0's section state. **PROVEN** for the literal
-distribution; **INFERRED (high confidence)** for the per-core address-space
-claim, which follows from all 17 images sharing the same base.
+therefore cannot reach PROC0's section state. **PROVEN**, both for the literal
+distribution and for the per-core address-space claim — `0x7ff80000` is one
+512 KiB slot of the SoC unit grid, self-aliased, so the address resolves to the
+issuing core. No alias to another core's slot exists in any image. See
+`sn200-memory-map.md` §1, §4.
 
 This is why `0x7ff87c64` is the target and the section bits are not: the mode
 word lives on the processor the host can actually talk to.

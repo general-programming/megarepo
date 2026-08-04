@@ -105,6 +105,14 @@ class StringTable:
     def num_reserved(self) -> int:
         return int(self.meta.get("NUMRSVD", "0"))
 
+    @property
+    def hashval(self) -> int | None:
+        """The table's own HASHVAL, which every crash-dump log block header
+        repeats at +0x14. A mismatch means the table is for a different
+        firmware revision and every string it renders will be wrong."""
+        v = self.meta.get("HASHVAL")
+        return int(v, 0) if v else None
+
     def __len__(self) -> int:
         return len(self.lines)
 

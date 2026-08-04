@@ -571,6 +571,27 @@ reliably inert when **CDW10, CDW11, CDW12 *and* CDW13** are all zero. Nothing
 about these encodings is guessable — `0x0F` erase sits two values from `0x10`
 write, and `0x0403` sits one nibble from the `0x0503` used in recovery.
 
+### ⚠ Read-only is not the same as harmless — pace admin traffic
+
+**A latched drive is reset-looping.** Every admin command you send lands on a
+controller that is cycling every ~5 s, and the driver is fighting to
+re-establish queues each time. Sustained admin traffic against that will wedge
+the host: on sea1-k8s-2 a 50-chunk crash-dump pull took Talos down — kernel
+alive and pinging, but `apid` and `kubelet` both stopped answering, 7 OSDs
+dropped and ceph went to 33% degraded. Recovery needed a Redfish
+`GracefulRestart`.
+
+The commands were individually read-only and individually safe. The *volume*
+was the problem.
+
+- **Issue the minimum number of commands.** One large read beats fifty small
+  ones. If a probe tells you an offset field is ignored, you have your answer —
+  do not repeat it 49 more times to be sure.
+- **Set `noout` before touching a latched drive on a ceph host**, not after the
+  node drops.
+- Prefer a **diagnostics boot** over the production node for anything
+  exploratory; that is what `tools/nvme-noreset/` exists for.
+
 ### Two safe reads — use these before inferring anything
 
 Both are allow-listed, so they work on a latched drive, and neither changes

@@ -7,6 +7,7 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 
 | Doc | Covers |
 |---|---|
+| `sn200-memory-map.md` | what is core-local vs shared, and why isolation holds |
 | `sn200-xtensa-isa.md` | instruction encodings, FLIX slots, decoder corrections |
 | `sn200-command-reference.md` | every command, encoding, gating, safety class |
 | `sn200-firmware-re.md` / `sn200-independent-re.md` | the two independent teardowns |
@@ -25,7 +26,8 @@ Everything below is PROVEN from code unless marked otherwise.
 Not one CPU. **18 Tensilica Xtensa images**, each its own core with its **own
 address space** — which matters more than it sounds: a memory-write primitive on
 one core cannot reach another's state. That single fact closed most of the
-offensive avenues.
+offensive avenues, and it is **PROVEN** — `0x7ff80000` is a self-aliased 512 KiB
+slot of the SoC unit grid, not a shared window (`sn200-memory-map.md`).
 
 | Image | Role |
 |---|---|

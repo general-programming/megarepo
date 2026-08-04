@@ -349,6 +349,12 @@ def rank_asserts(records: list[Record], table: StringTable) -> list[Record]:
 
 # --- container sniffing ------------------------------------------------------
 EYECATCHERS = {
+    # These two are the real container magics. They are 3-char tags with a
+    # binary byte in front, which is exactly why years of 8-char-ASCII
+    # eyecatcher scans over the firmware never found them.
+    b"\x00CDH": "CDH crash-dump container header (offset 0)",
+    b"\x09CDI": "CDI log-section header",
+    b"MMAP": "MMAP capture-region descriptor",
     b"\x7fELF": "ELF (the format libied.so's assert_dump_decoder.c expects)",
     b"E6LG": "E6LG host capture-diagnostics container",
     b"CRSHDMP": "crash dump section tag",

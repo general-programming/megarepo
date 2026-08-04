@@ -44,16 +44,22 @@ genuinely different second half; 160 KiB and above return nothing.
 Content runs to the final byte (`0x1fffc`), so the dump is **truncated, not
 complete**. `mdts` reports 0.
 
+## SOLVED SINCE
+
+- **Record framing is understood.** See `sn200-crash-dump-retrieval.md` §4.3:
+  0x18-byte block headers on a 0x1000 grid, 8-byte records, an 8-bit per-block
+  record index that overlaps the low nibble of the level byte, and bit 31 as a
+  stale-terminator rather than a set constant. The "13 records at ~`0x1000`
+  intervals" was the walk dying at record 16 of every block. Correct framing
+  yields **733 records** from the same bytes, with arguments intact.
+- **The dump is a per-core grid**: 4 blocks per core, `0x4000` per core,
+  core N at `0x12500 + N*0x4000`. 128 KiB reaches cores 0–3 of 16.
+
 ## STILL OPEN
 
-- **Record framing is not understood.** The decoder finds no self-consistent
-  chain and falls back to a scan, which yields only 13 records across 128 KiB —
-  at suspiciously regular ~`0x1000` intervals, suggesting per-page framing that
-  the scan is sampling rather than parsing. Argument values are consequently
-  garbage (`"FW Slot 6053912"`), exactly as the decoder warns.
-- **No assert-level (level `0x20`) record appears in the retrievable portion.**
-  So the actual firing assert is *not yet in hand* — it may lie beyond 128 KiB,
-  or require correct framing to surface.
+- **No assert-level (level `0x20`) record exists in the retrievable portion.**
+  All 733 records are level `0x60`. The firing assert is not in hand and is
+  almost certainly on a core above 3, i.e. past `0x22500`.
 - **The offset mechanism itself.** Something must let WD's tooling read the
   whole section; it is not any CDW tried here.
 
