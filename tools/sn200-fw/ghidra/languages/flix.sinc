@@ -541,6 +541,30 @@ flixSlotB_E: "?B pre="^flixBE_pre is flixBE_pre {
     build flixSlotB_E;
 }
 
+# ===========================================================================
+# Plain (non-FLIX) op0=0 catch-all -- length, not semantics.
+#
+# The core ISA fixes instruction length from op0 alone: op0=0 is always three
+# bytes. The stock spec still refuses to *resolve* several op0=0 encodings
+# this controller uses -- reserved QRST sub-opcodes, and defined ones carrying
+# a non-zero reserved field (`sll ar,as` requires at=0; ~4400 sites here have
+# at!=0). Without a matching constructor SLEIGH cannot advance at all, which
+# is what stopped the 0xFF/0x0303 walk in docs/sn200-pcode-toolchain.md.
+#
+# This constructor constrains op0 only, so every real constructor (which
+# constrains op0+op1+op2 at least) is strictly more specific and still wins.
+# It asserts NOTHING about the instruction beyond its length: no register is
+# written, so any value the real instruction produced stays stale. Emu records
+# it via OPAQUE_PCODEOPS and reports it; treat a result that depends on one as
+# corroborated at best, never proven.
+define pcodeop xt_op0_reserved;
+
+:xt.rsvd "{op1="^op1^", op2="^op2^", r="^ar^", s="^as^", t="^at^"}"
+    is op0=0 & op1 & op2 & ar & as & at
+{
+    xt_op0_reserved();
+}
+
 @else
 
 # Big-endian FLIX bundles have not been analysed for this project (the

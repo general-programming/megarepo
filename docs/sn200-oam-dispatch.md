@@ -217,11 +217,21 @@ SBL EEPROM section 13. Full decode in `sn200-marker-write.md` §1.
 | 0 | `0x0003` | `0x30033772` / `0x7ffbc43a` | 3 | `6` System Area | `0x30033571` | return |
 | 1 | `0x0103` | `0x30033795` / `0x7ffbc45d` | 3 | `3` Bad Block list | `0x30033652` | return |
 | 2 | `0x0203` | `0x300337b8` / `0x7ffbc480` | 3 | `9` BIST Script | `0x30033643` | **chains** a second erase, verb 3 section `8` BIST Status (`0x3003372c`), resume `0x30033634` |
-| 3 | `0x0303` | `0x30033661` / `0x7ffbc329` | 1 | `13` SBL | `0x300335f7` → `0x300335e8` | return ☠ (drive will not POST) |
+| 3 | `0x0303` | `0x30033661` / `0x7ffbc329` | 1 | `13` SBL | `0x300335f7` → `0x300335e8` | return ☠ (drive will not POST) — **the only two-stage arm**, and the only row here now confirmed by *execution* as well as by reading: see the note below |
 | 4 | `0x0403` | `0x300337db` / `0x7ffbc4a3` | **`0x25`** | — | `0x300335d9` | ☠ posts re-init **with `+0x128 = 1`**, unconditionally |
 | 5 | `0x0503` | `0x300337fe` / `0x7ffbc4c6` | 3 | `11` (`0x0b`) CLOG | `0x300335ca` | **if `*(0x7ff87c64) == 6`**, posts re-init with `+0x128 = 0` |
 | 6 | `0x0603` | `0x3003374f` / `0x7ffbc417` | 3 | `10` (`0x0a`) PFCL | `0x300335a3` | **return — nothing else at all** |
 | else | — | `0x300336f2` | — | — | — | StrId 1636 "Received Bad Erase sub-cmd: %d", `status |= 0x40040000` |
+
+> **Sub 3 confirmed by execution, 2026-08-04.** This row was the last one the
+> p-code lifter could not reach: three reserved-encoding instructions on the arm
+> stopped SLEIGH dead (`sn200-tie-opcodes.md` §5). With the lifter able to step
+> over them, `sn200_oracle.py --ff` now runs the arm and reads **verb 1, section
+> 13**, reaching the OAM enqueue `0x30030aa0` — reproducing this table's row
+> exactly. Two structural details the read had not surfaced: it is a **two-stage
+> coroutine** (stage 1 at `0x30033661` fills a 64-byte buffer at `ctx+0x178`
+> through `0x30031d10` and yields; the request is built on the resume at
+> `0x300335f7`), and its `+0x120` and `+0x12c` are both set to **1**.
 
 Section ids read directly off the `movi` in each arm's second bundle
 (`6`, `3`, `9`, `13`, —, `11`, `10`) and corroborated by the failure string each

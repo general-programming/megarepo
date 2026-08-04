@@ -10,7 +10,9 @@ short chain over proven facts. **UNKNOWN** = not established; stated as such.
 
 Companion documents: `sn200-command-reference.md` (safety classification — the
 document you act from), `sn200-oam-dispatch.md` (`0xFF`), `sn200-c6-dispatch.md`
-(`0xC6`), `sn200-vuc-flash-read.md` (`0xCA` sub-values `0x00`–`0x03`).
+(`0xC6`), `sn200-vuc-flash-read.md` (`0xCA` sub-values `0x00`–`0x03`),
+`sn200-vendor-tooling.md` (**vendor names for these encodings**, cross-referenced
+against `nvme-cli`'s WDC plugin — and which of them do *not* apply to us).
 **This document is an index, not a safety authorisation. Nothing new here is
 cleared to send.**
 
@@ -153,20 +155,28 @@ comparisons (`op ≤ 0xC9` → `op ≤ 0xC7` → `op == 0xC6` or reject) send al
 
 | op | handler (runtime → static) | ovl | identity | status |
 |---|---|---|---|---|
-| `0xC6` | `0x7ffbea44` → `0x3003147c` | 18 | VUC SCSI Ported Command | documented, `sn200-c6-dispatch.md` |
+| `0xC6` | `0x7ffbea44` → `0x3003147c` | 18 | VUC SCSI Ported Command — WDC `CAP_DIAG_CMD_OPCODE`, the generic VUC transport | documented, `sn200-c6-dispatch.md`; six of its `0x20` subs vendor-CONFIRMED |
 | **`0xC8`** | `0x7ffbc180` → `0x30031bf8` | 19 | **VCAP failure injection** — sub `0` = *fake* vcap failure, sub `1` = *clear* fake vcap failure | **NEW** |
 | **`0xC9`** | `0x7ffbc038` → `0x300329f0` | 20 | **UNKNOWN** — 114-byte coroutine stub, no strings of its own | **NEW** |
 | `0xCA` | 67-entry jump table, §3 | various | VUC Flash family | partly documented |
-| **`0xCC`** | 8-arm sub-dispatch, §4 | 12/24/25 | **`Admin_VUC_Sys_*` / `Admin_VUC_Device_Config_*` — the system/config family** | **NEW** |
+| **`0xCC`** | 8-arm sub-dispatch, §4 | 12/24/25 | **`Admin_VUC_Sys_*` / `Admin_VUC_Device_Config_*` — the system/config family**. Command `0x03` sub `0x01` (`CDW12 = 0x0103`, `CDW13 = new size`) is WDC **Drive Resize** — `sn200-vendor-tooling.md` §5 | **NEW** |
 | **`0xD4`** | 11-arm sub-dispatch, §5 | 21 + resident | **diagnostics / power-off / FW-slot-erase / error injection** | **NEW** |
 | **`0xD7`** | *same sub-dispatch as `0xD4`* | ″ | alias of `0xD4` — the dispatcher falls through | **NEW** |
 | **`0xD9`** | `0x7ffbcf4c` → `0x3002c744` | 12 | **alias of the `0x0D` Namespace Management handler** | **NEW** |
-| `0xDD` | `0x7ffa76dc` | — | Start Secure Purge | documented |
-| `0xDE` | via `0x7ffa7593` → `0x7ffa7d2a` | resident | Secure Purge status | documented |
-| `0xE6` | `0x7ffb375c` | resident | *(owned by a parallel analysis)* | — |
+| `0xDD` | `0x7ffa76dc` | — | Start Secure Purge — WDC `PURGE_CMD_OPCODE`. SN100/SN200 are the **only** two families in the whole WDC plugin granted this | documented |
+| `0xDE` | via `0x7ffa7593` → `0x7ffa7d2a` | resident | Secure Purge status — WDC `PURGE_MONITOR_OPCODE` (`CDW10 = 0x0C`, 0x2F bytes) | documented |
+| `0xE6` | `0x7ffb375c` | resident | **WDC `CAP_DIAG_OPCODE` — Capture Diagnostics.** Header read: `CDW10 = 2`, `CDW12 = 0`, 8 bytes, length in bytes `[4..7]` **big-endian** | vendor-named, `sn200-vendor-tooling.md` §4 |
 | `0xEC` | `0x7ffbc24c` → `0x3002b6c4` | 11 | **`Admin_VUC_Enable`** — see §6 | **NEW identification** |
 | **`0xEF`** | `0x7ffbc5f4` → `0x3003392c` | 22 | **`Admin_VUC_Mi_Test_OVL022`** — NVMe-MI command inject / response retrieve | **NEW** |
-| `0xFF` | `0x7ffbc110` → `0x30033448` | 22 | OAM command | documented |
+| `0xFF` | `0x7ffbc110` → `0x30033448` | 22 | OAM command — WDC `CLEAR_DUMP_OPCODE`. `CDW12 = 0x0503`/`0x0603` (clear crash / pfail dump) are **vendor-CONFIRMED**, encoding for encoding, against our executed oracle | documented, `sn200-oam-dispatch.md` |
+
+**Vendor names, and the four traps in them.** `sn200-vendor-tooling.md` carries
+the full cross-reference. In short: `0xC6`, `0xE6`, `0xDD`, `0xDE`, `0xFF` and
+`0xCC`/`0x0103` are corroborated by `nvme-cli`'s WDC plugin; `0xC8`, `0xC9`,
+`0xD4`, `0xD7`, `0xD9`, `0xEC`, `0xEF` and our `0xCA` have **no** vendor name.
+The plugin *does* use the values `0xC9`, `0xCA` and `0xD4` — for **OpenFlex
+enclosure** commands and **log page ids** on other products. Those names are
+numeric collisions and must not be adopted here.
 
 Not implemented in the vendor range: `0xC0`–`0xC5`, `0xC7`, `0xCB`,
 `0xCD`–`0xD3`, `0xD5`, `0xD6`, `0xD8`, `0xDA`–`0xDC`, `0xDF`–`0xE5`,

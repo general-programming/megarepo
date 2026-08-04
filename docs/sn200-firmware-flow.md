@@ -24,6 +24,8 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-section-arming.md` | what arms CLOG and PFCL, and why `0x0603` can never help |
 | `sn200-marker-write.md` | the generic marker-write (verb 1 + section 6), why no host command reaches it, and what a serial-console primitive would actually be worth |
 | `sn200-pcode-toolchain.md` | lifting the firmware to p-code and **executing** it — the claims above as tests, and what the lifter cannot read |
+| `sn200-tie-opcodes.md` | the custom/reserved instruction space: what is really undecodable, why it is not what we thought, and how `0xFF`/`0x0303` was finally resolved |
+| `sn200-vendor-tooling.md` | vendor names for these opcodes from `nvme-cli`'s WDC plugin — what is confirmed, and the three numeric collisions that must **not** be adopted |
 
 Everything below is PROVEN from code unless marked otherwise.
 

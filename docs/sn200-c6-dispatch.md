@@ -125,9 +125,9 @@ resume PC, yield. **There is no eighth command byte.**
 
 | `CDW12[7:0]` | handler runtime / static | reads sub byte? | identity |
 |---|---|---|---|
-| `0x20` | `0x7ffbdeec` / `0x30030924` | **yes**, 9 subs | `VUC Get Drive Log` — §4 |
+| `0x20` | `0x7ffbdeec` / `0x30030924` | **yes**, 9 subs | `VUC Get Drive Log` — §4. **Six of its nine subs are now vendor-CONFIRMED** against `nvme-cli`'s WDC plugin, encoding for encoding — `sn200-vendor-tooling.md` §4 |
 | `0x21` | `0x7ffbe3f4` / `0x30030e2c` | no | Get hardware-component values, ≤68 bytes |
-| `0x22` | `0x7ffbd5f4` / `0x3003002c` | **yes**, 5 subs | `VUC Reset Drive Stats` |
+| `0x22` | `0x7ffbd5f4` / `0x3003002c` | **yes**, 5 subs | `VUC Reset Drive Stats`. Sub `4` (`CDW12 = 0x0422`) is WDC **Clear PCIe Correctable Error Count** — ADOPTED, not proven; `sn200-vendor-tooling.md` §6. Sub `6` (`vs-drive-info`) is a **later-family** command and is not implemented here |
 | `0x23` | `0x7ffbe940` / `0x30031378` | no | reads a firmware buffer via descriptor `0x7ff82644`; **unidentified** |
 | `0x30` | `0x7ffbd400` / `0x3002fe38` | **yes**, 7 subs | **SMART / statistics collection** — §5, `sn200-c6-30-family.md` |
 | `0xB7` | `0x7ffbe4d0` / `0x30030f08` | **yes**, = list section | Read Defect Data (bad-block list) |

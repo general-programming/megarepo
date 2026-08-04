@@ -49,6 +49,13 @@ OPAQUE_PCODEOPS = (
     "flix_slotB_unknown_alu",
     "flix_slotC_unknown",
     "flix_unknown",
+    # designer-defined TIE space (stock cust.sinc) and the op0=0 encodings the
+    # stock spec refuses to resolve (flix.sinc's xt.rsvd catch-all). Each is a
+    # real, three-byte instruction whose effect is unknown -- stepping over one
+    # leaves whatever it wrote stale. See docs/sn200-tie-opcodes.md.
+    "cust0",
+    "cust1",
+    "xt_op0_reserved",
 )
 
 
@@ -590,10 +597,10 @@ class Emu:
                 continue
             if oc == OpCode.RETURN:
                 raise _Ret()
-            self._alu(o)
+            self._alu(o, insn)
         return fallthrough
 
-    def _alu(self, o: PcodeOp) -> None:
+    def _alu(self, o: PcodeOp, insn: "Insn") -> None:
         oc = o.opcode
         out = o.output
         ins = o.inputs
@@ -649,6 +656,18 @@ class Emu:
             OpCode.INT_SREM: lambda: sa - sb * int(sa / sb) if sb else 0,
         }.get(oc)
         if f is None:
+            if oc.name.startswith("FLOAT_") or oc.name in ("INT2FLOAT", "TRUNC"):
+                # The stock Xtensa spec decodes QRST op1=0xA/0xB as the FPU
+                # option. This core has no usable FPU: there is not one `rfr`
+                # or `wfr` in any of the 18 images, so no value can move
+                # between the AR and FR files, and no compiled code could use
+                # a float. Those encodings are in use for something else --
+                # see docs/sn200-tie-opcodes.md. Treat the float decode as
+                # opaque rather than executing a fabricated FP operation.
+                if self.on_opaque != "skip":
+                    raise Opaque(f"float decode {oc.name} at {insn.addr:#x}")
+                self.opaque.append((insn.addr, insn.text))
+                return
             raise Opaque(f"unimplemented p-code op {oc}")
         if out is not None:
             self._write(out, f() & ((1 << bits) - 1))

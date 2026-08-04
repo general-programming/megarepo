@@ -132,7 +132,7 @@ then reads the EEPROM request object the handler filled in:
 | `0x0007` | READ-ONLY | — | — | read raw System Area |
 | `0x0103` | DESTRUCTIVE | 3 erase | 3 bad block list | |
 | `0x0203` | DESTRUCTIVE | 3 erase | 9 BIST script | |
-| `0x0303` | **UNKNOWN** | — | — | undecodable, see §4 |
+| `0x0303` | **CATASTROPHIC** | **1 write** | **13 SBL EEPROM** | ☠ resolved 2026-08-04, see §4 |
 | `0x0403` | CATASTROPHIC | `0x25` re-init | — | param **1**, no startup-type gate |
 | `0x0503` | CATASTROPHIC | 3 erase | 11 CLOG | resume posts verb `0x25` iff mode == 6 |
 | `0x0603` | DESTRUCTIVE | 3 erase | 10 PFCL | resume posts nothing, ever |
@@ -194,36 +194,51 @@ command without checking it fails in CI rather than on a drive.
 
 Read this section before quoting anything above as proof.
 
-**Custom TIE opcodes are undecodable, and always will be without the TIE
+**Custom opcodes are undecodable, and always will be without the TIE
 description.** Xtensa reserves `QRST op1=6` and `op1=7` for `CUST0`/`CUST1`, the
-per-core TIE extension space. There are **3040** of them in slot A across the
-images. Neither Ghidra's stock spec nor `xdis.py` can read them; they are not
-"not yet decoded", they are *not describable* from public information.
+per-core TIE extension space — **2 422** CUST0 in FLIX slot A and **3 854**
+CUST1 as plain instructions, counted at real boundaries inside confirmed
+function extents. Their *semantics* are not describable from public information
+and this toolchain does not guess at them.
 
-**Do they affect the boot path?** Mostly no, and where they do the tooling says
-so rather than guessing. Sweeping the eleven boot/latch functions:
+> **Correction, 2026-08-04.** An earlier revision of this section said "SLEIGH
+> cannot even determine instruction lengths" and blamed the `0x0303` wall on
+> custom TIE opcodes. **Both halves were wrong.**
+>
+> Xtensa fixes instruction length from `op0` alone, so every `op0=0` custom
+> instruction is three bytes whatever it does; length was never in question.
+> What SLEIGH reported was `Unable to resolve constructor` — no constructor
+> *matched*, which is a spec-coverage problem fixable without knowing any
+> semantics. And the instruction that actually stopped the `0x0303` walk was not
+> a TIE opcode at all: `0x30033673` is `op1=1, op2=0xa` — the `SLL` encoding,
+> whose reserved `t` field must be zero and here is 4. Roughly 10 000 of the
+> 14 315 unresolved `op0=0` sites are in reserved sub-encodings of *standard*
+> classes, not in `CUST0`/`CUST1`.
+>
+> `flix.sinc` now carries an `op0`-only catch-all (`xt.rsvd`) that asserts the
+> three-byte length and nothing else, `cust0`/`cust1`/`xt_op0_reserved` are in
+> `OPAQUE_PCODEOPS`, and `Emu` refuses to execute the stock spec's bogus
+> floating-point decodes of `QRST op1=0xA/0xB` (this core has no usable FPU —
+> there is not one `rfr` or `wfr` in any image). **`0x0303` resolved as a result:
+> verb 1, section 13, SBL EEPROM.** Full account and evidence in
+> `docs/sn200-tie-opcodes.md`.
 
-| function | insns | opaque bundles |
-|---|---|---|
-| boot marker dispatch `0x7ffaae69` | 93 | 1 |
-| UNEXSTRT stub writer `0x7ffaad01` | 51 | 0 |
-| latch predicate `0x7ffaae2d` | 113 | 1 |
-| force-marker-9 `0x7ffaaf08` | 95 | 1 |
-| admin gate `0x7ffa6b18` | 132 | 2 |
-| `0xFF` command-id dispatch | 50 | 6 |
-| `0xFF` erase sub-dispatch | 60 | 6 |
-| `0x0503` resume | 25 | 2 |
-| `0x0603` resume | 17 | 1 |
-| EEPROM submitter `0x7ffb4fec` | 23 | 6 |
-| `0xFF` handler `0x7ffbc110` | 54 | 6 |
-| **total** | **713** | **32 (4.5 %)** |
+**Do they affect the boot path?** They no longer *stop* it anywhere — but every
+one they touch is recorded, and the oracle reports the count with every answer.
+The eleven boot/latch functions run 713 instructions of which roughly 4–8 % are
+opaque; the worst is the `0x0303` arm at 7 opaque instructions on the executed
+path. `Insn.opaque()` and `Emu.opaque` are how you find out for any given
+result, and `sn200_oracle.py` surfaces the number rather than hiding it.
 
-The one place it bites hard is **`0xFF`/`0x0303`**, the SBL EEPROM arm: after
-its `memset` the code runs straight into three custom-TIE bundles and SLEIGH
-cannot even determine instruction lengths, so the walk stops. The oracle reports
-it as **UNKNOWN**, not as safe and not as the hand-decoded "verb 1, section 13,
-permanent brick" — that claim stands on the hand decode alone and this toolchain
-neither confirms nor refutes it. **Treat `0x0303` as catastrophic regardless.**
+`0xFF`/`0x0303` was the one place it bit hard, and it is now resolved: **verb 1
+(section write), section 13 (SBL EEPROM), OAM enqueue reached**, with the
+completion handler logging `"OAM ERASE CMD: Erase to SBL EEPROM failed"` as an
+independent corroboration of the section. The hand decode was right. The result
+is *corroborated rather than pure* — seven instructions were stepped over on the
+way, none of which writes the request pointer or any register the decoded stores
+read — and `test_0303_walk_still_steps_over_undecoded_instructions` exists so
+that qualification cannot quietly disappear. **Treat `0x0303` as catastrophic;
+that has not changed and is now better supported, not worse.**
 
 Other limits, each of them a way to be wrong if ignored:
 
@@ -249,6 +264,11 @@ Other limits, each of them a way to be wrong if ignored:
 - **Calls are not entered by default.** Every result above is
   intraprocedural plus the specific callee identities resolved by the overlay
   delta rule.
+- **The custom-opcode catch-all asserts length only.** `xt.rsvd` in `flix.sinc`
+  matches any `op0=0` encoding no real constructor claims, and emits nothing but
+  an opaque pseudo-op. Whatever the real instruction wrote stays stale in the
+  emulator, silently. `docs/sn200-tie-opcodes.md` is the account of what those
+  instructions are and are not known to be.
 - **Nothing here has touched hardware.** Static analysis and p-code execution
   only.
 
@@ -263,5 +283,6 @@ Other limits, each of them a way to be wrong if ignored:
 - `0xC6`/`0x30` is admitted by the gate and remains unidentified. The oracle
   proves reachability; it does not yet walk the handler.
 - `0xE6` and `0xEC` are admitted on the opcode alone and have never been walked.
-- The `0x0303` custom-TIE wall is worth one attempt at inference from
-  surrounding context, clearly labelled SPECULATIVE if it happens.
+- ~~The `0x0303` custom-TIE wall~~ — **done**, and it was not a TIE wall.
+  `docs/sn200-tie-opcodes.md`. The same treatment now unblocks the `0xCA`
+  work above: nothing in the custom-opcode space stops a walk any more.

@@ -158,15 +158,30 @@ def test_0503_and_0603_erase_different_sections():
     assert oracle.ff_classify(0x0603).section == 10
 
 
-def test_0303_is_not_decodable_and_must_not_be_called_safe():
-    """The SBL arm runs through custom TIE opcodes the lifter cannot read.
+def test_0303_writes_the_sbl_eeprom_section():
+    """0x0303 posts verb 1 (section write) against section 13, the SBL EEPROM.
 
-    It stays UNKNOWN rather than being classified from a plausible guess --
-    the hand decode (verb 1, section 13, permanent brick) is unconfirmed here.
+    This was UNKNOWN until the lifter learned to step over the reserved-space
+    op0=0 encodings on the arm (docs/sn200-tie-opcodes.md). It is a two-stage
+    coroutine: the first entry preps a 64-byte scratch buffer and yields, and
+    the request is built on the resume at static 0x300335f7. The completion
+    handler it registers logs "OAM ERASE CMD: Erase to SBL EEPROM failed",
+    which corroborates the section independently of the field decode.
     """
     r = oracle.ff_classify(0x0303)
-    assert r.classification == oracle.UNKNOWN
-    assert r.error
+    assert (r.verb, r.section) == (oracle.VERB_WRITE, 13)
+    assert r.classification == oracle.CATASTROPHIC
+    assert r.error is None
+    assert oracle.FF_ENQUEUE in r.calls
+
+
+def test_0303_walk_still_steps_over_undecoded_instructions():
+    """...and the result is corroborated, not pure: the arm has opaque slots.
+
+    Guards against a future spec change silently turning "we stepped over
+    seven unknown instructions" into an unqualified proof.
+    """
+    assert oracle.ff_classify(0x0303).opaque > 0
 
 
 # --------------------------------------------------------------------------

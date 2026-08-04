@@ -207,6 +207,20 @@ def ff_erase_arm(
     # memset on the way there and stopping at that would read a blank request.
     try:
         e.run(FF_SUB_DISPATCH, max_steps=4000, stop_on_call=(FF_ENQUEUE, FF_LOG))
+        # Two-stage arms (sub 3 is the only one) do their preparation, yield,
+        # and build the request on the *next* coroutine entry. The yield hands
+        # the resume PC back in a3 as a runtime address in the overlay window;
+        # follow it rather than reporting "no enqueue reached".
+        if FF_ENQUEUE not in e.calls:
+            resume = e.getreg("a3")
+            if pcode.OVERLAY_WINDOW <= resume < pcode.OVERLAY_WINDOW + 0x4000:
+                e.setreg("a12", REQ)
+                e.setreg("a1", STACK)
+                e.run(
+                    resume - img.overlay_delta(FF_OVERLAY),
+                    max_steps=4000,
+                    stop_on_call=(FF_ENQUEUE, FF_LOG),
+                )
     except (pcode.BadDataError, pcode.Opaque, pcode.Halt) as exc:
         return None, None, None, e.calls, len(e.opaque), str(exc)
     if FF_ENQUEUE not in e.calls:
