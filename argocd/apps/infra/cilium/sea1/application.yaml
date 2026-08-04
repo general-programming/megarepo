@@ -150,10 +150,14 @@ spec:
           ui:
             enabled: true
 
-  # DELIBERATELY MANUAL for the migration. Automated sync is restored in a
-  # follow-up commit once every node has rolled onto Cilium -- selfHeal
-  # fighting a half-migrated cluster is exactly the wrong failure mode.
+  # Automated sync restored 2026-08-04, after all five nodes were rolled onto
+  # Cilium. It was deliberately manual during the cutover so selfHeal could not
+  # fight a half-migrated cluster.
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
     syncOptions:
       - allowEmpty=true
       - ServerSideApply=true
