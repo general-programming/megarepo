@@ -69,3 +69,59 @@ This confirms the container format and the decoding pipeline end to end, and
 proves retrieval is safe and repeatable on a latched drive. It does **not** yet
 deliver the root-cause assert. Treat the root cause as strongly evidenced by
 code and field behaviour, not as confirmed by the drive's own record.
+
+## The fault record IS in our 128 KiB — `.CDI` at `0x11000`
+
+Found 2026-08-04 by searching for the 3-char tag with a **variable lead byte**,
+which is why earlier sweeps for `\x00CDI` missed it. The container is:
+
+| offset | tag | contents |
+|---|---|---|
+| `0x00000` | `\x00CDH` | header: version `0x00020200` (full fault dump), `"KNGND122"` at `+0x08`, reason tag at `+0x40` **zero** |
+| `0x00100` | `\x00MMAP` | one region only: `0x60000000`–`0x60003ff0` (16368 B), count 1 |
+| `0x11000` | `\x09CDI` | **the fault context** |
+| `0x12500` | — | per-core log blocks, 4 × `0x1000` per core |
+
+### The `.CDI` record, raw
+
+```
++000: 49444309 00000006 bffbbfa8 7ff9ff80
++010: 7ff91d78 ffffc001 7ff977a8 00000003
++020: 00000001 00000004 00000000 7ff941d4
++030: 00000000 7ff9ff60 00000024 7ff941d4
++040: 00000000 00000000 bffbaba3 7ff9fec0
++060: 00000001 ffffffff bffbacfd 7ff9fea0
++0e0: 7ff97784 00000000 bffa3973 7ff9ffb0
++120: ... 7ffbdab8
++130: 7ffbdac3 ...
+```
+
+**The `0xbffb****` values are Xtensa windowed return addresses** — bits 31:30
+are the call-size increment, so `0xbffbbfa8` → `0x7ffbbfa8`. Paired with an
+adjacent `0x7ff9f***` stack pointer each time, this is a **saved call chain**:
+
+```
+0x7ffbbfa8   sp 0x7ff9ff80
+0x7ffbaba3   sp 0x7ff9fec0
+0x7ffbacfd   sp 0x7ff9fea0
+0x7ffa3973   sp 0x7ff9ffb0
+```
+
+plus two direct code addresses at `+0x12c`/`+0x130`: `0x7ffbdab8`, `0x7ffbdac3`.
+
+### Why this does not yet name the core — INFERRED, needs work
+
+Per-core address spaces are **self-aliased**, so `0x7ffb****` resolves inside
+*every* image; `whichfunc.py` returns 2–15 candidates per address. The record
+must identify its own core.
+
+`+0x04 = 6` is the obvious candidate for a core index, and it would be
+significant if true: **PROC6 is the core that writes the CLEAN/PFAIL completion
+marker** at `0x7ffbba61`. Under that reading `0x7ffbdab8`/`0x7ffbdac3` land
+inside PROC6 `0x7ffbd0f8` (a 3072-byte function). But `+0x04` may equally be a
+record version, and the field layout is **not proven** — the offsets above are
+positional guesses, not a decoded structure.
+
+**Do not build on this until the layout is traced from the writer.** The
+exception vectors stage into `0x7ff97df0` and push 76 dwords through the
+section-append primitive; that writer defines the truth.
