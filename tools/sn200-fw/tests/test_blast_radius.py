@@ -23,10 +23,11 @@ spec.loader.exec_module(br)
 SN200 = {"sea1-k8s-0", "sea1-k8s-1"}
 
 
-def pv(node, ns, claim, size="8Gi"):
+def pv(node, ns, claim, size="8Gi", sc="local-path"):
     d = {
         "spec": {
             "capacity": {"storage": size},
+            "storageClassName": sc,
             "claimRef": {"namespace": ns, "name": claim},
         }
     }
@@ -187,3 +188,17 @@ def test_summary_counts_do_not_double_count(capsys, tmp_path, monkeypatch):
     )
     br.main()
     assert "1 CRITICAL, 1 HIGH, 0 OK" in capsys.readouterr().out
+
+
+def test_local_path_sizes_are_flagged_as_unenforced():
+    """local-path is a hostPath directory with no quota. shared-timescaledb was
+    found at 478 GB against a 256 Gi PVC, so anyone sizing a migration off the
+    declared capacity under-sizes it by ~2x and the move fails on a storage
+    class that DOES enforce size."""
+    rows = run([pv("sea1-k8s-0", "shared-db", "shared-timescaledb-7", "256Gi")])
+    assert rows[0]["volumes"][0]["unenforced"] is True
+
+
+def test_enforced_storage_classes_are_not_flagged():
+    rows = run([pv("sea1-k8s-0", "x", "x-solo", "8Gi", sc="ceph-rbd-xfs")])
+    assert rows[0]["volumes"][0]["unenforced"] is False

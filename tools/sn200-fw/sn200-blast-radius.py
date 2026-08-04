@@ -84,10 +84,16 @@ def collect(pvs: dict, sn200_nodes: set, backups: int) -> list[dict]:
         ns, name = cr.get("namespace", ""), cr.get("name", "")
         if not ns:
             continue
+        sc = pv.get("spec", {}).get("storageClassName", "")
         copies[workload_of(ns, name)].append(
             {
                 "node": node,
+                # NOMINAL ONLY for local-path: it is a hostPath directory with
+                # no quota, so real usage can exceed this without warning --
+                # shared-timescaledb was found at 478 GB against a 256 Gi PVC.
+                # Anything sizing a migration off this number will under-size it.
                 "size": pv.get("spec", {}).get("capacity", {}).get("storage", "?"),
+                "unenforced": sc == "local-path",
                 "pvc": name,
                 "on_sn200": node in sn200_nodes,
             }
@@ -185,7 +191,8 @@ def main() -> int:
         print("%s %-8s %s" % (mark, r["verdict"], r["workload"]))
         print("      %s" % r["why"])
         for v in r["volumes"]:
-            print("      %-14s %-8s %s" % (v["node"], v["size"], v["pvc"]))
+            note = " (nominal; local-path enforces no quota)" if v["unenforced"] else ""
+            print("      %-14s %-8s %s%s" % (v["node"], v["size"], v["pvc"], note))
         print()
 
     n_crit = sum(1 for r in rows if r["verdict"] == CRITICAL)
