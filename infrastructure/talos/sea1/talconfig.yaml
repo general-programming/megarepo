@@ -430,6 +430,18 @@ nodes:
         #
         # Matched on MODEL, never on kernel name: nvmeN numbering is not stable
         # and a KERNEL=="nvme7n1" rule could land on a ceph OSD after a reorder.
+        #
+        # SCOPE, deliberately: this is a NODE patch, so it protects this host
+        # only. sea1-k8s-0 and sea1-k8s-1 each have an SN200 passed through from
+        # their hypervisor (invisible in the HV's own /sys/class/nvme, which is
+        # why they read as a clean negative), both live and both with
+        # discard_max_bytes at 2199023255040. sea1-k8s-1 is also still on
+        # KNGND112 rather than KNGND122.
+        #
+        # Leaving them exposed is an accepted decision (2026-08-03), not an
+        # oversight: they hold production data, and acting on a working SN200 is
+        # itself a risk. Generalise this rule when that data is replicated or
+        # evacuated -- see docs/sn200-runbook.md section 0a.
         |-
         machine:
           udev:

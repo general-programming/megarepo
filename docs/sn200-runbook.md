@@ -11,6 +11,35 @@ destructive**.
 
 ---
 
+## 0a. Where the drives are, and what is protecting them
+
+Three SN200s, all at sea1. **They do not appear on the hypervisors** — hv-0 and
+hv-1 pass theirs straight through to the k8s guests, so `/sys/class/nvme` on
+the HV shows only the seven Intel OSD drives and looks like a clean negative.
+Look inside the guest.
+
+| Node | dev | firmware | `discard_max_bytes` | state |
+|---|---|---|---|---|
+| `sea1-k8s-0` | nvme0 | `KNGND122` | 2199023255040 | live, in service |
+| `sea1-k8s-1` | nvme0 | **`KNGND112`** | 2199023255040 | live, in service |
+| `sea1-k8s-2` | nvme7 | `KNGND122` | — | **latched**, `state=resetting` |
+
+**The DISCARD suppression protects only the broken one.** The udev rule lives in
+`sea1-k8s-2`'s *node* patch (`infrastructure/talos/sea1/talconfig.yaml`), not in
+a shared one, so the two drives still holding data are the two with DISCARD
+fully enabled at 2 TiB — and a whole-device TRIM is the one trigger demonstrated
+in the field. `sea1-k8s-1` also still carries `KNGND112`, which has the
+PFAIL-monitor defect `KNGND122` closed.
+
+**This is a known, accepted exposure, not an oversight to fix on sight.** Both
+drives are in active production use. The owner's decision (2026-08-03) is to
+leave them untouched: a protective sysfs write is cheap, but any action against
+a working SN200 is itself a risk, and firmware activation is worse — `--action=2`
+writes marker 3 gated on **the target image's own flags bit**, so whether it
+wipes is a property of the image in that slot, not of the action chosen.
+
+Close the gap when the data on these two is replicated or evacuated — not before.
+
 ## 0. Prevention — ranked by how much they actually buy
 
 | Do this | Why | Confidence |
