@@ -531,11 +531,14 @@ controlPlane:
 patches:
   - # DO NOT REMOVE. Cilium is the CNI (argocd/apps/infra/cilium/sea1);
     # dropping this reinstalls flannel under a running Cilium cluster.
+    # Cilium also replaces kube-proxy, reaching the API via KubePrism.
     |-
     cluster:
       network:
         cni:
           name: none
+      proxy:
+        disabled: true
   - # Raise kubelet max pods from the Talos default of 110. 200 absorbs a whole
     # node's workload during a drain. Each node gets one /24, so ~250 is the ceiling.
     |-
