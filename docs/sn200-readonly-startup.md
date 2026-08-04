@@ -567,10 +567,10 @@ noted). Nothing here reaches `0x7ffa84c8` except the three rows marked ⚠.
 | `0xCA` | real dispatch table at `0x7ffa760e`, 67 slots; the "12-entry sub-list" at `0x7ffa6d76` is the *gate's* inline compare chain, not a table. Allow-listed subs {2,3,4,8,13,14,15,16,17,19,33,50} are reads / flash-controller resets | no |
 | `0x09` Set Features | FIDs 1–11, 126–131, **240 (0xF0)** only. No FID ≥ 0xC0 other than 0xF0. No APST (0x0C) | no |
 | `0x0A` Get Features | same FID set; pure read in every arm | no |
-| `0xE6` | log-dump reader (big-endian length header, DDR→host DMA) | no (pure read) |
-| `0xEC` | dispatches to overlay handler `0x7ffbc24c`; **semantics UNKNOWN** — the pointer did not resolve under any recovered overlay delta | unresolved |
+| `0xE6` | log-dump reader (big-endian length header, DDR→host DMA). ⚠ **It is the only admitted opcode dispatched without requesting an overlay load, and its worker contains `call8 0x7ffbc18c` into the overlay window** — only 1 of 30 overlays has an entry there (`sn200-ec-and-allowlist.md` §5.3). Do not send while latched | no (but see left) |
+| `0xEC` | **RESOLVED** — `Admin_VUC_Enable`, overlay row 10, handler static `0x3002b6c4` / runtime `0x7ffbc24c`. Two encodings; writes one byte at `0x7ff8f1dd`; host input space after validation is one bit. Inert while latched (`sn200-ec-and-allowlist.md` §1–§2) | no |
 | `0xC6` cmd `0x20` | `VUC Get Drive Log`, subs 0–8, all reads | no |
-| `0xC6` cmd `0x30` | `VUC Reset Drive Stats` — a writer, but statistics only (INFERRED) | no |
+| `0xC6` cmd `0x30` | ☠ **NOT `VUC Reset Drive Stats`** — that name belongs to command byte `0x22`, which is rejected while latched. `0x30` is an unidentified seven-sub action family, handler `0x3002fe38` (`sn200-c6-dispatch.md` §5). The largest un-analysed surface that survives the gate | **UNKNOWN** |
 | `0x10` Firmware Commit | ⚠ sets marker 3 via `0x7ffabccc` | ⚠ marker 3 only |
 
 ### ⚠⚠ New landmine found while doing this: `0xFF` / CDW12 `0x0403`

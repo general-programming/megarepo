@@ -256,10 +256,18 @@ So "no other host command builds verb 1" rests on:
 - the value-side argument of §3.2, which is base-pointer-independent.
 
 It does **not** rest on an exhaustive scan of every request builder in PROC8.
-`0xEC`'s overlay handler remains unresolved (`sn200-readonly-startup.md` §6.3),
-and that gap is unchanged. What is now clear is precisely *what* such a handler
-would have to do — verb 1, section 6, value `0x80000008` — which is a much
-sharper target for anyone who resolves the `0xEC` binding later.
+
+> **☑ RESOLVED 2026-08-04 — `sn200-ec-and-allowlist.md`.** `0xEC` is
+> `Admin_VUC_Enable` (overlay row 10, handler static `0x3002b6c4`, runtime
+> `0x7ffbc24c`). It builds no OAM request, calls no EEPROM primitive, and after
+> its parameter validation the **entire host-controlled input space of the
+> command is one bit** (six dwords must be zero, three must equal
+> `VOID`/`WARR`/`ANTY`, one 16-bit field must be zero, one byte must be 0 or 1).
+> Its only effect is a byte at `0x7ff8f1dd`, whose two readers are both inert on
+> a latched drive. **It is not the escape.** The `0xFF`-side argument above is
+> now the whole story for the vendor surface. (`0xC6` command byte `0x30`, the
+> other outstanding unknown, was resolved in the same period — see
+> `sn200-c6-30-family.md`.)
 
 ---
 
@@ -395,8 +403,16 @@ namespace startup either.
 | Any host path that re-attaches/re-creates the namespace? | **No.** `0x0D` and `0x15` are not in the post-crash allow-list. **PROVEN** |
 | Net change to the recovery procedure? | **None in-band.** `sn200-readonly-startup.md`'s conclusion stands: this is a code-execution / EEPROM-write problem, not a command-encoding one. |
 
-The sharper target for anyone continuing: the only unresolved door is `0xEC`,
-whose overlay handler binding is runtime-built BSS. What it would have to do is
-now fully specified — **OAM verb 1, section 6, request `+0x124 = 0x80000008`**.
-If `0xEC` turns out to be a generic "write EEPROM section" passthrough, that is
-the escape. If it is anything else, the surface is closed.
+**Update, 2026-08-04 — the door is closed.** `0xEC` was resolved
+(`sn200-ec-and-allowlist.md`): it is `Admin_VUC_Enable`, a one-bit command that
+never touches an OAM request. The requirement stated here — *OAM verb 1,
+section 6, request `+0x124 = 0x80000008`* — has no host producer anywhere in the
+admitted surface. That same pass re-proved the exhaustion argument with a
+cleaner sweep: `litref -v 7ffa84c8` returns **exactly three** call sites for the
+marker setter, all in PROC0 (verb 37, verb 1 + section 6, firmware commit), and
+`litref -v 7ff8c7ec` returns 11 sites, all in PROC0.
+
+`0xC6` command byte `0x30` — the other outstanding unknown — was resolved in the
+same period (`sn200-c6-30-family.md`): a SMART-collection family that builds no
+OAM request. **Every opcode the post-crash gate admits has now been read for
+function, and none of them writes the marker.**

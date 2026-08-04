@@ -13,13 +13,16 @@ and settles whether any of it reads user media or the L2P.
 - **Only `0x20` and `0x30` are reachable while latched.** The other five are
   rejected by the gate before they reach the handler.
 - **No `0xC6` selector reads user data or the L2P.** The `0xCA` analysis missed
-  nothing. `0x30` cannot even carry data to the host.
+  nothing. `0x30` cannot carry data to the host.
+- **`0x30` is now identified** — SMART / drive-statistics collection, seven
+  subs, no escape. Full teardown in `sn200-c6-30-family.md`; §5 summarises.
 - `0x0720` / `0x0820` are **`0xC6` command `0x20`, sub-commands 7 and 8** — the
   71808-byte producer arms. The runbook's "never send" row attributed them to
   `0xFF`; that was already known to be wrong, and this document says what they
   are.
-- **New hazard:** the safe read family `0x_20` is one nibble from the
-  unidentified action family `0x_30`, and both pass the gate.
+- **New hazard:** the safe read family `0x_20` is one nibble from the action
+  family `0x_30`, both pass the gate, and the length check does **not** catch
+  the mistype (§3).
 
 Labels: **PROVEN** = read off correctly-decoded instructions. **INFERRED** =
 short chain over proven facts. **SPECULATIVE** = neither.
@@ -35,9 +38,13 @@ static label means a different function depending on which overlay is resident.
 For overlay 18:
 
 ```
-runtime = static + 0x4DF915C8        (i.e. 0x7ffbc000 − 0x3002ea38)
+runtime = static + 0x4FF8D5C8        (i.e. 0x7ffbc000 − 0x3002ea38)
 static  = runtime − 0x7ffbc000 + 0x3002ea38
 ```
+
+(This constant read `0x4DF915C8` until 2026-08-04. That was a transcription
+error — the table below, and every other resolution in this file, is consistent
+only with `0x4FF8D5C8`.)
 
 **This resolves the "unvalidated call-set" caveat in
 `sn200-crash-dump-retrieval.md` §1.3.** That note said the nine call targets of
@@ -122,7 +129,7 @@ resume PC, yield. **There is no eighth command byte.**
 | `0x21` | `0x7ffbe3f4` / `0x30030e2c` | no | Get hardware-component values, ≤68 bytes |
 | `0x22` | `0x7ffbd5f4` / `0x3003002c` | **yes**, 5 subs | `VUC Reset Drive Stats` |
 | `0x23` | `0x7ffbe940` / `0x30031378` | no | reads a firmware buffer via descriptor `0x7ff82644`; **unidentified** |
-| `0x30` | `0x7ffbd400` / `0x3002fe38` | **yes**, 7 subs | **unidentified action family** — §5 |
+| `0x30` | `0x7ffbd400` / `0x3002fe38` | **yes**, 7 subs | **SMART / statistics collection** — §5, `sn200-c6-30-family.md` |
 | `0xB7` | `0x7ffbe4d0` / `0x30030f08` | **yes**, = list section | Read Defect Data (bad-block list) |
 | `0xCD` | main image `0x7ffb9208` | no | overlay-manager / register command; **unidentified** |
 | anything else | — | — | StrId 1618, `status |= 0x40040000`, no side effect |
@@ -146,13 +153,22 @@ Before dispatching, `0x3003170a` cross-checks `CDW10` against the command byte:
 ```
 
 **`CDW10 == 0` is rejected for every command byte except `0x22` and `0x30`.**
-Those two are the no-host-data families; every other `0xC6` command must carry a
-transfer length. This is a clean structural fact and it is corroborated by every
+Every other `0xC6` command must carry a transfer length. Corroborated by every
 working command we send (`CDW10 = 2` for the size probes, `0x8000` for the body
 read).
 
-**It also settles the media question for `0x30` on its own: a family that is
-required to have a zero transfer length cannot return user data.**
+> **⚠ The rule is one-directional, and an earlier revision of this section had
+> it backwards.** It does **not** *require* `CDW10 == 0` for `0x22`/`0x30`; it
+> merely *permits* it. A non-zero `CDW10` is accepted for every command byte,
+> `0x30` included, and for `0x30` it is accepted without even the StrId-1617 log
+> line. Full branch trace in `sn200-c6-30-family.md` §6.1. The practical
+> consequence is operator-facing: a mistyped `0x0320` size probe (typed with
+> `CDW10 = 2`) becomes `0x0330` and executes.
+
+`0x30` still cannot return host data, but on different evidence: neither the
+`0x30` handler nor any of its workers ever programs a host DMA descriptor, and
+the shared completion path `0x3003149c` copies only 28 bytes of status back into
+the command context.
 
 ---
 
@@ -229,37 +245,50 @@ Handler `0x3002fe38` (`entry a1,0x20`). Sub byte at `ctx+0x139`, same field the
 Seven sub-commands, `0x0030` … `0x0630`, plus a default arm. **PROVEN
 enumeration.**
 
-What is known about them, honestly:
+### 5.1 Identified: SMART / drive-statistics collection
 
-- **They transfer no host data** (§3 length rule). Whatever they do, they do it
-  inside the drive.
-- Sub 1 is guarded by a state check on `[0x7ff8f46c]` and diverts if it reads 1.
-- Sub 4 spawns main-image worker `0x7ffa97f4`, which composes a 64-bit address
-  against `0x82180000 & 0x0003ffff` and hands it to `0x7ffbacf4` — a DMA/mailbox
-  descriptor build.
-- Sub 5 indexes a table at `0x7ff81410` and compares an entry against 53.
-- Sub 6 touches `0x7ff96b04` (the OAM worker list head) and `0x7ff80490`, and
-  logs StrId 111 `"SYS: ERROR - OCP interrupt dispatch table is full"` on one
-  path — i.e. it registers something with the interrupt dispatcher.
-- The default arm builds a record containing the literal bytes `0xC9`, `0xC6`,
-  `0x30` and the sub byte and hands it to `0x7ffabec8`, which has the shape of a
-  forwarded/ported command.
-- **No erase or program primitive appears anywhere in the resolved callee set of
-  the `0x30` subtree** (§1). That is a genuine negative and it is the only
-  reassuring thing here.
+Fully traced in **`sn200-c6-30-family.md`**. Summary:
 
-**`0x30` is NOT "VUC Reset Drive Stats".** `sn200-command-reference.md` and
-`sn200-attack-surface.md` §4.2 attribute that name to command byte `0x30`. It
+- **`0x30` is the SMART / statistics *collection* family** — `0x20` reads the
+  drive log, `0x30` refreshes the counters behind it. Sub 0's worker
+  `0x7ffa9374` emits StrId 1952 `"SMART update failed from one of the managers -
+  did not save to DDR"`. **PROVEN.**
+- The only effector any sub reaches is the internal mailbox `0x7ffbacf4`,
+  carrying hard-coded statistic IDs. Everything written is DRAM counter state.
+- **Subs 2, 4 and 5 disable themselves on a latched drive**: each reads
+  `*(0x7ff87c64)` and returns immediately when it is `6` (Post Crash), because
+  their work needs a System Area that startup type 6 never loads. Subs 0, 1, 3,
+  6 and the default arm do run.
+- **No sub writes the boot marker, the CLOG/PFCL arming, the namespace, the
+  L2P, the gate or the startup type.** PROC8 contains zero references to
+  `0x7ff8c7ec`, `0x7ff8d200` or `0x80000003/8/9` in any image, and no `0x30` sub
+  builds an OAM verb/section request. **PROVEN.**
+
+Three claims in earlier revisions of this section were wrong:
+
+- Sub 6 does **not** log StrId 111 `"OCP interrupt dispatch table is full"`.
+  That was a false positive on the data constant `0x006f6006` at `0x3002f211`,
+  which is in sub **3**'s range and merely satisfies `disany.py`'s log-word
+  heuristic. No `0x30` sub touches the interrupt dispatcher.
+- The default arm is not a forwarded/ported command: it writes one 64-byte
+  **diagnostic trace record** (`0xC9`, `0xC6`, `0x30`, sub) onto a ring and
+  returns.
+- Sub 4's `0x82180000 & 0x0003ffff` mailbox build is real, but it sits *after*
+  the startup-type-6 return and is unreachable while latched.
+
+**Operational position: `0x30` is identified, DRAM-mutating in five of eight
+arms, and reachable on a latched drive. Still do not send any `0x__30`
+encoding** — it is an unnecessary action family one nibble from the reads we
+type, and §3's length check does not catch the mistype.
+
+### 5.2 `0x30` is NOT "VUC Reset Drive Stats"
+
+`sn200-command-reference.md` and `sn200-attack-surface.md` §4.2 attribute that name to command byte `0x30`. It
 belongs to command byte **`0x22`**: the "Reset Drive Stats" dispatcher at
 `0x30030918` (`l8ui a11,a15,0x39 ; l32r a10,-> StrId 1602
 "VUC Reset Drive Stats SubCmd %08X"`) sits inside `0x3003002c`, which is the
 `0x22` arm's handler pointer. **PROVEN, corrected here.** The "zero-length
 internal control/handshake" observation was right; the label on it was not.
-
-**Operational position: `0x30` is unidentified, state-mutating in at least two
-arms, and reachable on a latched drive. Do not send any `0x__30` encoding.**
-This is the single largest un-audited surface that survives the gate, and it is
-one nibble from the command we type on every drive.
 
 ---
 
@@ -288,7 +317,7 @@ mapping table, since `0xC6` is a *read* family that survives the gate.
 |---|---|
 | `0x20` subs 0–6 | Every source address is recomputed from a firmware-owned descriptor on every call (`sn200-crash-dump-retrieval.md` §1.2.4). Log, string table, crash sections. **No LBA, no L2P.** |
 | `0x20` subs 7–8 | Fixed 71808-byte producer output. Not media; the producers touch a DRAM counter table, not the mapping table. |
-| `0x30` subs 0–6 | **Cannot return data at all** — the length rule forces `CDW10 == 0`. |
+| `0x30` subs 0–6 | No host DMA descriptor is ever programmed on any arm; the completion path returns 28 bytes of status only. Statistics counters in DRAM, reached through an internal mailbox. **No LBA, no L2P.** |
 | `0xB7` | Bad-block list: *physical* block addresses. Not user data, and rejected while latched anyway. |
 | `0x21`, `0x23`, `0xCD` | Firmware buffers, rejected while latched. |
 
@@ -307,7 +336,8 @@ no recovery path hiding in `0xC6`.**
 | `0x0020` `0x0120` `0x0220` `0x0320` `0x0420` `0x0520` `0x0620` | yes | **read-only** — the retrieval procedure |
 | `0x0720` `0x0820` | yes | **do not send** — unaudited producers, one mutates DRAM state |
 | `0x0920`…`0xFF20` | yes | inert (StrId 1611) |
-| `0x0030`…`0x0630` | **yes** | **do not send** — unidentified action family |
-| `0x0730`…`0xFF30` | yes | falls to the default arm — **do not send** |
+| `0x0030` `0x0130` `0x0330` `0x0630` | **yes** | **do not send** — SMART collection, executes on a latched drive, mutates DRAM counters |
+| `0x0230` `0x0430` `0x0530` | yes | **do not send** — self-disabling: each returns immediately when startup type == 6 |
+| `0x0730`…`0xFF30` | yes | **do not send** — default arm writes a 64-byte trace-ring record |
 | `0x__21` `0x__22` `0x__23` `0x__B7` `0x__CD` | no | rejected, SC `0xC5` |
 | any other command byte | no (rejected by the gate first) | — |
