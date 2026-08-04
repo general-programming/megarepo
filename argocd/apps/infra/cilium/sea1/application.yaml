@@ -43,6 +43,13 @@ spec:
         ipv4NativeRoutingCIDR: 10.244.0.0/16
         ipv6NativeRoutingCIDR: fd40:10:244::/56
 
+        # Pin the device carrying the node IP. Auto-detection is ambiguous here:
+        # every node also has bond0/dummy0/teql0, and k8s-2 four more NICs.
+        # This is the control-plane value; nodeconfig-lan-bridge.yaml overrides
+        # it to br0 on the bridged workers.
+        devices: "ens18"
+        directRoutingDevice: "ens18"
+
         # Pods are on ULA fd40:10:244::/56, so v6 egress still needs masquerade.
         # bpf.masquerade would additionally require CoreDNS
         # forwardKubeDNSToHost=false, or DNS breaks on Talos.

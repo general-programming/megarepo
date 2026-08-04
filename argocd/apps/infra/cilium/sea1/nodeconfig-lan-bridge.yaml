@@ -1,0 +1,20 @@
+---
+# The node IP lives on a different device depending on the node: ens18 on the
+# VM control planes, br0 on the bridged workers. The Helm values set the ens18
+# case; this overrides it for the bridged nodes.
+#
+# Without this, kubeProxyReplacement fails to start the agent outright --
+# "unable to determine direct routing device" -- because every node also
+# carries bond0/dummy0/teql0 (and four NICs on k8s-2) and Cilium cannot choose.
+apiVersion: cilium.io/v2
+kind: CiliumNodeConfig
+metadata:
+  name: lan-bridge-devices
+  namespace: kube-system
+spec:
+  nodeSelector:
+    matchLabels:
+      generalprogramming.org/lan-bridge: "true"
+  defaults:
+    devices: "br0"
+    direct-routing-device: "br0"
