@@ -229,3 +229,36 @@ afi 0x44 (slot 4 active)   frs1 KNGND112 [READ-ONLY]   frs4 KNGND122
 Three of five slots held `KNGND112` — an **undocumented** revision with no
 release notes and no binary in the firmware zip. Worth checking across the fleet
 and upgrading slots 2/3, since any future activation of those lands on it.
+
+## Reaching the drive from Kubernetes (no Proxmox needed)
+
+Talos has no shell, but a privileged pod on the node gives **full NVMe admin
+access**, including vendor passthru. Verified 2026-08-04 on `sea1-k8s-2`:
+`id-ctrl`, `fw-log` and `admin-passthru --opcode=0xff` all succeed.
+
+```sh
+kubectl apply -f tools/sn200-fw/nvme-debug-pod.yaml
+kubectl -n kube-system exec nvme-debug -- nvme fw-log /dev/nvme6
+kubectl -n kube-system delete pod nvme-debug     # it is disposable
+```
+
+**The device number is not stable across OSes.** The same SN200 is `nvme7`
+under Proxmox and `nvme6` under Talos. Always resolve by model:
+
+```sh
+for n in /sys/class/nvme/nvme*; do
+  grep -q HUSMR "$n/model" 2>/dev/null && echo "${n##*/}"
+done
+```
+
+**Do not use the shared `workpod` DaemonSet for this.** It lacks
+`CAP_SYS_ADMIN` (`CapEff 0xa80425fb` — the stock container set), so passthru
+fails; and its `/dev` hostPath is **live drift** — `base/daemonset.yaml`
+declares no volumes at all, so an ArgoCD resync would remove it. It also runs
+on every node including both control planes, which is the wrong place to add
+privilege for a one-off job.
+
+**A latched drive does not harm the node** as long as no volume targets it.
+Observed here: 21 controller resets logged against `nvme6` while `udevd` and
+`kubelet` both stayed `OK`. It only wedged udevd previously because Talos was
+trying to partition and format it.

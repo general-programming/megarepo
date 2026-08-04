@@ -1,0 +1,42 @@
+# Disposable privileged pod for NVMe work on the metal node.
+#
+# Deliberately NOT a change to the shared `workpod` DaemonSet: that runs on all
+# six nodes including both control planes, and CAP_SYS_ADMIN there would be a
+# standing privilege-escalation surface for a convenience shell. This is pinned
+# to one node, runs one job, and gets deleted.
+#
+# Needs privileged (not just CAP_SYS_ADMIN) because nvme-cli's admin-passthru
+# ioctl path also wants unrestricted access to the char device.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: nvme-debug
+  namespace: kube-system
+  labels:
+    app: nvme-debug
+spec:
+  nodeName: sea1-k8s-2
+  hostPID: true
+  restartPolicy: Never
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: nvme
+      image: debian:trixie-slim
+      command: ["/bin/bash", "-c", "--"]
+      args: ["apt-get update -qq && apt-get install -y -qq nvme-cli pciutils >/dev/null 2>&1; echo READY; while true; do sleep 30; done"]
+      securityContext:
+        privileged: true
+      volumeMounts:
+        - name: dev
+          mountPath: /dev
+        - name: sys
+          mountPath: /sys
+      resources:
+        requests: {cpu: 100m, memory: 128Mi}
+        limits: {memory: 512Mi}
+  volumes:
+    - name: dev
+      hostPath: {path: /dev}
+    - name: sys
+      hostPath: {path: /sys}
