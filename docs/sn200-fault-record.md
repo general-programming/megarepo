@@ -322,9 +322,14 @@ So the innermost live frame is **the body of an RTOS task, entered via
 `callx8` from the dispatcher**. Frame arguments (`AR2..AR7`):
 `0x7ff91d78`, `0xffffc001`, `0x7ff977a8`, `3`, `1`, `4`.
 
-**The task's identity is not statically recoverable** — the entry pointer is
-`[task+0x8]` in RAM (`0x7ff91d88`), which is not in the dump. Anyone naming the
-task from this record is guessing.
+**The task's identity IS statically recoverable**, though not from RAM. The entry
+pointer at `[task+0x8]` (`0x7ff91d88`) is written by exactly one instruction in
+the image — `0x7ffbbe66: s32i a3,a2,0x8`, in the task registrar `0x7ffbbe60` —
+and the one registration of node `0x7ff91d80` loads its function pointer from a
+literal. The task is **`MI_ControlPrimitiveHandler`, PROC9 `0x7ffb2890`**, and
+the fault is a null-pointer store at `0x7ffb29b8`. See
+**`docs/sn200-proc9-fault.md`**, which supersedes this paragraph and upgrades the
+dead frames below from INFERRED to PROVEN.
 
 ### The dead frames — INFERRED (structurally sound)
 

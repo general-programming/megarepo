@@ -5,6 +5,11 @@
 
 CALLn encoding (Xtensa): byte0 low 4 bits = 5, n = bits 4..5, 18-bit signed offset in
 bits 6..23; target = ((PC & ~3) + 4) + (offset << 2).
+
+`n` IS the window increment in units of 4 registers: n=0 CALL0, 1 CALL4, 2 CALL8,
+3 CALL12. It is not off by one -- printing `call{4*(n+1)}` mislabels every CALL8
+as "call12" and made the frame chain in docs/sn200-proc9-fault.md look inconsistent
+with the CALLINC bits (31:30) of the saved return addresses until it was caught.
 """
 
 import os
@@ -63,4 +68,4 @@ if __name__ == "__main__":
     hits = [(pc, n) for pc, n, t in calls(base, d) if t == target]
     print(f"call sites -> {target:08x}: {len(hits)}")
     for pc, n in hits:
-        print(f"  {pc:08x}  call{4 * (n + 1)}")
+        print(f"  {pc:08x}  call{4 * n}")

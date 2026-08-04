@@ -28,6 +28,13 @@ except the physical wiring.**
 > diagnostic console → write the boot-mode word or EEPROM System-Area section 6 →
 > a boot that never consults the crash sections.
 
+> ⚠ **`docs/sn200-data-recovery.md` supersedes the operational plan in §11 below.**
+> Three corrections found since: the SBL console has **no SPI write command**, so
+> the "write EEPROM section 6" arm has nothing to execute it; a crash latch forces
+> the marker to 9 at `0x7ffaaf02`, so marker 8 would be discarded anyway; and
+> `LOAD_N_GO` lands in startup mode 0, i.e. a fully writable drive, not a
+> read-only one. `LOAD_N_GO` is still the escape — just not a read-only posture.
+
 The pieces, each PROVEN separately and now joined:
 
 1. **The `DiagMgr>` console comes up on a latched drive.** The console task is
