@@ -256,14 +256,51 @@ Disabling device after reset failure: -19
 `state=dead` at that point is expected, not a brick — the pending activation
 completes on the next power cycle.
 
-**It is still destructive.** The media came back fully zeroed (every offset
-sampled from 1 MiB to 1 TiB). So this replaces `0x0503` as the recovery of
-choice — same data outcome, but no vendor commands, no risk of a typo landing
-on `Erase to SBL EEPROM` or `Drive Uninit`, and no dependence on the VUC gate.
-Pull the crash dump first if you want the evidence.
+**It is destructive, and NOT a safe pointer flip.** The media came back fully
+zeroed (every offset sampled 1 MiB → 1 TiB). Why, proven in code: PROC0
+`0x7ffabbf0` writes marker 3, gated at `0x7ffabcc6` on **bit 0 of the target
+image's own flags word** — so whether an activation wipes is a property of the
+**image sitting in that slot**, not of the commit action you chose. `--action=2`
+is not "just repoint the boot slot".
+
+It has one real advantage over `0x0503` — no vendor opcodes, so no chance of a
+typo landing on `Erase to SBL EEPROM` (permanent brick) or `Drive Uninit`, and
+no dependence on the VUC gate. It has **no advantage in data cost**. Pull the
+crash dump before either.
 
 Slot 1 is read-only (`frmw` bit 0), so a factory image always survives and this
 cannot leave the drive without a bootable slot.
+
+### The re-init really does destroy data — PROVEN
+
+Markers 3 **and** 4 converge on `0x7ffaaf7d` → startup type **0 = FIRST** →
+`SYS: Executing First time startup` → `0x7ffaabd8` blanks the SA directory →
+PROC8 `0x7ffac7de` runs `Admin_NamespaceStartup` (type 0 only) → `memset` of
+**both LBN translation tables** (`0x7ffad556`, `0x7ffad2f6/0x7ffad304`), region
+map set to `0xffff`, namespaces **created fresh** (`0x7ffadac6`). V2P restore is
+skipped (`0x7ffa6418`) and no from-scratch reconstruction path exists.
+
+So this is not "namespace hidden" and not "L2P rebuilt from a journal" — the
+mapping metadata is destroyed. No NAND erase loop was found, so pages are
+presumably reclaimed lazily, but nothing host-visible gets them back.
+
+**Startup type 6 is `INVALID` (the latched state); `NORMAL` is 1.** That settles
+the `bnei a14,6` gate: `0x0503` schedules the wipe **only when the drive is
+already latched**. Fired from a normally-booted drive it erases the crash
+section without scheduling a re-init.
+
+### Marker 8 `READ ONLY` — the only non-destructive recovery in the firmware
+
+Read-only startup is **not** a degraded mode. SAM `0x7ffba9dc` sets a single
+flag bit (`0x80`) and falls straight into the **normal** boot path: L2P
+restored, namespace present, writes refused at the admin/IO layer. That is
+exactly what is needed to get data off a latched drive.
+
+PROC12 `0x7ffa7a68` writes marker 8 when request code `[ctx+0x48] == 6`.
+**Whether a host can supply that code is UNKNOWN** — no constant-6 store has
+been found and there is no "set startup marker" VUC. If a route exists, it beats
+every other recovery here. Do not run a destructive recovery on a drive whose
+contents matter until this is resolved.
 
 ### First thing to check on any SN200: the firmware revision
 
@@ -409,6 +446,18 @@ releases them.
 So: **the data is intact, the media is intact, and the only known release
 destroys it.** A latched drive left powered down keeps every future option
 open; `0x0503` closes them all. Decide deliberately, not reflexively.
+
+Precise bit mapping, PROVEN three ways (TOC at `0x7ff84a70`, producer
+`0x7ffb461c`, consumer `0x7ffab010`): **bit 0 ⇒ section `0x0b` CLOG**,
+**bit 2 ⇒ section `0x0a` PFCL**. `UNEXSTRT` stamps CLOG (`0x7ffaaf2b`
+`movi a12,11`), so PFCL plays no part in sustaining a power-event latch and
+`0x0603` cannot release one. The flags byte lives at **`0x7ff8d200`**.
+
+**Caveat — one possible non-destructive path exists but is unproven:** marker 8
+`READ ONLY` startup brings the drive up with L2P restored and the namespace
+present (see above). Nobody has found a way for a host to request it. Until
+that is settled, "no non-destructive recovery" means *none known*, not *none
+possible*.
 
 Triage which section is armed (read-only, safe):
 

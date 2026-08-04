@@ -20,7 +20,12 @@ lifted without wiping the namespace).
 > - The re-init **is** proven in code to destroy the mapping structures (§13.7).
 > - A **firmware activation schedules that same re-init**, gated on a flag bit in the
 >   target slot's image header — it is not a cheaper alternative (§13.5).
-> - Boot marker 8 `READONLY Startup requested` is **unreachable dead code** (§13.6).
+> - Boot marker 8 `READONLY Startup requested` is **REACHABLE**, and a read-only startup is
+>   a normal boot (L2P restored, namespace present) plus a write-inhibit bit — the only
+>   non-destructive recovery in the firmware. Whether the *host* can request it is UNKNOWN
+>   (§13.6). An earlier version of §13.6 called it dead code; that was wrong.
+> - Crash-section bits: **bit 0 = `0x0b` CLOG, bit 2 = `0x0a` PFCL**, PROVEN; the flags byte
+>   is at `0x7ff8d200` (§13.1), and UNEXSTRT stamps CLOG (§13.2).
 > - The marker → startup-type table in §5 is **wrong**; §13.8 has the real one.
 > - The `bnall` at `0x3003354d` cited as evidence **never existed** (§13.0).
 
@@ -2040,18 +2045,35 @@ stream — this is how the earlier reading went wrong):
 Confirms: two single-bit `ball` tests, **bit 0** and **bit 2** (not bit 1), both forcing
 marker 9. The `ball`/`bany` immediate-mask reading is correct.
 
-**⚠ OVERTURNS a supporting argument (not the conclusion).** The bit→section naming in
-`docs/sn200-nondestructive-recovery.md` §2 was derived from the section-state manager at
-`0x7ffab010`. Those are **different objects**:
+**The bit → section assignment is PROVEN**, by three independent points that agree:
 
-| literal | value | used by |
-|---|---|---|
-| `*(0x7ff829a8)` | **`0x7ff8b4f8`** | the boot latch (`0x7ffaac38` → a5) |
-| `*(0x7ff826d8)` | **`0x7ff8d200`** | the section-state manager (`0x7ffab01d` → a5) |
+1. **The TOC names the sections.** PROC0's EEPROM/System-Area table of contents is at
+   `0x7ff84a70` (pointer literal `0x7ff826bc`), 8-byte entries `{u8 id; u8 flags; u16 start;
+   char name[4]}`:
+   `…7ff84b08: 0b 90 6471 "CLOG"` and `…7ff84b10: 0a 01 7d70 "PFCL"`.
+   **id `0x0b` = CLOG (crash log), id `0x0a` = PFCL (pfail crash log)** — matching the erase
+   sub-command mapping in §13.3.
+2. **The producer.** System-init `0x7ffb4560` at `0x7ffb461c` derives the byte from the
+   SBL-supplied boot config: `bbci a10,2,…` → sets bits {0,1} (CLOG present);
+   `bbci a10,3,…` → sets bits {2,3} (PFCL present).
+3. **The consumer.** The section coroutine `0x7ffab010` tests `ball a8,mask 0x1` then issues
+   a read with **`movi a12,11`** (`0x7ffab23a`, section `0x0b`), and tests
+   `ball a14,mask 0x4` then issues a read with **`movi a12,10`** (`0x7ffab20f`, section
+   `0x0a`). The result arms report StrIds 1277–1279 (Crash Dump) and 1280–1282 (PFail).
 
-So "bit 0 = CRASH, bit 2 = PFCRASH" is **INFERRED** (an inference carried across two
-distinct byte-sized objects), not PROVEN. It remains the best reading — see §13.2 — but it
-should not be quoted as proven.
+So: **bit 0 ⇒ section `0x0b` CLOG; bit 2 ⇒ section `0x0a` PFCL.** Bits 1 and 3 are the
+companion "section examined this boot" flags (set on *every* outcome). Bits 4–7 are never
+referenced.
+
+**⚠ Correction to the address.** The flags byte is at **`0x7ff8d200`** (literal
+`0x7ff826d8`), not `0x7ff8b4f8`. The producer and `0x7ffab010` both use `0x7ff8d200`
+unambiguously, and the UNEXSTRT staging buffer is `0x7ff8d208` = `0x7ff8d200 + 8` (§13.2).
+`0x7ff8b4f8` (literal `0x7ff829a8`, loaded into a5 at `0x7ffaac38`) is the coroutine's
+*message* object, polled as `l32i aX,a5,0x8` in the `call8 0x7ffa3bd8 / bnez` receive idiom.
+Within `0x7ffaac30`, `a5` therefore serves **two** roles and must be reassigned between them
+— the reassignment sits in a slot `xdis.py` does not yet decode (candidate: `?B 2fd8c` at
+`0x7ffaac43`). **INFERRED (high confidence)** that `a5 = 0x7ff8d200` at `0x7ffaad01` and
+`0x7ffaae2d`; the bit *semantics* above do not depend on resolving it.
 
 ### 13.2 The latch is self-sustaining, and marker 9 is what sustains it — **PROVEN**
 
@@ -2075,10 +2097,24 @@ So the loop is closed: **marker 9 → if the crash section is empty, stamp an `U
 stub into it → next boot's bit-0 test fires → marker 9 again.** A bare power cycle cannot
 break it, which is exactly what the field control showed.
 
-Note `0x7ff8b4f8` serves both roles — byte `+0` is the section-state byte the latch tests,
-and `+0x08 … +0x4c` is the crash-header staging buffer the stub is built in. That resolves
-the apparent contradiction between §5 and §5.1 of the non-destructive-recovery doc: it is
-one struct, not two.
+**And the stub provably lands in CLASH section `0x0b`** — settling the CLOG-vs-PFCL question
+outright. The hand-off at `0x7ffaaf13`:
+
+```asm
+7ffaaf13: { l32r a11,0x7ff8341c ; movi a12,0 }              ; buf = 0x7ff8d208, op = 0 (write)
+7ffaaf23: { s32i a11,a10,0x24 ; movi a9,256 }
+7ffaaf2b: { s32i a9,a10,0x28 ; movi a11,1 ; movi a12,11 }   ; len 256, SECTION 11 = 0x0b
+7ffaaf33: call8 0x7ffb4fec
+```
+
+(`op` 0 = write; the read path at `0x7ffab23a` uses 1.) So the loop closes through **CLOG**:
+stub → CLOG non-blank → `0x7ffb4666` sets flags **bit 0** → `0x7ffaae35`'s `ball mask 0x1`
+fires → marker 9. **PFCL plays no part in sustaining it.**
+
+The struct is `0x7ff8d200`: byte `+0` is the section-flags byte, `+0x08 … +0x4c` is the
+crash-header staging buffer (memset 256 B at `0x7ffaad0c`). That resolves the apparent
+contradiction between §5 and §5.1 of the non-destructive-recovery doc: it is one struct, not
+two — but at `0x7ff8d200`, not `0x7ff8b4f8`.
 
 ### 13.3 The erase dispatcher, re-read cleanly — **PROVEN**
 
@@ -2243,7 +2279,63 @@ reaches the *same* destructive re-init by a different door — and it does so
 spec-defined commands, so there is no chance of a typo landing on `Erase to SBL EEPROM` or
 `Drive Uninit`, and it does not depend on the Post-Crash allow-list.
 
-### 13.6 ⚠ Boot marker 8 "READONLY Startup requested" is dead code — **PROVEN**
+### 13.6 ⚠⚠ Boot marker 8 is REACHABLE, and read-only startup preserves the L2P — **PROVEN**
+
+> **This subsection was published earlier today claiming marker 8 was dead code. That was
+> wrong and is retracted in full.** The error is instructive: the brute-force scan below
+> *did* flag PROC12 `0x7ffa7d70`, and it was dismissed as a false positive after
+> disassembling from `0x7ffa7d60` — a mid-stream address. `0x7ffa7d6d` is a `retw.n`, so the
+> linear sweep desynced and printed garbage. `0x7ffa7d70` is a **branch target**, not a
+> continuation. Decoded from the target, it is real code. *Always enter at an `entry` or a
+> proven branch target* — the rule this document states twice, broken here.
+
+**PROC12 writes marker 8.** Function `0x7ffa7a68`, request code from `[ctx+0x48]`:
+
+```asm
+7ffa7b2d: { sync/extw ; beqi a11,4,0x7ffa7ce8 }   ; code 4 -> 0x80000004 FACTORY
+7ffa7b35: { sync/extw ; beqi a11,5,0x7ffa7d70 }   ; code 5 -+
+7ffa7b3d: { sync/extw ; beqi a11,6,0x7ffa7d70 }   ; code 6 -+-> shared block:
+...
+7ffa7d70: l32r a13,0x7ffa0d94        ; = 0x80000008   READONLY
+7ffa7d73: l32r a12,0x7ffa0d98        ; = 0x80000006   PFAIL Shutdown STARTED
+7ffa7d76: addi a14,a11,-6
+7ffa7d79: moveqz a12,a13,a14         ; a11 == 6  ->  a12 = 0x80000008
+7ffa7d7c: { s32i a12,a2,0x54 ; j 0x7ffa7cee }      ; stage + commit via the SA writer
+```
+
+Literal values verified directly: `*(0x7ffa0d94) = 0x80000008`, `*(0x7ffa0d98) = 0x80000006`.
+
+**And a read-only startup is a normal startup with a write-inhibit flag.** Marker 8 →
+startup type **3**, and the type enum is confirmed against StringTable 303–309:
+`FIRST(0) / NORMAL(1) / RECOVERY(2) / READ ONLY(3) / FIRMWARE UPDATE(4) / FAST(5) /
+INVALID(6)`. SAM (PROC6 `0x7ffba898`) switches on it at `0x7ffba940`:
+
+```asm
+7ffba940: beqi a12,3,0x7ffba9dc      ; READ ONLY
+7ffba948: beqi a12,1,0x7ffba9e5      ; NORMAL
+7ffba9dc: movi a13,128 ; or a10,a10,a13 ; s32i a10,a6,0x3d0   ; set flag 0x80
+7ffba9e5: <falls straight into the NORMAL path>
+```
+
+BlockMgr does the same (`0x7ffa66e8: beqi a9,3`, StrId 2671 `"BlockMgr: Read Only Startup"`,
+then jumps into the shared blockset init used by Normal/Recovery/Fast). Write rejection
+lives in the *host* layer, not in startup: StrIds 1833, 1988, 2007, 3210, 3266, 510, 1494.
+
+**Operational consequence — this is the most important finding in §13.** The firmware
+*does* contain a posture that brings the drive fully up — System Area read, **L2P restored,
+namespace present** — with writes refused. It is not a diagnostic or degraded mode; it is
+the normal boot path plus one bit. **If marker 8 can be requested, it is a non-destructive
+recovery for a latched drive**, and the only one that exists.
+
+**What is NOT established:** where `[ctx+0x48] == 6` comes from. No store of a constant 6 to
+that offset was found in any image, so the value arrives in a received message / DMA'd
+request block. There is no "set startup marker" VUC string, and the only raw-System-Area OAM
+string is read-only (`"OAM READ RAW SA CMD"`). PROC0 contains no marker-8 writer. **So
+host-reachability is UNKNOWN — do not assume it is reachable, and do not assume it is not.**
+This is now the highest-value open question in the whole investigation, and it is a pure
+static-analysis question requiring no hardware.
+
+### 13.6a The earlier scan, kept for the record
 
 Scanned all 18 flat images for every literal-pool word equal to a marker constant and every
 reference to it, counting **both** plain 3-byte `l32r` and `l32r` hidden in FLIX slot A
@@ -2257,18 +2349,17 @@ reference to it, counting **both** plain 3-byte `l32r` and `l32r` hidden in FLIX
 | POSTCRASH (9) | PROC0 `0x7ff83474` | `0x7ffaaf08` (**boot forcer**) · `0x7ffaaec8` (compare) |
 | **READONLY (8)** | PROC0 `0x7ff83478` | **`0x7ffaaed3` only** — the dispatch comparison |
 
-`0x80000008` has **exactly one reference in the entire firmware**, and it is the `beq` in
-the dispatch chain that decides whether to branch to the handler at `0x7ffaaff5`. There is
-no producer anywhere. (The only other candidate, PROC12 `0x7ffa7d70`, is a false positive:
-`0x7ffa7d6d` is a `retw.n` and the bytes after it are a literal pool, not code.)
-`0x80000008` is also outside `movi`'s immediate range, so it cannot be materialised without
-a literal load.
+The table remains useful for the *other* markers. For marker 8 the second row —
+PROC12 `0x7ffa7d70` — is the real writer, decoded above; the "one reference only" reading
+was the mistake described at the head of §13.6.
 
-**Verdict: marker 8 is unreachable.** The handler at `0x7ffaaff5` is bookkeeping only
-(`{ movi a11,1272 ; j 0x7ffaac8a }`, StrId 1272 `SYS: Read-only startup`). **There is no
-read-only-with-L2P-intact startup path to reach**, and the "SPECULATIVE but worth pursuing"
-note in §6 of this document — that setting marker 8 might give a read-only recovery — is
-now closed as **not pursuable**.
+Note also that `0x80000008` is outside `movi`'s immediate range, so a producer must load it
+from a literal pool. That is why this scan is a sound way to enumerate producers — provided
+its hits are decoded from a valid entry point.
+
+**The §6 note — "SPECULATIVE but worth pursuing: if the startup marker could be set to 8…
+that would be a non-destructive recovery" — is therefore VINDICATED, not closed.** The
+mechanism exists and does exactly what §6 hoped. Only the request path is unknown.
 
 ### 13.7 ⚠ The re-init DOES destroy user data — now **PROVEN in code**, end to end
 
@@ -2398,12 +2489,18 @@ Every handler, verbatim:
 | 8 READONLY | `0x7ffaaff5` | 1272 | **3** |
 | — (crash section armed) | `0x7ffaac82` | 1273 | **6** |
 
+Names confirmed against StringTable 303–309: **`FIRST(0) / NORMAL(1) / RECOVERY(2) /
+READ ONLY(3) / FIRMWARE UPDATE(4) / FAST(5) / INVALID(6)`**. Every row lines up: marker 1
+CLEAN → NORMAL, marker 2 PFAIL → RECOVERY, markers 3/4 → **FIRST** (hence
+`"SYS: Executing First time startup"` in §13.7), marker 8 → **READ ONLY**, crash-armed →
+**INVALID**.
+
 **This overturns the §5 startup-type table**, which was inferred from string order rather
 than read from code.
 
 **It also settles the `0x30033704` gate.** `bnei a14,6` on `*(0x7ff87c64)` means the crash
-erase schedules the re-init **only when the startup type is 6 — i.e. only when the drive is
-already latched in Post Crash.** That is the reading in
+erase schedules the re-init **only when the startup type is 6 = `INVALID` — i.e. only when
+the drive is already latched.** That is the reading in
 `docs/sn200-nondestructive-recovery.md` §1, and it is now **PROVEN** rather than inferred:
 `0x7ffaac82` is reached only as the branch-taken target of the Post-Crash gate
 `ball a14,mask 0x1` at `0x7ffaad04`, and it is the sole site assigning 6.
@@ -2412,10 +2509,11 @@ Practical consequence, unchanged in substance but now firmly grounded: **`0xFF/0
 fired on a latched drive always schedules the destructive re-init.** The `bnei` exists to
 avoid scheduling one on a drive that was never latched; it is not an escape hatch.
 
-**Corrects a reading produced during this pass:** an intermediate trace read type 6 as
-"Normal" from `0x7ffac7de: bnez a9 → LOG 1552 "Admin: Normal Startup 0x%x"`. That branch
-only distinguishes *zero* from *nonzero* — "normal" there means "not first startup". Normal
-clean boot is type **1**. Type 6 is Post Crash.
+**Corrects two readings produced during this pass:** (a) an intermediate trace read type 6 as
+"Normal" from `0x7ffac7de: bnez a9 → LOG 1552 "Admin: Normal Startup 0x%x"`; that branch only
+distinguishes *zero* from *nonzero*, and NORMAL is type **1**. (b) This document briefly
+called type 6 "Post Crash"; its enum name is **`INVALID`**. Operationally identical — it is
+the latched state — but quote the right name.
 
 ### 13.9 Provenance of the claims in this section
 
