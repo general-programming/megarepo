@@ -1,0 +1,47 @@
+---
+# Replaces MetalLB's IPAddressPool. Carved out of the SEA1 10.3.2.0/23 LAN;
+# sea1-core's Kea pool starts at 10.3.3.128 and every static lives in 10.3.2.x.
+#
+# serviceSelector is the equivalent of MetalLB's autoAssign: false -- several
+# Services here are type=LoadBalancer only because they were written for FMT2
+# (znc, loki, tempo), and they should stay pending rather than silently
+# consuming a VIP. Opt in with the label below.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: sea1-lan
+spec:
+  blocks:
+    - cidr: "10.3.3.0/28"
+  serviceSelector:
+    matchLabels:
+      generalprogramming.org/lb-pool: sea1-lan
+---
+# The v6 ingress pool traefik draws from. Auto-assigns, matching the MetalLB
+# pool-external it replaces.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: sea1-external-v6
+spec:
+  blocks:
+    - cidr: "2602:fa6d:10:ffff::e00/120"
+---
+# Replaces MetalLB's L2Advertisement -- ARP for v4, NDP for v6.
+#
+# Announce only from the bridged nodes. Their node address lives on br0, which
+# is the LAN-facing device; announcing from a node whose LAN path differs would
+# publish a VIP that cannot be reached. The interface list must match those
+# devices, and is the same set Cilium uses for direct routing.
+apiVersion: cilium.io/v2alpha1
+kind: CiliumL2AnnouncementPolicy
+metadata:
+  name: sea1-lan
+spec:
+  nodeSelector:
+    matchLabels:
+      generalprogramming.org/lan-bridge: "true"
+  interfaces:
+    - ^br0$
+  loadBalancerIPs: true
+  externalIPs: false

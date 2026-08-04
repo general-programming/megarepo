@@ -113,6 +113,18 @@ spec:
               - SYS_ADMIN
               - SYS_RESOURCE
 
+        # Replaces MetalLB in sea1: Cilium does LB IPAM and ARP/NDP itself.
+        # Requires kubeProxyReplacement, which is why this could not be done
+        # before Phase C. Pools and announcement policy live in lb-ipam.yaml.
+        #
+        # The rate limit is raised deliberately -- L2 announcements churn
+        # coordination leases, and the 5/10 default throttles the agent.
+        l2announcements:
+          enabled: true
+        k8sClientRateLimit:
+          qps: 20
+          burst: 40
+
         # Metrics on :9962 (agent) and :9963 (operator). Scraped by
         # VMPodScrape, not the chart's serviceMonitor -- this cluster runs the
         # VictoriaMetrics operator, not prometheus-operator.

@@ -13,9 +13,14 @@ apiVersion: v1
 kind: Service
 metadata:
   name: akvorado-flows
+  labels:
+    # Opts this Service into the sea1-lan pool. Cilium's serviceSelector is
+    # how MetalLB's autoAssign: false is expressed -- without the label no
+    # VIP is handed out.
+    generalprogramming.org/lb-pool: sea1-lan
   annotations:
-    metallb.universe.tf/address-pool: sea1-pool
-    metallb.universe.tf/loadBalancerIPs: 10.3.3.1
+    # Pinned: device configs hardcode this address.
+    lbipam.cilium.io/ips: "10.3.3.1"
 spec:
   type: LoadBalancer
   externalTrafficPolicy: Local

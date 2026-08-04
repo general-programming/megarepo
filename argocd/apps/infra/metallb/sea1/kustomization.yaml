@@ -1,5 +1,16 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
-resources:
-  - ../base
-  - l2.yaml
+# MetalLB is retired in sea1 -- Cilium does LB IPAM and L2 announcements
+# (argocd/apps/infra/cilium/sea1/lb-ipam.yaml), which needs kubeProxyReplacement
+# and so only became possible once that landed.
+#
+# It served two Services from twelve pods here, five of them frr-k8s for BGP
+# sea1 never used -- the upstream manifest ships the FRR stack regardless.
+#
+# Deliberately an empty kustomization rather than a deleted directory: the
+# infra ApplicationSet generates an app per cluster from argocd/apps/infra/*,
+# so removing this path would leave a permanently erroring Application.
+# Empty + prune retires the resources cleanly.
+#
+# fmt2 keeps MetalLB: it uses real BGP peering, and still runs flannel.
+resources: []
