@@ -545,10 +545,24 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
+  - # Cilium is the CNI, deployed by ArgoCD from
+    # argocd/apps/infra/cilium/sea1. Talos must not install flannel.
+    #
+    # DO NOT REMOVE. This was applied live on 2026-08-04 during the migration
+    # and only recorded here afterwards; while the two disagreed, any
+    # `talhelper genconfig` + `talosctl apply-config` would have reinstalled
+    # flannel underneath a running Cilium cluster and broken pod networking
+    # a second time.
+    |-
+    cluster:
+      network:
+        cni:
+          name: none
   - # Raise kubelet max pods from the Talos default of 110. 200 leaves room to
     # absorb a whole node's workload during a drain, and for the bare-metal
-    # nodes which have far more RAM than the VMs. Flannel gives each node a
-    # /24, so ~250 is the hard ceiling.
+    # nodes which have far more RAM than the VMs. Each node still gets a single
+    # /24 from kube-controller-manager (Cilium runs ipam.mode=kubernetes and
+    # reuses it), so ~250 remains the hard ceiling.
     |-
     machine:
       kubelet:
