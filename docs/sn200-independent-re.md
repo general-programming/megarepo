@@ -360,13 +360,18 @@ Confidence split for the findings that matter:
 | States 5/6/7 converge on `0x7ffaaf6b`, load-n-go is their only escape | `b12` edges + adjacent constants | **high** |
 | Crash-section detect forces `0x80000009` | `l32r` + log adjacency in one basic block | **high** |
 | State 9 does **not** share the load-n-go override | absence of a matching `b12` | **medium** |
-| Which admin opcodes are exempt from the gate | undecoded bundle operands | **UNKNOWN** |
+| Which admin opcodes are exempt from the gate | ~~undecoded bundle operands~~ | **RESOLVED** — allow-list, see Addendum §B.1 |
 
 ---
 
 ## 6. Can the host get the drive out of this without a chassis power cycle?
 
-### 6.1 The rejection gate is a deny-list, not an allow-list
+### 6.1 ~~The rejection gate is a deny-list, not an allow-list~~ — **RETRACTED**
+
+> **RETRACTED.** With slot-B-aware decoding the gate at `0x7ffa6b18` is an **allow-list**:
+> a matching opcode sets `a9 = 0` and falls through, only the no-match path at `0x7ffa6bd1`
+> sets `a9 = 1` and reaches the `0x7C5` reject. See the Addendum, §B.1. The rest of this
+> section's structural findings (one status literal, one reject site) still stand.
 
 **PROVEN.** Searching all PROC8 images for the constant `0x8f8a0000` returns **exactly one**
 location (`0x7ffa0da0`, referenced once, at `0x7ffa6d13`). There is a single post-crash
@@ -1009,7 +1014,12 @@ that PCIe code cannot reach. Where we differ is emphasis. That document routes D
 Both are real; mine needs no firmware bug, only a disabled port, which is precisely what
 `UEFI0067` produced. For latch #2 mine is the simpler explanation.
 
-### D5. The admin-gate polarity — **that document's "whitelist" is not usable, and neither was my first reading**
+### D5. ~~The admin-gate polarity~~ — **SUPERSEDED by Addendum §B**
+
+> That document's *polarity* was right (allow-list) and its membership was incomplete; my
+> "self-inconsistent duplicate constants" argument was itself an artefact of the imm12
+> branch-displacement error and of merging four different gates. See Addendum §B.6.
+
 
 It reports extracted constants `0, 1, 2, 4, 5, 6, 8, 10, 10, 12, 16, 12, 128, 8, 32, 10, 32,
 256` and correctly notes the duplicates prove the field extraction is wrong. I initially
@@ -1650,3 +1660,304 @@ it. Both hypotheses predict "fails under load"; the counter in §B3 is what sepa
   PDF table columns interleave, and both possible readings are self-consistent. The commonly
   quoted `OM-6588 = deallocate/L2P` mapping may be off by one entry. **Cite these by title.**
   The titles and root causes are unambiguous; the IDs are not.
+
+---
+
+# Addendum: re-derivation with slot-B-aware FLIX decoding
+
+Everything in this addendum was produced with **`tools/sn200-fw/disany.py` / `xdis.py`**,
+which decode FLIX slot A *and* slot B (and, as of this pass, slot C). **No claim here comes
+from Ghidra's decompiler.** That matters: the patched `flix.sinc` only fixes the *length* of a
+bundle — it still renders the bundle as one opaque pseudo-op, so Ghidra's decompiler cannot see
+the branch that lives in slot B and silently drops roughly half the conditional control flow.
+For this firmware Ghidra is usable for layout and xrefs, not for control flow.
+
+Sanity check demanded before trusting anything (`disany.py 'PROC8@30000000' 30033500 30033600`):
+`0x3003353c` decodes exactly as `entry a1,0x30`, the stream from `0x30033500` runs with **no
+address gaps**, and there is **no floating-point** anywhere in the integer control code. Passed.
+
+## A. Decoder corrections found while doing this (PROVEN)
+
+1. **FLIX slot C exists and is `movi at, imm8`.** Format-`0xE` bundles are
+   `[tag+slotA : bits 0-27][slotB : bits 28-47][slotC : bits 48-63]`. Slot C is
+   `[op=0xC @60-63][t @56-59][imm8 @48-55]`; `0xC090` is the canonical NOP.
+   Proven statistically over all 18 images — nibble 56-59 is spread over `a1..a15` and only
+   ever `a0` in the NOP, while nibble 52-55 is not register-shaped — and semantically at
+   `PROC0 0x7ffaad0c`, where slot C supplies the `0` fill byte to a 256-byte `memset`, and at
+   `PROC8 0x7ffa6b28`, where it supplies opcode constant `0x0D`. Now decoded by `xdis.py`.
+2. **`xdis.py` decoded `addi.n` with the wrong field order.** RRRN puts the destination in
+   `r` and the immediate in `t`; the tool printed `addi.n a{t},a{s},{r}`. This made
+   `addi.n a11,a11,1` read as `addi.n a1,a11,11` — an apparent SP corruption in the middle of
+   the crash-dump timestamp update. Fixed.
+3. **The FLIX branch displacement is 18 bits, not 12.** The calibration handed to me
+   ("`r@28-31, s@32-35, imm12@36-47`") is only accidentally right for small forward branches.
+   The real field is `imm18 @36-53`, opcode `@54-63` (bit 54 always 0, mnemonic index `k @55-63`),
+   target `= pc + 4 + sext18(imm)`. Decisive counter-example: `0x7ffa6d1b`
+   `ff 20 00 b0 83 f2 3f 04` → `imm18 = 0x3ff28` → `-216` → target `0x7ffa6c47`, a **backward**
+   branch that the imm12 model cannot express. Every backward branch in the gate is mis-targeted
+   under the imm12 reading, which is exactly how a sweep desynchronises and produces "dead code".
+4. Slot-B class `pre=1` is `addi at, as, imm4` (`[t@28-31][imm4@32-35][s@36-39][…][op=2@44-47]`),
+   confirmed at `0x7ffb4fda` = `addi a2,a2,4` inside a word-push loop. Not yet added to `xdis.py`.
+
+## B. QUESTION 1 — the Post-Crash admin gate
+
+One function, `PROC8 @ 0x7ffa6b18` (`entry a1,0x20`, one caller: `0x7ffa7244 call12`), hosts
+**four independent gates**. Conflating them is what produced every previous contradiction.
+Arguments: `a2` = command-class flag (`1` = admin), `a3` = opcode, `a4` = a sub-opcode/CDW
+selector, `a5` = the status word accumulated so far. All four gates return
+`a2 = a5 | <status literal>`; status = literal `>> 17` (CQE DW3 bits 17-31).
+
+### B.1 Gate 1 — Post-Crash. **ALLOW-LIST. PROVEN.**
+
+```
+7ffa6b18: entry a1,0x20
+7ffa6b1b: l32r a8,->0x7ff87c64 ; l32i.n a8,a8,0    ; startup-mode global
+7ffa6b20: { … ; movi a15,48 }
+7ffa6b28: { movi a12,230 ; movi a10,17 ; movi a11,13 }   <- slot C = movi a11,13
+7ffa6b30: { movi a13,198 ; bnei a8,6,0x7ffa6bd9 }        <- mode != 6 -> skip this gate
+… chain of beqi/beq a3,<const> -> 0x7ffa6cfb …
+7ffa6bd1: { movi a9,1 ; j 0x7ffa6d05 }                   <- no match
+7ffa6cfb: { movi a9,0 ; j 0x7ffa6d05 }                   <- match
+7ffa6d05: beqz a9,0x7ffa6bd9                             <- a9==0 => fall through to gate 2
+7ffa6d08: l32r a10,->StrId 1804 ; mov a11,a3 ; call Log_Printf
+7ffa6d13: l32r a9,=0x8f8a0000 ; or a2,a5,a9 ; retw.n     <- a9==1 => REJECT
+```
+
+* **Mode `6` is Post-Crash startup mode** — self-proving: the whole chain is guarded by
+  `bnei a8,6` and the reject path logs StrId 1804 *"Admin cmd rejected due to Post Crash
+  startup mode: 0x%x"*.
+* **Polarity: a match means ALLOWED.** A match sets `a9 = 0`, and `beqz a9` at `0x7ffa6d05`
+  falls through to the next gate. Only the no-match fall-through at `0x7ffa6bd1` sets `a9 = 1`
+  and reaches the logger. There is no reading of this that makes it a deny-list.
+* **Status: `0x8F8A0000 >> 17 = 0x47C5`** = DNR | SCT=7 | SC=0xC5. Matches the field
+  observation of `0x7C5` exactly, and independently confirms the "status = literal >> 17"
+  decode.
+
+**Complete membership (PROVEN, every site listed):**
+
+| opcode | site | NVMe meaning |
+|---|---|---|
+| `0x00` | `7ffa6b38 beqz a3` | Delete I/O SQ |
+| `0x01` | `7ffa6b3b` | Create I/O SQ |
+| `0x02` | `7ffa6b43` | Get Log Page |
+| `0x04` | `7ffa6b4b` | Delete I/O CQ |
+| `0x05` | `7ffa6b53` | Create I/O CQ |
+| `0x06` | `7ffa6b5b` | Identify |
+| `0x08` | `7ffa6b63` | Abort |
+| `0x09` | `7ffa6b6b/6d` (`movi a9,9`) | Set Features |
+| `0x0A` | `7ffa6b75` | Get Features |
+| `0x0C` | `7ffa6b7d` | Async Event Request |
+| `0x10` | `7ffa6b85` | Firmware Commit |
+| `0x11` | `7ffa6b8d` (`a10`) | Firmware Image Download |
+| `0xE6` | `7ffa6bab` (`a12`) | vendor |
+| `0xEC` | `7ffa6b95/98` | vendor |
+| `0xFF` | `7ffa6ba0/a3` | vendor — **the OAM erase carrier** |
+| `0xC6` | `7ffa6bbe` **conditional**: allowed only if `a4 == 0x20` or `a4 == 0x30` (`7ffa6bc1/c9`) | vendor read family |
+| `0xCA` | `7ffa6bb6` → sub-list at `0x7ffa6d76` | vendor |
+
+`0xCA`'s sub-list (`0x7ffa6d76`-`0x7ffa6da1`, match → `movi a9,0` → allowed):
+`a4 ∈ {0x02, 0x03, 0x04, 0x08, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x13, 0x21, 0x32}`.
+
+Everything else is rejected with `0x7C5` — including `0x0D` Namespace Management, `0x15`
+Namespace Attachment, `0x18` Keep Alive, `0x80` Format NVM, `0x84` Sanitize, and **`0xDD`**.
+
+The list is coherent as "every standard admin command this drive implements": `0x03`, `0x07`
+and `0x0B` are absent because they are *reserved in NVMe*, not because they were missed.
+Note also that `B4CONST` (the `beqi` immediate table) cannot encode 3, 7, 11, 13, 14 or 15 —
+so any opcode with such a value must appear as `movi`+`beq`, and none does.
+
+### B.2 Gate 2 — VUC Control. **DENY-BY-DEFAULT above `0xBF`.** `0x7ffa6bd9`
+
+Guard: byte `[0x7ff8f140 + 0x9d] == 0` **and** `a2 == 1` **and** `a3 > 0xBF`. Then the only
+opcodes let through (`-> 0x7ffa6c0e`, `a9 = 0`) are `0xEC..0xEE` (`movi a9,-236; bltui a9,3`),
+`0xD8..0xDF` (`movi a8,-216; bltui a8,8`), `0xC6` with `a4 ∈ {0x20,0x30}`, and `0xE6`. Anything
+else `> 0xBF` → `0x7ffa6d5b`, `a9 = 1`, log **StrId 1805** *"Admin cmd restricted by VUC Control
+disabled"*, status `0x80020000 >> 17 = 0x4001` = DNR | **Invalid Command Opcode**.
+
+**This is where `0xCC`, `0xD4`, `0xD8-0xDF` came from.** They are *VUC-control* constants, not
+Post-Crash constants. The prior "allow-list with rejected `0xCC, 0xD4, 0xD8-0xDF`" mixed two
+gates. Note the polarity is the opposite of what that reading implied: `0xD8-0xDF` are the
+opcodes gate 2 **permits**.
+
+### B.3 Gate 3 — purge phase. `0x7ffa6c16` → `0x7ffa6d1b`
+
+Reached when `[0x7ff918ac] != 0` and `byte[0x7ff95708 + 2] ∉ {2,3}`. For `a2 == 1` and an
+opcode with bit 7 set (or `> 0xBF`), the list at `0x7ffa6d1b` is
+`{0x10, 0x11 (a10), 0x15 (a12), 0x0D (a11), 0x80}` → `0x7ffa6c47` → `a9 = 1` → **REJECT**,
+logging **StrId 1806** *"Admin cmd restricted by purge phase 0x%x: 0x%x"*, status
+`0x00180000 >> 17 = 0x0C` (Command Sequence Error), or `0x00040000 >> 17 = 0x02`
+(Invalid Field) via `0x7ffa6d53` for opcode `0x80`/`0x00`. **This one is a deny-list.**
+
+### B.4 Gate 4 — sanitize. **DENY-LIST. PROVEN.** `0x7ffa6c80` — this is where `0xDD` lives
+
+Reached when `byte[0x7ff95708 + 2] == 2` (or `2/3` via `0x7ffa6c76`).
+
+```
+7ffa6c80: { movi a9,1 ; bnei a2,1,0x7ffa6cd4 }
+7ffa6c88: beqi a3,16          -> 0x7ffa6d4b     0x10  Firmware Commit
+7ffa6c90: beq  a3,a10 (=0x11) -> 0x7ffa6d4b     0x11  Firmware Download
+7ffa6c98: beq  a3,a12 (=0x15) -> 0x7ffa6d4b     0x15  Namespace Attachment
+7ffa6ca0: beq  a3,a11 (=0x0D) -> 0x7ffa6d4b     0x0D  Namespace Management
+7ffa6ca8: beqi a3,128         -> 0x7ffa6d4b     0x80  Format NVM
+7ffa6cb0: movi a12,221 ; beq a3,a12 -> 0x7ffa6d4b   0xDD
+7ffa6cbb: movi a14,129 ; beq a3,a14 -> 0x7ffa6d4b   0x81
+7ffa6cc6: movi a15,130 ; beq a3,a15 -> 0x7ffa6d4b   0x82
+7ffa6ccc: { movi a9,0 ; j 0x7ffa6cd4 }          <- NO match
+7ffa6d4b: { movi a9,1 ; j 0x7ffa6cd4 }          <- match
+7ffa6cd4: bnei a9,1,0x7ffa6c7c                  <- a9==0 -> mov a2,a5 ; retw = ALLOW
+7ffa6cd9: l32r a10,->StrId 3370 ; … ; call Log_Printf ; REJECT
+```
+
+StrId 3370 = *"Admin cmd (opcode 0x%x) restricted by sanitize command SANACT 0x%x: SSTAT …"*.
+**Match ⇒ rejected.** So `0xDD`, `0x81`, `0x82` are the opcodes the *sanitize* gate blocks
+while a sanitize/purge is in progress.
+
+### B.5 Verdict on `0xDD` — **SAFETY-CRITICAL**
+
+* `0xDD` appears in the firmware's gate function **exactly once**, at `0x7ffa6cb0`, in the
+  **sanitize** deny-list. It does **not** appear anywhere in the Post-Crash chain.
+* Because gate 1 is an allow-list and `0xDD` is not a member, **`0xDD` is *rejected* with
+  `0x7C5` on a latched drive.** It is not "permitted in Post-Crash mode", and it is not how the
+  OAM erase is delivered.
+* The OAM erase is `0xFF` — which *is* in the allow-list (`0x7ffa6ba0`), and whose handler at
+  `PROC8@30000000 0x3003353c` logs *"OAM ERASE CMD: Erase to Crash Dump failed"*,
+  *"… Erase to PFail Crash Dump failed"*, *"… Erase to system area 0 failed"*,
+  *"… Drive Uninit failed"*. That is the erase family.
+* `0xDD` is `hgst_nvme_secure_purge` (`libdmi_core @ 0x146480`), **Start Secure Purge** — a
+  whole-drive crypto erase. **Never issue it.** Any document saying `0xDD` is the Post-Crash
+  vendor erase is wrong and destructive.
+
+### B.6 Prior claims overturned
+
+| claim | verdict |
+|---|---|
+| "the gate at `0x7ffa6b18` is an allow-list; exempt `0x02,0x06,0x09/0x0A,0x0C,0x10/0x11,0xE6,0xFF`" | **polarity right, membership incomplete.** Missing `0x00,0x01,0x04,0x05,0x08,0xC6,0xCA,0xEC` and the `0xC6`/`0xCA` sub-conditions. |
+| "rejected: `0xCC, 0xD4, 0xD8-0xDF`" | **wrong gate.** Those are VUC-control constants (gate 2), where `0xD8-0xDF` are *permitted*. |
+| "the gate is a deny-list" (this document, §6.1) | **RETRACTED.** Gate 1 is an allow-list. |
+| "the extracted constants are self-inconsistent — 10, 12, 8, 32 each appear twice, so the r-field position is wrong" | **RETRACTED.** No duplicates exist within any single chain. The apparent duplication came from merging four different gates' constants and from the imm12 branch-target error, which mis-attributed backward branches. |
+| "polarity never resolved" | resolved, above. |
+| "`0xDD` is permitted in Post-Crash mode / is the OAM erase" | **FALSE AND DANGEROUS.** It is a sanitize-gate deny entry and is rejected in Post-Crash mode. |
+| FLIX `beqi` uses `imm12@36-47` | **wrong**; `imm18@36-53`. |
+
+**Practical consequence.** On a latched drive you can issue: Identify, Get Log Page, Get/Set
+Features, Abort, AER, queue create/delete, Firmware Download + Commit, and vendor `0xC6`
+(CDW `0x20`/`0x30`), `0xCA` (12 sub-ops), `0xE6`, `0xEC`, `0xFF`. Everything else returns
+`0x7C5`. Firmware Download/Commit being on the list is the operationally important part.
+
+## C. QUESTION 2 — the crash-dump container header
+
+**Result: recovered, not merely bounded.** The writer was found. The dump *writer* really does
+emit no log messages, but it does not have to — it is reachable from the exception vectors,
+which are trivially locatable by their `wsr aN, EXCSAVE / rsil / l32r a1` prologue.
+
+### C.1 How it was found
+
+`"HDC\0"` is the 32-bit constant `0x48444300`. Searching every image's literal pool for that
+value gives five sites: `PROC0 0x7ffa29b4` and `0x7ffaad1a` (writers), `PROC8@7ff80000
+0x7ffb31d4` and `PROC8@30000000 0x30030b48` (readers), each with its literal.
+
+### C.2 The magic is three characters plus a variable byte (PROVEN)
+
+Both readers do the same thing:
+
+```
+PROC8 0x7ffb31d2: l32i.n a13,[a14+0]
+7ffb31d4:         l32r a8,=0x48444300
+7ffb31d7:         movi a9,-256          ; 0xFFFFFF00
+7ffb31da:         and  a13,a13,a9
+7ffb31dd:         beq  a13,a8,<ok>      ; else return error 131 (0x83)
+```
+
+The **low byte is masked off before comparison**. On media, little-endian, dword 0 reads as the
+bytes `00 43 44 48` — i.e. a hexdump shows **`.CDH`**, and the leading byte is a sub-type/version
+field, not part of the magic. `"HDC\0"` as previously written is the constant read backwards.
+The magic sits at **offset 0 of the section image** (`l32i.n a13,[a14+0]`).
+
+There is a **second magic**: `0x49444300` → `.CDI`, at `PROC0 0x7ffa1553`.
+
+### C.3 Header layout — two independent writers agree (PROVEN)
+
+Writer 1, the UNEXSTRT stub, `PROC0 0x7ffaad0c`-`0x7ffaad4e`. `a5 = 0x7ff8d200` (the section-state
+base, same register the section-state manager at `0x7ffab010` uses), so the header buffer is
+`a5 + 8 = 0x7ff8d208` — and `0x7ffaad14` is `memset(0x7ff8d208, 0, 256)`, with the `0` supplied
+by slot C (`movi a11,0`) and the length by slot B (`movi a12,256`).
+
+Writer 2, the real crash header, `PROC0 0x7ffa29b1`-`0x7ffa29db`. Base `a12 = 0x7ff97bf4`,
+stores at `+0x1FC`… — i.e. the header is at **`0x7ff97df0`**, which is also the value of the
+literal loaded at `0x7ffa29cf` and the exception vectors' save-area base.
+
+| off | writer 1 (`0x7ff8d208`) | writer 2 (`0x7ff97df0`) | meaning |
+|---|---|---|---|
+| `0x00` | `s32i a8,a5,0x08` = `0x48444300` | `s32i a9,a12,0x1FC` = `0x48444300` | magic `.CDH` + subtype byte |
+| `0x04` | `s32i a9,a5,0x0C` = `0x00020100` | `s32i a8,a12,0x200` = `0x00020200` | **format version** (maj 2, min 1 = stub / min 2 = full) |
+| `0x08` | (zero — memset) | `s32i a10,a12,0x204` = `0x4E474E4B` `"KNGN"` | firmware revision, 8 bytes |
+| `0x0C` | (zero) | `s32i a15,a12,0x208` = `0x32323144` `"D122"` | …`"KNGND122"` |
+| `0x10` | `s32i.n a12,a5,0x18` = `rsr a12,234` | `s32i a10,a12,0x20C` = `[0x7ff84bc0+0x210]` | timestamp low = **CCOUNT** |
+| `0x14` | `s32i.n a11,a5,0x1C` = wrap count | `s32i a15,a12,0x210` = `[0x7ff84bc0+0x214]` | timestamp high = CCOUNT wrap count |
+| `0x40` | `s32i a15,a5,0x48` = `0x554E4558` `"UNEX"` | — | 8-byte **reason tag** |
+| `0x44` | `s32i a14,a5,0x4C` = `0x53545254` `"STRT"` | — | …`"UNEXSTRT"` |
+
+The 64-bit timestamp is a genuine extended cycle counter: the code at `0x7ffaad21`-`0x7ffaad3f`
+(and the identical block at `0x7ffa2995`-`0x7ffa29af`) reads `CCOUNT` (`rsr aN,234`), compares it
+against `[0x7ff97994 + 8]`, and increments `[0x7ff97994 + 4]` on wrap — a software-extended
+64-bit CCOUNT whose two halves are copied into the header.
+
+**Header size: 256 bytes** — the `memset(buf, 0, 256)` that immediately precedes the field
+stores. Everything from `+0x18` to `+0xFF` is zero in the stub.
+
+### C.4 The `.CDI` record and the fault-time context (PROVEN)
+
+`0x7ff97df0` is a **shared staging buffer**, not one struct — different record types are built
+in it and pushed out one dword at a time.
+
+The exception vectors (`PROC0 0x7ffa01d0`-`0x7ffa0270`, `0x7ffa0580`-`0x7ffa05c4`) all do
+`wsr a1,EXCSAVEn / rsil a1,15 / l32r a1,=0x7ff97df0 / s32i.n a0,a1,0x1C / rsr a0,EXCSAVEn /
+s32i.n a0,a1,0x20 / movi.n a0,<vector index 1..7> / j 0x7ffa05dc`. The common tail at
+`0x7ffa05dc` then writes:
+
+```
++0x00 = rsr 72        (config-specific SR)      +0x18 = vector index (1..7)
++0x04 = rsr 73        (config-specific SR)      +0x1C = a0
++0x08 = rsr 230       PS                        +0x20 = a1  (via EXCSAVEn)
++0x0C = rsr 177       EPC1 -- the faulting PC   +0x24..+0x38 = a2..a7
++0x10 = rsr 232       EXCCAUSE                  +0x3C..+0x58 = a8..a15
+```
+
+then `addi a9,a1,32 ; rotw 2` seven times, dumping **all 64 physical AR registers** into
+`+0x1C .. +0x11B`. It finishes by switching to the crash stack at `0x7ff97dd0`, setting
+`PS = 0x0005002F`, and jumping to the crash routine `0x7ffa140c`.
+
+`0x7ffa140c` snapshots `LBEG/LEND/LCOUNT` (`rsr 0/1/2`) into `0x7ff97ef0+0x40/44/48`, a block of
+SRs (`106, 107, 109, 111, 226, 228, 238=EXCVADDR`) into `0x7ff84bc0+0xB0..0xCC`, and 16 words of
+a hardware register block at `0x7FFF0120` into `0x7ff84f50`. It then stamps
+`0x49444300` (`.CDI`) at `0x7ff97df0+0x14` and calls
+`0x7ffb4fd4(buf=0x7ff97df0, count=75)` — a loop (`l32i a10,[a2]; addi a2,a2,4;
+call 0x7ffa1028`) that pushes **76 dwords = 304 bytes** into the log section one word at a time
+via the section-append primitive `0x7ffa1028`. Finally `movi.n a10,7 ; call8 0x7ffa1e24`
+drives the section manager to flush.
+
+So the on-media crash section is: a **`.CDH` container header** (256 B: magic, version, fw rev,
+64-bit CCOUNT, 8-byte reason tag at `+0x40`), then a **`.CDI` 304-byte fault context** (64 ARs,
+EPC1, PS, EXCCAUSE, EXCVADDR, loop registers), then the ring of `0x14 + 4*nargs` log records
+that `sn200_dump.py` already parses. The **`UNEXSTRT` stub** is the degenerate case: a `.CDH`
+header with version `0x00020100`, no fw-rev, and `"UNEXSTRT"` in the reason tag, and no `.CDI`.
+
+### C.5 What is still open
+
+* The `+0x18`-`+0x3F` and `+0x48`-`+0xFF` header fields are zero in the stub and I have not
+  found a writer for them in the full path. There may be a **section table** there; I found no
+  code that writes or reads one, and the reader's only structural check is the masked magic at
+  offset 0.
+* The section-name table at `PROC8 0x7ff80570` (36-byte records: 8-char name + 28 bytes;
+  `"STRTBL  "`, `"CRSHDMP "`, `"PFCRDMP "`, `"DRVLOG  "`, then `L_LOGX*`) is a **media-area
+  directory**, not the dump container's section table — its trailing field is 6/4/5/0x0A for
+  those four, which does not match section ids `0x0B`/`0x0A`. Referenced only from
+  `PROC8 0x7ffb2ef0` and `0x7ffb375c`.
+* The `0x7ffa1028` section-append primitive was not decoded, so the exact per-record framing on
+  media (whether records are length-prefixed or the reader really must derive framing) is still
+  unproven. **This is the one piece of evidence that would close the question**: decode
+  `PROC0 0x7ffa1028` and its ring-buffer state in `0x7ff84bc0`.
+
+**No hardware action is proposed or implied by any of this.** Nothing here should be issued to a
+drive; in particular `Erase to SBL EEPROM` and `Drive Uninit` sit adjacent to the wanted values
+in the same `0xFF` sub-command space.

@@ -432,7 +432,7 @@ stop re-arms the crash section.
 
 Before anything that changes drive state, pull the dump. It names the assert
 that actually fired. Reads are PROVEN side-effect-free and `0xC6` cmd `0x20` is
-in the Post-Crash admin allow-list, so this works while latched:
+in the Post-Crash admin allow-list (below), so this works while latched:
 
 ```sh
 cd tools/sn200-fw
@@ -442,6 +442,36 @@ sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvmeN
 
 Re-run the same command line to resume after a reset. Full procedure and
 provenance: `docs/sn200-crash-dump-retrieval.md`.
+
+### What a latched drive still accepts — PROVEN
+
+`PROC8 0x7ffa6b18` hosts **four separate gates**, which is why earlier readings
+contradicted each other — each was describing a different one. The Post-Crash
+gate is the first (`0x7ffa6b30`–`0x7ffa6bd8`), guarded by `bnei a8,6` on the
+startup-mode global at `0x7ff87c64`, and it is an **ALLOW-LIST**:
+
+```
+0x00 0x01 0x02 0x04 0x05 0x06 0x08 0x09 0x0A 0x0C 0x10 0x11 0xE6 0xEC 0xFF
+0xC6  only when a4 ∈ {0x20, 0x30}
+0xCA  with a 12-entry sub-list at 0x7ffa6d76
+```
+
+(`0x03/0x07/0x0B` are simply reserved in NVMe.) The reject path returns
+`0x8F8A0000`; `>> 17` gives `0x47C5` = DNR|SCT7|SC=0xC5, which independently
+confirms the `0x7C5` seen on the wire.
+
+**Firmware Download (`0x10`) and Commit (`0x11`) are on this list** — which is
+why the slot-fill and the `CA=2` activation recovery work on a latched drive.
+
+☠ **`0xDD` is NOT permitted post-crash.** It appears exactly once in the whole
+gate structure, in the **sanitize deny-list** at `0x7ffa6cb0`, so a latched
+drive rejects it with `0x7C5`. Any note claiming `0xDD` is allowed, or that it
+carries the OAM erase, is wrong — `0xDD` is **Start Secure Purge**, a
+whole-drive crypto erase. The OAM erase is `0xFF`.
+
+A previously-published "rejected: `0xCC, 0xD4, 0xD8–0xDF`" list was reading the
+**wrong gate** — those are gate 2 (VUC Control, status `0x4001`), where
+`0xD8–0xDF` are in fact the *permitted* opcodes.
 
 ### The trap
 
