@@ -31,7 +31,28 @@ lost. Exit status is non-zero if anything is `CRITICAL`. **Run it before any
 maintenance that could power-cycle a host, and after any change to database
 topology.**
 
-**As of 2026-08-04 it reports 2 CRITICAL, 11 HIGH, 0 OK, and zero backups.**
+**As of 2026-08-04, after the migrations below: 0 CRITICAL, 11 HIGH, 1 OK.**
+Nothing at sea1 is one drive fault from permanent loss any more. Getting there
+took two moves, both to `ceph-rbd-xfs` (which lives on the Intel OSD drives,
+entirely off the SN200s):
+
+- `shared-db/shared-timescaledb` — was 1 running instance of a declared 2, on
+  an SN200, `backup: null`. Its replica had been `Pending` for 14 h with
+  `persistentvolumeclaim not found` after the hv-2 evacuation deleted the PVC.
+  Now 2/2, streaming, second copy on Ceph.
+- `shared-db/meilisearch` — one replica, no backup, 104 KB of actual index.
+
+Two traps worth knowing before repeating this:
+
+- **Do not raise `size` in the same change as `storageClass`.** CNPG tries to
+  expand the *existing* PVC, `local-path` is `allowVolumeExpansion: false`, and
+  the error aborts the whole reconcile before any instance is created — the
+  cluster reports "waiting for instances" while doing nothing at all. Set
+  `storage.resizeInUseVolumes: false` until no local-path PVC remains.
+- **Size from measured usage, never from the PVC.** `local-path` is a hostPath
+  directory and enforces no quota: timescaledb's `pgdata/base` was **477 G
+  against a 256 Gi PVC**. Ceph RBD *does* enforce size, so the declared figure
+  would have under-provisioned by ~1.9×.
 
 | Verdict | Meaning |
 |---|---|
@@ -61,6 +82,73 @@ still has 2 live copies so it is `HIGH`, not `CRITICAL`.
 those two second copies converts the worst case from *permanent loss* to *an
 inconvenience*, and unlike every firmware avenue it is ordinary, reversible,
 well-understood work.
+
+## 0b. The blast radius is the NODE, not the drive
+
+Observed 2026-08-04 on `sea1-k8s-2`. A latched SN200 does not just cost you the
+drive — it can take the whole node down, and the path is not obvious:
+
+```
+SN200 latches, stops presenting a block device
+  └─ the `data` userVolume selector matches NO disk
+     └─ Talos never completes startAllServices  → stage stays `booting`
+        └─ container runtime degrades: sandbox creation fails with
+           "failed to reserve sandbox name ... is reserved for <id>"
+           and DeadlineExceeded
+           └─ node NotReady → 7 OSDs down, 31% objects degraded
+```
+
+**The volume selector is the load-bearing part.** Talos will not finish booting
+with a declared userVolume it cannot satisfy, and it reports `Ready` to
+Kubernetes the whole time, so `kubectl` shows nothing wrong. Check
+`talosctl get machinestatus` — `stage: booting` with `READY: true` on a node
+that has been up for hours is the signature.
+
+A second, independent trap on the same node: **`lldpd` is an extension
+*service***, unlike the file-only extensions in the schematic. With no
+`ExtensionServiceConfig` it waits forever and blocks `startAllServices` by
+itself. Both must be fixed or the node never reaches `stage: running`, which
+`talosctl upgrade` gates on.
+
+### The reboot-recovery cascade (bit us hard, will recur)
+
+Rebooting a node carrying ~74 pods produced a **CNI IPAM lock convoy** that no
+amount of waiting cleared:
+
+```
+host-local blocked in flock() on /var/lib/cni/networks/cbr0/lock
+  └─ bridge waits on its child (do_wait)
+     └─ multus never returns → containerd kills multus-shim on timeout
+        └─ "netplugin failed ... signal: killed" → CNI teardown fails
+           └─ sandbox name stays reserved → replacement pod cannot start
+```
+
+Self-sustaining, because `cni0` only receives `10.244.1.1/24` when a bridge ADD
+*succeeds* — so `cni0` sat `DOWN` with no IPv4 and every ADD queued forever.
+`/var/lib/cni` lives on EPHEMERAL, so **198 stale IPAM leases survived the
+reboot** and the herd of restarting pods all contended on one lock.
+
+Diagnosis that actually works — `/proc/locks` names the holder outright:
+
+```sh
+# from a hostNetwork pod (these still start: they bypass CNI entirely)
+ino=$(stat -c %i /var/lib/cni/networks/cbr0/lock); grep "$ino" /proc/locks
+ip -4 addr show cni0          # no IPv4 => no ADD has ever succeeded
+ps -eo etime,args | grep /opt/cni/bin/   # plugins older than ~1 min are stuck
+```
+
+Recovery, in this order:
+
+1. `kubectl cordon` the node, then delete its reschedulable pods so the herd stops
+2. clear stale leases — **only** once `kubectl` shows zero Running pod-network
+   pods on that node: `rm /var/lib/cni/networks/cbr0/10.244.* .../fd40:* .../last_reserved_ip.*`
+3. `ip link del cni0` to drop the half-configured bridge
+4. **reboot the node** — killing the stuck plugin one at a time only hands the
+   flock to the next victim, and a fresh `host-local` wedges the same way
+
+Do not bother restarting multus or flannel: both are downstream symptoms.
+`"Waiting for all goroutines to exit"` is flannel's **normal** steady-state log
+line, not a shutdown — do not chase it.
 
 ## 0a. Where the drives are, and what is protecting them
 
