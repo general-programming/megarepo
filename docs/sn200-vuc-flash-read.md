@@ -152,6 +152,18 @@ that case is exactly the one where the command is refused.
 
 ### Read-only? — INFERRED, high confidence (and moot)
 
+> **⚠ The call-target addresses below are in the wrong address space.** Overlay
+> code is linked for its *execution* address `0x7ffbc000`, so `callN`
+> displacements must be resolved as
+> `runtime_target = static_target + (0x7ffbc000 − overlay_src2)`. Under that
+> rule 0/174 static targets in overlay 22 are function entries and 63/174
+> runtime ones are; and `0x30030aa0` is **not** a "flash erase primitive"
+> (runtime `0x7ffb9768`, an OAM-worker enqueue) while `0x30031d10` is **not** an
+> "EEPROM primitive" (runtime `0x7ffba9d8`, `memset`). Static addresses are also
+> not stable identities *across* overlays — the same word means a different
+> function from each. The read-only conclusion here is probably still right, but
+> the argument needs redoing. See `sn200-oam-dispatch.md` §1.1.
+
 Every call target inside the handler extent `0x30036494`–`0x30036b41`:
 `0x3002d920` (log), `0x30028e00`/`0x30028e44` (coroutine yield),
 `0x300339ec`/`0x30033a10`/`0x30033a34`/`0x30032ae0` (status/completion

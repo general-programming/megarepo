@@ -215,6 +215,12 @@ nvme fw-log  $D                                   # slot contents + active slot
 nvme admin-passthru $D --opcode=0xff -n 0 --cdw10=0 --cdw12=0x0004 --data-len=0
 ```
 
+> **☠ Check that `0x0004` before you press enter.** `0xFF`/`0x0003` — one
+> nibble away — erases EEPROM System-Area section 6, the boot-marker record,
+> and an empty System Area is itself a latch predicate. This is the only
+> dangerous typo on a *healthy* drive, and this is the command you type on
+> every drive.
+
 Reading the result:
 
 - **`tnvmcap` > 0 and `unvmcap` == 0** → capacity is still allocated to a
@@ -254,14 +260,35 @@ machine before doing anything else** — every recovery below destroys it.
 
 ```
 Is there data on this drive you want?
-├─ NO  → 0xFF cdw12=0x0603, then 0x0503, then a COLD power cycle.
+├─ NO  → 0xFF cdw12=0x0503, then a COLD power cycle.
 │         Drive returns healthy, namespace ZEROED. Fast and proven.
-└─ YES → STOP. Do not send 0x0503. Do not run `nvme wdc get-crash-dump`
-          (it fires 0x0503 itself on a successful read).
+├─ YES, and the §1 probes say PFCL armed / CLOG NOT armed
+│      → 0xFF cdw12=0x0603, then a COLD power cycle. NEVER 0x0503.
+│         Mechanism proven, never yet tested on hardware. See below.
+└─ YES, in every other case → STOP. Do not send 0x0503.
+          Do not run `nvme wdc get-crash-dump` (it fires 0x0503 itself
+          on a successful read).
           A latched drive left powered DOWN preserves every option.
           Your only non-destructive route is the UART/SBL procedure —
           see docs/sn200-data-recovery.md. It has never been run.
 ```
+
+**`0x0603` was never part of the wipe, and `0x0503` never needed it.** The old
+"send `0x0603` then `0x0503`" sequence has been traced to the instruction:
+`0x0603` erases the PFail dump section and returns — no startup-type test, no
+second request, no boot marker. `0x0503` erases the Crash Dump section and then
+its *resume* handler tests `*(0x7ff87c64) == 6` and posts the re-init verb.
+**`0x0503` alone is the entire data cost; `0x0603` alone can never cost data.**
+PROVEN — `sn200-oam-dispatch.md` §4.2. Dropping `0x0603` from the destructive
+path changes nothing; it is removed above only because it was never doing
+anything.
+
+That is also what makes the middle branch worth trying. A latch armed *only* by
+PFCL is released by clearing PFCL, and `0x0603` does exactly that and nothing
+else. It is rare — `UNEXSTRT` stamps **CLOG**, so every ordinary power-event
+latch and every reset-loop iteration arms the section `0x0603` cannot touch —
+so run the `0x0320`/`0x0520` probes in §1 first and only take this branch if
+CLOG comes back **not armed** (SC `0xC3`) and PFCL comes back armed.
 
 **There is no NVMe-surface way to read the data off a latched drive.** This was
 chased to the end, not assumed. `Admin_VucFlashRead` (`0xCA`/`CDW12=0x0001`)
@@ -289,8 +316,9 @@ cost; its only real advantage is using no vendor opcodes.
 | `0xCA` `CDW12=0x0010`/`0x0110` | raw page write |
 | `0xFF` `CDW12=0x0403` | Drive Uninit — **no startup-type gate at all**, sets FACTORY re-init |
 | `0xFF` `CDW12=0x0303` | Erase to SBL EEPROM — permanent brick |
+| `0xFF` `CDW12=0x0003` | Erase System Area 0 — the boot-marker record. **One nibble from the `0x0004` probe.** |
 | `0xDD` | Start Secure Purge |
-| `0xFF` `CDW12=0x0720`/`0x0820` | unidentified producers; not confirmed read-only |
+| `0xC6` `CDW12=0x0720`/`0x0820` | unidentified producers; not confirmed read-only. **These are `0xC6`, not `0xFF`** — under `0xFF` they are simply invalid command ids and do nothing. |
 
 A vendor command is only reliably inert with **CDW10, CDW11, CDW12 *and*
 CDW13 all zero**. Note the spacing: `0x0F` erase is two values from `0x10`

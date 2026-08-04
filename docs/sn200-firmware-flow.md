@@ -18,6 +18,7 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-field-evidence.md` | what was actually observed on hardware |
 | `sn200-bmc-mitigation.md` | who drives PROC9's NVMe-MI, the live iDRAC knobs, and the measurement that would settle it |
 | `sn200-vuc-flash-read.md` | the read-by-LBA VUC, and why the latch gates it off |
+| `sn200-oam-dispatch.md` | the complete `0xFF` table; which of `0x0503`/`0x0603` wipes |
 
 Everything below is PROVEN from code unless marked otherwise.
 
@@ -206,8 +207,16 @@ already latched.** Fired from a normally-booted drive it erases the section
 harmlessly — which is circular and therefore useless, since a set bit forces the
 latch which forces mode 6.
 
-`0x0603` (PFCL) is synchronous and schedules nothing — but `UNEXSTRT` stamps
-**CLOG**, so it cannot release a power-event latch.
+`0x0603` (PFCL) is synchronous and schedules nothing — now PROVEN at the
+instruction level: its resume handler has no `bnei a14,6` and no second request
+post, so it can never blank the L2P. But `UNEXSTRT` stamps **CLOG**, so it
+cannot release a power-event latch either. It *can* release a PFCL-only latch,
+with the data intact (`sn200-oam-dispatch.md` §7.1).
+
+The whole `0xFF` surface is now enumerated — three command ids (`0x03`, `0x04`,
+`0x07`), nine valid `CDW12` encodings, nothing else — and it contains **no**
+boot-mode write, **no** marker write other than re-init, and **no** namespace
+attach. The escape is not hiding there.
 
 **Firmware activation is not a safe alternative.** Marker 3 is written gated on
 **bit 0 of the target image's own flags word**, so whether an activation wipes is

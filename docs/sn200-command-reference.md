@@ -230,6 +230,14 @@ firmware-slot-fill procedure both work on a latched drive.
 
 ## 5. The OAM erase sub-command table
 
+> **The complete `0xFF` dispatch table is now mapped end to end** — handler
+> `0x7ffbc110` = static `0x30033448` in overlay 22 — and it is **exactly three
+> command ids**: `0x03` (erase family, below), `0x04` (startup probe) and
+> `0x07` (read raw System Area). Every other `CDW12[7:0]` is rejected with
+> `status |= 0x40040000` and no side effect. `0x04` and `0x07` never read the
+> sub byte at all. See **`sn200-oam-dispatch.md`** for the full trace, the
+> per-selector safety class, and the corrected `0x0503`/`0x0603` story.
+
 `0xFF`, `CDW12 = (sub<<8) | cmd_id`, `cmd_id = 0x03` (erase family). Switch at
 `PROC8@30000000 0x300336c6` (`l8ui a11,a12,0x8d`), 7 sub-commands, 0–6.
 **PROVEN**, confirmed three independent ways (source ordering, the section id
@@ -244,7 +252,29 @@ each arm writes to `[req+0x11c]`, and the EEPROM section-name enum StrIds
 | 3 | `0x0303` | `13` (SBL) | ☠ **SBL EEPROM — permanent brick** | CATASTROPHIC |
 | 4 | `0x0403` | — (verb `37`/`0x25`, not a section id) | ☠ **Drive Uninit — FACTORY reinit, no startup-type gate** | CATASTROPHIC |
 | 5 | `0x0503` | `0x0b` (CLOG, Crash Dump) | Crash Dump — schedules REINIT when startup type == 6 | DESTRUCTIVE BY DESIGN |
-| 6 | `0x0603` | `0x0a` (PFCL, PFail Crash Dump) | PFail Crash Dump — synchronous, no reinit | DESTRUCTIVE BY DESIGN |
+| 6 | `0x0603` | `0x0a` (PFCL, PFail Crash Dump) | PFail Crash Dump — **no startup-type test, no re-init, no marker** | erases the pfail dump only; costs no user data |
+
+**☠ `0x0003` is one nibble from `0x0004`, the triage probe.** It erases EEPROM
+System-Area section `6`, which holds the boot-marker record — and an empty
+System Area is itself one of the three latch predicates. This is the most
+dangerous adjacency in the whole command set, because `0x0004` is typed on
+*every* drive, healthy ones included.
+
+**Sub 5 and sub 6 are not "identical but for the section id."** An earlier
+revision of this file said so and it was wrong. The forward arms are
+near-identical; the **resume handlers** are where they part, and that is
+precisely where the wipe lives:
+
+```asm
+; 0x0603 resume, 0x300335a3      ; 0x0503 resume, 0x300335ca
+l32i   a13,a12,0x188             ; l32i a11,a12,0x188
+beqz.n a13,<plain return>        ; beqz a11,0x30033704   -> keeps going:
+                                 ;   bnei *(0x7ff87c64),6 -> plain return
+                                 ;   else verb 0x25 param 0 -> marker 3 REINIT
+```
+
+`0x0603` contains no `bnei a14,6`, no second request post, and no reachable
+path to verb `0x25`. **PROVEN.** It cannot blank the L2P under any drive state.
 
 **Why there are nine erase-failure log strings (StrIds 1628–1636) for seven
 sub-commands:** sub 2 is **one chained arm covering two EEPROM sections, not
@@ -263,6 +293,11 @@ CLOG-present; the consumer (`0x7ffab010`/`0x7ffaaf2b`) writes the stub with
 `movi a12,11` (section `0x0b`). **PFCL (section `0x0a`) plays no part in
 sustaining a power-event latch, so `0x0603` alone cannot release one** — only
 useful if the drive latched for a reason other than an unclean stop.
+
+That exception is now worth acting on, because `0x0603` is proven to be free:
+**if the `0x0320` probe says CLOG is not armed and `0x0520` says PFCL is,
+`0x0603` + a cold power cycle should clear the latch with the data intact.**
+Mechanism PROVEN, scope narrow, never yet tested. `sn200-oam-dispatch.md` §7.1.
 
 ---
 
