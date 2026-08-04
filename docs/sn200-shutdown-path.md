@@ -897,13 +897,11 @@ Stated explicitly, because a gap is more useful than a guess here.
    exhaustion that would make it fire is inferred from the two allocators sharing
    `0x7ffa8428` on PROC9. No count of the pool size was recovered.
 
-5. **PROC8's `Admin_ShutdownPFailMonitor: PFail detected`** (StrId 2914,
-   referenced at `0x7ffb1bb6`). `PROC8_7ff80000.bin` is a sparse flat image and
-   that address falls in an unpopulated hole, so it did not disassemble. This is
-   an admin-side PFAIL monitor distinct from PROC0's, and it is a live candidate
-   for a *second* "monitor thread added again". Rebuilding PROC8's flat image
-   with hole-aware segment placement (`segparse.py` shows 11 segments) would let
-   it be read.
+5. ~~**PROC8's `Admin_ShutdownPFailMonitor`**~~ — **CLOSED, see §4.4.** The
+   "unpopulated hole" claim was wrong: `unpack.py` already places segments at
+   their real load addresses, and `0x7ffb1bb6` sits inside PROC8's
+   `0x7ffa0710–0x7ffbb064` segment. The function (`0x7ffb1b60`) reads cleanly.
+   What remains open inside it is who, if anyone, increments `0x7ff95678`.
 
 6. **`SYS: Stopping SAM startup because PFAIL is in progress`** (StrId 3518,
    PROC0 `0x7ffa72e3`). This is on the *startup* side and suggests a boot in
@@ -923,15 +921,21 @@ updates, in-flight deallocates, plus a CellCare table save. Only after all of it
 does PROC6 `0x7ffbba61` write the "FINISHED" marker (1 = CLEAN, 2 = PFAIL). The
 PFAIL supervisor gives that entire list **25 ms** (`0x7ff830e0 = 25000` µs,
 measured against CCOUNT at PROC0 `0x7ffa8346`); at expiry it does not force
-completion — it writes marker 7 and **exits**. Three independent defects prevent
-the list from finishing: the work can simply exceed the budget (no admission
-control exists); the PCIe subsystem discards the PFail shutdown outright if a
-link-down already claimed the port (PROC9 `0x7ffaed12`, *"Do nothing"*); and the
-System Manager **re-arms** the PFAIL monitor mid-shutdown (PROC0 `0x7ffa8de0` →
-`0x7ffa8910` → `0x7ffa8428`), which restarts the deadline from the next PFAIL
-edge so the supervisor never gives up. In all three cases the drive dies holding a
-STARTED breadcrumb, and the boot-side tests at PROC0 `0x7ffaae35`/`0x7ffaae3d`
-then force `0x80000009` forever.
+completion — it writes marker 7 and **exits**. **Two** independent defects
+prevent the list from finishing: the work can simply exceed the budget (no
+admission control exists); and the PCIe subsystem discards the PFail shutdown
+outright if a link-down already claimed the port (PROC9 `0x7ffaed12`, *"Do
+nothing"*). In both cases the drive dies holding a STARTED breadcrumb, and the
+boot-side tests at PROC0 `0x7ffaae35`/`0x7ffaae3d` then force `0x80000009`
+forever.
+
+A third defect was previously claimed here — a mid-shutdown re-arm of the PFAIL
+monitor at PROC0 `0x7ffa8de0` — and is **withdrawn** (§4.1–§4.3): that branch is
+post-completion, is unreachable while PFAIL is asserted, and schedules
+"Waiting for CC.EN (FAST_RESTART) from PcieMgr", where re-arming is correct.
+The genuine *second* PFAIL monitor is PROC8's `Admin_ShutdownPFailMonitor`
+(`0x7ffb1b60`, §4.4): polled rather than interrupt-driven, **no deadline of any
+kind**, one-shot, and its poll loop is unbounded.
 
 **Does exposure scale with workload?** **Yes, provably.** The budget is a
 constant; every item of work is a runtime counter. A busy drive — especially one
@@ -943,8 +947,8 @@ test profile.
 substantially, but it does not avoid the defect.** Quiescing I/O and completing
 `CC.SHN` before power removal collapses the dominant failure term to near zero,
 which is why a UPS-driven OS shutdown is the right operational answer. But the
-link-down/PFail race, the monitor re-arm, and the two unconditional monitor exits
-all sit on the shared path and are untouched by host behaviour, and `CC.SHN`
+link-down/PFail race, PROC8's deadline-free admin monitor, and the two monitor
+exits all sit on the shared path and are untouched by host behaviour, and `CC.SHN`
 itself is downgraded to a PFAIL shutdown if the rails sag while it runs
 (PROC6 `0x7ffbbc86`). `KNGND122` is the terminal firmware and WD marks this defect
 family *"unable to recover"*. The mitigation is permanent and partial.

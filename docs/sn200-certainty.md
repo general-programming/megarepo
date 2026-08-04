@@ -56,14 +56,33 @@ causal — it is the peak dirty-state workload, not a special code path.
   `minu a15,a7,a15` against the section size, so the drive would return all
   3.2 MiB in one command. Closing this needs a patched driver
   (`tools/nvme-noreset/`) on a diagnostics boot.
-- **Whether the mid-shutdown PFAIL re-arm fires every time or rarely.** Hinges
-  on when SAM publishes completion; the natural reading implies "every time" but
-  it was not proven.
 - **The GC deadlock.** The state machine and the PFail early-exit were found;
-  the circular wait was not.
-- **`PROC8 Admin_ShutdownPFailMonitor`** at `0x7ffb1bb6` — a *second*,
-  admin-side PFAIL monitor that did not disassemble because the flat image has
-  holes. A live candidate for another "monitor added again".
+  the circular wait was not. Narrowed 2026-08-03 to two counters,
+  `0x7ff810d0` / `0x7ff810d8`, that GC waits on and that only media-completion
+  handlers decrement — see `sn200-shutdown-path.md` §6 item 1. Still not proven.
+- **Whether PROC8's admin PFAIL monitor can actually spin forever.** Its poll
+  loop is provably unbounded and its guard word `0x7ff95678` is provably never
+  incremented in either PROC8 image; whether it is reached with a non-zero value
+  is inferred, not shown.
+
+## Resolved and retracted, 2026-08-03
+
+- **The "mid-shutdown PFAIL re-arm" (defect 3 / S8) is WITHDRAWN.** The word the
+  branch tests, `[0x7ff8c7ec]`, is not a SAM handshake — it is PROC0's boot info
+  block, whose marker field is written only by boot-side code. The branch sits
+  *after* `SYS: Returning shutdown completion` and is unreachable while PFAIL is
+  asserted (`0x7ffa8d25` diverts first); what it schedules is
+  "Waiting for CC.EN (FAST_RESTART) from PcieMgr", where re-enabling PFAIL
+  monitoring is correct. The shutdown path has two defects, not three.
+- **`PROC8 Admin_ShutdownPFailMonitor` (`0x7ffb1b60`) is read.** The "image
+  holes" explanation was wrong — the address is inside a loaded segment. It is a
+  genuine second PFAIL monitor: **polled**, spawned once per admin shutdown,
+  **with no timeout at all**, and one-shot (it terminates on the first edge after
+  flipping the global shutdown mode to PFail). It shares no state with PROC0's
+  monitor, so the two do not race.
+- **`0x7ff8c7c4` is a "system-area-saving shutdown in progress" flag**, set by a
+  type-3 shutdown request at PROC0 `0x7ffa8ee8` and cleared at `0x7ffa8bc0` —
+  not the power-backup health gate previously guessed.
 
 ## Deliberately not claimed
 

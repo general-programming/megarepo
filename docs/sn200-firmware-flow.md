@@ -109,19 +109,37 @@ CCOUNT, units pinned by `SYS: PFAIL time = %5u.%03u ms`. At expiry the superviso
 does **not** force completion: it writes marker 7 and **exits**. It is a
 stopwatch that labels the failure, not a hold-up guarantee.
 
-### Why the list doesn't finish — three independent defects
+### Why the list doesn't finish — two independent defects
 
 1. **No admission control.** The work simply exceeds 25 ms.
 2. **The lost-PFAIL race.** `PCIe_PfailShutdown` finds the port already claimed
    by link-down's bottom half and logs *"already shut down or in the process of
    shutting down - Do nothing"*. This is WD's documented race — and it is **not**
    interrupt masking: PFAIL is PROC0-only, so PROC9 only ever sees a message.
-3. **Re-arming mid-shutdown.** The System Manager re-enables PFAIL monitoring
-   when SAM hasn't yet published completion, and the deadline is anchored to the
-   **latest PFAIL edge, not the start of the shutdown**.
 
 Plus two *unconditional* silent exits where the monitor logs "PFAIL is detected",
 exits, and initiates no shutdown and no marker at all.
+
+> **A third defect was claimed here and is WITHDRAWN.** "The System Manager
+> re-arms PFAIL monitoring mid-shutdown, anchoring the deadline to the latest
+> PFAIL edge" does not survive checking. The word the branch tests,
+> `[0x7ff8c7ec]`, is **not** a SAM handshake — it is PROC0's boot info block,
+> whose marker field is written only by boot-side code. The branch also sits
+> *after* `SYS: Returning shutdown completion` and is unreachable while PFAIL is
+> asserted, because `0x7ffa8d25` diverts to the power-off watcher first. What it
+> actually schedules is *"Waiting for CC.EN (FAST_RESTART) from PcieMgr"*, where
+> re-enabling PFAIL monitoring is correct behaviour. See
+> `sn200-shutdown-path.md` §4.
+
+**There is a second, admin-side PFAIL monitor** — PROC8
+`Admin_ShutdownPFailMonitor` at `0x7ffb1b60`. It is **polled** rather than
+interrupt-driven, spawned once per admin shutdown (including normal `CC.SHN`),
+one-shot, and has **no timeout at all**. On detecting PFAIL it flips the global
+shutdown mode 2 → 3 and terminates itself. It shares no state with PROC0's
+monitor, so the two do **not** race — and being a poll, it is an accidental
+backstop for the lost-interrupt defect above. Its poll loop is provably
+unbounded while `[0x7ff95678] != 0`, and no incrementer for that word exists in
+either PROC8 image; whether it is ever entered non-zero is INFERRED.
 
 **Exposure scales with workload — provably.** Fixed 25 ms budget against live
 counters: outstanding NAND writes, write-buffer entries, in-use command
