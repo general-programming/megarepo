@@ -187,6 +187,8 @@ def dis(d, pc, base):
         # `?C cb00` supplies the 0 fill byte to the 256-byte memset of the crash
         # header buffer, and at 0x7ffa6b28 (PROC8), where `?C cb0d` supplies the
         # opcode constant 0x0D that the sibling routine at 0x7ffa6db4 spells out.
+        # KNOWN GAP: `0xC [s] 8 [t]` is really `mov at,as`, printed here as
+        # `movi a<s>, 0x80|t`. Distrust any slot-C movi with an operand 128-143.
         c = (q >> 48) & 0xFFFF
         if c == 0xC090:
             sC = ""

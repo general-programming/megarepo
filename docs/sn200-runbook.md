@@ -356,17 +356,21 @@ cost; its only real advantage is using no vendor opcodes.
 | `0xFF` `CDW12=0x0003` | Erase System Area 0 — the boot-marker record. **One nibble from the `0x0004` probe.** Also poisons the SBL `LOAD_N_GO` escape: an erased marker fails the `0xC0000000` mask test at `0x7ffaae53` and is rewritten as REINIT. |
 | `0xDD` | Start Secure Purge |
 | `0xC6` `CDW12=0x0720`/`0x0820` | `0xC6` command `0x20`, **subs 7 and 8** — 71808-byte producer arms. They spawn workers (`0x7ffa972c` / `0x7ffa43c0`); `0x7ffa43c0` conditionally **zeroes** a DRAM counter at `0x7ff879f8+(idx<<4)+0x1f0`, and both contain custom opcodes our decoder cannot read. No erase/program primitive is reachable, so not *destructive* — but not certified read-only either. **These are `0xC6`, not `0xFF`.** |
-| `0xC6` `CDW12=0x__30` (any sub) | **NEW.** Command byte `0x30` is a seven-sub *action* family (`0x0030`…`0x0630`, handler `0x3002fe38`), unidentified, and it **passes the post-crash gate**. The firmware forces `CDW10 == 0` for it, so it can never return data — whatever it does, it does inside the drive. See `sn200-c6-dispatch.md` §5. |
+| `0xC6` `CDW12=0x__30` (any sub) | Command byte `0x30` is a seven-sub *action* family (`0x0030`…`0x0630`, handler `0x3002fe38`) that **passes the post-crash gate**. Identified 2026-08-04 as SMART / drive-statistics collection: its only effector is an internal mailbox and everything it writes is DRAM counter state — no erase, no program, no EEPROM, no marker write, no re-init, no namespace, no L2P (`sn200-c6-30-family.md`). Subs 2, 4 and 5 self-disable on a latched drive; subs 0, 1, 3, 6 run. Not destructive, still not something to send. **⚠ Correction: the firmware does NOT force `CDW10 == 0` for it.** An earlier revision of this row said so; the branch runs the other way. A non-zero `CDW10` is accepted, so the length check does **not** catch a mistyped `0x0320`. |
 
 A vendor command is only reliably inert with **CDW10, CDW11, CDW12 *and*
 CDW13 all zero**. Note the spacing: `0x0F` erase is two values from `0x10`
 write, and `0x0403` is one nibble from the `0x0503` used in recovery.
 
 **☠ New one-nibble hazard, and it is on the commands you type every time.**
-Every safe `0xC6` read is `0x__20`. The unidentified action family is `0x__30`.
-`0x0320` → `0x0330`, `0x0420` → `0x0430`, `0x0520` → `0x0530` — one keystroke,
-and the mistyped target is the least-audited surface that survives the latch.
-`0x0620` (PFail body read) is likewise one nibble from `0x0720` (do not send).
+Every safe `0xC6` read is `0x__20`. The action family is `0x__30`.
+`0x0320` → `0x0330`, `0x0420` → `0x0430`, `0x0520` → `0x0530` — one keystroke.
+Nothing in `0x__30` is destructive, but **the length check does not catch the
+mistype**: the `0x0320` size probe is typed with `CDW10 = 2`, and `0x0330` with
+`CDW10 = 2` is accepted without even a log line. Of the mistypes, `0x0230`,
+`0x0430` and `0x0530` are the harmless ones (they self-disable while latched);
+`0x0030`, `0x0130`, `0x0330` and `0x0630` actually execute. `0x0620` (PFail body
+read) is likewise one nibble from `0x0720` (do not send).
 
 ---
 
