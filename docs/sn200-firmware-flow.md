@@ -19,6 +19,9 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-bmc-mitigation.md` | who drives PROC9's NVMe-MI, the live iDRAC knobs, and the measurement that would settle it |
 | `sn200-vuc-flash-read.md` | the read-by-LBA VUC, and why the latch gates it off |
 | `sn200-oam-dispatch.md` | the complete `0xFF` table; which of `0x0503`/`0x0603` wipes |
+| `sn200-c6-dispatch.md` | the complete `0xC6` table; the other family that survives the gate |
+| `sn200-section-arming.md` | what arms CLOG and PFCL, and why `0x0603` can never help |
+| `sn200-marker-write.md` | the generic marker-write (verb 1 + section 6), why no host command reaches it, and what a serial-console primitive would actually be worth |
 
 Everything below is PROVEN from code unless marked otherwise.
 
@@ -210,8 +213,11 @@ latch which forces mode 6.
 `0x0603` (PFCL) is synchronous and schedules nothing — now PROVEN at the
 instruction level: its resume handler has no `bnei a14,6` and no second request
 post, so it can never blank the L2P. But `UNEXSTRT` stamps **CLOG**, so it
-cannot release a power-event latch either. It *can* release a PFCL-only latch,
-with the data intact (`sn200-oam-dispatch.md` §7.1).
+cannot release a power-event latch either. It looked as though it could release
+a **PFCL-only** latch with the data intact — but that branch is **withdrawn**:
+the boot that latches on PFCL writes marker 9 and falls straight into the
+`UNEXSTRT` stub writer (`0x7ffaad01`), which stamps CLOG on that same boot. The
+precondition cannot be observed. See `sn200-section-arming.md`.
 
 The whole `0xFF` surface is now enumerated — three command ids (`0x03`, `0x04`,
 `0x07`), nine valid `CDW12` encodings, nothing else — and it contains **no**

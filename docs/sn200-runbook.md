@@ -217,7 +217,8 @@ nvme admin-passthru $D --opcode=0xff -n 0 --cdw10=0 --cdw12=0x0004 --data-len=0
 
 > **☠ Check that `0x0004` before you press enter.** `0xFF`/`0x0003` — one
 > nibble away — erases EEPROM System-Area section 6, the boot-marker record,
-> and an empty System Area is itself a latch predicate. This is the only
+> and an empty System Area is itself a latch predicate. It also forecloses the
+> serial-console escape (`sn200-marker-write.md` §4). This is the only
 > dangerous typo on a *healthy* drive, and this is the command you type on
 > every drive.
 
@@ -262,10 +263,8 @@ machine before doing anything else** — every recovery below destroys it.
 Is there data on this drive you want?
 ├─ NO  → 0xFF cdw12=0x0503, then a COLD power cycle.
 │         Drive returns healthy, namespace ZEROED. Fast and proven.
-├─ YES, and the §1 probes say PFCL armed / CLOG NOT armed
-│      → 0xFF cdw12=0x0603, then a COLD power cycle. NEVER 0x0503.
-│         Mechanism proven, never yet tested on hardware. See below.
-└─ YES, in every other case → STOP. Do not send 0x0503.
+└─ YES → STOP. Do not send 0x0503. Do not send 0x0603 either — it
+          cannot lift the latch and it erases the PFail crash dump.
           Do not run `nvme wdc get-crash-dump` (it fires 0x0503 itself
           on a successful read).
           A latched drive left powered DOWN preserves every option.
@@ -280,9 +279,9 @@ buys a procedure that needs the drive pulled, on a bench, soldered to
 sub-millimetre pads through a level shifter, and kept wired for the whole read.
 Once you are at "pull it and bench it" you are already at the logistics of
 shipping it to a lab that has a fixture and PC-3000 — same cost, better tooling.
-So if the data genuinely matters and it is not the PFCL-only case above, the
-honest choice is **a recovery service, or accept the loss** — and the real
-lesson is upstream, in §0: do not let an SN200 hold the last copy.
+So if the data genuinely matters, the honest choice is **a recovery service, or
+accept the loss** — and the real lesson is upstream, in §0: do not let an SN200
+hold the last copy.
 `docs/sn200-data-recovery.md` stays as the reference for what the boot path
 does, not as a plan.
 
@@ -296,12 +295,37 @@ PROVEN — `sn200-oam-dispatch.md` §4.2. Dropping `0x0603` from the destructive
 path changes nothing; it is removed above only because it was never doing
 anything.
 
-That is also what makes the middle branch worth trying. A latch armed *only* by
-PFCL is released by clearing PFCL, and `0x0603` does exactly that and nothing
-else. It is rare — `UNEXSTRT` stamps **CLOG**, so every ordinary power-event
-latch and every reset-loop iteration arms the section `0x0603` cannot touch —
-so run the `0x0320`/`0x0520` probes in §1 first and only take this branch if
-CLOG comes back **not armed** (SC `0xC3`) and PFCL comes back armed.
+### ☠ The "PFCL-only, use `0x0603`" branch is WITHDRAWN
+
+An earlier revision of this section offered a data-preserving branch: if the §1
+probes said PFCL armed and CLOG **not** armed, `0x0603` would lift the latch with
+the data intact. The mechanism is real. **The precondition cannot exist on a
+drive you are able to probe.** `docs/sn200-section-arming.md` traces it:
+
+- The boot that latches on PFCL writes marker `0x80000009` at `0x7ffaaf08` and
+  falls into the marker dispatch, which sends marker 9 to **`0x7ffaad01` — the
+  `UNEXSTRT` stub writer** — which stamps a 256-byte stub into **EEPROM section
+  11 (CLOG)** with verb 1 at `0x7ffaaf13`. **The latch arms CLOG by itself, on
+  the same boot.** PROVEN, and it is the only `verb == 1` write against either
+  crash section anywhere in PROC0.
+- There is no window to race. The drive is already both-armed the first time you
+  can talk to it, and the ~5 s reset loop closes any gap.
+- On a both-armed drive `0x0603` is **inert** — the boot predicate is an OR and
+  `ball a9,mask 0x1` at `0x7ffaae35` still fires — and it **destroys** the PFail
+  crash dump you might have wanted to read with `CDW12 = 0x0620`.
+
+Two related corrections from the same trace:
+
+- The stub writer is **gated on CLOG being clear** (`0x7ffaad04:
+  ball a14,mask 0x1 → skip`). A reset loop does **not** progressively re-stamp
+  anything, so there is no "act fast" time window to warn about.
+- It is **not** reached on "any unclean start". Only startup markers **5/6/7**
+  (shutdown began, never finished) and **9** (already post-crash) reach it. A
+  power event whose PFAIL shutdown *completed* writes marker 2 and never touches
+  CLOG. The old wording reached the right conclusion by the wrong route.
+
+Still run the `0x0320`/`0x0520` probes in §1 — they tell you which failure mode
+you have and which dump is worth pulling. Just do not act on them.
 
 **There is no NVMe-surface way to read the data off a latched drive.** This was
 chased to the end, not assumed. `Admin_VucFlashRead` (`0xCA`/`CDW12=0x0001`)
@@ -328,14 +352,21 @@ cost; its only real advantage is using no vendor opcodes.
 | `0xCA` `CDW12[7:0]=0x0F` | NAND block erase — `CDW12[15:8]` is *ignored*, no harmless sub-value |
 | `0xCA` `CDW12=0x0010`/`0x0110` | raw page write |
 | `0xFF` `CDW12=0x0403` | Drive Uninit — **no startup-type gate at all**, sets FACTORY re-init |
-| `0xFF` `CDW12=0x0303` | Erase to SBL EEPROM — permanent brick |
-| `0xFF` `CDW12=0x0003` | Erase System Area 0 — the boot-marker record. **One nibble from the `0x0004` probe.** |
+| `0xFF` `CDW12=0x0303` | **Writes** one byte into SBL EEPROM section 13 (the string says "Erase"; the verb is a write) — permanent brick |
+| `0xFF` `CDW12=0x0003` | Erase System Area 0 — the boot-marker record. **One nibble from the `0x0004` probe.** Also poisons the SBL `LOAD_N_GO` escape: an erased marker fails the `0xC0000000` mask test at `0x7ffaae53` and is rewritten as REINIT. |
 | `0xDD` | Start Secure Purge |
-| `0xC6` `CDW12=0x0720`/`0x0820` | unidentified producers; not confirmed read-only. **These are `0xC6`, not `0xFF`** — under `0xFF` they are simply invalid command ids and do nothing. |
+| `0xC6` `CDW12=0x0720`/`0x0820` | `0xC6` command `0x20`, **subs 7 and 8** — 71808-byte producer arms. They spawn workers (`0x7ffa972c` / `0x7ffa43c0`); `0x7ffa43c0` conditionally **zeroes** a DRAM counter at `0x7ff879f8+(idx<<4)+0x1f0`, and both contain custom opcodes our decoder cannot read. No erase/program primitive is reachable, so not *destructive* — but not certified read-only either. **These are `0xC6`, not `0xFF`.** |
+| `0xC6` `CDW12=0x__30` (any sub) | **NEW.** Command byte `0x30` is a seven-sub *action* family (`0x0030`…`0x0630`, handler `0x3002fe38`), unidentified, and it **passes the post-crash gate**. The firmware forces `CDW10 == 0` for it, so it can never return data — whatever it does, it does inside the drive. See `sn200-c6-dispatch.md` §5. |
 
 A vendor command is only reliably inert with **CDW10, CDW11, CDW12 *and*
 CDW13 all zero**. Note the spacing: `0x0F` erase is two values from `0x10`
 write, and `0x0403` is one nibble from the `0x0503` used in recovery.
+
+**☠ New one-nibble hazard, and it is on the commands you type every time.**
+Every safe `0xC6` read is `0x__20`. The unidentified action family is `0x__30`.
+`0x0320` → `0x0330`, `0x0420` → `0x0430`, `0x0520` → `0x0530` — one keystroke,
+and the mistyped target is the least-audited surface that survives the latch.
+`0x0620` (PFail body read) is likewise one nibble from `0x0720` (do not send).
 
 ---
 

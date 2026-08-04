@@ -101,10 +101,18 @@ def all_entries(result):
     return entries
 
 
+# SBL/MBL are bootloader code carved out of SBLPATCH.bin once its two
+# interleaved streams were untangled (sblpatch.py). They live in flat/ beside
+# the firmware images but are NOT part of the function map: different address
+# space, different container, and funcmap's overlay logic does not apply to
+# them. Keep them excluded rather than deleting them from flat/ -- they are the
+# input to the SBL analysis.
+NOT_FIRMWARE = {"MBL_7ff80000", "SBL_7ff98000"}
+
+
 @needs_fw
-def test_scans_all_18_images(jsdata):
-    # PROC0-7, PROC9-15 (15) + PROC8's two banks (2) + FCC (1) = 18, matching
-    # the flat/*.bin file count the task specifies.
+def test_scans_all_18_firmware_images(jsdata):
+    # PROC0-7, PROC9-15 (15) + PROC8's two banks (2) + FCC (1) = 18.
     assert len(jsdata["images"]) == 18
 
 
@@ -116,7 +124,21 @@ def test_image_names_match_flat_dir():
         os.path.basename(p)[:-4] for p in glob.glob(os.path.join(FLAT, "*.bin"))
     }
     got = set(funcmap.load_segments())
-    assert got == flat_names
+    assert got == flat_names - NOT_FIRMWARE
+
+
+@needs_fw
+def test_the_bootloader_carveouts_are_present_and_excluded_deliberately():
+    """Guards both directions: if SBL/MBL vanish from flat/ the SBL analysis has
+    lost its input, and if funcmap starts loading them the function map is being
+    built over the wrong address space."""
+    import glob
+
+    flat_names = {
+        os.path.basename(p)[:-4] for p in glob.glob(os.path.join(FLAT, "*.bin"))
+    }
+    assert NOT_FIRMWARE <= flat_names, "SBL/MBL carve-outs missing from flat/"
+    assert not (NOT_FIRMWARE & set(funcmap.load_segments()))
 
 
 @needs_fw

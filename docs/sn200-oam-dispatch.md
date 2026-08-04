@@ -198,10 +198,17 @@ Every arm fills the same request fields and posts it to the OAM worker list:
 
 | request field | meaning |
 |---|---|
-| `+0x118` | **verb** — `1` = EEPROM-section erase (SBL path), `3` = section erase, `0x25` = schedule drive re-init, `0x2a` = read |
+| `+0x118` | **verb** — `1` = section **WRITE**, `3` = section erase, `0x20` = two-word write, `0x25` = schedule drive re-init, `0x2a` = read |
 | `+0x11c` | EEPROM **section id** |
-| `+0x120` / `+0x128` | verb parameters |
+| `+0x120` / `+0x124` / `+0x128` / `+0x12c` | verb parameters; for read/write verbs `+0x128` is the **buffer** and `+0x12c` the **length** |
 | `+0x188` | completion status (zeroed by `0x7ffba674`, tested on resume) |
+
+The verb space is shared across the IPC boundary: PROC0's worker `0x7ffa3e48`
+dispatches a 45-entry jump table at `0x7ffa4184` on the same numbers, seeing the
+whole struct at a base **0xD4 lower** (`+0x118` → `[ctx+0x44]`, `+0x11c` →
+`[ctx+0x48]`, …). Verb 1 is a **write**, not an erase — StrId 1633 *"Erase to
+SBL EEPROM failed"* is a misleading string, and `0x0303` writes one byte into
+SBL EEPROM section 13. Full decode in `sn200-marker-write.md` §1.
 
 ### 4.1 The table — PROVEN
 
@@ -371,7 +378,7 @@ namespace. Against the complete table in §3:
 | wanted | present in the `0xFF` surface? |
 |---|---|
 | set boot mode / `LOAD_N_GO` | **No.** `0x7ff87c64` is *read* by `0x0004` and by the `0x0503` gate. Nothing in overlay 22 stores to it. |
-| write an arbitrary boot marker | **No.** Only verb `0x25` is reachable, and only with `+0x128 ∈ {0,1}` ⇒ markers 3 and 4. PROC0 *does* have a generic marker-write (`sn200-readonly-startup.md` §6.0a, request code 6, value from `[ctx+0x50]`) — but no `0xFF` selector constructs that request. |
+| write an arbitrary boot marker | **No.** Only verb `0x25` is reachable, and only with `+0x128 ∈ {0,1}` ⇒ markers 3 and 4. PROC0's generic marker-write is **verb 1 with section id 6**, value taken verbatim from request `+0x124` — and the only `0xFF` producer of verb 1 is sub 3 (`0x0303`), which hardcodes section **13**. No selector writes `+0x124` at all. Followed to the end in `sn200-marker-write.md`. |
 | clear the latch without the re-init | **Only for a PFCL-armed latch** — see below. For a CLOG-armed latch, `0x0503` is the only eraser of section `0x0b`, and its own resume handler schedules the re-init before it can return. There is no host-visible knob between the two. |
 | re-attach the namespace | **No.** Nothing in overlay 22 references namespace startup. |
 
