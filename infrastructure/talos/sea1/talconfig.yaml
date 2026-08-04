@@ -383,6 +383,25 @@ nodes:
           type: xfs
 
     patches:
+      - # lldpd is an extension SERVICE, unlike every other extension in the
+        # schematic above (ucode/util-linux-tools/nvme-cli/mstflint are just
+        # files). An extension service with no ExtensionServiceConfig sits in
+        # "Waiting for extension service config" forever, which blocks the
+        # startAllServices boot task -- so the node runs fine and reports Ready
+        # to Kubernetes while Talos itself never leaves stage=booting.
+        #
+        # That is not cosmetic: `talosctl upgrade` and other operations gate on
+        # the machine reaching stage=running. The VM nodes are unaffected
+        # because they do not carry this extension.
+        |-
+        apiVersion: v1alpha1
+        kind: ExtensionServiceConfig
+        name: lldpd
+        configFiles:
+          - content: |-
+              configure lldp portidsubtype ifname
+              configure system description "Talos metal node"
+            mountPath: /usr/local/etc/lldpd/lldpd.conf
       - # nodeID LUKS, NOT tpm. hv-2's TPM 2.0 is present and enabled (verified
         # live: /dev/tpm0, iDRAC TrustedModules State=Enabled, fw 1.3.1.0) --
         # but TPM sealing still does not work here.
