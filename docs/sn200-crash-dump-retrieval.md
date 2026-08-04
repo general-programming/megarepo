@@ -9,6 +9,10 @@ fired is known rather than inferred from firmware control flow.
 Companion documents:
 - `docs/sn200-firmware-re.md` — the firmware RE this builds on (VUC map, log
   ABI, boot-marker state machine, why the erase is a wipe).
+- **`docs/sn200-nondestructive-recovery.md`** — whether the latch can be lifted
+  WITHOUT the namespace-wiping clear, and the read-only triage
+  (`check-latch-state.sh`) that decides it per drive. Read that first if the
+  data matters.
 - `.claude/skills/nvme-recovery/SKILL.md` — the recovery runbook.
 
 Claims are labelled **PROVEN** (read directly out of a binary or source),

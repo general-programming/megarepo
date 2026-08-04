@@ -66,6 +66,12 @@ def main() -> int:
     if c12 in SIZE:
         if nbytes != 8 or ndw != 2:
             die("size probe must be cdw10=2 data-len=8")
+        # A section that is not armed makes the probe FAIL with SC 0xC3,
+        # exactly as the firmware does -- it does not return zero.
+        empty = os.environ.get("FAKE_NVME_EMPTY", "").split(",")
+        if SIZE[c12][0] in empty:
+            sys.stderr.write("NVMe status: VENDOR SPECIFIC(0x7c3)\n")
+            return 1
         if c12 == 0x0120:
             reply = len(img("drvlog")).to_bytes(4, "little") + len(
                 img("strtbl")

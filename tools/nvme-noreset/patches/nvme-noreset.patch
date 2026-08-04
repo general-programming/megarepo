@@ -1,0 +1,57 @@
+--- a/core.c	2026-08-03 17:06:58
++++ b/core.c	2026-08-03 17:14:41
+@@ -26,6 +26,7 @@
+ 
+ #include "nvme.h"
+ #include "fabrics.h"
++#include "noreset.h"
+ #include <linux/nvme-auth.h>
+ 
+ #define CREATE_TRACE_POINTS
+@@ -1887,6 +1888,19 @@
+ static void nvme_config_discard(struct nvme_ns *ns, struct queue_limits *lim)
+ {
+ 	struct nvme_ctrl *ctrl = ns->ctrl;
++
++	/*
++	 * nvme-noreset: a large deallocate is a confirmed firmware-crash
++	 * trigger on some controllers (WD errata OM-6588). Refuse to
++	 * advertise discard at all for allow-listed devices; doing it here
++	 * cannot lose a race against early I/O the way a udev rule can.
++	 */
++	if (nvme_noreset_zero_discard(ctrl->dev)) {
++		lim->max_hw_discard_sectors = 0;
++		lim->discard_granularity = lim->logical_block_size;
++		lim->max_discard_segments = ctrl->dmrl ?: NVME_DSM_MAX_RANGES;
++		return;
++	}
+ 
+ 	if (ctrl->dmrsl && ctrl->dmrsl <= nvme_sect_to_lba(ns->head, UINT_MAX))
+ 		lim->max_hw_discard_sectors =
+@@ -4787,6 +4801,18 @@
+ 
+ static void nvme_handle_aer_persistent_error(struct nvme_ctrl *ctrl)
+ {
++	/*
++	 * nvme-noreset: for allow-listed devices, log and do nothing. The
++	 * caller returns without requeueing async_event_work, so no new AER
++	 * is outstanding and the controller cannot post another AEN -- the
++	 * reset loop stops and admin commands get an unlimited window.
++	 */
++	if (nvme_noreset_suppress_reset(ctrl->dev)) {
++		dev_warn_ratelimited(ctrl->device,
++			"nvme-noreset: persistent internal error, reset suppressed\n");
++		return;
++	}
++
+ 	dev_warn(ctrl->device,
+ 		"resetting controller due to persistent internal error\n");
+ 	nvme_reset_ctrl(ctrl);
+@@ -5366,6 +5392,7 @@
+ 	int result = -ENOMEM;
+ 
+ 	_nvme_check_size();
++	nvme_noreset_init();
+ 
+ 	nvme_wq = alloc_workqueue("nvme-wq", wq_flags, 0);
+ 	if (!nvme_wq)

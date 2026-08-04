@@ -46,6 +46,26 @@ BR_IMM = {"beqi", "bnei", "blti", "bgei"}
 BR_IMMU = {"bltui", "bgeui"}
 BR_NOR = {"beqz", "bnez", "bltz", "bgez"}
 
+# `ball` and `bany` take a single-bit MASK, not a register: the r field is an
+# immediate and the mask is 1 << r.
+#
+# PROVEN statistically over all 18 images at real instruction boundaries. Every
+# genuine register-operand branch avoids a0 (return address) and a1 (SP)
+# entirely -- beq (n=888), bgeu (n=621), bltu, bne and bnone all show r in
+# 2..15 and NEVER 0 or 1. ball (n=180) and bany (n=171) have r=0 as their most
+# common value by a wide margin, with r=1 next. A field that constantly names
+# a0/a1 is not a register field.
+#
+# Confirmed semantically in PROC0's section-state manager, which does the same
+# tests with plain 3-byte bit ops on the same byte:
+#   0x7ffab265: ball a8,<r=0>  -> fall-through logs StrId 1277 "Crash Dump section is erased"
+#   0x7ffab0d9: ball a14,<r=2> -> fall-through logs StrId 1280 "PFail Crash Dump section is erased"
+# and the byte is built from the single-bit constants 1, 2, 4, 8.
+# So 1<<0 = bit 0 = Crash armed, 1<<2 = bit 2 = PFail armed.
+#
+# NOTE: bnall and bnone ARE register forms. Do not "fix" those too.
+BR_MASK = {"ball", "bany"}
+
 
 def flix_slotA(q, pc):
     w = (
@@ -74,6 +94,8 @@ def flix_branch(q, pc):
         return "%s a%d,%d,0x%08x" % (nm, s, B4CONSTU[r], tgt)
     if nm in BR_NOR:
         return "%s a%d,0x%08x" % (nm, s, tgt)
+    if nm in BR_MASK:
+        return "%s a%d,mask 0x%x,0x%08x" % (nm, s, 1 << r, tgt)
     if nm.startswith("bb"):
         return "%s a%d,b/i%d,0x%08x" % (nm, s, r, tgt)
     return "%s a%d,a%d,0x%08x" % (nm, s, r, tgt)
@@ -136,10 +158,25 @@ def dis(d, pc, base):
             if disp & 0x20000:
                 disp -= 0x40000
             sB = "j 0x%08x" % ((pc + 4 + disp) & 0xFFFFFFFF)
-        elif pre == 2 and ((q >> 40) & 0x3F) == 0:
-            sB = "movi a%d,0x%x" % (t, (q >> 32) & 0xFF)
+        elif pre == 2 and ((q >> 44) & 0xF) == 0x8:
+            # movi carries a 12-bit immediate, not 8. dest@28-31, imm12@32-43,
+            # opcode nibble 0x8 @44-47. The old imm8 rule only matched values
+            # below 0x100, which is why StrId-range constants came out as
+            # undecoded `?B` -- e.g. `?B 4fdb` is `movi a11,1277`, and 1277 is
+            # the base of the crash/pfail section-state string array.
+            sB = "movi a%d,%d" % (t, (q >> 32) & 0xFFF)
         elif pre == 2 and ((q >> 40) & 0x3F) == 0x23:
             sB = "mov a%d,a%d" % (t, (q >> 36) & 0xF)
+        elif pre == 2 and ((q >> 44) & 0xF) == 0x9:
+            # slot-B ALU: [t@28-31][s@32-35][r@36-39][sub@40-43], opcode 0x9.
+            # sub 0xE = `or at,as,ar`. Verified at 0x7ffab120, whose result the
+            # very next instruction stores with `s32i a11,a5,0x108`.
+            sub = (q >> 40) & 0xF
+            sr, rr = (q >> 32) & 0xF, (q >> 36) & 0xF
+            if sub == 0xE:
+                sB = "or a%d,a%d,a%d" % (t, sr, rr)
+            else:
+                sB = "?Balu sub=%x a%d,a%d,a%d" % (sub, t, sr, rr)
         else:
             sB = "?B %04x" % ((q >> 28) & 0x3FFFF)
         sC = (

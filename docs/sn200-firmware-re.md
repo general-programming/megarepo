@@ -8,6 +8,9 @@ Status: living document. Claims are labelled **PROVEN** (read directly out of a 
 string table) or **INFERRED** (reasoned from structure) or **SPECULATIVE**.
 
 Companion runbook: `.claude/skills/nvme-recovery/SKILL.md`.
+Companion documents: `docs/sn200-crash-dump-retrieval.md` (getting the dump off a
+latched drive) and `docs/sn200-nondestructive-recovery.md` (whether the latch can be
+lifted without wiping the namespace).
 
 ---
 
@@ -1922,6 +1925,30 @@ The four blobs have **null handler and zero length**, confirming a dedicated VUC
 
 > Correction: the firmware tag is **`PFCRDMP `**. `PCRSHDMP` is the *host-side* E6 entry
 > name `libdmi_core` writes. Different names, same section.
+
+### The armed-section bitfield and UNEXSTRT — **PROVEN**
+
+Settles §4's "sub-command numbering" blocker and §7's UNEXSTRT question. Full write-up:
+`docs/sn200-nondestructive-recovery.md`.
+
+- The boot latch (PROC0 `0x7ffaae35`/`0x7ffaae3d`) tests a state byte with two single-bit
+  masks: **bit 0 = CRASH armed, bit 2 = PFCRASH armed**; either forces `0x80000009`.
+  Bits 1 and 3 are the second bit of each section's 2-bit erased/detected/invalid state.
+- `ball`/`bany` in a FLIX slot take a **single-bit immediate mask (`1 << r`), not a
+  register**. `xdis.py` prints them correctly now; the earlier register reading is what
+  made these masks look like nonsense.
+- The OAM erase sub-commands write an EEPROM section id into `[req+0x11c]`, which settles
+  the mapping from decoded operands rather than string order: sub 0→6 (System Area),
+  1→3 (Bad Block list), 2→9 then 8 (BIST Script, Status), 4→Drive Uninit,
+  **5→`0x0b` Crash Dump**, **6→`0x0a` PFail Crash Dump**.
+- **UNEXSTRT stamps its stub into the CRASH section (`0x0b`)**, not PFail: the gate at
+  `0x7ffaad01` is `ball a14,mask 0x1` (bit 0), the write goes through the crash handle
+  `0x7ff85364`, and the failure path reports id `0x0b`. So every unclean start arms the
+  section only the destructive clear can release.
+- The crash-erase's reinit scheduling is conditional on `*(0x7ff87c64) == 6` (the latched
+  mode), so a latched drive always gets the reinit.
+- The armed bits are **sticky**: the section-state manager (`0x7ffab010..0x7ffab290`) only
+  ever sets them. No clean startup releases them.
 
 ### What is still unknown
 

@@ -1,0 +1,3 @@
+VENDORED_KERNEL_RELEASE="7.0.2-6-pve"
+VENDORED_SOURCE="git.proxmox.com mirror_ubuntu-kernels Ubuntu-7.0.0-18.18 (69bb061d6b71ee9b43e6584cc16d2a8853e81fe6), via pve-kernel 87f22e5 'update ABI file for 7.0.2-6-pve'"
+VENDORED_DATE="2026-08-03"

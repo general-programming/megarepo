@@ -14,25 +14,59 @@ Claims are labelled **PROVEN** / **INFERRED** / **SPECULATIVE**.
 
 ## The short answer
 
-**It depends on which section is armed, and that is cheaply and safely
-testable — but the test has been being read wrong.**
+**No. For these five drives, `0x0503` is unavoidable — and the reason is
+UNEXSTRT.** The detail and the one narrow exception are below.
 
 1. The latch fires on **either** the CRASH section or the PFAIL section, tested
    independently. **PROVEN.**
 2. Clearing PFAIL (`0x0603`) is a bare erase of one EEPROM section and
    schedules nothing. Clearing CRASH (`0x0503`) is what arms the REINIT.
    **PROVEN.**
-3. **So if only PFAIL is armed, `0x0603` alone should lift the latch with no
-   re-init and no data loss.** — **INFERRED**, and the remaining uncertainty is
-   named in §5.
-4. **The crucial correction:** armed-ness is signalled by the size probe's
-   **status code**, not by the value it returns. `0x00320000` is a fixed
-   section reservation. A section that is *not* armed makes the probe **fail**
-   with SC `0xC3`. See §1 — this is the part that has been misread.
+3. So if only PFAIL were armed, `0x0603` alone would lift the latch with no
+   re-init and no data loss. **But that case does not arise after a power
+   event** — see 4.
+4. **`UNEXSTRT` arms the CRASH section, not PFAIL. PROVEN (§5).** Every start
+   not preceded by a recorded clean shutdown stamps a stub into EEPROM section
+   `0x0b` (Crash Dump). A power event is exactly such a start. So a
+   power-event latch sets **bit 0**, and only `0x0503` clears it.
+5. **The armed bits are sticky. INFERRED, high confidence (§5.1).** No clean
+   startup releases them; the section-state manager only ever *sets* bits.
+6. **The crucial correction to your triage:** armed-ness is signalled by the
+   size probe's **status code**, not by the value it returns. `0x00320000` is a
+   fixed section reservation. A section that is *not* armed makes the probe
+   **fail** with SC `0xC3` (§1).
+7. **But the size probe is NOT the boot latch.** They read different storage
+   with different bit numbering. Boot latch: PROC0 RAM byte, **bit 0 = CRASH,
+   bit 2 = PFAIL**. Size probe: hardware word at `0x82a60008`, **bit 6 =
+   CRASH, bit 7 = PFAIL**. Nothing traced connects them. Treat the probe as a
+   strong proxy, never as an equivalence (§2).
 
-> **Nothing in this document has been run against hardware.** The
-> non-destructive sequence in §6 is **NOT YET VERIFIED**. Do not run it on a
-> drive whose data matters until §5's open question is closed.
+> ### ⚠ The one narrow exception, and why it is probably not reachable
+>
+> **PROVEN:** the reinit is not unconditional. The crash-erase schedules it
+> only when the global at `0x7ff87c64` equals 6 — the latched/diagnostic mode:
+>
+> ```asm
+> 30033709: { sync/extw ; bnei a14,6,0x300335bf }   ; not 6 -> plain success tail
+> ```
+>
+> So `0x0503` fired from a **normally booted** drive erases the crash section
+> **without scheduling the reinit**.
+>
+> **But that is circular and I do not believe it is reachable.** A set crash
+> bit forces the boot latch, which forces marker `0x80000009`, which is what
+> writes mode 6. To boot normally you must first clear the crash bit; to clear
+> it safely you must first boot normally. The `bnei` exists to avoid scheduling
+> a reinit on a drive that was never latched — not to give you a quiet clear.
+>
+> The only crack: the boot latch reads its byte from `0x7ff8b4f8` while the
+> section-state manager writes `0x7ff8d200`. **Nothing proves those two are
+> kept in sync.** If they can diverge, a drive could boot normally with the
+> manager's crash bit still set, and then `0x0503` would be non-destructive.
+> That is **SPECULATIVE** and must not be planned around.
+>
+> **Nothing here has been run against hardware.** Steps 1–3 of §6 are read-only
+> and safe today; step 4 is not.
 
 ---
 
@@ -108,9 +142,64 @@ byte**, with different masks, both jumping to the same forced state
 **Consequence:** clearing one section lifts the latch **only if the other was
 never armed**. That is precisely what `check-latch-state.sh` determines.
 
-The same `ball`-on-a-state-word shape gates the size probes (§1), which is why
-the probes are a faithful proxy for the boot predicate rather than a
-coincidence.
+### The bits — **PROVEN**
+
+The `ball` operands are **single-bit masks, not registers**: for `ball`/`bany`
+the `r` field is an immediate and the mask is `1 << r`. (An earlier reading of
+this document had them as registers, which is what made the masks look like
+nonsense. `tools/sn200-fw/xdis.py` now decodes them correctly.)
+
+Evidence: every genuine register-operand branch avoids `a0` (return address)
+and `a1` (SP) — `beq` (n=888), `bgeu` (n=621), `bltu`, `bne`, `bnone` all show
+`r` in 2..15 and **never** 0 or 1. `ball` (n=180) and `bany` (n=171) have `r=0`
+as their commonest value, `r=1` next. A field that constantly names a0/a1 is
+not a register field.
+
+Confirmed semantically in PROC0's section-state manager (`0x7ffab010`), which
+does the same thing with plain 3-byte bit ops — visible in one line:
+
+```asm
+7ffab015: { l32r a6,0x7ff829a8 ; movi a9,4    }   ; a9 = 4 = bit 2
+7ffab025: { movi a11,251       ; beqz a10,... }   ; a11 = 0xFB = ~(bits 2,3)
+7ffab03a: and a10,a10,a11                         ; clear the PFail state bits
+7ffab03d: { or a10,a10,a9 ; movi a11,1280 }       ; SET bit 2, and StrId 1280 =
+                                                  ; "PFail Crash Dump section is erased"
+```
+
+and the crash-side block at `0x7ffab181` uses `and 0xFE ; or 1` (**bit 0**)
+with StrId 1277 `"Crash Dump section is erased"` and EEPROM id `0x0b`.
+
+So the boot latch reads:
+
+```asm
+7ffaae2d: { l8ui a9,a5,0x0 ; beqi a12,4,0x7ffaae53 }
+7ffaae35: { sync/extw ; ball a9,mask 0x1,0x7ffaaf02 }   ; bit 0 -> CRASH armed
+7ffaae3d: { sync/extw ; ball a9,mask 0x4,0x7ffaaf02 }   ; bit 2 -> PFCRASH armed
+```
+
+Bits 1 and 3 are the second bit of each section's 2-bit state — the
+erased/detected/invalid trichotomy of StrIds 1277–1282.
+
+### ⚠ The size probe is a proxy, NOT the same storage
+
+```asm
+30030d7e: { l32r a10,0x3002ee1c ; bnei a9,3,0x30030da4 }   ; *(0x3002ee1c) = 0x82a60008
+30030d86: l32i.n a14,a10,0x0
+30030d88: { sync/extw ; ball a14,mask 0x40,0x30030ba9 }    ; crash = bit 6
+30030da6: { sync/extw ; ball a8, mask 0x80,0x30030bca }    ; pfail = bit 7
+```
+
+Both read the **same word at `0x82a60008`**, a hardware/SPI-window address —
+**not** the PROC0 RAM byte, and with **different bit numbering** (6/7 vs 0/2).
+No code was found that propagates one into the other.
+
+**Consequence, and it is a real limitation:** "the probe says EMPTY" is strong
+evidence the latch will not fire, but it is **not proof**. In particular,
+whether an UNEXSTRT-induced *invalid* state would trip the boot latch while the
+probe reports SC `0xC3` could **not be determined**. Since the boot latch is a
+single-bit test on bit 0 and the section state is 2 bits, an invalid state
+(bit 0 clear) should *not* trip it — but that is INFERRED from the bit layout,
+not traced.
 
 ---
 
@@ -170,8 +259,22 @@ latched/diagnostic state.
 
 **So on a latched drive the condition is satisfied and `0x0503` will schedule
 the reinit.** There is no "clear the crash dump quietly while latched" — the
-latched state is exactly when it bites. (**INFERRED**, high confidence: it
-follows if 6 is the latched mode, which the admin gate strongly implies.)
+latched state is exactly when it bites.
+
+**INFERRED, and well corroborated.** Three independent facts agree that 6 is
+the latched/diagnostic mode:
+
+1. the admin gate at `0x7ffa6b18` opens with `bnei a8,6,<skip the gate>` — the
+   Post-Crash restriction applies *only* when the global is 6;
+2. the crash-erase reinit is likewise conditional on it being 6;
+3. the field observation from a latched drive: `0xFF`/`0x0004`
+   (`gf_nvme_sys_init_done`, a read) returned `0x00000601`, i.e. **startup type
+   6** (`sn200-firmware-re.md` §2, §11).
+
+Note this cuts against any hope of a loophole: there is no reachable state in
+which the drive is latched *and* `0x0503` skips the reinit. The `bnei` exists
+to avoid scheduling a reinit on a drive that was never latched, not to give you
+a quiet clear.
 
 Note `0x25` (37) is passed where the erase bodies pass a section id, and the
 EEPROM section enum only runs to 14 — so the second call is a different verb on
@@ -203,104 +306,133 @@ synchronous erase, no scheduled work, and the latch persisted because the
 
 ---
 
-## 5. THE OPEN QUESTION — which section does an UNEXSTRT stub arm?
+## 5. UNEXSTRT arms the CRASH section — **PROVEN**
 
-This is the hinge, and it is **not yet settled**.
+This was the hinge, and the answer is the unwelcome one.
 
-**PROVEN** — the UNEXSTRT stub writer, PROC0 `0x7ffaad01`:
+**(a) The gate that guards the stub write is the CRASH predicate.** Reached only
+from `0x7ffaaecb` (`beq a11,a14,0x7ffaad01` with a14 = `0x80000009`):
 
 ```asm
 7ffaad01: l8ui a14,a5,0x0
-7ffaad04: { sync/extw ; ball a14,a0,0x7ffaac82 }
-7ffaad17: l32r a9,0x3002... ; = 0x00020100        ; version
-7ffaad1a: l32r a8,...       ; = 0x48444300        ; "HDC\0"
-7ffaad1d: s32i.n a8,a5,0x8                        ; [buf+0x08] = magic
-7ffaad1f: s32i.n a9,a5,0xc                        ; [buf+0x0c] = version
-7ffaad21: rsr a12,234                             ; CCOUNT
-7ffaad43: s32i.n a12,a5,0x18                      ; [buf+0x18] = timestamp
-7ffaad45: l32r a14,... ; = 0x53545254             ; "STRT"
-7ffaad48: l32r a15,... ; = 0x554e4558             ; "UNEX"
-7ffaad4b: s32i a15,a5,0x48                        ; [buf+0x48] = "UNEX"
-7ffaad4e: s32i a14,a5,0x4c                        ; [buf+0x4c] = "STRT"
+7ffaad04: { sync/extw ; ball a14,mask 0x1,0x7ffaac82 }   ; mask 0x1 = bit 0 = CRASH
 ```
 
-with `a5 = 0x7ff8b4f8` (a RAM staging buffer) set at function entry. Earlier in
-the same function, at `0x7ffaac53`, a state byte is read, ANDed with `0xFE`
-then `0xFD` (**clearing bits 0 and 1**) and written back — evidently the
-"header valid/complete" flags whose clearing produces the *invalid* third state
-(StrIds 1279/1282).
+Branch-taken goes to "log `SYS: Post Crash startup`, set mode 6, do not stamp".
+**Fall-through writes the stub — i.e. the stub is written precisely when the
+crash bit is CLEAR. Its purpose is to make the crash bit true.**
 
-**StrId 3520 says "writing UNEXSTRT stub header to crash area."** If "crash
-area" means the CRASH section (EEPROM id `0x0b`), then **every unclean stop
-arms the section that only the destructive clear can release**, and for these
-five drives a non-destructive recovery is impossible. If it lands in PFAIL,
-`0x0603` suffices.
+**(b) The write goes through the CRASH section handle.** `0x7ffaad51` loads
+`0x7ff825f8` → **`0x7ff85364`**. That is the same global the crash-side error
+handler pairs with **section id `0x0b`** (`0x7ffab23a`, then
+`{ l32i a14,a14,0x4 ; movi a12,0xb }`). The PFail handle is a *different*
+global, `0x7ff82674` → `0x7ff85374`, paired with id `0x0a` — and it is **not
+referenced anywhere in the UNEXSTRT block**.
 
-The string is suggestive but a string is not a section id. **This is being
-traced now and this document must not be acted on until it is resolved.**
+**(c) The stub-write failure path reports section `0x0b`.** The wait loop is
+`0x7ffaad7c`; its error arm `0x7ffaaf13` ends in `call8 0x7ffb4fec` with the
+section-id register holding `0x0b`.
 
-Why it matters so much here: the drives latched during *power events*. A power
-event produces both a plausible PFAIL record **and** an unclean stop. If
-UNEXSTRT arms CRASH, the PFAIL section being armed is a red herring and
-`0x0603` will never lift the latch.
+**(d)** StrId 3520 says "to crash area", consistent with (a)–(c).
 
----
+Stub contents (**PROVEN**): magic `0x48444300` (`"HDC\0"`) at `[buf+0x08]`,
+version `0x00020100` at `[buf+0x0c]`, CCOUNT at `[buf+0x18]`, `"UNEX"`/`"STRT"`
+at `[buf+0x48]`/`[buf+0x4c]`, with `buf = 0x7ff8b4f8`.
 
-## 6. Candidate non-destructive sequence — **UNVERIFIED, DO NOT RUN YET**
+### Why this kills the hypothesis
 
-Stated so it can be reviewed, not so it can be executed. Steps 1–3 are
-read-only and safe today. Step 4 is the unverified one.
+A power event is a start not preceded by a recorded clean shutdown. It stamps
+an UNEXSTRT stub into the **Crash Dump** section, setting **bit 0**. The boot
+latch's first test is exactly bit 0. So:
 
-### Step 1 — triage (read-only, safe)
+- the latch fires because of the CRASH bit, whatever PFAIL is doing;
+- `0x0603` clears bit 2 and cannot help;
+- clearing bit 0 requires `0x0503`, which on a latched drive (mode 6) always
+  schedules the reinit.
+
+Worse, it is self-perpetuating: each of the ~5 s controller resets while
+latched is itself another unclean start.
+
+### 5.1 The bits are sticky — **INFERRED, high confidence**
+
+The whole section-state manager (`0x7ffab010..0x7ffab290`), which is what runs
+on the normal boot paths, contains **no bit-clearing operation** other than
+read-modify-write pairs that immediately re-set the same bit
+(`and 0xFE ; or 1`, `and 0xFB ; or 4`, …). It only ever **sets**. There is no
+"clear after successful read" anywhere in the crash-dump read paths.
+
+The one genuine clear is `0x7ffaac53..0x7ffaac71` — read byte, `AND 0xFE`,
+`AND 0xFD`, store — which zeroes the CRASH section's 2-bit state and is
+immediately followed by the UNEXSTRT log. **That is a re-arm, not a release.**
+
+So a clean startup does not release the bits. Only the OAM erase does.
+
+## 6. What to actually do
+
+The non-destructive sequence this document set out to find **does not exist for
+a power-event latch**. What follows is the best available procedure given that.
+
+### Step 1 — triage all five (read-only, safe, do this now)
 
 ```sh
 cd tools/sn200-fw
 sudo ./check-latch-state.sh /dev/nvmeN
 ```
 
-**If it says the CRASH section is armed, stop.** There is no known
-non-destructive path; go to `sn200-crash-dump-retrieval.md` and treat any
-further step as accepting total data loss.
+Run it on every drive and keep the output. It costs nothing and modifies
+nothing, and the pattern across five drives is worth more than any single
+result. Two outcomes matter:
 
-### Step 2 — get the dumps off first (read-only, safe)
+- **CRASH armed** (the expected case after a power event) — there is no
+  non-destructive path. Continue to step 2, then accept the loss or park the
+  drive.
+- **PFAIL armed, CRASH empty** — the one case where `0x0603` alone might
+  suffice. Given §5 this should be rare; if you see it, say so, because it
+  means the drive latched for a reason other than an unclean stop.
+
+Remember §2: a clean triage is strong evidence, not proof.
+
+### Step 2 — get the dumps off, always (read-only, safe)
 
 ```sh
 sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvmeN
 ./decode-crash-dump.py sn200-dump-*/crash.bin --string-table sn200-dump-*/strtbl.bin
 ```
 
-Reads are PROVEN side-effect-free and `0xC6` cmd `0x20` is inside the
-Post-Crash allow-list, so this works while latched and can be resumed. Do this
-even if you intend to stop afterwards: the dump names the assert, and with five
-drives the pattern across them is worth more than any single one.
+Do this on all five **before** anything else, and especially before any clear.
+With five drives the cross-drive pattern is the real prize: if they all name
+the same assert, that is a far stronger case to WD (or for a controlled
+workaround) than any single dump. Reads are side-effect-free and resumable.
 
 ### Step 3 — copy everything off the machine
 
-Everything after this point changes drive state.
+Everything after this changes drive state.
 
-### Step 4 — the safe clear — **NOT YET VERIFIED**
+### Step 4 — accept the cost, or park the drive
 
-Only if step 1 said **PFAIL armed, CRASH empty**, and only once §5 is closed:
+If CRASH is armed, the only known release is:
 
 ```sh
-# ⚠ UNVERIFIED. Erases the PFail Crash Dump EEPROM section (id 0x0a).
-# It is irreversible: the pfail dump is gone. It should NOT schedule a reinit.
+# ☠ IRREVERSIBLE AND DESTRUCTIVE. Schedules Drive REINIT -> rebuilds the L2P
+# -> the namespace comes back FULLY PROVISIONED AND ENTIRELY ZERO.
 nvme admin-passthru /dev/nvmeN --opcode=0xff --namespace-id=0 \
-     --cdw10=0 --cdw12=0x0603 --data-len=0
+     --cdw10=0 --cdw12=0x0503 --data-len=0
 ```
 
-**This is the first irreversible step.** It destroys the pfail dump (which is
-why step 2 comes first) but should not touch the L2P, the system area, or any
-boot marker.
+**This is the point of no return.** There is no partial or recoverable form of
+it. If the data on a drive is worth more than the drive, leave it latched and
+powered down — the media is intact, the data is intact, and only the boot path
+refuses. A future firmware-level or vendor-side recovery remains possible in a
+way it does not once the reinit has run.
 
-Then re-run step 1. If PFAIL now reads EMPTY and CRASH still reads EMPTY, the
-latch predicate should no longer fire on the next startup.
+If a drive's data is expendable, `0x0603` first (synchronous, provably
+side-effect-free, and it removes the pfail record) then `0x0503`, then step 5.
 
 ### Step 5 — a CLEAN stop, then start
 
-The latch is self-sustaining: `SYS: UNEXSTRT detected` means **any start not
-preceded by a recorded clean shutdown re-arms a crash section**. So the restart
-must be a real NVMe shutdown, not a reset.
+The latch is self-sustaining: **any** start not preceded by a recorded clean
+shutdown stamps a fresh UNEXSTRT stub into the crash section (§5). So the
+restart must be a real NVMe shutdown, not a reset.
 
 ```sh
 BDF=0000:xx:00.0
@@ -312,11 +444,22 @@ echo $BDF > /sys/bus/pci/drivers/nvme/bind     # drives CC.EN 0->1
 `unbind` goes through `nvme_dev_disable(shutdown=true)` and is the **only**
 in-band stop that produces a clean-shutdown marker. `nvme reset`, NSSR, FLR,
 SBR and link-disable all drop `CC.EN` or the link without `CC.SHN` and are each
-themselves another unclean start. (`sn200-firmware-re.md` §6, §7.)
+themselves another unclean start that re-arms the section.
 
-Whether the lighter FAST_RESTART path consumes the state, or whether a true
-cold power cycle is still required, is **unresolved** — but a cold cycle
-following a clean `unbind` is strictly safer than one following a reset.
+Whether the lighter FAST_RESTART path consumes the state or a true cold power
+cycle is still required is **unresolved** — but a cold cycle following a clean
+`unbind` is strictly safer than one following a reset.
+
+### The prevention that actually matters here
+
+Five drives, five power events. Since every unclean stop re-arms the crash
+section, the fix is upstream of the drives:
+
+- make sure the host issues a real NVMe shutdown on power-down — a UPS that
+  triggers an orderly OS shutdown, not just a delayed cut;
+- never yank power or hard-reset a chassis with these drives live;
+- keep them off the deallocate/TRIM workloads in `sn200-firmware-re.md` §8
+  (`mkfs -K`, no `discard` mount option, no whole-device `fstrim`).
 
 ### What NOT to do
 
@@ -339,26 +482,39 @@ typo, and do not let a shell history search pick the wrong one.
 - Armed-ness is the size probe's status code (success vs SC `0xC3`), not its
   value. `0x00320000` is a fixed reservation.
 - The boot latch tests CRASH and PFAIL independently; either arms it.
+  **Bit 0 = CRASH, bit 2 = PFAIL** in the PROC0 state byte.
+- `ball`/`bany` take a single-bit immediate mask, not a register operand.
 - Sub 5 → EEPROM section `0x0b` (Crash Dump), sub 6 → `0x0a` (PFail Crash
-  Dump). This also retires the long-standing "sub-command mapping" blocker.
+  Dump), read from the section id each handler writes. This retires the
+  "sub-command mapping" item `sn200-firmware-re.md` §4 called its biggest
+  blocker, and confirms the full table (sub 0→6 System Area, 1→3 Bad Block
+  list, 2→9/8 BIST Script+Status, 4→Drive Uninit).
 - The pfail erase has no second operation and writes no marker.
-- The crash erase's reinit scheduling is conditional on the global at
-  `0x7ff87c64` being 6.
+- **UNEXSTRT stamps its stub into the CRASH section (`0x0b`).**
+- The crash-erase's reinit is conditional on `*(0x7ff87c64) == 6`, and 6 is the
+  latched/diagnostic mode.
+- The size probe reads a different object (`0x82a60008`, bits 6/7) from the
+  boot latch (PROC0 byte, bits 0/2).
 
 **INFERRED**
-- 6 is the latched/diagnostic mode, so on a latched drive `0x0503` always
-  schedules the reinit.
-- If only PFAIL is armed, `0x0603` alone lifts the latch.
+- The armed bits are sticky: nothing but the OAM erase clears them.
+- On a latched drive `0x0503` therefore always schedules the reinit.
 
-**UNRESOLVED — blocks the whole procedure**
-- Which section an UNEXSTRT stub arms (§5). If CRASH, non-destructive recovery
-  is impossible for power-event latches.
-- Whether the armed bits are sticky until explicitly erased, or cleared by a
-  successful clean startup.
-- Whether a clean `unbind`/`bind` cycle is sufficient or a cold power cycle is
+**COULD NOT DETERMINE**
+- Whether an UNEXSTRT-induced *invalid* state trips the boot latch while the
+  size probe reports SC `0xC3`. The two predicates read different objects and
+  the code propagating one to the other was not found.
+- Whether the boot latch's byte (`0x7ff8b4f8`) and the section manager's byte
+  (`0x7ff8d200`) are kept in sync. If they can diverge, the §-summary exception
+  becomes reachable — but this is SPECULATIVE.
+- What verb `0x25` (the crash path's second call) actually does. It is *not* an
+  EEPROM erase: it writes no section id, and it targets a different request
+  block. Consistent with "write the reinit boot marker", not proven. The erase
+  primitive `0x30030aa0` itself could not be disassembled (not `entry`-aligned
+  in the flat overlay image), so its verb dispatch is unresolved.
+- Whether a clean `unbind`/`bind` cycle suffices or a cold power cycle is
   mandatory.
 
 **UNTESTED AGAINST HARDWARE**
 - All of it. Steps 1–3 of §6 are read-only and safe to run today on all five
-  drives; running step 1 across all five and comparing is itself valuable
-  evidence and costs nothing.
+  drives.

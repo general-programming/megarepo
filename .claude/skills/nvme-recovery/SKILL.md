@@ -309,23 +309,37 @@ That is why no in-band reset works: `nvme reset`, NSSR, FLR, SBR and link-disabl
 all drop `CC.EN` or the link without first issuing `CC.SHN`, so each one is
 another "unexpected start".
 
-### Triage FIRST: which section is armed?
+### There is NO non-destructive recovery from a power-event latch
 
-The latch fires on **either** the CRASH or the PFAIL section, tested
-independently. Only the CRASH clear (`0xFF`/`0x0503`) schedules the
-namespace-wiping REINIT. So which section is armed decides whether a
-non-destructive recovery is even possible:
+**PROVEN.** The boot latch fires on **either** the CRASH or the PFAIL section
+(bit 0 / bit 2 of a state byte). `UNEXSTRT` — any start not preceded by a
+recorded clean shutdown, which includes every power event and every reset in
+the ~5 s loop — stamps its stub into the **CRASH** section. Only
+`0xFF`/`0x0503` clears CRASH, and on a latched drive that always schedules the
+Drive REINIT that zeroes the namespace. The bits are sticky; no clean boot
+releases them.
+
+So: **the data is intact, the media is intact, and the only known release
+destroys it.** A latched drive left powered down keeps every future option
+open; `0x0503` closes them all. Decide deliberately, not reflexively.
+
+Triage which section is armed (read-only, safe):
 
 ```sh
-cd tools/sn200-fw && sudo ./check-latch-state.sh /dev/nvmeN     # read-only
+cd tools/sn200-fw && sudo ./check-latch-state.sh /dev/nvmeN
 ```
 
 ⚠ **Armed-ness is the size probe's STATUS, not its value.** A section that is
 not armed makes the probe **fail with SC 0xC3**; it does not return zero.
 `0x00320000` is a fixed section reservation and says nothing about armed-ness.
+And the probe reads different storage from the boot latch (bits 6/7 of a
+hardware word vs bits 0/2 of a PROC0 byte) — strong proxy, not proof.
 
-See `docs/sn200-nondestructive-recovery.md`. The non-destructive sequence there
-is **not yet verified** — read it before acting.
+Full evidence and the procedure: `docs/sn200-nondestructive-recovery.md`.
+
+**Prevention is the real fix here:** ensure power-down issues a real NVMe
+shutdown (UPS-triggered orderly OS shutdown, not a delayed cut). Every unclean
+stop re-arms the crash section.
 
 ### Get the crash dump FIRST — there is a script
 
