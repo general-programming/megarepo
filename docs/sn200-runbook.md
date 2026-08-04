@@ -11,6 +11,57 @@ destructive**.
 
 ---
 
+## 0. The only recovery route that actually works today
+
+There is **no proven way to get data off a latched SN200.** The NVMe surface is
+exhausted (§2), and the UART/SBL route has never been run and needs a pinout
+that does not exist publicly. Planning to recover a latched drive is planning on
+something nobody has done.
+
+So the recovery story cannot be "get it back". It has to be **"the drive was
+never the last copy"** — and that is entirely within our control, needs no
+firmware work, and is testable today:
+
+```sh
+tools/sn200-fw/sn200-blast-radius.py --node sea1-k8s-0 --node sea1-k8s-1
+```
+
+It reads live PVs, groups them by owning workload, and reports what would be
+lost. Exit status is non-zero if anything is `CRITICAL`. **Run it before any
+maintenance that could power-cycle a host, and after any change to database
+topology.**
+
+**As of 2026-08-04 it reports 2 CRITICAL, 11 HIGH, 0 OK, and zero backups.**
+
+| Verdict | Meaning |
+|---|---|
+| `CRITICAL` | one copy, on an SN200. One latch and it is gone permanently |
+| `HIGH` | every copy is on an SN200 — a replica count of 2 that is **not** independent redundancy, because both copies share a model, a firmware defect, and a common trigger |
+| `OK` | at least one copy lives somewhere that is not an SN200 |
+
+The `HIGH` class is the point of the tool. Eleven CNPG clusters look protected
+at two replicas each; all eleven have both replicas on the two SN200s, with no
+backup anywhere in the cluster (`kubectl get backups.postgresql.cnpg.io -A` →
+none, and the barman ObjectStore CRD is not installed). Replication is the only
+thing protecting any of it, and it is replication across two units of the same
+defective part.
+
+The two `CRITICAL` items are not hypothetical:
+
+- **`shared-db/shared-timescaledb`, 256 Gi, `sea1-k8s-0`.** Declares 2
+  instances, runs **1**. `shared-timescaledb-9` has been `Pending` for 14 h with
+  `persistentvolumeclaim "shared-timescaledb-9" not found` — its PVC was deleted
+  during the hv-2 evacuation and CNPG has not recreated it. `backup: null`.
+- **`shared-db/meilisearch`, 32 Gi, `sea1-k8s-1`.** One replica, no backup.
+
+`authentik-db-5` is `Pending` in the same PVC-not-found way, though authentik
+still has 2 live copies so it is `HIGH`, not `CRITICAL`.
+
+**This is the highest-value work available on this whole problem.** Restoring
+those two second copies converts the worst case from *permanent loss* to *an
+inconvenience*, and unlike every firmware avenue it is ordinary, reversible,
+well-understood work.
+
 ## 0a. Where the drives are, and what is protecting them
 
 Three SN200s, all at sea1. **They do not appear on the hypervisors** — hv-0 and
