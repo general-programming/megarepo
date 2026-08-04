@@ -298,23 +298,20 @@ elif [[ $RESETTING -eq 1 && "$DATA_PRESENT" == unknown ]]; then
 	echo "       the namespace, and it is the only thing that has ever lost"
 	echo "       data on these drives."
 elif [[ "$DATA_PRESENT" == yes && "$CLOG_ARMED" == no && "$PFCL_ARMED" == yes ]]; then
-	# The rare data-preserving case. 0x0603 erases the PFail section and does
-	# nothing else -- no startup-type test, no re-init verb -- so a latch armed
-	# ONLY by PFCL is released without touching the L2P. PROVEN from the resume
-	# handler at 0x300335a3; never yet exercised on hardware.
-	echo "  Drive is LATCHED, THE DATA IS STILL THERE, and this is the RARE"
-	echo "  case that may be recoverable WITHOUT data loss:"
+	# This state should be UNREACHABLE. The boot that latches on PFCL writes
+	# marker 0x80000009 and falls into the marker dispatch, which routes marker 9
+	# to the UNEXSTRT stub writer -- stamping CLOG on that same boot. So a drive
+	# you can talk to is always already both-armed. Seeing this means a premise
+	# is wrong, and guessing would be worse than saying so.
+	echo "  Drive is LATCHED and THE DATA IS STILL THERE -- but the section"
+	echo "  state is one the firmware analysis says CANNOT happen:"
 	echo "      CLOG not armed + PFCL armed"
 	echo
-	echo "  Send ONLY:  nvme admin-passthru $CTRL --opcode=0xff -n 0 \\"
-	echo "                --cdw10=0 --cdw12=0x0603 --data-len=0"
-	echo "  then a COLD power cycle. NEVER 0x0503 -- that is the entire data"
-	echo "  cost, and it is one nibble away."
-	echo
-	echo "  Mechanism is proven from the firmware; nobody has run it yet. If the"
-	echo "  data is irreplaceable, dump the crash section first (--dump) and"
-	echo "  consider leaving the drive powered down instead."
-	echo "  See docs/sn200-runbook.md section 2."
+	echo "  A PFCL latch stamps CLOG itself on the same boot (marker 9 ->"
+	echo "  UNEXSTRT stub writer), so a reachable drive is always both-armed."
+	echo "  Do NOT improvise a recovery from this. Capture it (--dump), leave"
+	echo "  the drive powered down, and read docs/sn200-section-arming.md --"
+	echo "  this observation would refute it."
 elif [[ "$DATA_PRESENT" == yes ]]; then
 	echo "  Drive is LATCHED and THE DATA IS STILL THERE."
 	echo

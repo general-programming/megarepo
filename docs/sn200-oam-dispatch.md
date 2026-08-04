@@ -386,7 +386,19 @@ The re-init cannot be dodged by racing either: the mode word is read *after* the
 erase completes, and it is only ever written by boot-side code, so its value is
 fixed for the life of the power-on.
 
-### 7.1 The one real win: a PFCL-only latch — PROVEN mechanism, narrow scope
+### 7.1 A PFCL-only latch — PROVEN mechanism, **WITHDRAWN as a procedure**
+
+> **☠ Read `sn200-section-arming.md` before acting on anything below.** The
+> mechanism in this section is correct and unchanged. Its *precondition* is
+> unreachable: the boot that latches on PFCL writes marker `0x80000009` at
+> `0x7ffaaf08` and falls into the marker dispatch, which routes marker 9 to the
+> `UNEXSTRT` stub writer `0x7ffaad01` — the one and only `verb == 1` write
+> against either crash section in PROC0 — which stamps **section 11 (CLOG)** on
+> that same boot. A drive you can probe is always both-armed. On a both-armed
+> drive `0x0603` is inert (the boot predicate is an OR) and destroys the PFail
+> dump. The "test it before believing it" recipe below is retained only as a
+> record of the reasoning; **do not run step 2.**
+
 
 The boot predicate latches on **CLOG bit 0 OR PFCL bit 2 OR empty System Area**
 (`sn200-firmware-flow.md` §2). `0x0603` clears the PFCL section, and clears it

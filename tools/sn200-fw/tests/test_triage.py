@@ -133,11 +133,12 @@ def test_no_destructive_opcode_can_be_issued(tmp_path):
     # join backslash continuations first -- an invocation split over two lines
     # would otherwise hide its CDW12 from this check
     src = open(SCRIPT).read().replace("\\\n", " ")
-    # The script PRINTS a 0x0603 recommendation for the data-preserving case, so
-    # echo/printf lines are advice, not invocations. Excluding them is a loophole
-    # unless we also assert that no echoed command is ever executed -- which the
-    # fake_nvme_triage.py run above already guarantees, since it aborts on any
-    # destructive opcode actually reaching it across every branch.
+    # The script PRINTS destructive encodings as prohibitions ("DO NOT send
+    # 0x0503"), so echo/printf lines are advice, not invocations. Excluding them
+    # is a loophole unless we also assert that no echoed command is ever
+    # executed -- which the fake_nvme_triage.py run above already guarantees,
+    # since it aborts on any destructive opcode actually reaching it across
+    # every branch.
     invocations = [
         ln
         for ln in src.splitlines()
@@ -272,18 +273,18 @@ def test_namespace_suffix_is_stripped_from_the_basename_only(tmp_path):
     assert "run_n0" in proc.stdout
 
 
-def test_pfcl_only_latch_is_flagged_as_the_data_preserving_case(tmp_path):
-    """CLOG not armed + PFCL armed is the one case 0x0603 can lift without
-    touching the L2P (0x0603's resume handler has no path to the re-init verb).
-    Missing it means an operator either loses data unnecessarily or leaves a
-    recoverable drive powered off forever."""
+def test_pfcl_only_latch_is_reported_as_impossible_not_recoverable(tmp_path):
+    """This branch used to recommend 0x0603 as a data-preserving recovery. That
+    was WITHDRAWN: the boot that latches on PFCL routes marker 9 to the UNEXSTRT
+    stub writer and stamps CLOG on the same boot, so a drive you can probe is
+    always already both-armed. The precondition cannot exist. Recommending a
+    recovery here would be acting on a refuted premise."""
     r = run(tmp_path, armed="pfail")
     out = r.stdout
-    assert "RARE" in out
-    assert "cdw12=0x0603" in out
-    assert "NEVER 0x0503" in out
-    # it must not be oversold -- nobody has run this
-    assert "nobody has run it yet" in out
+    assert "CANNOT happen" in out
+    assert "Do NOT improvise" in out
+    # and it must never hand the operator a command in this state
+    assert "0x0603" not in out.split("VERDICT")[1]
 
 
 def test_both_sections_armed_still_says_stop(tmp_path):
@@ -294,8 +295,9 @@ def test_both_sections_armed_still_says_stop(tmp_path):
     assert "DO NOT send 0xFF cdw12=0x0503" in r.stdout
 
 
-def test_the_0603_branch_never_suggests_0503(tmp_path):
-    """0x0503 is one nibble away and is the entire data cost."""
-    r = run(tmp_path, armed="pfail")
-    body = r.stdout.split("VERDICT")[1]
+def test_the_impossible_state_offers_no_command_at_all(tmp_path):
+    """0x0503 is the entire data cost and 0x0603 is refuted here, so the only
+    safe output in this state is 'capture it and stop'."""
+    body = run(tmp_path, armed="pfail").stdout.split("VERDICT")[1]
     assert "--cdw12=0x0503" not in body
+    assert "--cdw12=0x0603" not in body
