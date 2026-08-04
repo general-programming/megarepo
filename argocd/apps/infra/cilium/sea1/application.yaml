@@ -118,6 +118,16 @@ spec:
             enabled: true
           ui:
             enabled: true
+            # Reachable at hubble-sea1 on the tailnet. Stays ClusterIP -- the
+            # operator proxies those (cf. shared-db/meilisearch).
+            #
+            # Hubble UI has NO authentication of its own. Anyone who can reach
+            # it sees every flow in the cluster: pod names, namespaces, IPs,
+            # ports. Tailnet ACLs are the only control, so scope it there.
+            service:
+              annotations:
+                tailscale.com/expose: "true"
+                tailscale.com/hostname: "hubble-sea1"
 
   syncPolicy:
     automated:
