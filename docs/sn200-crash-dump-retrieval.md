@@ -61,7 +61,8 @@ opcode  = 0xC6
 NSID    = 0
 CDW10   = transfer length in DWORDS
 CDW12   = (subcmd << 8) | cmd_id          ; cmd_id 0x20 = "Get Drive Log" family
-CDW13   = transfer offset in DWORDS       ; <-- see §1.2
+CDW13   = IGNORED. So are CDW11/14/15.    ; the handler reads no other field
+                                          ; at all -- see §1.2.4
 direction = from device (read)
 ```
 
@@ -176,8 +177,8 @@ running to `0x30030e29`. The sub-command dispatcher is at `0x30030d14`:
       ... beqi a9,5,0x30030d7b             ; sub 5  pfail size          0x0520
       ... beqi a9,4,0x30030ddf             ; sub 4  CRASH DUMP BODY     0x0420  <-- us
       ... beqi a9,6,0x30030e0e             ; sub 6  pfail body          0x0620
-      ... beqi a9,7,0x30030b18
-      ... beqi a9,8,0x30030ae7
+      ... beqi a9,7,0x30030b18            ; sub 7  71808-B region A   0x0720
+      ... beqi a9,8,0x30030ae7            ; sub 8  71808-B region B   0x0820
 30030d64: a1 2b f8  l32r a10,0x3002ee10    ; = 0x064b6000 -> StrId 1611, 0 args
 30030d6a: d1 2a f8  l32r a13,0x3002ee14    ; = 0x40040000  status
 ```
@@ -249,13 +250,124 @@ the upper half of CDW12, CDW13, CDW14 and CDW15 are never read. The PRP/DPTR is
 never touched by the handler — the transport consumes it generically.
 
 **No seek, no cursor either.** The `0x_20` dispatch is closed at sub-commands
-0–8; everything else falls to StrId 1611. Every arm is a read. The `0x0420` arm
+0–8; everything else falls to StrId 1611. All nine arms are enumerated
+individually in §1.2.4 — none of them takes a selector. The `0x0420` arm
 performs no store to the section descriptor and no store to any ctx field that
 could persist as a position — `+0x28`/`+0x2c` are recomputed from the descriptor
 on every call. Every invocation restarts at the section base, which is exactly
 the observed "repeated reads are byte-identical".
 
-#### 1.2.4 The 160 KiB cliff is probably **ours** — SPECULATIVE, and cheap to settle
+#### 1.2.4 All nine sub-commands, individually — **PROVEN**, and there is **no windowing**
+
+The handler is a **coroutine**, not a straight-line function. That is why earlier
+passes could not follow the arms: each arm runs a few instructions, stores a
+*resume PC* and returns to the scheduler, and is re-entered later at that PC
+(`0x30030924`: `l32i a11,a2,0x18 ; … jx a11`, with `beqz a11,0x30030cec`
+selecting the first-entry/dispatch path).
+
+The resume PCs are the `l32r`-loaded `0x7ffbXXXX` literals that appear in pairs
+throughout the function. They are **overlay runtime addresses**, and the
+relocation constant for this bank is now pinned:
+
+```
+runtime = 0x7ffbc000 + (static − 0x3002ea38)
+```
+
+**Interlock: all 24 such literals in the function map back into
+`0x30030955`–`0x30030c0b`, and every single one lands on a real instruction
+boundary in the linear disassembly. 24/24.** Two of them (`0x7ffbe0af` →
+`0x30030ae7`, `0x7ffbe0e0` → `0x30030b18`) are the sub-8 and sub-7 dispatch
+targets themselves — self-retry loops after a failed resource allocation, which
+is exactly what the surrounding `call8 0x30022504 ; bnez` code implies. Nothing
+else would produce that fit by chance.
+
+Of each pair, `a10` is the yield-site block label (trace id) and `a9` is the
+resume PC.
+
+Every arm 0–6 converges on one of two entries into the same transfer tail:
+
+```asm
+30030a42: s32i.n a10,a2,0x28    ; src lo          <- entry A (src still in a1 slots)
+30030a44: l32i   a10,a2,0x130   ; CDW10
+30030a47: s32i.n a11,a2,0x2c    ; src hi
+30030a49: slli   a15,a10,2      ; bytes = CDW10*4 <- entry B (src already stored)
+30030a4c: minu   a15,a7,a15     ; clamp to section size
+30030a4f: s32i.n a15,a2,0x34    ; transfer length
+30030a51: call8  0x30022504     ; get a job slot, then 0x3002d0ac = set up the DMA
+```
+
+| sub | CDW12 | what it is | mechanism | length | selector? |
+|---|---|---|---|---|---|
+| **0** | `0x0020` | Drive log **body** | `0x30030dc2`: src ← `a1+0x48/0x4c`, size ← `desc[+4]<<6`, → tail B | `min(size, CDW10*4)` | none |
+| **1** | `0x0120` | Drive log + string table **size** | `0x30030e01`: `ctx+0x190 = desc[+4]<<6`; yield → `0x300309eb` sets `ctx+0x194 = ctx+0x184<<6`; yield → `0x30030b88`, src ← `a1+0x30/0x34`, → tail B. Returns the two u32s as an 8-byte payload. | `min(8, CDW10*4)` | none |
+| **2** | `0x0220` | String table **body** | `0x30030bec`: yield → `0x30030b66`, `ctx+0x194 = ctx+0x184<<6`, src ← `a1+0x28/0x2c`, → tail A | `min(size, CDW10*4)` | none |
+| **3** | `0x0320` | Crash dump **size** | `0x30030d7b`: `ball` bit **6** of `*(0x82a60008)`; clear → StrId 1607 + abort. Set → `0x30030ba9` yields an SPI read of 32 bytes into `ctx+0x198`, resumes `0x30030b45`, checks `(*ctx+0x198 & 0xffffff00) == 0x48444300` (`"\0CDH"`). Mismatch → StrId 1608, size 0. Then `0x300309c9` → `0x3003098e` → `0x30030b2b`, src ← `a1+0x20/0x24`, → tail A | `min(8, CDW10*4)` | none |
+| **4** | `0x0420` | Crash dump **body** | `0x30030ddf`: src ← `a1+0x40/0x44`, size ← `desc[+4]<<6` = `0x320000`, → tail B | `min(0x320000, CDW10*4)` | none |
+| **5** | `0x0520` | PFail crash **size** | `0x30030da4`: `ball` bit **7** of `*(0x82a60008)`; clear → StrId 1609. Set → `0x30030bca` yields, resumes `0x300309b3`, `beqz ctx+0x1a8` → StrId 1610. Joins sub 3's tail at `0x300309cc`/`0x3003098e`/`0x30030b2b` | `min(8, CDW10*4)` | none |
+| **6** | `0x0620` | PFail crash **body** | `0x30030e0e`: src ← `a1+0x38/0x3c`, → `0x30030b9a` → tail B | `min(size, CDW10*4)` | none |
+| **7** | `0x0720` | **unidentified** 71808-byte region | `0x30030b18`: `call8 0x30022504` (retry-loop on failure), fill a job at `+0x118`, `+0x11c = 7`, `+0x120`, `+0x128 = *(0x7ff82904)`, `+0x12c = 1122`, flag byte `+0x184 = 1`; spawn worker **`0x7ffa972c`**; yield → `0x30030afa`, `ctx+0x190 = 0x11880`, src ← `a1+0x18/0x1c`, → tail A | `min(0x11880, CDW10*4)` | none |
+| **8** | `0x0820` | **unidentified** 71808-byte region, different producer | `0x30030ae7`: identical job setup, spawn worker **`0x7ffa43c0`**; yield → `0x30030955`, `ctx+0x190 = (child_rc == 0) ? 0x11880 : 0`, then `0x30030964` → `0x30030a2e`, src ← `a1+0x10/0x14`, → tail A | `min(0x11880, CDW10*4)` | none |
+| ≥9 | — | rejected | StrId 1611, status `0x40040000` | — | — |
+
+`1122 × 64 = 71808 = 0x11880`, and `0x00011880` is exactly the literal
+(`0x3002ed88`) both arms load as the returned size. That interlock is what
+identifies the `+0x12c = 1122` field as a length in 64-byte units and the
+`+0x11c = 7` field as a request type.
+
+##### The decisive result: **no sub-command takes any selector**
+
+A byte-exhaustive scan — every byte offset in `0x30030924`–`0x30030e29`, decoded
+as RRI8 (`l8ui`/`l16ui`/`l32i`/`s8i`/`s16i`/`s32i`) and as the narrow
+`l32i.n`/`s32i.n` forms, *without* assuming instruction boundaries, so it cannot
+miss an access hidden inside a mis-bundled FLIX word — yields for base `a2`
+(the command context) in the SQE range:
+
+```
+0x130   (CDW10)   x3      0x14c   (past the 64-byte SQE, an internal ctx field)
+```
+
+and **nothing else**. There is no encoding anywhere in the function's bytes of a
+load from `a2+0x134` (CDW11), `a2+0x138`/`0x13a` (CDW12 as a dword / its upper
+half), `a2+0x13c` (CDW13), `a2+0x140` (CDW14) or `a2+0x144` (CDW15).
+
+The two derived bases are covered too. `[a1+0x58]` = `ctx+0xb8` is read at
+exactly one offset, `+0x81` = `ctx+0x139` = the sub-command byte
+(`0x30030d20 l8ui a9,a10,0x81`); CDW11/13/14/15 would be `+0x7c`/`+0x84`/`+0x88`/
+`+0x8c` off that base and none is read. The `+0x84` stores that *do* exist
+(`0x30030c5c`, `0x30030ca8`) are `s8i` into the job object returned by
+`0x30022504`, at a different base — not the host command. The other derived
+bases (`addmi a2,512` then `addi −112`/`−104` = `ctx+0x190`/`ctx+0x198`) sit
+*above* the SQE and RRI8 offsets are unsigned, so they cannot reach back into it.
+
+**Answer to the windowing question: no. PROVEN.** Not one of the nine arms
+accepts a core index, a block index, a region selector, an offset, or any
+command field at all beyond `CDW10` (length) and `CDW12[15:8]` (sub-command).
+Every arm's source address is recomputed from a firmware-owned descriptor on
+every invocation, so there is no cursor either. The assert on cores 4–15 is
+reachable **only** by raising the host's admin transfer cap and issuing a single
+command with a larger `CDW10` (§1.2.5 below, §5.5).
+
+##### What this changes about safety
+
+`sn200-attack-surface.md` previously recorded that subs 7 and 8 "route into the
+same `.CDH`-magic reader". **That is wrong** — they do not touch the crash
+sections at all. They allocate a job, spawn a worker coroutine and return a
+fixed 71808-byte region.
+
+- **Subs 0–6 are safe to send.** Each is positively identified: fill
+  `ctx+0x28/0x2c` (source, recomputed from a descriptor), `ctx+0x34` (clamped
+  length), hand off to the DMA. No store to any descriptor, no store to media,
+  no erase or program primitive on any path.
+- **Subs 7 and 8: do not send.** They are *reads as far as anything visible
+  goes* — no erase/program primitive is reachable — but they are the only arms
+  that **spawn a producer** rather than pointing at an existing section, and
+  worker `0x7ffa43c0` demonstrably mutates a DRAM table
+  (`0x7ff879f8 + (idx<<4) + 0x1f0`, a counter it conditionally zeroes). Both
+  workers also contain 3-byte opcodes in the `op0=0 / op1∈{6,7,0xa,0xb}` custom
+  space that none of our tooling decodes. That fails the "positively identified
+  as a pure read" bar. Marked **do not send**.
+
+#### 1.2.5 The 160 KiB cliff is probably **ours** — SPECULATIVE, and cheap to settle
 
 No length clamp other than the 3.2 MiB one exists in the handler. Searches for
 the obvious constants came up empty: `0x00020000` in PROC8 has three references
@@ -543,7 +655,7 @@ the interesting record.
 > chunk with, in any dword (§1.2.3). Single-shot is the *only* mode, and the
 > job is therefore to make the single shot bigger: the firmware will hand back
 > all 3.2 MiB for `CDW10 = 0xC8000`, and the 160 KiB ceiling looks host-side
-> (§1.2.4). Settle that first — it is three read-only checks — and the rest of
+> (§1.2.5). Settle that first — it is three read-only checks — and the rest of
 > this section's chunking machinery becomes moot.
 
 ### 3.1 Two modes, same code path
@@ -1012,7 +1124,7 @@ Two independent reasons the assert is not here:
    overwhelmingly likely to be one of the other twelve — the SN200's admin and
    back-end work lives on PROC8 and up. The firmware will return the whole
    3.2 MiB in one command (§1.2.3); the 160 KiB cliff appears to be a host-side
-   buffer-mapping limit, not the drive (§1.2.4). Lift that and the assert should
+   buffer-mapping limit, not the drive (§1.2.5). Lift that and the assert should
    be reachable.
 2. **Stream.** Every block in range carries flags `3` or `7` in
    `stream & 0xFFFF` and every record in them is level `0x60`. Whether
@@ -1330,7 +1442,7 @@ tooling, since `--single-shot` then just works.
   a `MMAP` descriptor at `0x100`. Register state, if the dump has any, is here.
 - **Where the 160 KiB ceiling comes from.** It is not in the handler, and no
   candidate constant exists in the firmware. The leading hypothesis is host-side
-  buffer mapping (§1.2.4), supported by the symptom: the drive would have
+  buffer mapping (§1.2.5), supported by the symptom: the drive would have
   *truncated*, and instead we got nothing. Three read-only checks settle it.
   This is the highest-value open item — it is what stands between us and cores
   4–15, and therefore between us and the assert.
@@ -1344,5 +1456,5 @@ tooling, since `--single-shot` then just works.
   retrievable window (§4.4.2). Treat the root cause as strongly evidenced by code
   and field behaviour, **not** as confirmed by the drive's own record.
 - **The next move is not more RE.** The framing is solved and the handler is
-  fully mapped. What is left is one host-side measurement (§1.2.4) and, if it
+  fully mapped. What is left is one host-side measurement (§1.2.5) and, if it
   goes the way the evidence points, one bigger read.

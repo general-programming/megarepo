@@ -22,5 +22,5 @@ dpkg -i $DEB >/dev/null
 cp -a /src /build && cd /build
 make KDIR=/usr/src/linux-headers-$KVER modules
 ./check-crc.sh $KVER /build/src/Module.symvers
-modinfo /build/src/nvme-core.ko | grep -E '^(vermagic|depends|parm:( *(persist_err_noreset_ids|zero_discard_ids)))'
+modinfo /build/src/nvme-core.ko | grep -E '^(vermagic|depends|parm:( *(persist_err_noreset_ids|zero_discard_ids|max_admin_xfer_ids)))'
 "

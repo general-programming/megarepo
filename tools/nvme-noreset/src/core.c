@@ -2090,6 +2090,28 @@ static void nvme_set_ctrl_limits(struct nvme_ctrl *ctrl,
 	lim->virt_boundary_mask = ctrl->ops->get_virt_boundary(ctrl, is_admin);
 	lim->max_segment_size = UINT_MAX;
 	lim->dma_alignment = 3;
+
+	/*
+	 * nvme-noreset: for allow-listed devices, raise the ADMIN queue's
+	 * (and only the admin queue's) transfer ceiling above what the
+	 * low-level driver's dma_opt_mapping_size() clamp otherwise commits
+	 * here, so a single large vendor admin command doesn't need
+	 * chunking. Still bounded by ctrl->max_segments -- the low-level
+	 * driver's real scatterlist allocation -- so this can never ask the
+	 * transport to build more segments than it has memory for. Namespace
+	 * I/O queues (is_admin == false) are untouched.
+	 */
+	if (is_admin) {
+		u32 admin_sectors = nvme_noreset_max_admin_sectors(ctrl->dev);
+
+		if (admin_sectors) {
+			lim->max_hw_sectors = admin_sectors;
+			lim->max_segments = min_t(u32, USHRT_MAX,
+				min_not_zero(admin_sectors /
+					(NVME_CTRL_PAGE_SIZE >> SECTOR_SHIFT) + 1,
+					ctrl->max_segments));
+		}
+	}
 }
 
 static bool nvme_update_disk_info(struct nvme_ns *ns, struct nvme_id_ns *id,

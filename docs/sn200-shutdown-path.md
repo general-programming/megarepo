@@ -151,13 +151,38 @@ Detect state `0x7ffa838e`:
 
 Both **(A)** and **(B)** are exits that log nothing further, initiate **no
 shutdown**, and write **no marker**. (B) is gated on the global at `0x7ff8c7c4`,
-which is zero in the image and is written at runtime from
-PROC0 `0x7ffab8f9` (`s32i.n a11,a10,0x0`, a11 from the caller's frame) inside the
-same init function that calls `0x7ffa8428`. INFERRED: it is a
-"PFAIL handling enabled" configuration/health gate — plausibly tied to the
-power-backup health that PROC8 reports as
-`Flush Admin_isPowerBackupFailed = %d` (StrId 2162, `PROC8@30000000:0x300292e6`).
-SPECULATIVE beyond that; I did not find the writer's caller.
+which is zero in the image (it is BSS — PROC0's loaded data stops at
+`0x7ff84bb4`).
+
+**Correction (2026-08-03).** An earlier revision of this document guessed that
+`0x7ff8c7c4` was a "PFAIL handling enabled" health gate tied to
+`Admin_isPowerBackupFailed`. That was wrong. Both runtime writers are now read
+(PROVEN):
+
+```
+7ffa8eb4: l32i.n a13,a2,0x3c                        ; shutdown type
+7ffa8ed8: { s32i a14,a2,0x40 ; bnei a13,3,0x7ffa8eea }
+7ffa8ee0: { l32r a13,0x7ff82b20 ; beqi a12,2,0x7ffa8eea }  ; a12 = [req+0x10]
+7ffa8ee8: s32i.n a3,a13,0x0                         ; [0x7ff8c7c4] = 1   (a3 = 1)
+...
+7ffa8bba: l32r a9,0x7ff82b20
+7ffa8bc0: s32i.n a7,a9,0x0                          ; [0x7ff8c7c4] = 0   (a7 = 0)
+```
+
+It is set to 1 by `Shutdown Request Received` (PROC0 `0x7ffa8e64`) when the
+request type is **3** and `[req+0x10] != 2`, and cleared to 0 on the completion
+path at `0x7ffa8bc0`. The shutdown state machine itself reads it at `0x7ffa8c1d`
+and, if it is zero, **skips `SYS: ShutdownReq --> SAM` entirely** and jumps
+straight to completion (`0x7ffa8bb2`).
+
+So `0x7ff8c7c4` is a **"a system-area-saving shutdown is in progress"** flag
+(INFERRED meaning; writes PROVEN). Consequence for exit (B): PROC0's PFAIL
+monitor is a *supervisor for an in-flight shutdown*, not an initiator — exactly
+matching WD's phrasing *"when a shutdown is issued, internally the firmware will
+invoke a thread to monitor PFAIL"*. A brownout with no qualifying shutdown in
+flight makes the monitor log `SYS: PFAIL is detected` and exit, writing no
+marker. That is by design, not a bug, but the failure mode it produces is the
+same.
 
 ### 1.4 What must complete, in order
 
@@ -282,8 +307,9 @@ Ordered by where they sit in the path. "silent" = leaves marker 5/6/7 or nothing
 | S5 | PROC10 `0x7ffb6267` — `Data_Shutdown: Taking too long` | warns, does not abort; command contexts not drained | PROVEN |
 | S6 | PROC11 GC quiesce | WD documents a GC deadlock here; I found the early-exit (`0x7ffa81ea`) but **not** the deadlock itself | see §6 |
 | S7 | PROC6 `0x7ffa881b` — CellCare table save inside the PFAIL budget | long NAND write on the critical path | PROVEN |
-| S8 | PROC0 `0x7ffa8de0` — SAM did not report `0x80000002`; re-enters `0x7ffa8910`, which calls `0x7ffa8428` (**Enable PFAIL monitoring**) again | monitor re-armed mid-shutdown; deadline restarts | PROVEN (control flow), INFERRED (consequence) — see §4 |
+| ~~S8~~ | ~~PROC0 `0x7ffa8de0` — mid-shutdown PFAIL re-arm~~ | **WITHDRAWN 2026-08-03.** The branch is post-completion and unreachable while PFAIL is asserted; it schedules "Waiting for CC.EN (FAST_RESTART)". | see §4.1–§4.3 |
 | S9 | PROC9 `0x7ffaed12` — `PCIe_PfailShutdown` finds the port already shutting down | logs "Do nothing" and returns | PROVEN — see §3 |
+| S10 | PROC8 `0x7ffb1b92` — `Admin_ShutdownPFailMonitor` poll loop, no deadline, gated on `[0x7ff95678]` which is only ever *decremented* | spins forever on PROC8 | PROVEN (unbounded loop), INFERRED (that the guard cannot clear) — see §4.4 |
 
 Note also the boot-side confirmation that step 6 is the one that fails:
 PROC0 `0x7ffaae18` logs
@@ -500,86 +526,232 @@ KNGND122's notes: *"the PFAIL monitor thread is added again … a hang occurs
 during the shutdown process"* — **still being fixed, recovery: unable to
 recover.**
 
-### 4.1 It is there, and it is re-armed mid-shutdown (PROVEN control flow)
+> **RETRACTION (2026-08-03).** §4.1–§4.2 previously claimed that the System
+> Manager re-arms PFAIL monitoring *mid-shutdown*, restarting the 25 ms deadline
+> from the latest PFAIL edge, and listed that as defect 3 ("S8"). **That claim is
+> withdrawn.** The re-arm is real, but it is not mid-shutdown and it cannot fire
+> while PFAIL is asserted. The corrected trace is §4.1–§4.3 below. The genuine
+> second monitor is on PROC8 and is documented in §4.4.
 
-`SYS: Enable PFAIL monitoring` (PROC0 `0x7ffa8428`) has exactly two call sites:
+### 4.1 What the re-arm branch actually tests (PROVEN)
+
+The branch is at the **tail** of the System Manager state machine, after the work
+list and after `SYS: Returning shutdown completion` (`0x7ffa8bdc`):
 
 ```
-7ffa8944  (inside function entry 0x7ffa8910)
-7ffab917  (inside function entry 0x7ffab338)
+7ffa8cfd: l32i.n a12,a2,0x3c                       ; shutdown type
+7ffa8d05: { l32r a13,0x7ff826a0 ; beqi a12,6,0x7ffa8d4d }   ; type 6 (FAST) -> done
+7ffa8d0f: l32i.n a14,a14,0x0                       ; [0x82a60140] status
+7ffa8d11: l32i.n a13,a13,0x0                       ; [0x82a60148] enable
+7ffa8d15: xor a13,a13,a15                          ; a15 = -1
+7ffa8d18: bnone a13,a14,0x7ffa8d23                 ; nothing pending -> a9 = 0
+7ffa8d1b: { movi a9,1 ; j 0x7ffa8d25 }
+7ffa8d23: movi.n a9,0
+7ffa8d25: { l32r a10,0x7ff82f40 ; bnez a9,0x7ffa8d3d }   ; PFAIL ASSERTED -> 0x7ffa8d3d
+7ffa8d2d: l32r a15,0x7ff83120                      ; -> 0x7ff8c7ec
+7ffa8d30: l32r a8,0x7ff83218                       ; = 0x80000002
+7ffa8d33: l32i.n a15,a15,0x0                       ; [0x7ff8c7ec + 0x00]
+7ffa8d35: { sync ; bne a15,a8,0x7ffa8de0 }
 ```
 
-`0x7ffab917` is boot-time init — that one is expected. `0x7ffa8910` is the
-interesting one, because it is loaded as a **continuation pointer from inside the
-System Manager's shutdown state machine** (`entry 0x7ffa8b8c`):
+Two facts the earlier reading missed:
+
+1. **`0x7ffa8d2d` is only reached when the live hardware poll says PFAIL is
+   *not* asserted.** `bnez a9,0x7ffa8d3d` at `0x7ffa8d25` diverts every case
+   where power is actually failing.
+2. **`[0x7ff8c7ec]` is not something SAM publishes.** See §4.2.
+
+### 4.2 `0x7ff8c7ec` is the *boot* info block, not a live SAM handshake (PROVEN)
+
+`0x7ff8c7ec` is PROC0-local BSS (PROC0's loaded data segment ends at
+`0x7ff84bb4`; the region is self-aliased per core, so no other processor can
+write it — see `docs/sn200-certainty.md`). It is the base of the **boot /
+shutdown debug info structure**, whose layout is fixed by the reporter at PROC0
+`0x7ffaab28`:
+
+| Offset | Meaning | Evidence |
+|---|---|---|
+| `+0x00` | effective marker this boot came up with | `0x7ffaae21`, `0x7ffa8d33` |
+| `+0x08`, `+0x0c` | boot timestamps | `0x7ffaab3f`, `0x7ffaab41` |
+| `+0x14` | `userCapacityGB` | `0x7ffab3e3` (StrId 1292), `0x7ffab856` |
+| `+0x8c`… | breadcrumb characters (`0x7ff8c878`) | `0x7ffaaba0` (StrId 1259) |
+| `+0xf4` | persisted `SysAreaMarker` read from the System Area | `0x7ffaab31`, `0x7ffaadc6` |
+| `+0xfc` | shutdown time, µs | `0x7ffaab69` — `SYS: Shutdown time = % 5u.%03u ms` |
+| `+0x100` | PFAIL time, µs | `0x7ffaab71` — `SYS: PFAIL time = % 5u.%03u ms` |
+
+**Every writer of `+0x00` is boot-side.** The base is reachable from exactly 11
+`l32r` sites (`litref.py -a 0x7ff83120 PROC0`) and a whole-image sweep for RRI8
+stores whose effective address is `0x7ff8c7ec` finds nothing else. The writers
+are:
 
 ```
-7ffa8cfd: l32i.n a12,a2,0x3c           ; shutdown type
-7ffa8d05: { l32r a13,0x7ff826a0 ; beqi a12,6,0x7ffa8d4d }
-7ffa8d0f: l32i.n a14,a14,0x0           ; [0x82a60140] status
-7ffa8d11: l32i.n a13,a13,0x0           ; [0x82a60148] enable
-7ffa8d15: xor a13,a13,a15
-7ffa8d18: bnone a13,a14,0x7ffa8d23     ; nothing pending -> a9=0
-7ffa8d2d: l32r a15,0x7ff83120 -> 0x7ff8c7ec   ; the SysAreaMarker SAM reported
-7ffa8d30: l32r a8,0x7ff83218           ; = 0x80000002
-7ffa8d35: { sync ; bne a15,a8,0x7ffa8de0 }    ; SAM did NOT say PFAIL-clean
-7ffa8de0: l32r a10,0x7ff83234          ; = 0x7ffa8910   <-- re-enables PFAIL monitoring
-7ffa8de3: l32r a9,0x7ff83238           ; = 0x7ffa8d5d
+7ffaac01: s32i a11,a3,0x0     ; = 0x80000000   (clear; fn 0x7ffaabd8)
+7ffaadb3: s32i a12,a7,0x0     ; = 0x80000003   "SYS: Found an incompatible SA"
+7ffaae21: s32i.n a11,a7,0x0   ; := [+0xf4]     the persisted marker
+7ffaae67: s32i.n a11,a7,0x0   ; = 0x80000003   "SYS: Detected CellCare mismatch"
+```
+
+all inside the boot System-Area evaluation function `0x7ffaac30`, which is used
+only as a **boot** state pointer (its address appears once, in the literal loaded
+at `0x7ffab54e`), plus `0x7ffaabd8` whose only two call sites (`0x7ffaacb8`,
+`0x7ffab007`) are in that same boot function.
+
+So the test at `0x7ffa8d35` asks **"did this boot come up from a PFAIL-marked
+System Area?"** — not "has SAM finished?".
+
+### 4.3 What the branch schedules — and why it is correct (PROVEN)
+
+`0x7ffa8de0` does not call `0x7ffa8428`. It schedules a sub-state-machine:
+
+```
+7ffa8de0: l32r a10,0x7ff83234   ; = 0x7ffa8910   sub-machine entry
+7ffa8de3: l32r a9,0x7ff83238    ; = 0x7ffa8d5d   resume state
 7ffa8de6: { addi a6,a2,24 ; j 0x7ffa8d45 }
+7ffa8d45: { movi a2,7 ; j 0x7ffa8c7a }           ; epilogue puts a10 in a5
 ```
 
-and `0x7ffa8910` does, in order:
+`0x7ffa8910`'s **state-0 entry is `0x7ffa8b7b`**, not `0x7ffa892b`
+(`0x7ffa8920: { l32r a11,… ; beqz a15,0x7ffa8b7b }` on the stored state pointer):
 
 ```
-7ffa8939: call8 0x7ffb5398        ; log
-7ffa893c: call8 0x7ffa3274
-7ffa8941: movi.n a10,0 ; call8 0x7ffa6834      ; mode := 0
-7ffa8944: call8 0x7ffa8428                     ; ENABLE PFAIL MONITORING (again)
+7ffa8b7b: movi.n a10,2 ; call8 0x7ffa6834          ; mode := 2
+7ffa8b80: l32r a10,0x7ff831dc  ; StrId 1200 "Waiting for CC.EN (FAST_RESTART) from PcieMgr"
+7ffa8b83: call8 0x7ffb5398
+7ffa8b86: j 0x7ffa8b6b -> { movi a2,13 ; j 0x7ffa89e3 }   ; yield, wait
 ```
 
-So: **during a shutdown, if SAM has not yet reported the clean marker, the
-System Manager re-arms PFAIL monitoring.**
+`0x7ffa8428` is reached only at `0x7ffa8944`, inside the state that runs when
+PcieMgr actually delivers the restart (`Received FAST_RESTART request from
+PcieMgr`, StrId 1201, `0x7ffa8936`). **The re-arm is part of bringing the
+controller back up after `CC.EN`, which is exactly where PFAIL monitoring should
+be re-enabled.**
 
-### 4.2 Why that hangs (INFERRED)
+The other two outcomes both go to the literal at `0x7ff82f40 = 0x7ffa8840`, the
+**post-shutdown power-off watcher**: it writes 1 to MMIO `0x82a60020`
+(`0x7ffa8850`–`0x7ffa8861`), then polls CCOUNT in 1 ms steps
+(`movi a14,1000; mull a13,[0x7ff979e0],a14`, `0x7ffa8868`) waiting for the rails
+to actually go, and if the saved hardware status says PFAIL it submits
+`0x7ff830f4 = 0x80000007` (`0x7ffa88c5`–`0x7ffa88dd`).
 
-`0x7ffa8428` unconditionally clears `pfailAsserted` (`s32i a3,a2,0x20` with
-`a3 = 0` at `0x7ffa8436`) and re-enables IRQ 16. Two outcomes, neither good:
+**Answer to the open question.** The predicate `[0x7ff8c7ec] != 0x80000002` is
+**normally true** — a drive that booted after a clean shutdown holds
+`0x80000001`, and a latched drive holds the forced `0x80000009`; only a drive
+that booted from a PFAIL-marked System Area holds `0x80000002`. But that no
+longer matters, because:
 
-- **PFAIL is still physically asserted.** Re-enabling a level-sensitive line
-  re-fires the ISR, which writes a **fresh** `t0 = CCOUNT` into `[obj+0x1c]`.
-  The 25 ms deadline **restarts from zero**. Do this in a loop — and the loop is
-  right there, the state machine returns to `0x7ffa8d45` and comes back through
-  `0x7ffa8cfd` — and the deadline never expires, marker 7 is never written, and
-  the monitor never gives up. It just watches until the rails go.
-- **PFAIL has de-asserted** (or the ISR already masked it and the line went
-  inactive). Then `pfailPending` is stale-cleared and the monitor sits in state
-  `0x7ffa8415` waiting for a `pfailPending` that will not come, while the
-  shutdown it was supposed to be supervising is unsupervised.
+- during a **real PFAIL** the branch is unreachable — `0x7ffa8d25` diverts to the
+  power-off watcher while the line is asserted;
+- on the **`CC.SHN`** path taking it is correct — the controller parks in
+  "Waiting for CC.EN" and re-arms PFAIL only when the host restarts it.
 
-Either way the supervisor is defeated by its own re-arm. The deadline is
-anchored to `[obj+0x1c]`, which only the ISR writes — so **the timeout is
-relative to the most recent PFAIL edge, not to the start of the shutdown.**
-That is the bug shape that matches "the PFAIL monitor thread is added again …
-a hang occurs during the shutdown process".
+**There is no mid-shutdown re-arm and no deadline restart. Defect 3 is
+withdrawn**; the shutdown path has two defects (§2.4 no admission control, §3 the
+PCIe "Do nothing"), not three.
 
-**Can the monitor itself hang?** Yes, independently of the above: stall point S3.
+### 4.4 The second monitor is real, and it is on PROC8 (PROVEN)
+
+`Admin_ShutdownPFailMonitor: PFail detected` (StrId 2914) is at PROC8
+`0x7ffb1bb6`. **It disassembles fine** — the earlier note that it fell in an
+image hole was wrong: `segparse.py` puts it inside the segment
+`0x7ffa0710–0x7ffbb064`, and `whichfunc.py --image PROC8_7ff80000 0x7ffb1bb6`
+places it at `0x7ffb1b60+0x56`. (`unpack.py` already lays segments at their true
+load addresses; the only holes are between segments, and this is not in one.)
+
+The whole function:
+
+```
+7ffb1b60: entry a1,0x20
+7ffb1b63: l32r a9,0x7ffa07c4        ; = 0x82a60140  status
+7ffb1b66: { l32r a8,0x7ffa07c8 ; movi a10,4095 }   ; = 0x82a60148  enable, mask 0xFFF
+7ffb1b6e: l32i.n a9,a9,0x0          ; <-- re-entry point for the poll loop
+7ffb1b70: l32i.n a8,a8,0x0
+7ffb1b72: xor a8,a8,a10
+7ffb1b75: { movi a10,1 ; bnone a8,a9,0x7ffb1b80 }  ; a10 = PFAIL asserted?
+7ffb1b80: movi.n a10,0
+7ffb1b82: l32r a9,0x7ffa1db4 ; l32i a9,a9,0xb0     ; [0x7ff95678] shutdowns in flight
+7ffb1b88: bnez.n a10,0x7ffb1b98
+7ffb1b8a: { movi a2,2 ; beqz a9,0x7ffb1bc3 }       ; no PFAIL, nothing in flight -> exit
+7ffb1b92: l32r a13,0x7ffa1db8       ; = 0x7ffb1b6e  next state
+7ffb1b95: j 0x7ffb1bcb              ; return 2 -> poll again, FOREVER
+7ffb1b98: l32r a10,0x7ffa09a0       ; -> 0x7ff88018  global shutdown mode
+7ffb1b9b: beqz.n a9,0x7ffb1bc3
+7ffb1b9f: beqi a11,3,0x7ffb1bc3     ; already PFail mode -> nothing to do
+7ffb1bae: { s32i a8,a10,0x0 ; movi a14,1 }         ; [0x7ff88018] = 3  (PFail)
+7ffb1bb6: { l32r a10,0x7ffa1dbc ; ... }            ; StrId 2914
+7ffb1bbe: s32i.n a12,a13,0x0        ; [0x7ff918a8]++  detection counter
+7ffb1bc0: call8 0x7ffb45a8          ; emit the log record
+7ffb1bc3: l32r a8,0x7ffa1dc0 ; movi.n a2,0 ; s32i a2,a8,0x1c0   ; [0x7ff95688] = 0
+7ffb1bcb: mov.n a3,a13 ; retw.n     ; a2 = return code, a3 = next state
+```
+
+It is **spawned from the admin inter-processor message receiver**
+(`Admin_MessageCommandReceiverIBQ`), once per shutdown, guarded so it cannot be
+armed twice:
+
+```
+7ffb0561: l32r a10,->0x7ff88018 ; movi a9,3 ; s32i.n a9,a10,0x0   ; mode = 3 (PFail Shutdown)
+7ffb0568: StrId 2054 "Admin_MessageCommandReceiverIBQ PFail Shutdown"
+7ffb0574: [0x7ff88018] = 2                                        ; mode = 2 (normal)
+7ffb0586: l32i a13,a3,0x84 ; bnez.n a13,0x7ffb059c                ; already armed -> skip
+7ffb058b: l32r a10,0x7ffa1bb0   ; -> 0x7ff955f0   task object
+7ffb058e: l32r a11,0x7ffa1bb4   ; -> 0x7ffb1b60   task entry
+7ffb0591: { s32i a5,a3,0x84 ; … } ; call8 0x7ffb9768               ; schedule it
+```
+
+Answers to the four questions asked of it:
+
+- **What it monitors.** The raw PFAIL hardware register pair
+  `[0x82a60140]`/`[0x82a60148]`, **by polling**, with a `0xFFF` mask — narrower
+  than PROC0's and PROC6's `~0` tests, and matching the `0xFFF` written by the
+  enable sequence at PROC0 `0x7ffa8452`. It is gated on a shutdowns-in-flight
+  count at `0x7ff95678`, decremented at PROC8 `0x7ffb1e8a` in the
+  `Admin_SendShutdownCompletion` state machine (`0x7ffb1bd0`).
+- **What it does on timeout.** *There is no timeout.* No CCOUNT read, no deadline
+  field, no timeout string anywhere in the function. Unlike PROC0's 25 ms
+  supervisor this one has no clock at all.
+- **What it does on detection.** Upgrades the global shutdown mode
+  `[0x7ff88018]` from 2 (normal) to **3 (PFail)**, so the admin manager takes the
+  abbreviated PFail path — the PROC8 counterpart of PROC6's `0x7ffbbc86`
+  downgrade. Then it logs, bumps `[0x7ff918a8]`, and **terminates itself**
+  (`a2 = 0`). Because `[ctx+0x84]` is still set it is never re-armed for that
+  shutdown: it is strictly **one-shot**.
+- **Can it hang.** Yes, in the "spins forever" sense (PROVEN loop; INFERRED that
+  it is reachable). While `[0x7ff95678] != 0` and PFAIL is not asserted it
+  returns 2 with next state `0x7ffb1b6e` and re-polls with no bound. `0x7ff95678`
+  is BSS and I can find **no code in either PROC8 image that increments it** —
+  the only writer is the `addi.n a13,a13,-1` decrement at `0x7ffb1e8a` (checked
+  by an effective-address sweep over both `PROC8_7ff80000` and `PROC8_30000000`,
+  and by an opcode sweep for every `s32i …,0x1b0`). If it is ever decremented
+  from zero it wraps to `0xFFFFFFFF` and the monitor becomes a permanent poller
+  on PROC8. I could not prove that path is taken, so: **PROVEN that the loop is
+  unbounded, INFERRED that the guard can never clear it, SPECULATIVE that this is
+  the "hang … during the shutdown process".**
+
+**How it interacts with PROC0's monitor: it does not.** Different processors,
+disjoint state, no shared object, no lock. PROC0 owns the interrupt, the 25 ms
+CCOUNT deadline and the breadcrumb markers; PROC8 owns only the mode byte
+`0x7ff88018`. They are not racing over one shutdown, so this is not the
+"two monitors racing" defect the brief hypothesised. The interesting asymmetry is
+the opposite one: **PROC0's PFAIL interrupt is one-shot and self-masking
+(§1.2), while PROC8's is a poll of the raw register.** PROC8 can therefore see a
+PFAIL edge that PROC0's masked interrupt never delivers — it is an accidental
+backstop for the lost-interrupt defect, but only while an admin shutdown is in
+flight, and only once.
+
+### 4.5 Where PROC0's monitor really can hang
+
+`SYS: Enable PFAIL monitoring` (PROC0 `0x7ffa8428`) still has exactly two call
+sites, `0x7ffa8944` and `0x7ffab917` (verified with `xref.py`). `0x7ffab917` is
+boot-time init. `0x7ffa8944` is the FAST_RESTART completion, per §4.3 — not a
+mid-shutdown path.
+
+**Can PROC0's monitor itself hang?** Yes, and this part stands: stall point S3.
 The drain loop at `0x7ffa83b9` retries `0x7ffa3bd8` forever while `[a5+8]` is
 non-zero and yields to a state that re-enters the same loop when it is zero. If
 the record free list is empty — and §3.2 gives a reason for it to be empty, a
 link-down storm — the monitor never writes marker 6 and never advances to the
 deadline watch. (PROVEN loop structure; INFERRED that the pool can actually be
 exhausted.)
-
-**Undetermined:** whether the re-arm at `0x7ffa8de0` is reached in the common
-field case, because the branch is guarded by
-`[0x7ff8c7ec] != 0x80000002`, and I could not establish the timing of when SAM
-publishes that word relative to when the System Manager polls it. If SAM
-publishes early, the re-arm is rare; if it publishes only at `0x7ffbba61` (the
-same instruction that writes the marker), the re-arm fires on **every** PFAIL
-shutdown until the save completes. The second reading is the natural one — the
-value read is literally the marker — but I am not calling it proven. A crash dump
-showing repeated `SYS: Enable PFAIL monitoring` (StrId 1211) lines interleaved
-with a single `SYS: PFAIL is detected` (StrId 1209) would settle it.
 
 ---
 
@@ -610,8 +782,10 @@ What breaks it anyway:
   sees a power-fail assertion, **downgrades the marker to `0x80000002`** and
   takes the PFAIL branches. A PSU that droops while the orderly shutdown is
   running converts it into a PFAIL shutdown mid-flight.
-- S8 (§4) applies to the `CC.SHN` path too — it is the same state machine.
-- S1/S2 (§1.3) are unconditional exits that do not care how the shutdown started.
+- S1/S2 (§1.3) are exits that do not care how the shutdown started.
+- S10 (§4.4) is on the `CC.SHN` path too: PROC8 arms
+  `Admin_ShutdownPFailMonitor` for a **normal** admin shutdown as well as a
+  PFail one (`0x7ffb0574` sets mode 2 and falls into the same arming code).
 
 ### 5.2 Does quiescing I/O and waiting before power removal help?
 
@@ -646,13 +820,13 @@ Saying otherwise would be wrong, and this feeds a keep-or-bin decision, so:
   (StrId 903, PROC9 `0x7ffad0e8`) is for. Under normal conditions there is no
   concurrent PFail, so the race does not arm. But a UPS that fails over
   imperfectly, or a rail that sags during the shutdown, arms it precisely then.
-- It **does not** avoid §4. The re-arm is on the shared path.
-- It **does not** avoid S1/S2. If the global gate at `0x7ff8c7c4` is zero — and
-  a degraded power-backup capacitor is a plausible reason for that
-  (`Admin_isPowerBackupFailed`) — PFAIL handling is a no-op regardless of what
-  the host does.
-- Nothing the host can send changes the 25 ms constant, the ordering on PROC9,
-  or the re-arm. There is no vendor-unique command in the set catalogued in
+- It **does** avoid the withdrawn S8 — because S8 was not a defect. See §4.
+- It **does not** avoid S1/S2. If `0x7ff8c7c4` is zero the PFAIL monitor logs and
+  exits without initiating anything; per §1.3 that flag is set only by a
+  type-3 shutdown request, so a brownout that arrives with no host shutdown in
+  flight is unsupervised no matter what the host does.
+- Nothing the host can send changes the 25 ms constant or the ordering on PROC9.
+  There is no vendor-unique command in the set catalogued in
   `docs/sn200-firmware-re.md` that tunes `[obj+0x30]`; it is written from the
   literal at `0x7ffa839e` on every detect, so even if the field were writable it
   would be overwritten.
@@ -669,14 +843,42 @@ partial.
 
 Stated explicitly, because a gap is more useful than a guess here.
 
-1. **The GC deadlock during shutdown** (WD's named defect). I found the GC
-   shutdown state machine (PROC11 `0x7ffa81b0`–`0x7ffa85c0`), its PFail
-   early-exit (`0x7ffa81ea`) and its wait state (`0x7ffa81f4`,
-   `GC> Waiting to disable GC due to shutdown ...`). I did **not** find the lock
-   or the circular wait. It is very likely in the blockset/V2P interaction with
-   PROC6 BlockMgr, but I will not name a mechanism I have not read.
+1. **The GC deadlock during shutdown** (WD's named defect). **Still not found**,
+   but now localised to specific words rather than a function range.
+
+   The GC shutdown machine is PROC11 `0x7ffa8070` (`entry`, dispatch `jx a9` on
+   `[a2+0x10]`), context base `a4 = [0x7ffa0994] = 0x7ff80e44`. Its wait
+   predicates are PROVEN:
+
+   ```
+   7ffa8085: l32i a8,a4,0x28c    ; -> 0x7ff810d0   outstanding work A
+   7ffa8088: { l32i a9,a4,0x168 ; beqz a8,0x7ffa81b0 }   ; a9 = mode
+   7ffa8090: { … ; bnei a9,5,0x7ffa8158 }                ; mode != 5 -> yield
+   7ffa8158: { l32r a3,0x7ffa0d20 ; movi a2,2 }          ; = 0x7ffa8085, retry
+   7ffa81d2: l32i a10,a4,0x294   ; -> 0x7ff810d8   outstanding work B
+   ```
+
+   So GC leaves the wait only when both counters reach zero **or** the mode
+   `[0x7ff80fac]` becomes 5 (the PFail short-circuit that logs StrId 554 at
+   `0x7ffa81ea`). The only decrements of either counter are
+   `0x7ffa2ecb`/`0x7ffa2ecd` (`0x7ff810d0`) and `0x7ffa4e7e`/`0x7ffa4e80`
+   (`0x7ff810d8`), both inside completion handlers — i.e. they drain only when
+   the media path retires work. (`0x7ffa4db5` and `0x7ffa2ede` also write them,
+   but as copies, not adjustments.)
+   That is the shape of the circular wait (GC waits on media
+   completions; the media managers are themselves shutting down), but I have not
+   traced a completion path back into a component that is itself blocked on GC,
+   so **I am not calling it proven.**
+
+   One earlier suspicion is ruled out: `[a4+0x190]` (`0x7ff80fd4`), which also
+   gates the wait at `0x7ffa817b`, has **no writer anywhere in PROC11** — an
+   opcode sweep for every `s32i …,0x190` finds one site (`0x7ffa31a0`) and its
+   base is `0x7ff80900`, a different object. `[a4+0x190]` is permanently zero and
+   is not the stall.
+
    *Would settle it:* the pair of tasks blocked in a dump taken while latched, or
-   tracing the `0x7ffbe5f0` / `0x7ffbf2a8` callees in PROC6's BlockMgr states.
+   tracing who increments `0x7ff810d0` / `0x7ff810d8` and which processor retires
+   those items during a shutdown.
 
 2. **"System Manager never sending the shutdown message"** (WD). PROC0
    `SYS: ShutdownReq --> SAM` (`0x7ffa8c2b`) is guarded by the drain loops at

@@ -60,24 +60,101 @@ in-kernel equivalent of the "starve the AER" `vfio-pci` trick, but keeping
 ## What was built
 
 `tools/nvme-noreset/` — an out-of-tree rebuild of **`nvme-core.ko` only**,
-DKMS-packaged, adding two opt-in PCI-scoped module parameters:
+DKMS-packaged, adding three opt-in PCI-scoped module parameters:
 
 | Parameter | Default | Effect for matching devices |
 |---|---|---|
 | `nvme_core.persist_err_noreset_ids` | `""` | Log rate-limited instead of calling `nvme_reset_ctrl()` |
 | `nvme_core.zero_discard_ids` | `""` | `nvme_config_discard()` sets `max_hw_discard_sectors = 0` at namespace setup |
+| `nvme_core.max_admin_xfer_ids` | `""` | The **admin queue only** gets `max_hw_sectors`/`max_segments` raised to 8192 sectors (4 MiB) in `nvme_set_ctrl_limits()` |
 
 Entries are exact `vendor:device` (`1c58:0023`) or exact PCI address
 (`0000:b2:00.0`). **There is no wildcard**, deliberately: this host has seven
 Intel SSDPE2KX020T8 carrying live ceph OSDs on the same driver, and a
-mis-scoped build would put the storage cluster at risk. Both parameters are
-`0444`, so they cannot be changed at runtime and the matcher cannot race a
+mis-scoped build would put the storage cluster at risk. All three parameters
+are `0444`, so they cannot be changed at runtime and the matcher cannot race a
 sysfs write.
 
-The delta is small on purpose — `patches/nvme-noreset.patch` is two hunks in
+The delta is small on purpose — `patches/nvme-noreset.patch` is three hunks in
 `core.c` plus one `#include` and one init call; everything else lives in a new
 self-contained `src/noreset.c`. This is what makes re-vendoring for another
 kernel version cheap.
+
+### Where the admin transfer ceiling actually lives, and why it's raisable here
+
+The blocker: a 3.2 MiB single-shot vendor admin read fails the host-side
+ioctl with `EINVAL` above 128 KiB (256 sectors / 32 pages), even though `mdts`
+reports 0 (unbounded) and no `nvme`/`nvme_core` module parameter changes it.
+
+Traced through the vendored 7.0.2-6-pve source:
+
+1. `ctrl->max_hw_sectors` is first set in `nvme_pci_alloc_dev()`
+   (`drivers/nvme/host/pci.c`, **`nvme.ko`, not vendored here**):
+   `min(NVME_MAX_KB_SZ << 1, dma_opt_mapping_size(dev) >> 9)`.
+2. `dma_opt_mapping_size()` is an IOMMU **optimal**-mapping-size hint
+   (`iommu_dma_opt_mapping_size()` → `iova_rcache_range()` = `32 * PAGE_SIZE`
+   on a 4K-page host = 128 KiB), not a hardware maximum. That 32-page number
+   is exactly the observed cliff.
+3. `nvme_init_identify()` in `core.c` (vendored, ours to patch) combines this
+   with `mdts` via `min_not_zero(ctrl->max_hw_sectors, mdts_derived)`. With
+   `mdts == 0`, `mdts_derived = UINT_MAX`, so this combination is a no-op —
+   it can only ever lower the value, never raise it.
+4. That same function then commits the result into `ctrl->admin_q`'s block
+   layer queue limits via `nvme_set_ctrl_limits(ctrl, &lim, true)` — **this
+   commit point is nvme-core's own code**, and it is what
+   `nvme_map_user_request()` → `blk_rq_map_user_io()` checks the ioctl's
+   `bufflen` against, producing the observed `EINVAL`.
+
+So although the *value* 128 KiB originates in `nvme.ko` (out of scope — a
+different module entirely, and touching it forfeits the CRC guarantee), the
+*commit* of that value onto the admin queue happens inside `nvme-core.c`,
+in a function this module already patches. `max_admin_xfer_ids` overrides the
+commit for allow-listed devices, `is_admin == true` only:
+
+```c
+if (is_admin) {
+	u32 admin_sectors = nvme_noreset_max_admin_sectors(ctrl->dev);
+	if (admin_sectors) {
+		lim->max_hw_sectors = admin_sectors;
+		lim->max_segments = min_t(u32, USHRT_MAX,
+			min_not_zero(admin_sectors /
+				(NVME_CTRL_PAGE_SIZE >> SECTOR_SHIFT) + 1,
+				ctrl->max_segments));
+	}
+}
+```
+
+Two things keep this safe:
+
+- **`ctrl->max_hw_sectors` itself is never touched**, only the local
+  `queue_limits` struct used for the admin queue's own commit. Namespace disk
+  queues call the same function with `is_admin = false` and are byte-for-byte
+  unaffected — this is genuinely admin-queue-scoped, not a global change.
+- **`lim->max_segments` is still hard-clamped against `ctrl->max_segments`**
+  (`NVME_MAX_SEGS = 128` in the vendored `pci.c`, `nvme.ko`'s own fixed-size
+  `struct scatterlist` allocation). The override can raise the *byte* ceiling
+  arbitrarily, but it can never ask the transport driver to build more DMA
+  segments than the memory it already allocated for that purpose — so this
+  cannot overrun anything in `nvme.ko`, even though `nvme.ko` is completely
+  unmodified and unaware of this parameter.
+
+8192 sectors (4 MiB) was chosen to comfortably cover the 3.2 MiB dump with
+headroom, while staying well inside `NVME_MAX_KB_SZ << 1` (16 MiB) —
+`nvme_pci.c`'s own hard ceiling before the `dma_opt_mapping_size()` clamp —
+so the chosen value has never been rejected by anything upstream of
+nvme-core.
+
+**The remaining ceiling — segments, not bytes.** Raising the byte limit does
+not by itself guarantee 3.2 MiB lands in one DMA transfer: a userspace buffer
+backed by scattered 4 KiB anonymous pages can still exhaust the 128-segment
+cap before the byte cap. `blk_rq_map_user_io()` coalesces *physically
+contiguous* page runs into one segment, so a buffer backed by a small number
+of large contiguous allocations — 2 MiB hugetlbfs/`MAP_HUGETLB` pages
+coalesce a 3.2 MiB buffer into as few as 2 segments — reaches the ceiling
+comfortably; an ordinary `malloc()` may not. This is the honest remaining
+constraint, not fixable from nvme-core: it is a property of the userspace
+buffer's physical layout and the transport's fixed segment count, not
+something a module parameter can override further.
 
 The in-driver discard suppression is more robust than a udev rule because it
 runs at namespace setup, before the block device exists, so it cannot lose a
@@ -98,7 +175,7 @@ Built in a Debian 13 / amd64 container against the real
   `nvme-fabrics`, `nvme-tcp`, `nvme-rdma`, `nvme-fc` load against the
   replacement unchanged. `check-crc.sh` performs this comparison and
   `install.sh` aborts before `dkms install` if it ever fails.
-- Both new parameters appear in `modinfo`.
+- All three parameters appear in `modinfo`.
 
 ### The vendoring trap this exposed
 

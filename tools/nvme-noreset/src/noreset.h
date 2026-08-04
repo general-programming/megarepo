@@ -19,4 +19,10 @@ bool nvme_noreset_suppress_reset(struct device *dev);
 /* True if @dev is on the zero_discard_ids allow-list. */
 bool nvme_noreset_zero_discard(struct device *dev);
 
+/*
+ * Admin-queue-only max_hw_sectors override, in 512B sectors, for @dev on the
+ * max_admin_xfer_ids allow-list. 0 means "no override" (stock behaviour).
+ */
+u32 nvme_noreset_max_admin_sectors(struct device *dev);
+
 #endif /* _NVME_NORESET_H */

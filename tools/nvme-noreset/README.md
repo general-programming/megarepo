@@ -2,7 +2,8 @@
 
 A modified `nvme-core` kernel module that can be told, **per PCI device**, to
 stop resetting a controller that raises the NVMe "persistent internal error"
-asynchronous event — and to refuse to advertise DISCARD for that device.
+asynchronous event, to refuse to advertise DISCARD for that device, and to
+raise the admin queue's transfer ceiling for a single large vendor command.
 
 Built for the HGST/WDC Ultrastar SN200 (`HUSMR7676BDP3Y1`, PCI `1c58:0023`)
 stuck in firmware "Post Crash Startup" diagnostic mode. See
@@ -21,7 +22,7 @@ on the next boot — every OSD on it goes down.
 
 Two things reduce that risk to near zero, and both are enforced by the tooling:
 
-1. **Default behaviour is byte-identical to stock.** Both knobs are empty
+1. **Default behaviour is byte-identical to stock.** All three knobs are empty
    allow-lists. With no module parameters, no code path changes for any device.
    There is no wildcard: an entry must be an exact `vendor:device` or an exact
    PCI address, so it is not possible to accidentally match all NVMe.
@@ -39,24 +40,55 @@ Proxmox host.** Use it from a diagnostics boot. Reasoning in
 
 ## What it changes
 
-Two hunks in `drivers/nvme/host/core.c` (`patches/nvme-noreset.patch`), plus a
-new self-contained `src/noreset.c` holding the parameters and the matcher.
+Three hunks in `drivers/nvme/host/core.c` (`patches/nvme-noreset.patch`), plus
+a new self-contained `src/noreset.c` holding the parameters and the matcher.
 
 | Parameter | Default | Effect |
 |---|---|---|
 | `nvme_core.persist_err_noreset_ids` | `""` | For matching devices, an Error-class AEN with subtype `03h` logs a rate-limited warning instead of calling `nvme_reset_ctrl()`. |
 | `nvme_core.zero_discard_ids` | `""` | For matching devices, `nvme_config_discard()` sets `max_hw_discard_sectors = 0` at namespace setup, so the block layer never issues a DSM/deallocate. |
+| `nvme_core.max_admin_xfer_ids` | `""` | For matching devices, the **admin queue only** gets `max_hw_sectors`/`max_segments` raised to 8192 sectors (4 MiB), so one large vendor admin command doesn't need chunking. Namespace I/O queues are untouched. |
 
-Both take a comma-separated list; each entry is either `vendor:device`
-(`1c58:0023`) or a PCI address (`0000:b2:00.0`, or `b2:00.0`). Both are
+All three take a comma-separated list; each entry is either `vendor:device`
+(`1c58:0023`) or a PCI address (`0000:b2:00.0`, or `b2:00.0`). All are
 `0444` — set them at modprobe or on the kernel command line, not at runtime,
 so a concurrent sysfs write can never race the matcher.
 
 A marker line is printed by `nvme_core_init()` at every load:
 
 ```
-nvme-noreset: patched nvme-core active (persist_err_noreset_ids="1c58:0023" zero_discard_ids="1c58:0023")
+nvme-noreset: patched nvme-core active (persist_err_noreset_ids="1c58:0023" zero_discard_ids="1c58:0023" max_admin_xfer_ids="1c58:0023")
 ```
+
+### Where the 128 KiB admin ceiling actually comes from
+
+`ctrl->max_hw_sectors` starts life in `nvme_pci.c` (`nvme.ko`, not part of
+this module): `min(NVME_MAX_KB_SZ << 1, dma_opt_mapping_size(dev) >> 9)`.
+`dma_opt_mapping_size()` is an IOMMU **optimal**, not maximum, mapping-size
+hint (`iova_rcache_range()`, `32 * PAGE_SIZE` = 128 KiB on a 4K-page host) —
+that's the real origin of the 256-sector / 32-page cliff. On this hardware
+`mdts` reports 0 (unbounded), so nvme-core's own mdts combination in
+`nvme_init_identify()` (`min_not_zero(ctrl->max_hw_sectors, UINT_MAX)`) never
+lowers that 128 KiB value, but it never raises it either — nvme-core just
+commits whatever `nvme_pci.c` handed it into `ctrl->admin_q`'s queue limits,
+and that commit is what the failing ioctl's `blk_rq_map_user_io()` checks
+against.
+
+That commit point (`nvme_set_ctrl_limits()`, called with `is_admin = true` for
+the admin queue only) *is* in nvme-core, so `max_admin_xfer_ids` overrides it
+there — for the admin queue only, never touching `ctrl->max_hw_sectors`
+itself, so namespace disk queues are unaffected. The override is still hard
+-clamped against `ctrl->max_segments` (the low-level driver's real, fixed-size
+scatterlist allocation, `NVME_MAX_SEGS`), so it can never ask the transport to
+build more segments than it has memory for — the same safety property the
+existing two parameters have.
+
+**What still bounds a real transfer even with this set:** the number of DMA
+segments the buffer decomposes into. A userspace buffer backed by scattered
+4 KiB pages can still hit the segment cap before the byte-size cap. Back the
+destination buffer with a few large physically-contiguous chunks — hugetlbfs
+or an aligned `mmap(..., MAP_HUGETLB, ...)` of 2 MiB pages coalesces a 3.2 MiB
+buffer into as few as 2 segments — to actually reach it in one command.
 
 ### Why suppressing the reset also stops the AEN flood
 
@@ -137,7 +169,7 @@ whose sources it was not vendored from. After every kernel upgrade you re-run
 Nothing changes until a parameter is set *and* the module is reloaded.
 
 ```sh
-echo 'options nvme_core persist_err_noreset_ids=1c58:0023 zero_discard_ids=1c58:0023' \
+echo 'options nvme_core persist_err_noreset_ids=1c58:0023 zero_discard_ids=1c58:0023 max_admin_xfer_ids=1c58:0023' \
   | sudo tee /etc/modprobe.d/nvme-noreset.conf
 sudo update-initramfs -u -k all
 sudo reboot
@@ -153,7 +185,7 @@ If no NVMe is in use at all (diagnostics boot), you can skip the reboot:
 
 ```sh
 sudo rmmod nvme nvme_core
-sudo modprobe nvme_core persist_err_noreset_ids=1c58:0023 zero_discard_ids=1c58:0023
+sudo modprobe nvme_core persist_err_noreset_ids=1c58:0023 zero_discard_ids=1c58:0023 max_admin_xfer_ids=1c58:0023
 sudo modprobe nvme
 ```
 
@@ -172,14 +204,22 @@ dmesg | grep 'nvme-noreset: patched nvme-core active'
 # 3. the parameters took
 cat /sys/module/nvme_core/parameters/persist_err_noreset_ids
 cat /sys/module/nvme_core/parameters/zero_discard_ids
+cat /sys/module/nvme_core/parameters/max_admin_xfer_ids
 
 # 4. discard really is off for the target device only
 lsblk -o NAME,MODEL,DISC-MAX            # 0B on the SN200, unchanged elsewhere
 
-# 5. the reset loop is gone -- one line, not one per 5s
+# 5. the admin ceiling took: there is no sysfs file for the admin queue's own
+# max_hw_sectors, so the proof is functional -- a single admin-passthru read
+# above 128 KiB (data-len up to 4 MiB) that previously failed the ioctl with
+# EINVAL now succeeds:
+nvme admin-passthru /dev/nvme0 --opcode=0xC6 --data-len=3355443 --read \
+  --namespace-id=0 -b > dump.bin   # replace opcode/cdw* with the real VUC
+
+# 6. the reset loop is gone -- one line, not one per 5s
 dmesg -w | grep -E 'nvme-noreset|persistent internal error'
 
-# 6. the other drives are untouched
+# 7. the other drives are untouched
 nvme list                               # all seven Intel NS still present
 ceph -s                                 # all OSDs up
 ```

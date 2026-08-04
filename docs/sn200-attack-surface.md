@@ -532,9 +532,16 @@ No memcpy, no host length, no host offset on that arm.
 
 **Newly documented (PROVEN):** the `0xC6`/`0x20` "Get Drive Log" sub-dispatch at
 `0x30030d14` accepts sub-commands **0–8**, not 0–6 as previously recorded. Sub 7
-→ `0x30030b18`, sub 8 → `0x30030ae7`; both route into the same `.CDH`-magic
-reader and neither calls an erase primitive. They are **unidentified** and are
-not recommended.
+→ `0x30030b18`, sub 8 → `0x30030ae7`. **Corrected:** they do *not* route into
+the `.CDH`-magic reader and touch no crash section. Each allocates a job
+(`0x30022504`, retry-looping on failure), fills it with `type = 7` and
+`len = 1122` 64-byte units (= 71808 = `0x11880`, the size both arms return),
+spawns a worker coroutine — `0x7ffa972c` for sub 7, `0x7ffa43c0` for sub 8 —
+and DMAs the 71808-byte result. Neither calls an erase primitive, but they are
+the only arms that *spawn a producer* rather than pointing at an existing
+section, and `0x7ffa43c0` mutates a DRAM counter table at
+`0x7ff879f8 + (idx<<4) + 0x1f0`. Still **unidentified**; do not send. Full
+per-arm breakdown in `sn200-crash-dump-retrieval.md` §1.2.4.
 
 **`0xCA`'s handler dispatch IS table-driven — and the bound is correct. PROVEN.**
 This was the single most promising structural lead in the brief, and it is
