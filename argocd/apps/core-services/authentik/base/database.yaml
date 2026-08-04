@@ -21,7 +21,7 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    storageClass: local-path
+    storageClass: ceph-rbd-xfs
     size: 8Gi
   bootstrap:
     initdb:

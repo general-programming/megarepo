@@ -63,8 +63,8 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    storageClass: local-path
-    size: 8Gi
+    storageClass: ceph-rbd-xfs
+    size: 1Gi
   bootstrap:
     initdb:
       database: matrix_mas

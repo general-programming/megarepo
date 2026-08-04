@@ -26,8 +26,8 @@ spec:
         - ReadWriteOnce
       resources:
         requests:
-          storage: 16Gi
-      storageClassName: local-path
+          storage: 8Gi
+      storageClassName: ceph-rbd-xfs
     initdb:
       database: sentry
       owner: sentry
