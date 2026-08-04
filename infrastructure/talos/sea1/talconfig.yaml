@@ -355,14 +355,29 @@ nodes:
     # partitioning + mkfs.xfs + a 512 MiB write + remount + md5 verify all ran
     # with ZERO controller resets. mkfs took 1s instead of wedging the drive.
     #
-    # The size guard is load-bearing: without it the selector matches all eight
-    # NVMe and Talos would format a ceph OSD. disk.size is a uint -- the literal
-    # needs the u suffix or talhelper rejects the CEL.
+    # MOVED OFF THE SN200 2026-08-04. This volume now lives on the second SATA
+    # SSD (sdb), not the 7.68T HGST.
+    #
+    # The SN200 latched again and reset-looped every ~5s ("resetting controller
+    # due to persistent internal error"), which took the whole node NotReady --
+    # container runtime down, 6 OSDs down, 31% of objects degraded. There is no
+    # proven way to read data back off a latched SN200, so it is not a place to
+    # put a volume at all, discard suppression notwithstanding.
+    #
+    # Pinned by WWID, matching the install-disk convention above: behind
+    # megaraid_sas both SATA SSDs report an EMPTY serial, and sda/sdb ordering
+    # is not stable across boots. sdb is the same 1.9T SDLF1CRR-019T-1H model as
+    # the system disk, so model alone does not discriminate -- the WWID does.
+    #
+    # sdb carried hv-2's old Proxmox install (GPT + EFI + a 1.9T ZFS rpool,
+    # label 0927ff21a4ca1c70). hv-2 no longer exists; the pool must be wiped
+    # before Talos will provision here, and Rook cannot touch it because its
+    # deviceFilter is ^nvme[0-6]n1$.
     userVolumes:
       - name: data
         provisioning:
           diskSelector:
-            match: disk.transport == "nvme" && disk.size > 5000000000000u
+            match: disk.wwid == "naa.50011731008dd9ec"
           minSize: 500GiB
         filesystem:
           type: xfs
