@@ -190,6 +190,16 @@ cannot emit anything but Identify, `0xC6` reads and `0xFF`/`0x0004`.
 > `/sys/class/nvme` shows only the Intel OSD drives and reads as a confident
 > clean negative. It is wrong. Enumerate from wherever the drive is *attached*.
 
+> ⚠ **A latched SN200 can take the whole NODE down, and `kubectl` will not show
+> it.** If a Talos userVolume selector matches the drive, the latch makes it
+> match *nothing*, Talos never finishes `startAllServices`, and the container
+> runtime degrades into `failed to reserve sandbox name ... is reserved for
+> <id>` — while the node still reports `Ready`. Signature:
+> `talosctl get machinestatus` → `stage: booting`, `READY: true`, on a node up
+> for hours. Never point a userVolume at an SN200. Full chain, plus the CNI
+> IPAM flock convoy that makes reboot-recovery fail, in `docs/sn200-runbook.md`
+> §0b.
+
 > ⚠ **On a reset-looping controller every command fails with `EAGAIN`, which is
 > not the same as an answer.** `state=resetting` in sysfs means nothing was
 > asked. Never report an unreadable Identify as "capacity unallocated" — that
