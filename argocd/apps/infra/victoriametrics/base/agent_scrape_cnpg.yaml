@@ -1,0 +1,33 @@
+---
+# CloudNativePG's instance manager always exposes /metrics on the "metrics"
+# port (9187) -- that's independent of Cluster.spec.monitoring.enablePodMonitor,
+# which only controls whether CNPG itself creates a Prometheus-operator
+# PodMonitor CR. Those CRDs aren't installed in this cluster (see the
+# commented-out nodeExporter ServiceMonitor/PrometheusRule in
+# monitoring/base/kustomization.yaml), so scrape via a VM-native VMPodScrape
+# instead, keyed on the cnpg.io/cluster label CNPG sets on every instance pod.
+#
+# One scrape covers every CNPG Cluster in every namespace/dc -- primaries and
+# replicas alike, both roles carry the label.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMPodScrape
+metadata:
+  name: cnpg
+  namespace: victoriametrics
+spec:
+  podMetricsEndpoints:
+    - port: metrics
+      path: /metrics
+      relabelConfigs:
+        - sourceLabels: [__meta_kubernetes_pod_label_cnpg_io_cluster]
+          targetLabel: cnpg_cluster
+        - sourceLabels: [__meta_kubernetes_pod_label_cnpg_io_instanceRole]
+          targetLabel: cnpg_role
+        - sourceLabels: [__meta_kubernetes_namespace]
+          targetLabel: namespace
+  namespaceSelector:
+    any: true
+  selector:
+    matchExpressions:
+      - key: cnpg.io/cluster
+        operator: Exists

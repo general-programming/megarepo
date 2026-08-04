@@ -9,6 +9,7 @@ resources:
   - agent_scrape_kubelet.yaml
   - agent_scrape_node_exporter.yaml
   - agent_scrape_metallb.yaml
+  - agent_scrape_cnpg.yaml
   - alert_rules/
 images:
 - name: manager
