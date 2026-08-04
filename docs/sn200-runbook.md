@@ -269,9 +269,22 @@ Is there data on this drive you want?
           Do not run `nvme wdc get-crash-dump` (it fires 0x0503 itself
           on a successful read).
           A latched drive left powered DOWN preserves every option.
-          Your only non-destructive route is the UART/SBL procedure —
-          see docs/sn200-data-recovery.md. It has never been run.
+          There is no in-situ recovery. Decide between a recovery lab
+          and writing the data off — see below.
 ```
+
+**The UART/SBL route is not a real option for us, and the missing pinout was
+never the reason.** These drives sit in Dell hot-swap caddies that enclose them
+completely and have no cable exit, in a server, in a colo. A perfect pinout still
+buys a procedure that needs the drive pulled, on a bench, soldered to
+sub-millimetre pads through a level shifter, and kept wired for the whole read.
+Once you are at "pull it and bench it" you are already at the logistics of
+shipping it to a lab that has a fixture and PC-3000 — same cost, better tooling.
+So if the data genuinely matters and it is not the PFCL-only case above, the
+honest choice is **a recovery service, or accept the loss** — and the real
+lesson is upstream, in §0: do not let an SN200 hold the last copy.
+`docs/sn200-data-recovery.md` stays as the reference for what the boot path
+does, not as a plan.
 
 **`0x0603` was never part of the wipe, and `0x0503` never needed it.** The old
 "send `0x0603` then `0x0503`" sequence has been traced to the instruction:

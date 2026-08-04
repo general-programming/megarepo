@@ -16,6 +16,35 @@ entry), **INFERRED** (consistent with the evidence, one step of reasoning), or
 
 ---
 
+## 0-. PRACTICALITY VERDICT — read before spending any more effort here
+
+**This procedure is not deployable in our environment, and the pinout was never
+the real blocker.** Decided 2026-08-04.
+
+These drives live in Dell hot-swap caddies, in a server, in a colo. The caddy
+encloses the drive completely and has no cable exit. So even a *perfect* pinout
+buys a procedure that requires: pulling the drive, getting it onto a bench,
+soldering to sub-millimetre pads, a level shifter, and keeping that rig powered
+and wired for the entire read of up to 7.68 TB. There is no version of this that
+happens with the drive in a server.
+
+That makes the route **strictly dominated**. Once you have accepted "pull the
+drive and put it on a bench", you are already at the effort and logistics of
+sending it to a recovery lab — who have a fixture, a clean bench, and PC-3000.
+Doing it ourselves at that point is the same cost with worse tooling.
+
+**Consequence for where effort goes:** the only recovery worth building is one
+that runs **over NVMe, in-situ, with the drive in the server**. That is the sole
+criterion by which to judge any future lead. Keep this document as the reference
+for what the SBL and boot path actually do — much of it is load-bearing for
+other analysis — but stop treating the console as a recovery plan.
+
+Retained because it is still true and still useful: `MemWrite 0x7ff9ff64 4`
+**does** stick (§8.1 disproved the "SBL rewrites it at handoff" risk), so if a
+drive ever *is* on a bench for another reason, the procedure below is sound.
+
+---
+
 ## 0. Read this first — the shape of the answer changed
 
 Three findings in this document alter the plan that `sn200-logic-escapes.md` §11
