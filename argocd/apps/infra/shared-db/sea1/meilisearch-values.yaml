@@ -18,9 +18,22 @@ startupProbe:
   path: "/health"
   httpHeaders: []
 
+# Ceph, NOT local-path. local-path at sea1 lands on an HGST SN200, which
+# latches into a state with no proven way to read the data back off it
+# (docs/sn200-runbook.md). This was the last single-copy volume on one:
+# one replica, no backup, one firmware fault from permanent loss.
+#
+# Cheap to move because the index held 104 KB -- it had already been
+# reinitialised once during the hv-2 conversion. Meilisearch is a derived
+# index, so the real protection is that it can be rebuilt from source; Ceph
+# just stops a drive fault from silently emptying it again.
+#
+# A StatefulSet's volumeClaimTemplates are IMMUTABLE, so changing this does
+# not migrate anything -- the StatefulSet and its PVC must be deleted so the
+# chart recreates them on the new class.
 persistence:
   enabled: true
-  storageClass: local-path
+  storageClass: ceph-rbd-xfs
   size: 32Gi
 
 service:
