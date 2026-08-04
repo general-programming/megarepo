@@ -30,6 +30,9 @@ spec:
       owner: scraper
 ---
 apiVersion: v1
+# ClusterIP, not NodePort -- reach it via the tailscale proxy
+# (svc-scraperdb-postgres) so tailnet ACLs apply. As a NodePort it also
+# answered on every node IP, reachable from anywhere on the SEA1 LAN.
 kind: Service
 metadata:
   name: postgres-rw
@@ -46,4 +49,4 @@ spec:
     cnpg.io/cluster: scraperdb
     cnpg.io/instanceRole: primary
   sessionAffinity: None
-  type: NodePort
+  type: ClusterIP

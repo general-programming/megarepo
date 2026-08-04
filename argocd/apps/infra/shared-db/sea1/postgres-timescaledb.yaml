@@ -78,18 +78,24 @@ spec:
       - timescaledb
 ---
 apiVersion: v1
+# ClusterIP + tailscale, matching postgres-rw-hostport and meilisearch.
+# This one had NO tailscale exposure, so the NodePort was its only external
+# path -- the annotation is added here so dropping the NodePort does not
+# remove access outright, it moves it behind tailnet ACLs.
 kind: Service
 metadata:
   name: timescale-rw-hostport
+  annotations:
+    tailscale.com/expose: "true"
+    tailscale.com/hostname: "svc-shared-timescale"
 spec:
   ports:
     - name: postgres
       port: 5432
-      nodePort: 32346
       protocol: TCP
       targetPort: 5432
   selector:
     cnpg.io/cluster: shared-timescaledb
     cnpg.io/instanceRole: primary
   sessionAffinity: None
-  type: NodePort
+  type: ClusterIP

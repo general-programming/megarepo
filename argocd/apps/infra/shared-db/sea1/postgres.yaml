@@ -28,6 +28,13 @@ spec:
       database: shared
       owner: shared
 ---
+# ClusterIP, not NodePort. Reach it from outside via the tailscale proxy
+# (svc-shared-postgres), which applies tailnet ACLs. A NodePort additionally
+# answered on every node IP, so anything on the SEA1 LAN could open a postgres
+# session with only the DB password in the way -- verified reachable from a
+# laptop over tailscale with no cluster credentials.
+#
+# The -hostport suffix is now a misnomer, kept because apps resolve this name.
 apiVersion: v1
 kind: Service
 metadata:
@@ -39,11 +46,10 @@ spec:
   ports:
     - name: postgres
       port: 5432
-      nodePort: 32345
       protocol: TCP
       targetPort: 5432
   selector:
     cnpg.io/cluster: shared-db
     cnpg.io/instanceRole: primary
   sessionAffinity: None
-  type: NodePort
+  type: ClusterIP
