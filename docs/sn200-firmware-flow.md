@@ -109,13 +109,36 @@ CCOUNT, units pinned by `SYS: PFAIL time = %5u.%03u ms`. At expiry the superviso
 does **not** force completion: it writes marker 7 and **exits**. It is a
 stopwatch that labels the failure, not a hold-up guarantee.
 
-### Why the list doesn't finish — two independent defects
+### Why the list doesn't finish — three defects, one of them decisive
 
-1. **No admission control.** The work simply exceeds 25 ms.
+1. **No admission control.** The work simply exceeds the hold-up window. (Note
+   this is *not* the 25 ms timer — see the workload caveat below.)
 2. **The lost-PFAIL race.** `PCIe_PfailShutdown` finds the port already claimed
    by link-down's bottom half and logs *"already shut down or in the process of
    shutting down - Do nothing"*. This is WD's documented race — and it is **not**
    interrupt masking: PFAIL is PROC0-only, so PROC9 only ever sees a message.
+3. **The GC deadlock — PROVEN, and it has no escape on a normal shutdown.**
+   Both halves live in PROC11. The waiter `0x7ffa8070` blocks on three counters
+   — `0x7ff80fd4` (page relocations), `0x7ff810d0` (reclaim reads), `0x7ff810d8`
+   (pending V2P) — each with **only** a `mode == 5` escape, no timeout and no
+   bail-out. It is a continuation task, so it parks rather than spins; one timer
+   is armed on first entry and **no resume path ever reads it**.
+
+   Meanwhile a normal `CC.SHN` shutdown sets mode **4**. All 24 mode tests in
+   PROC11 compare against 5 (one against 2) — **none against 4**. So while the
+   waiter waits, the producers keep incrementing those same counters and the
+   dispatcher still accepts *new* page-relocation requests. **The set of tasks
+   that can satisfy the wait is the set that can defeat it.**
+
+   Mode 5 is written at exactly one site, `0x7ffa2bc5`, reachable only when the
+   shutdown message carries state 3 — i.e. from *outside* GC, and in that case a
+   different task runs anyway. **A normal `CC.SHN` with no PFail therefore has
+   no escape at all.** The PFail variant is worse still: it waits with no mode
+   test, no timer and no bail-out, directly on the hold-up window.
+
+   This matters because it is a path to an unfinished shutdown that needs **no
+   power event whatsoever** — which is the shape of the field case where a
+   `mkfs.xfs` latched a healthy, running drive.
 
 Plus two *unconditional* silent exits where the monitor logs "PFAIL is detected",
 exits, and initiates no shutdown and no marker at all.

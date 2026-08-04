@@ -843,42 +843,8 @@ partial.
 
 Stated explicitly, because a gap is more useful than a guess here.
 
-1. **The GC deadlock during shutdown** (WD's named defect). **Still not found**,
-   but now localised to specific words rather than a function range.
-
-   The GC shutdown machine is PROC11 `0x7ffa8070` (`entry`, dispatch `jx a9` on
-   `[a2+0x10]`), context base `a4 = [0x7ffa0994] = 0x7ff80e44`. Its wait
-   predicates are PROVEN:
-
-   ```
-   7ffa8085: l32i a8,a4,0x28c    ; -> 0x7ff810d0   outstanding work A
-   7ffa8088: { l32i a9,a4,0x168 ; beqz a8,0x7ffa81b0 }   ; a9 = mode
-   7ffa8090: { … ; bnei a9,5,0x7ffa8158 }                ; mode != 5 -> yield
-   7ffa8158: { l32r a3,0x7ffa0d20 ; movi a2,2 }          ; = 0x7ffa8085, retry
-   7ffa81d2: l32i a10,a4,0x294   ; -> 0x7ff810d8   outstanding work B
-   ```
-
-   So GC leaves the wait only when both counters reach zero **or** the mode
-   `[0x7ff80fac]` becomes 5 (the PFail short-circuit that logs StrId 554 at
-   `0x7ffa81ea`). The only decrements of either counter are
-   `0x7ffa2ecb`/`0x7ffa2ecd` (`0x7ff810d0`) and `0x7ffa4e7e`/`0x7ffa4e80`
-   (`0x7ff810d8`), both inside completion handlers — i.e. they drain only when
-   the media path retires work. (`0x7ffa4db5` and `0x7ffa2ede` also write them,
-   but as copies, not adjustments.)
-   That is the shape of the circular wait (GC waits on media
-   completions; the media managers are themselves shutting down), but I have not
-   traced a completion path back into a component that is itself blocked on GC,
-   so **I am not calling it proven.**
-
-   One earlier suspicion is ruled out: `[a4+0x190]` (`0x7ff80fd4`), which also
-   gates the wait at `0x7ffa817b`, has **no writer anywhere in PROC11** — an
-   opcode sweep for every `s32i …,0x190` finds one site (`0x7ffa31a0`) and its
-   base is `0x7ff80900`, a different object. `[a4+0x190]` is permanently zero and
-   is not the stall.
-
-   *Would settle it:* the pair of tasks blocked in a dump taken while latched, or
-   tracing who increments `0x7ff810d0` / `0x7ff810d8` and which processor retires
-   those items during a shutdown.
+1. ~~**The GC deadlock during shutdown**~~ — **CLOSED, see §6a below.** The
+   circular wait is real, and both halves are inside PROC11.
 
 2. **"System Manager never sending the shutdown message"** (WD). PROC0
    `SYS: ShutdownReq --> SAM` (`0x7ffa8c2b`) is guarded by the drain loops at
@@ -911,6 +877,148 @@ Stated explicitly, because a gap is more useful than a guess here.
 
 ---
 
+## 6a. The GC deadlock during shutdown — found
+
+WD's named defect. The circular wait is real. It is **not** GC-waits-on-a-media-
+manager-that-waits-on-GC; **both halves are inside PROC11**, and the cycle is
+*GC waits for its own outstanding work to drain while GC is still free to create
+more of it.*
+
+### 6a.1 The consumer half — `0x7ffa8070`, unbounded (PROVEN)
+
+PROC11 `0x7ffa8070` is a **cooperative continuation task**, not a spin loop:
+every "wait" is `return a2=2` with a resume label in `a3`, and the scheduler
+re-dispatches it. Context `a4 = [0x7ffa0994] = 0x7ff80e44`; the resume labels are
+`[0x7ffa0d20] = 0x7ffa8085`, `[0x7ffa0d24] = 0x7ffa813a`,
+`[0x7ffa0d28] = 0x7ffa8162`. Three gates, each with a `mode == 5` escape:
+
+```
+7ffa8178: l32i a10,a4,0x190   ; -> 0x7ff80fd4  outstanding page relocations
+7ffa817b: beqz a10,0x7ffa8145 / 7ffa817e: beqi a9,5,0x7ffa8145
+7ffa8145: l32i a14,a4,0x28c   ; -> 0x7ff810d0  outstanding reclaim reads
+7ffa814d: beqz a14,0x7ffa81d2 / 7ffa8150: beqi a9,5,0x7ffa8098
+7ffa81d2: l32i a10,a4,0x294   ; -> 0x7ff810d8  pending V2P updates
+7ffa81d5: bnez a10,0x7ffa8150 / else j 0x7ffa8098
+```
+
+Mode is `[0x7ff80fac]`, reached as `[a4+0x168]` here and as `[0x7ff80d00+0x2ac]`
+elsewhere. On the way out (`0x7ffa8098`) it unlinks itself and either logs
+StrId 554 *"GC> Early termination of normal shutdown due to PFail"* (mode 5) or
+StrId 555 *"GC> Shutdown complete"*.
+
+**There is no bail-out.** One timer is armed on the *first* entry only
+(`0x7ffa8217`/`0x7ffa821a`: deadline = `[0x7ff80900+0x1bc] + 5888 + 112`, i.e.
++6000 ticks, inserted into the sorted list at `0x7ff81b44`). It is a scheduler
+*wakeup*, not a deadline: no resume path reads it, and it is only cancelled on
+the success path. Every non-satisfying path returns 2 and comes back to the same
+predicate.
+
+### 6a.2 The producer half — gated on mode 5 only, never on mode 4 (PROVEN)
+
+The normal (`CC.SHN`) shutdown puts GC in **mode 4**, written at `0x7ffa2952`
+(`movi a14,4`, base `[0x7ffa0938] = 0x7ff80e38`, `+0x174`) in the GC message
+dispatcher `0x7ffa2750`, on StrId 559 *"GC> Received GC shutdown message.
+state (%d)"*. That arm also schedules `0x7ffa8070` (`[0x7ffa0960]`).
+
+An exhaustive enumeration of every mode test in PROC11 (24 sites: load of the
+mode word followed by `beqi`/`bnei` on the loaded register) finds **`5` at every
+site but one**, the exception being `bnei a9,2` at `0x7ffa7924`. **No producer
+anywhere in PROC11 tests for mode 4.** Consequently, while `0x7ffa8070` is
+waiting in mode 4:
+
+- `0x7ffa51d0` (reclaim-read machine, StrId 3475/524) **increments**
+  `0x7ff810d0` at `0x7ffa5524` (`addi.n a14,a14,1`, base `a6 = 0x7ff80d00`
+  from `addmi a6,a6,1024` at `0x7ffa51e3`, `+0x3d0`). Its only mode gate,
+  `0x7ffa52b4`/`0x7ffa52b7`, tests `== 5`.
+- `0x7ffa5d18` (page-relocation machine, StrId 533) **increments**
+  `0x7ff80fd4` at `0x7ffa61e8` (slot-B `addi a14,a14,1`, base `0x7ff80d00+0x2d4`)
+  and decrements it at `0x7ffa62c1`. Its mode gates also test `== 5`.
+- The dispatcher accepts **new** page-relocation requests in any mode:
+  `0x7ffa2af5` (StrId 2995 *"GC> Received page relocation request for blockset
+  %d on GC state %d"*) reads the mode at `0x7ffa2afa` only to format the log —
+  there is no branch on it.
+
+So the set of tasks that can satisfy the wait and the set that can defeat it are
+the same tasks, and the only thing that stops them is **mode 5 — which is also
+the escape from the wait.** Between mode 4 and mode 5 nothing forces progress.
+That is the cycle, and it is why the defect presents as "shutdown began and
+never finished" rather than as a crash.
+
+### 6a.3 What sets mode 5, and why it does not save the normal path (PROVEN)
+
+`[0x7ff80fac] = 5` is written at exactly one place: PROC11 `0x7ffa2bc5`
+(`movi a13,5` at `0x7ffa2bbd`, `s32i a13,a9,0x174`, `a9 = 0x7ff80e38`). It is
+reached from the same shutdown-message arm, taken when the message's state field
+is 3 — `beqi a12,3,0x7ffa2bab` at `0x7ffa2942`, `a12 = [a3+0x8]`. That arm also
+schedules a **different** task, `0x7ffa84b8` (`[0x7ffa098c]`), instead of
+`0x7ffa8070`.
+
+Two consequences:
+
+- Mode 5 comes from **outside GC** — the System Manager's PFail shutdown
+  message. Nothing inside GC ever sets it. For a normal `CC.SHN` shutdown with
+  no PFail, **the escape hatch is never taken and the wait is unbounded.**
+- In a real PFail the mode is 5 *from the outset*, so `0x7ffa8070` never runs at
+  all; `0x7ffa84b8` runs instead.
+
+### 6a.4 The PFail GC shutdown task is worse (PROVEN)
+
+`0x7ffa84b8` logs StrId 556 *"GC> Abrupt shutdown: %d pending V2P"* at
+`0x7ffa85a7` and then waits:
+
+```
+7ffa85b6: { l32r a9,0x7ffa0d58 ; … }     ; a9 = 0x7ff80edc
+7ffa85d1: l32i a14,a9,0x1fc              ; -> 0x7ff810d8   (same word as +0x294)
+7ffa85d4: bnez a14,0x7ffa8588            ; -> { l32r a3,0x7ffa0d60 ; movi a2,2 }
+7ffa8582: l32i a14,a10,0x1fc             ; resume: re-test, forever
+```
+
+`0x7ff80edc + 0x1fc = 0x7ff810d8` — the same counter the normal path calls
+"work B", and StrId 556 names it: **pending V2P**. This wait has **no mode test,
+no timer, and no bail-out of any kind**. It sits directly on the 25 ms PFAIL
+budget, and it is the single cleanest "GC hangs during shutdown" site in the
+image.
+
+### 6a.5 Retractions and corrections to the previous pass
+
+- **`[a4+0x190]` (`0x7ff80fd4`) is NOT permanently zero.** The earlier sweep
+  looked only for `s32i …,0x190`; the writers use a different base. It is
+  incremented at `0x7ffa61e8` and decremented at `0x7ffa62c1`, both in
+  `0x7ffa5d18`, via `0x7ff80d00 + 0x2d4`. It is a live gate.
+- **`0x7ffa2ede` and `0x7ffa4db5` are not "copies".** The adjustment is in the
+  FLIX slot B the old decoder printed as `?B`: `?B 2fefe` at `0x7ffa2ed6` and
+  `?B 2f9f9` at `0x7ffa4dad`/`0x7ffa4e9d` are `addi aX,aX,-1`.
+- **Slot-B `addi` decode** (new, and needed for the above). For a format-`0xE`
+  bundle with slot-B bits 44–45 = `2`: `t@28-31` = dest, `s@36-39` = src,
+  `imm8 = (bits 40-43) << 4 | (bits 32-35)`, signed → `addi at,as,imm8`.
+  Confirmed independently at `0x7ffa2d52` (`?B 2170b` = `addi a11,a7,16`, which
+  produces the list sentinel `0x7ff80910` that `0x7ffa2bd8` loads directly from
+  `[0x7ffa08b4]`) and at `0x7ffa2142` (`?B 21404` = `addi a4,a4,16`, the 16-byte
+  record stride of the loop it sits in). `xdis.py` still prints these as `?B`.
+
+### 6a.6 What is still inferred
+
+- **`0x7ff810d8` = pending V2P** is INFERRED, from StrId 556 formatting that
+  word, not from a type declaration.
+- **The increment of `0x7ff810d8`** is INFERRED to be `0x7ffa21b9` in
+  `0x7ffa1fb8` (GC's handler for write-manager message 292, StrId 564 *"GC>
+  Received unknown message %d from write mgr"* on the default arm). The
+  read-modify-write is `l32i a11,a2,0x2d4` / slot-B `?Balu sub=2` / `s32i` with
+  `a2 = 0x7ff80e04`; slot-B ALU `sub=2` is not yet decoded, so add-vs-subtract is
+  not proven. The balance argument favours add: `0x7ffa2bd8` (submit) decrements
+  the same word on its mode-5 drop path (`0x7ffa2bee`→`0x7ffa2d22`), which only
+  balances if the caller incremented first, and `0x7ffa1fb8`'s own mode-5 exit at
+  `0x7ffa1ff5` returns *before* reaching `0x7ffa21b9`, so no leak either way.
+- **A cross-manager variant of the same cycle** is SPECULATIVE but worth naming,
+  because §1.4 orders the Cache Manager's write flush (step 2) *before* GC
+  quiesce (step 3): PROC7 `PfailRspPth` waits at `0x7ffaa049` for
+  `[a4+0x2d0]` outstanding writes to reach zero (StrId 1501), while GC — not yet
+  in mode 4 or 5, because that is step 3 — is still free to hand it new writes.
+  *Would settle it:* proving `[a4+0x2d0]` on PROC7 is incremented by
+  GC-originated writes.
+
+---
+
 ## 7. Summary
 
 **The precise failure mechanism.** A shutdown — from either `CC.SHN` or a PFAIL
@@ -921,8 +1029,11 @@ updates, in-flight deallocates, plus a CellCare table save. Only after all of it
 does PROC6 `0x7ffbba61` write the "FINISHED" marker (1 = CLEAN, 2 = PFAIL). The
 PFAIL supervisor gives that entire list **25 ms** (`0x7ff830e0 = 25000` µs,
 measured against CCOUNT at PROC0 `0x7ffa8346`); at expiry it does not force
-completion — it writes marker 7 and **exits**. **Two** independent defects
-prevent the list from finishing: the work can simply exceed the budget (no
+completion — it writes marker 7 and **exits**. **Three** independent defects
+prevent the list from finishing: the GC quiesce step can wait forever, because
+its wait predicates are fed by GC producers that stop only on mode 5 and the
+PFail variant `0x7ffa84b8` has no escape at all (§6a); the work can simply
+exceed the budget (no
 admission control exists); and the PCIe subsystem discards the PFail shutdown
 outright if a link-down already claimed the port (PROC9 `0x7ffaed12`, *"Do
 nothing"*). In both cases the drive dies holding a STARTED breadcrumb, and the

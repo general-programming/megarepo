@@ -109,10 +109,15 @@ causal — it is the peak dirty-state workload, not a special code path.
   assuming instruction boundaries, finds only `CDW10`. No arm takes a core,
   block or region selector, and each recomputes its source from a
   firmware-owned descriptor, so there is no cursor either.
-- **The GC deadlock.** The state machine and the PFail early-exit were found;
-  the circular wait was not. Narrowed 2026-08-03 to two counters,
-  `0x7ff810d0` / `0x7ff810d8`, that GC waits on and that only media-completion
-  handlers decrement — see `sn200-shutdown-path.md` §6 item 1. Still not proven.
+- ~~**The GC deadlock.**~~ — **CLOSED, PROVEN. See `sn200-shutdown-path.md`
+  §6a.** Both halves are inside PROC11: `0x7ffa8070` waits on `0x7ff80fd4` /
+  `0x7ff810d0` / `0x7ff810d8` with no timeout and no bail-out, while every GC
+  producer that feeds those words gates only on mode `[0x7ff80fac] == 5`
+  (PFail) and **never** on mode 4 (normal shutdown) — 24 mode tests enumerated,
+  all against 5 bar one against 2. Mode 5 is written at exactly one site,
+  `0x7ffa2bc5`, and only from outside GC. What remains inferred is only the
+  *label* on `0x7ff810d8` ("pending V2P", from StrId 556) and its increment site
+  `0x7ffa21b9`.
 - **Whether PROC8's admin PFAIL monitor can actually spin forever.** Its poll
   loop is provably unbounded and its guard word `0x7ff95678` is provably never
   incremented in either PROC8 image; whether it is reached with a non-zero value

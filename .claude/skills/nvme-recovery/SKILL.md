@@ -160,6 +160,15 @@ host-visible `CC.SHN` completion — INFERRED, not yet proven — then **waiting
 guarantee the save finished. Allow real time after `unbind`, and treat a
 completed shutdown handshake as necessary rather than sufficient.
 
+⚠⚠ **And an orderly shutdown can hang outright — PROVEN.** A normal `CC.SHN`
+sets internal mode **4**, but PROC11's garbage collector waits on three counters
+whose *only* release is mode **5**, with no timeout and no bail-out — while its
+own producers, which gate on mode 5 too, keep incrementing them. Mode 5 is
+written from outside GC only. **A normal shutdown with no PFail has no escape
+from that wait**, so "shut down cleanly" is not a guaranteed mitigation; it is
+merely a better bet than cutting power. Full trace: `docs/sn200-shutdown-path.md`
+§6a.
+
 **A warm reboot is not a power cycle** — it does not drop rail power. But do
 not reach for `ForceOff` reflexively either: an abrupt power cut is an unclean
 stop and can *cause* the latched state on drives that record shutdown
