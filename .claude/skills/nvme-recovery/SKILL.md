@@ -179,7 +179,23 @@ tolerates it first, `noout` alone is not sufficient.
 
 Model `HUSMR7676BDP3Y1`, firmware `KNGND1xx`. Procedure below is what actually
 worked, not what the forum posts say. Full firmware teardown:
-`docs/sn200-firmware-re.md`.
+`docs/sn200-firmware-re.md`; operator sheet: `docs/sn200-runbook.md`.
+
+**Start with `tools/sn200-fw/sn200-triage.sh`.** One read-only pass: latched or
+not, data still allocated or not, which failure mode, what you may do next. It
+cannot emit anything but Identify, `0xC6` reads and `0xFF`/`0x0004`.
+
+> ⚠ **Finding an SN200 requires looking inside the guest.** At sea1 the drives on
+> hv-0/hv-1 are passed through to the k8s VMs, so the hypervisor's
+> `/sys/class/nvme` shows only the Intel OSD drives and reads as a confident
+> clean negative. It is wrong. Enumerate from wherever the drive is *attached*.
+
+> ⚠ **On a reset-looping controller every command fails with `EAGAIN`, which is
+> not the same as an answer.** `state=resetting` in sysfs means nothing was
+> asked. Never report an unreadable Identify as "capacity unallocated" — that
+> tells an operator their data is gone on no evidence at all. And do not retry
+> in a loop: sustained admin traffic against a latched SN200 wedged a production
+> node here (kernel alive, `apid`/`kubelet` dead, 7 OSDs down).
 
 > 🔴 **The one fault record we have recovered says the latch was armed by a
 > TRAP, not by a shutdown.** Decoded from real hardware: a fatal synchronous
@@ -192,9 +208,21 @@ worked, not what the forum posts say. Full firmware teardown:
 > crash section header first: `0x00020100` + `"UNEXSTRT"` at `+0x40` is a
 > shutdown stub, `0x00020200` with a zero tag is a genuine fault.
 >
-> Practical consequence worth testing: PROC9 is driven by the **chassis BMC**
-> over SMBus/MCTP. BMC/iDRAC NVMe-MI polling is therefore a live suspect for
-> provoking these traps, and is not something the host OS controls.
+> The faulting task is now named: **`MI_ControlPrimitiveHandler`, PROC9
+> `0x7ffb2890`** (proven — a single `litref` to its context). The frame chain
+> closes exactly through `Log_Emit`. The MI completion FIFO had both head links
+> zeroed while `g_curRequest` pointed at the FIFO's own sentinel; one dequeue of
+> the sentinel explains both, and 18 tail-insert sites share the unchecked
+> idiom. See `docs/sn200-proc9-fault.md`.
+>
+> **Do not run with the malformed-BMC-input story.** MI input *is* validated,
+> and every error path returns the request through the same enqueue as success,
+> so malformed messages are a traffic stressor and not a distinct memory-safety
+> path. No attacker-controlled value appears in the faulting frame. BMC NVMe-MI
+> polling is a *necessary condition* and a legitimate mitigation lever — it is
+> not shown to be sufficient. **The WD errata do not cover this either:**
+> OM-6850/7044/6836/6588/6697 are all deallocate/reset/PFail/SGL host-IO on the
+> PROC0/NAND side, and not one names MI, MCTP, SMBus or VDM.
 
 **One predicate, several arming routes.** Two independent teardowns agree
 (`docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`). At boot, PROC0
