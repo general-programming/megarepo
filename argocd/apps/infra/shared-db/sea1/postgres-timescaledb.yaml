@@ -34,9 +34,17 @@ spec:
   #
   # Changing storageClass affects NEW PVCs only -- CNPG recreates instances onto
   # it one at a time, it does not migrate anything in place.
+  #
+  # resizeInUseVolumes MUST be false while the old local-path PVC still exists.
+  # CNPG otherwise tries to expand THAT PVC to the new size, local-path has
+  # allowVolumeExpansion=false, and the resulting error aborts the reconcile
+  # before it ever creates the replacement instance -- so the cluster silently
+  # stops progressing while looking merely "not ready". Can be removed once no
+  # local-path PVC remains in this cluster.
   storage:
     storageClass: ceph-rbd-xfs
     size: 640Gi
+    resizeInUseVolumes: false
   bootstrap:
     initdb:
       database: shared
