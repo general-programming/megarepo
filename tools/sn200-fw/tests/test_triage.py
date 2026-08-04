@@ -133,10 +133,18 @@ def test_no_destructive_opcode_can_be_issued(tmp_path):
     # join backslash continuations first -- an invocation split over two lines
     # would otherwise hide its CDW12 from this check
     src = open(SCRIPT).read().replace("\\\n", " ")
+    # The script PRINTS a 0x0603 recommendation for the data-preserving case, so
+    # echo/printf lines are advice, not invocations. Excluding them is a loophole
+    # unless we also assert that no echoed command is ever executed -- which the
+    # fake_nvme_triage.py run above already guarantees, since it aborts on any
+    # destructive opcode actually reaching it across every branch.
     invocations = [
         ln
         for ln in src.splitlines()
-        if "nvme admin-passthru" in ln and not ln.lstrip().startswith("#")
+        if "nvme admin-passthru" in ln
+        and not ln.lstrip().startswith("#")
+        and not ln.lstrip().startswith("echo")
+        and not ln.lstrip().startswith("printf")
     ]
     assert invocations
     for ln in invocations:
@@ -262,3 +270,32 @@ def test_namespace_suffix_is_stripped_from_the_basename_only(tmp_path):
     )
     assert str(d / "nvme7") in proc.stdout
     assert "run_n0" in proc.stdout
+
+
+def test_pfcl_only_latch_is_flagged_as_the_data_preserving_case(tmp_path):
+    """CLOG not armed + PFCL armed is the one case 0x0603 can lift without
+    touching the L2P (0x0603's resume handler has no path to the re-init verb).
+    Missing it means an operator either loses data unnecessarily or leaves a
+    recoverable drive powered off forever."""
+    r = run(tmp_path, armed="pfail")
+    out = r.stdout
+    assert "RARE" in out
+    assert "cdw12=0x0603" in out
+    assert "NEVER 0x0503" in out
+    # it must not be oversold -- nobody has run this
+    assert "nobody has run it yet" in out
+
+
+def test_both_sections_armed_still_says_stop(tmp_path):
+    """UNEXSTRT stamps CLOG, so the ordinary power-event latch does NOT qualify
+    for the 0x0603 branch. Offering it there would destroy data."""
+    r = run(tmp_path, armed="clog,pfail")
+    assert "RARE" not in r.stdout
+    assert "DO NOT send 0xFF cdw12=0x0503" in r.stdout
+
+
+def test_the_0603_branch_never_suggests_0503(tmp_path):
+    """0x0503 is one nibble away and is the entire data cost."""
+    r = run(tmp_path, armed="pfail")
+    body = r.stdout.split("VERDICT")[1]
+    assert "--cdw12=0x0503" not in body

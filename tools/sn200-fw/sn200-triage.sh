@@ -205,18 +205,22 @@ fi
 # --- which section is armed -------------------------------------------------
 echo
 echo "--- crash sections ---"
+CLOG_ARMED=unknown
+PFCL_ARMED=unknown
 for pair in "CLOG 0x0320" "PFCL 0x0520"; do
 	name=${pair%% *}
 	sub=${pair##* }
 	out=$(nvme admin-passthru "$CTRL" --opcode=0xc6 --namespace-id=0 \
 		--cdw10=2 --cdw12="$sub" --data-len=8 -r -b 2>/dev/null | od -A n -t x4 | head -1)
 	if [[ -n "$out" ]]; then
+		[[ "$name" == CLOG ]] && CLOG_ARMED=yes || PFCL_ARMED=yes
 		echo "  $name ($sub): $out"
 	elif [[ $RESETTING -eq 1 ]]; then
 		# a failed probe normally means "not armed" -- but not when the command
 		# never reached the drive
 		echo "  $name ($sub): <could not ask; controller is $STATE>"
 	else
+		[[ "$name" == CLOG ]] && CLOG_ARMED=no || PFCL_ARMED=no
 		echo "  $name ($sub): <probe failed -- section not armed>"
 	fi
 done
@@ -293,6 +297,24 @@ elif [[ $RESETTING -eq 1 && "$DATA_PRESENT" == unknown ]]; then
 	echo "    3. Do NOT run recovery commands blind. 0xFF cdw12=0x0503 zeroes"
 	echo "       the namespace, and it is the only thing that has ever lost"
 	echo "       data on these drives."
+elif [[ "$DATA_PRESENT" == yes && "$CLOG_ARMED" == no && "$PFCL_ARMED" == yes ]]; then
+	# The rare data-preserving case. 0x0603 erases the PFail section and does
+	# nothing else -- no startup-type test, no re-init verb -- so a latch armed
+	# ONLY by PFCL is released without touching the L2P. PROVEN from the resume
+	# handler at 0x300335a3; never yet exercised on hardware.
+	echo "  Drive is LATCHED, THE DATA IS STILL THERE, and this is the RARE"
+	echo "  case that may be recoverable WITHOUT data loss:"
+	echo "      CLOG not armed + PFCL armed"
+	echo
+	echo "  Send ONLY:  nvme admin-passthru $CTRL --opcode=0xff -n 0 \\"
+	echo "                --cdw10=0 --cdw12=0x0603 --data-len=0"
+	echo "  then a COLD power cycle. NEVER 0x0503 -- that is the entire data"
+	echo "  cost, and it is one nibble away."
+	echo
+	echo "  Mechanism is proven from the firmware; nobody has run it yet. If the"
+	echo "  data is irreplaceable, dump the crash section first (--dump) and"
+	echo "  consider leaving the drive powered down instead."
+	echo "  See docs/sn200-runbook.md section 2."
 elif [[ "$DATA_PRESENT" == yes ]]; then
 	echo "  Drive is LATCHED and THE DATA IS STILL THERE."
 	echo
