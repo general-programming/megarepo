@@ -20,9 +20,11 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-vuc-flash-read.md` | the read-by-LBA VUC, and why the latch gates it off |
 | `sn200-oam-dispatch.md` | the complete `0xFF` table; which of `0x0503`/`0x0603` wipes |
 | `sn200-c6-dispatch.md` | the complete `0xC6` table; the other family that survives the gate |
+| `sn200-ca-dispatch.md` | the complete `0xCA` table, **executed**; the two commands that destroy a drive, and the mechanical adjacency map |
 | `sn200-c6-30-family.md` | `0xC6`/`0x30` fully traced — SMART/statistics collection, no escape; corrects the `CDW10 == 0` claim |
 | `sn200-section-arming.md` | what arms CLOG and PFCL, and why `0x0603` can never help |
 | `sn200-marker-write.md` | the generic marker-write (verb 1 + section 6), why no host command reaches it, and what a serial-console primitive would actually be worth |
+| `sn200-nondestructive-clear.md` | the exhaustive enumeration of EEPROM-request producers (only `0x0503` reaches verb 3 + section 11), why the mode-6 gate cannot be dodged, and the reframe: the re-init is a 4-byte record value, not an action |
 | `sn200-pcode-toolchain.md` | lifting the firmware to p-code and **executing** it — the claims above as tests, and what the lifter cannot read |
 | `sn200-tie-opcodes.md` | the custom/reserved instruction space: what is really undecodable, why it is not what we thought, and how `0xFF`/`0x0303` was finally resolved |
 | `sn200-vendor-tooling.md` | vendor names for these opcodes from `nvme-cli`'s WDC plugin — what is confirmed, and the three numeric collisions that must **not** be adopted |
