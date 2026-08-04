@@ -20,9 +20,23 @@ spec:
           - matchExpressions:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
+  # Ceph, NOT local-path. Both local-path nodes (sea1-k8s-0/1) are backed by
+  # HGST SN200s, which latch into an unrecoverable "Post Crash Startup" with no
+  # proven way to read data back off them (docs/sn200-runbook.md). This cluster
+  # was running a SINGLE instance on one of them with no backup, i.e. one
+  # firmware fault away from permanent loss of the whole dataset.
+  #
+  # 640Gi is sized from measured usage, not from the old PVC: pgdata/base was
+  # 477G against a 256Gi local-path PVC, because local-path is a hostPath
+  # directory and enforces no quota. Ceph RBD does enforce it, so the previous
+  # figure would have under-provisioned by ~1.9x. ceph-rbd-xfs allows online
+  # expansion if that stops being enough.
+  #
+  # Changing storageClass affects NEW PVCs only -- CNPG recreates instances onto
+  # it one at a time, it does not migrate anything in place.
   storage:
-    storageClass: local-path
-    size: 256Gi
+    storageClass: ceph-rbd-xfs
+    size: 640Gi
   bootstrap:
     initdb:
       database: shared
