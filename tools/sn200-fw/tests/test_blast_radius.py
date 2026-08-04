@@ -202,3 +202,27 @@ def test_local_path_sizes_are_flagged_as_unenforced():
 def test_enforced_storage_classes_are_not_flagged():
     rows = run([pv("sea1-k8s-0", "x", "x-solo", "8Gi", sc="ceph-rbd-xfs")])
     assert rows[0]["volumes"][0]["unenforced"] is False
+
+
+def test_a_ceph_copy_counts_as_an_off_sn200_copy():
+    """The bug this caught in production. shared-timescaledb had its replica
+    moved to ceph-rbd-xfs, which has no nodeAffinity. Skipping non-node-local
+    PVs meant the tool saw only the remaining local-path copy and still called
+    it CRITICAL -- reporting a resolved exposure as one latch from permanent
+    loss, i.e. exactly backwards."""
+    rows = run(
+        [
+            pv("sea1-k8s-0", "shared-db", "shared-timescaledb-7", "256Gi"),
+            pv(None, "shared-db", "shared-timescaledb-1", "640Gi", sc="ceph-rbd-xfs"),
+        ]
+    )
+    assert rows[0]["verdict"] == br.OK
+    assert rows[0]["copies"] == 2
+    assert "1 of 2 copies are off-SN200" in rows[0]["why"]
+
+
+def test_network_storage_only_workloads_still_do_not_appear():
+    """Counting ceph PVs as copies must not drag purely-ceph workloads into the
+    report -- they have nothing on an SN200 at all."""
+    rows = run([pv(None, "some-ns", "rbd-claim-0", sc="ceph-rbd-xfs")])
+    assert rows == []

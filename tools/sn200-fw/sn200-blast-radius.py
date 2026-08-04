@@ -77,9 +77,11 @@ def workload_of(namespace: str, claim: str) -> str:
 def collect(pvs: dict, sn200_nodes: set, backups: int) -> list[dict]:
     copies = defaultdict(list)
     for pv in pvs.get("items", []):
+        # A PV with no node affinity is network storage (ceph/RBD). It is NOT
+        # in the blast radius -- but it IS a copy, and skipping it entirely made
+        # this tool report a workload as CRITICAL after a replica had already
+        # been moved to ceph. Count it, then let the SN200 test classify it.
         node = pv_node(pv)
-        if not node:
-            continue  # ceph/network storage -- not in this blast radius
         cr = pv.get("spec", {}).get("claimRef", {})
         ns, name = cr.get("namespace", ""), cr.get("name", "")
         if not ns:
@@ -87,7 +89,7 @@ def collect(pvs: dict, sn200_nodes: set, backups: int) -> list[dict]:
         sc = pv.get("spec", {}).get("storageClassName", "")
         copies[workload_of(ns, name)].append(
             {
-                "node": node,
+                "node": node or "(network storage)",
                 # NOMINAL ONLY for local-path: it is a hostPath directory with
                 # no quota, so real usage can exceed this without warning --
                 # shared-timescaledb was found at 478 GB against a 256 Gi PVC.
@@ -95,7 +97,7 @@ def collect(pvs: dict, sn200_nodes: set, backups: int) -> list[dict]:
                 "size": pv.get("spec", {}).get("capacity", {}).get("storage", "?"),
                 "unenforced": sc == "local-path",
                 "pvc": name,
-                "on_sn200": node in sn200_nodes,
+                "on_sn200": bool(node) and node in sn200_nodes,
             }
         )
 
