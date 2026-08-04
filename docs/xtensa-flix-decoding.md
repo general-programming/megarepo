@@ -145,12 +145,25 @@ bundle has been confirmed against ground-truth execution.
 
 ### What was looked for and NOT found
 
-- **Control flow inside bundles.** A sweep of every candidate PC-relative
-  immediate field (widths 8/12/16/18, all bit offsets) found no field whose
-  computed targets land on instruction boundaries above chance (best 0.29 vs
-  0.11 baseline — no signal). SPECULATIVE conclusion: bundles are mostly
-  arithmetic / load-store and the CFG recovered from base-ISA branches is
-  probably close to complete. Do not treat this as guaranteed.
+- ~~**Control flow inside bundles.**~~ **RETRACTED — this was wrong, and it is
+  the most damaging error in this document's history.** Bundles carry a full
+  branch slot: `op0=0xF` slot B is a branch, and `op0=0xE` with `pre=3` is a `j`
+  (both now decoded — see "Real p-code semantics for slots A/B/C" below, and
+  `xdis.py:flix_branch`). Essentially **every dispatch chain in the SN200
+  firmware lives in those slots**.
+
+  The original sweep found no signal because it looked for a single fixed
+  PC-relative field across all bundles, while the displacement's position and
+  width depend on the slot-B class selector.
+
+  Consequences of having believed it, all real: a linear sweep that cannot see
+  these edges makes a conditional path look unconditional, and it made an NVMe-MI
+  **reject**-list read as an **allow**-list in `sn200-independent-re.md` §10.1.
+  **Never infer "no branch here" from a decode that does not resolve slot B.**
+- **Still undecoded:** `op0=0xE` with `pre=1` (~835 bundles in PROC9). Tested for
+  a PC-relative field; none found. Probably not control flow — but "probably not"
+  is exactly what was said above, so treat any CFG built over these as
+  incomplete.
 - **Slot boundaries.** Per-bit entropy over 25k bundles shows no clean
   segmentation for either format. The one structural hint is that `op0=0xE`
   bundles have `bits(48,63) == 0xc090` 68% of the time (`op0=0xF` peaks at

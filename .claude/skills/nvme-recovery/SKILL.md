@@ -289,18 +289,22 @@ the `bnei a14,6` gate: `0x0503` schedules the wipe **only when the drive is
 already latched**. Fired from a normally-booted drive it erases the crash
 section without scheduling a re-init.
 
-### Marker 8 `READ ONLY` — the only non-destructive recovery in the firmware
+### Marker 8 `READ ONLY` — real, non-destructive, and **unreachable**. Closed.
 
 Read-only startup is **not** a degraded mode. SAM `0x7ffba9dc` sets a single
 flag bit (`0x80`) and falls straight into the **normal** boot path: L2P
 restored, namespace present, writes refused at the admin/IO layer. That is
-exactly what is needed to get data off a latched drive.
+exactly what would be needed to get data off a latched drive.
 
-PROC12 `0x7ffa7a68` writes marker 8 when request code `[ctx+0x48] == 6`.
-**Whether a host can supply that code is UNKNOWN** — no constant-6 store has
-been found and there is no "set startup marker" VUC. If a route exists, it beats
-every other recovery here. Do not run a destructive recovery on a drive whose
-contents matter until this is resolved.
+**Nothing can set it.** `0x80000008` exists in exactly two places in the whole
+firmware: PROC0 `0x7ff83478`, which is only ever *compared* in the boot
+dispatch, and PROC12 `0x7ffa0d94`, which is an **Event-Log record tag, not the
+startup marker** — a different enum that happens to share the `0x80000000|N`
+form. Independently, the sole marker setter PROC0 `0x7ffa84c8` has two callers
+and can emit only markers 3 and 4. Full disproof in
+`docs/sn200-readonly-startup.md`.
+
+Do not spend more time looking for a request path. There isn't one.
 
 ### First thing to check on any SN200: the firmware revision
 
@@ -453,11 +457,41 @@ Precise bit mapping, PROVEN three ways (TOC at `0x7ff84a70`, producer
 `movi a12,11`), so PFCL plays no part in sustaining a power-event latch and
 `0x0603` cannot release one. The flags byte lives at **`0x7ff8d200`**.
 
-**Caveat — one possible non-destructive path exists but is unproven:** marker 8
-`READ ONLY` startup brings the drive up with L2P restored and the namespace
-present (see above). Nobody has found a way for a host to request it. Until
-that is settled, "no non-destructive recovery" means *none known*, not *none
-possible*.
+**There is no non-destructive recovery IN BAND.** The one candidate — marker 8
+`READ ONLY` startup — is genuinely non-destructive (L2P restored, namespace
+present, writes refused at the admin/IO layer) but **no firmware code path
+writes it**; the sole marker setter PROC0 `0x7ffa84c8` can emit only markers 3
+and 4. Exhaustive disproof in `docs/sn200-readonly-startup.md`.
+
+**But "no firmware writer" is not "cannot be set".** The marker is *persistent
+state* — word 0 of a 244-byte record in EEPROM System-Area section 6, held in
+two redundant copies (copy 1 at `+0xF4`; the dispatcher heals the primary from
+the secondary, so a half-write is undone). Writing it **out of band** is a live
+route, and the gate is a bare `bnei a8,6` while mode 6 is literally named
+`INVALID` — so startup type **3 = `READ ONLY` sails straight through it**.
+
+Out-of-band escape (`docs/sn200-logic-escapes.md`, every firmware link proven;
+only the UART pinout is unknown): `DiagMgr>` UART at 115200 8N1 → `SYS SBL` →
+SBL console → either boot mode 4 `LOAD_N_GO` (`beqi a12,4` at `0x7ffaae2d`
+jumps over **both** `ball` crash tests *and* the empty-System-Area door) or
+write `0x80000008` into EEPROM SA section 6, copy 0, word 0.
+
+So: **none known in band; one plausible route with physical access.** Do not
+run a destructive recovery on a drive whose contents matter without weighing
+that first. In the SBL console never type `I2CErase` (destroys FRU/VPD) or
+`LogicTrap` (deliberate crash), and set exact name matching — under flexible
+matching a bare `S` resolves to `SBL`.
+
+⚠ **`0xFF` CDW12 `0x0403` is a new landmine, one nibble from `0x0503`.** OAM
+ERASE sub 4 ("Drive Uninit") posts the re-init verb `0x25` with parameter 1 and
+— unlike sub 5, which is gated by `bnei a14,6` at `0x30033709` — has **no
+startup-type gate at all** (`0x300337e3`). It is allow-listed unconditionally
+while latched and sets the **FACTORY** re-init marker.
+
+✅ **`0xFF` CDW12 `0x0007` is safe and useful:** `OAM READ RAW SA CMD` (handler
+`0x30033824`) DMAs the System Area journal from EEPROM to the host. It is a pure
+read, is in the Post-Crash allow-list, and is not in `libdmi_core`. Use it to
+read the drive's actual startup marker instead of inferring it.
 
 Triage which section is armed (read-only, safe):
 
