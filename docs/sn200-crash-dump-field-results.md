@@ -109,6 +109,13 @@ adjacent `0x7ff9f***` stack pointer each time, this is a **saved call chain**:
 
 plus two direct code addresses at `+0x12c`/`+0x130`: `0x7ffbdab8`, `0x7ffbdac3`.
 
+> **Superseded.** The record is now fully decoded from its writer — see
+> **`docs/sn200-fault-record.md`**. The core is **PROC9** (NVMe-MI/MCTP/SMBus),
+> `+0x04 = 6` is the **vector index** (not a core index, and not PROC6), the
+> record begins at staging-buffer `+0x14`, and **`EPC1`/`EXCCAUSE` are provably
+> not appended**. The section below is kept only to show what was believed
+> before the writer was traced; every claim in it about the core is refuted.
+
 ### Why this does not yet name the core — INFERRED, needs work
 
 Per-core address spaces are **self-aliased**, so `0x7ffb****` resolves inside

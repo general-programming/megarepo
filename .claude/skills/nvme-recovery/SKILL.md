@@ -181,6 +181,21 @@ Model `HUSMR7676BDP3Y1`, firmware `KNGND1xx`. Procedure below is what actually
 worked, not what the forum posts say. Full firmware teardown:
 `docs/sn200-firmware-re.md`.
 
+> 🔴 **The one fault record we have recovered says the latch was armed by a
+> TRAP, not by a shutdown.** Decoded from real hardware: a fatal synchronous
+> exception on **PROC9, the NVMe-MI / SMBus out-of-band management processor**,
+> in an ordinary scheduler task, on a running drive, *after* a power-fail
+> recovery that completed. No shutdown machinery runs on PROC9. So at least one
+> arming route is `real trap → full dump → CLOG bit 0 → marker 9 → mode 6`,
+> needing **no shutdown at all**. Read `docs/sn200-fault-record.md` before
+> assuming the unfinished-shutdown story applies to a given drive — check the
+> crash section header first: `0x00020100` + `"UNEXSTRT"` at `+0x40` is a
+> shutdown stub, `0x00020200` with a zero tag is a genuine fault.
+>
+> Practical consequence worth testing: PROC9 is driven by the **chassis BMC**
+> over SMBus/MCTP. BMC/iDRAC NVMe-MI polling is therefore a live suspect for
+> provoking these traps, and is not something the host OS controls.
+
 **One predicate, several arming routes.** Two independent teardowns agree
 (`docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`). At boot, PROC0
 runs two separate tests — one per section — both branching to

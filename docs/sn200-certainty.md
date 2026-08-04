@@ -3,6 +3,41 @@
 An explicit confidence audit, written because "we are confident" is not the same
 as "we checked". Every claim below is graded, and the ungraded gaps are named.
 
+> ## 🔴 THE FAULT RECORD IS DECODED, AND IT REFUTES THE MODEL FOR THIS DRIVE
+>
+> `docs/sn200-fault-record.md`. The retrieved crash section is a **genuine fatal
+> trap on PROC9 — the NVMe-MI / MCTP / SMBus out-of-band management processor** —
+> in an ordinary scheduler-dispatched task, on a *running* drive, **after** the
+> log shows a power-fail recovery that completed.
+>
+> **None of the shutdown machinery runs on PROC9.** Markers 5/6/7 are PROC0;
+> markers 1/2 are PROC6 `0x7ffbba61`. So for this drive the latch was armed by
+> `real trap → full dump → CLOG bit 0 → marker 9 → mode 6` — a route that needs
+> **no shutdown at all**. That is red-team attack 7, and it fits WD's own
+> OM-6850 root cause (*"over time, this leads to a crash"*) better than the
+> unfinished-shutdown model we adopted.
+>
+> Core identity is PROVEN three independent ways: the CDI magic's low byte is the
+> core id (`0x49444309`); PROC9's appender hard-codes section offset `0x00011000`
+> and the record sits at `0x11000`; and the recorded `LBEG`/`LEND` require a
+> `loopnez a9,0x7ffbdac3` at `0x7ffbdab5`, which exists in **only** PROC9 across
+> all 18 images.
+>
+> **`EPC1` and `EXCCAUSE` are provably absent** — the append starts at
+> `buf+0x14`, two dwords past them. Vector index 6 is the catch-all for 61 of 64
+> causes, so all that is recoverable is "a fatal *synchronous* exception, not an
+> interrupt". Naming a specific cause from this artefact would be invention.
+>
+> A guess of mine is also refuted here: `+0x04` is the **vector index**, not a
+> core index, so the "PROC6, the marker-writing core" reading is wrong.
+>
+> **New and testable:** PROC9 is reached from the chassis BMC over SMBus/MCTP
+> NVMe-MI. Whether BMC polling correlates with the latched-vs-survived split is
+> now the most promising open question, and would be a fifth mitigation item.
+>
+> Scope discipline: this is **one drive**. It does not name the bug, date the
+> fault against the latch, or generalise to the other four.
+
 > ## ⚠ RED-TEAM RESULT — read this before the rest
 >
 > An agent was tasked with **refuting** this document. Seven attacks, **three
