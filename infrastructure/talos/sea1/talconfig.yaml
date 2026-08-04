@@ -14,9 +14,13 @@ nodes:
   - &k8s-cp
     hostname: sea1-k8s-cp-0
     # allowSchedulingOnControlPlanes is set cluster-wide for the metal nodes,
-    # which are control-plane AND worker. These three VM control planes are
+    # which are control-plane AND worker. These two VM control planes are
     # 8 GiB / 4 vCPU and exist only to hold etcd, so re-assert the taint the
     # flag would otherwise remove. Metal nodes deliberately carry no taint.
+    #
+    # etcd is three members: these two plus sea1-k8s-2. cp-2 was removed when
+    # hv-2 was converted to metal and merged into k8s-2 -- there is no spare
+    # voter, so never take two of the three down at once.
     nodeTaints:
       node-role.kubernetes.io/control-plane: ":NoSchedule"
     # VM-ONLY. These moved out of the cluster-level patches when metal
@@ -112,19 +116,6 @@ nodes:
         addresses:
           - "10.3.2.17/23"
           - "2602:fa6d:10:ffff::117/116"
-        routes: *k8s-cp-routes
-  - <<: *k8s-cp
-    hostname: sea1-k8s-cp-2
-    ipAddress: "10.3.2.18"
-    nameservers: *k8s-cp-dns
-    networkInterfaces:
-      - deviceSelector:
-          driver: virtio_net
-        dhcp: false
-        mtu: 9000
-        addresses:
-          - "10.3.2.18/23"
-          - "2602:fa6d:10:ffff::118/116"
         routes: *k8s-cp-routes
   # nvme passthrough, single nic for v4/v6.
   #
@@ -447,42 +438,16 @@ nodes:
           udev:
             rules:
               - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
-  - hostname: sea1-k8s-103-0
-    patches:
-      - *vm-tpm-luks
-      - *vm-ens18-checksum
-    ipAddress: "10.3.6.3"
-    installDisk: /dev/sda
-    controlPlane: false
-    # Keep CloudNativePG databases off this one-off wobscale-rack node.
-    nodeLabels:
-      generalprogramming.org/no-database: "true"
-      generalprogramming.org/no-lan-vip: "true"
-      # And KubeVirt guests: this node has no br0, so a LAN-attached VM here
-      # would have no way onto the sea1 LAN. The KubeVirt CR keeps
-      # virt-handler off any node carrying this, which is what actually makes
-      # VMs unschedulable here rather than merely deprefered.
-      generalprogramming.org/no-virt: "true"
-    nameservers:
-      - 10.3.0.3
-      - 10.65.67.5
-    networkInterfaces:
-      - interface: enp6s18
-        addresses:
-          - "10.3.6.3/27"
-        routes:
-          - network: "0.0.0.0/0"
-            gateway: "10.3.6.1"
-        dhcp: true
-        dhcpOptions:
-          ipv4: false
-          ipv6: true
-    userVolumes:
-      - name: data
-        provisioning:
-          diskSelector:
-            match: disk.transport != ''
-          minSize: 500GiB
+# sea1-k8s-103-0 (wobscale rack, 10.3.6.3) was decommissioned 2026-08-04. It was
+# the only node off the site L2 -- 10.3.6.0/27 and 2620:fc:c000::/64 against
+# everyone else's 10.3.2.0/23 and 2602:fa6d:10:ffff::/116 -- which forced the
+# cluster onto an overlay CNI. With it gone every node is on one L2 in both
+# families, so Cilium can route natively with no encapsulation.
+#
+# Its no-database / no-lan-vip / no-virt labels were only ever about this node.
+# The DoesNotExist selectors that reference them now match everything, so those
+# affinity blocks are inert rather than wrong -- left in place deliberately, for
+# the next odd node.
 worker:
   machineSpec:
     secureboot: true
