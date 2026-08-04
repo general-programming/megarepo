@@ -10,7 +10,7 @@ explicit about which ones must never be.
 
 Companions: `docs/sn200-firmware-re.md`, `docs/sn200-independent-re.md`,
 `docs/sn200-shutdown-path.md`, `docs/sn200-nondestructive-recovery.md`,
-`docs/sn200-crash-dump-retrieval.md`.
+`docs/sn200-crash-dump-retrieval.md`, `docs/sn200-logic-escapes.md`.
 
 Claims are labelled **PROVEN** / **INFERRED** / **SPECULATIVE**.
 
@@ -74,6 +74,13 @@ So the win condition is not "arbitrary code execution". It is:
 Both reads are re-issued per command, so the write does not have to persist — it
 only has to hold across one command.
 
+> **Result, stated up front: that write does not exist on the host surface.**
+> The rest of this document is the audit that establishes it. §3 shows the mode
+> word has exactly two writers in the entire firmware, both driven by
+> inter-processor messages rather than by any NVMe command; §4 shows no handler
+> reachable through the gate yields a controlled write of any kind. §5.1 is the
+> bottom line. Read §7 before touching a drive regardless.
+
 ### 1.1 Why the crash-section handles are the wrong target
 
 Goal #2 in the brief (write the boot marker / crash-section state directly) is
@@ -97,7 +104,7 @@ Every VUC/OAM handler in PROC8's overlay bank opens with the same coroutine
 resume sequence:
 
 ```asm
-3003353c: entry a1,0x30
+3003353c: entry a1,0x30                                 ; the OAM-ERASE sub-handler
 3003353f: mov.n a5,a2
 30033541: l32i.n a15,a5,0x18
 3003354e: { l32i a12,a5,0x174 ; beqz a15,0x30033559 }   ; 0 -> real entry
@@ -134,10 +141,11 @@ write-anywhere primitive, not merely influence over a command field. No path
 was found writing host data at a host-controlled offset anywhere near
 `frame+0x18`.
 
-### 1.4 The command-context field map, now PROVEN
+### 1.3 The command-context field map
 
 `sn200-crash-dump-retrieval.md` §1.5 leaves the identity of the gate's `+0x38`
-selector as INFERRED. It can be closed:
+selector as INFERRED. It can be **narrowed**, though not fully closed — see the
+caveat below the table:
 
 | offset | meaning |
 |---|---|
@@ -148,9 +156,40 @@ selector as INFERRED. It can be closed:
 
 Five independent handlers read `+0x38` then `+0x39` as a `(cmd, subcmd)` pair
 (`0x30030d14`, `0x3003726e`, `0x30033c2b`, and the gate itself), which is
-exactly libdmi's `cmd[0x30] = (subcmd << 8) | cmd_id`. **PROVEN.**
+exactly libdmi's `cmd[0x30] = (subcmd << 8) | cmd_id`.
 
-### 1.3 The mode word's neighbourhood rules out the easy overflow
+> ### ⚠ Which CDW that is remains UNRESOLVED — and the readings conflict
+>
+> Three independent attempts produced **three mutually inconsistent answers**,
+> so the table row above is marked CDW12 only because that is what the external
+> evidence says, not because the firmware was read that way.
+>
+> | source | claim | implies `+0x38` is |
+> |---|---|---|
+> | `libdmi_core.so.0.39` + nvme-cli WDC plugin | selector at SQE byte `0x30` | **CDW12** |
+> | static read A — CDW0 at `frame+0x118` | SQE starts `frame+0x118` | CDW8 / PRP2 |
+> | static read B — SQE at `ctx+0x110` (from `memset(ctx+0x100,0,160)` / `memcpy(...,64)` at `0x7ffa72b3`) | `ctx+0x138` = CDW10 | **CDW10** |
+>
+> The two static readings differ by 8 bytes and neither lands on CDW12.
+> `sn200-crash-dump-retrieval.md` §1.5 already flagged that a raw-SQE mapping
+> puts `+0x38` at CDW8, "which makes no sense as a selector" — that observation
+> stands, and it is now clear it signals a mis-derived base rather than a strange
+> firmware.
+>
+> **Do not treat this as settled, and do not let it change how commands are
+> constructed.** The strongest anchor remains WD's own library and nvme-cli,
+> which both place the selector in CDW12 and are what the working crash-dump
+> retrieval procedure is built on. Resolving it properly means deriving the SQE
+> base from the DMA that fills it, not from a `memset` length.
+>
+> **Safety consequence, and it is the reason this box is here.** If the
+> selector really is CDW10 rather than CDW12, then a command believed inert
+> because "CDW12 is zero" could carry a live OAM sub-command in CDW10. That
+> cuts across the §7 table. Until this is resolved, treat **CDW10, CDW11 and
+> CDW12 as all selector-bearing** on `0xFF`, `0xC6` and `0xCA`, and zero every
+> one of them on any command not deliberately using them.
+
+### 1.4 The mode word's neighbourhood rules out the easy overflow
 
 Every data literal in PROC8's main image between `0x7ff87000` and `0x7ff88400`:
 
@@ -227,13 +266,18 @@ CDW12 encodes `(sub << 8) | cmd_id`, with `cmd_id = 0x03` for the erase family.
 |---|---|---|---|---|---|
 | 0 | `0x0003` | `0x30033772` | 3 | 6 | System Area 0 |
 | 1 | `0x0103` | `0x30033795` | 3 | 3 | Bad Block list |
-| 2 | `0x0203` | `0x300337b8` | 3 | 9 | BIST Script |
-| 3 | `0x0303` | `0x30033661` | — | — | ☠ **SBL EEPROM — permanent brick** |
+| 2 | `0x0203` | `0x300337b8` | 3 | 9 **then 8** | BIST Script **+ Status**, chained |
+| 3 | `0x0303` | `0x30033661` | 1 | 13 | ☠ **SBL EEPROM — permanent brick** |
 | 4 | `0x0403` | `0x300337db` | **37** | — | ☠ **Drive Uninit**, `[req+0x128] = 1` |
 | 5 | `0x0503` | `0x300337fe` | 3 | 11 (`0x0b`) | Crash Dump |
 | 6 | `0x0603` | `0x3003374f` | 3 | 10 (`0x0a`) | PFail Crash Dump |
 
 **PROVEN**, and it confirms the table in `sn200_vuc.py` exactly.
+
+Sub 2 is **one chained arm covering two sections**, not two sub-commands:
+`0x30033643` → `0x3003372c` sets verb 3 / section 8 after the section-9 pass.
+That is why the firmware carries nine erase-failure strings for seven
+sub-commands — a discrepancy that has confused earlier passes.
 
 Two things fall out of this that prior work could not settle:
 
@@ -259,11 +303,16 @@ Two things fall out of this that prior work could not settle:
   dump, and libdmi's `post_fn` is pure host-side bookkeeping) — but the
   `0x30031d10` leg of the argument should be struck rather than relied on.
 
-- **Sub 3 is structurally different from every other arm.** It does not set a
-  verb/section pair at all; it calls `0x30031d10` with `(dst, 4095, 64)` and
-  takes a separate path. That is consistent with it being the SBL EEPROM
-  operation, and it is one increment away from `0x0403` Drive Uninit and two from
-  `0x0503`. **Do not sweep this space.**
+- **Sub 3 reaches its verb/section pair by a longer route.** It first calls
+  `0x30031d10` with `(dst, 4095, 64)`, then continues via `0x300335f7` which sets
+  **verb 1, section 13**, whose failure arm logs *"Erase to SBL EEPROM failed"*.
+  It is one increment from `0x0403` Drive Uninit and two from `0x0503`.
+  **Do not sweep this space.**
+
+Every arm's identity is confirmed twice over: once by the verb/section immediates
+fed to the submit routine, and once by relocating each arm's continuation literal
+through the overlay rule of §6.1 onto the block that logs a named failure string.
+Both methods agree on all seven.
 
 ### 2.3 The `0xCA` gate sub-list, independently re-verified — **PROVEN**
 
@@ -344,7 +393,17 @@ message** receiver, not a host command path:
 
 **PROVEN.** Both take the new mode straight out of an IBQ message payload word.
 The MSGID itself is `[a2+0xc]`, dispatched by another compare/range chain
-(`0x7ffb00da`–`0x7ffb01d5`).
+(`0x7ffb00da`–`0x7ffb01d5`): write #1 is reached by **MSGID `0x10`**
+("System Inited Done"), write #2 by **MSGID 260/261** (`0x104`/`0x105`,
+"Startup Req").
+
+**And the receiver is unreachable from any command path.** The enclosing
+function `0x7ffb0088` has exactly one caller, inside `0x7ffb0608` — which has
+**zero callers**. It is a task entry driven by the inter-processor message
+queue, not something any NVMe command dispatch can reach. **PROVEN.** This is
+the independent, from-the-other-end closure of the objective: even a perfect
+write-anywhere primitive would have been needed, because nothing narrower —
+no influence over a command field, no confused index — touches this word.
 
 Two consequences:
 
@@ -539,12 +598,18 @@ same sub-sub space as the raw-read family**:
 3003db27: l32r a10,=0xc0040000  ; else SC 0x02, DNR
 ```
 
-**Which opcode / CDW12[7:0] carries it could not be established** — it is reached
-through overlay-descriptor indirection into an unmapped region (§6). Because its
-sub-sub space collides with the raw-read family's, **the possibility that some
-`0xCA/0x03` sub-sub value reaches a page program or block erase is UNRESOLVED,
-not excluded.** A raw block erase on a latched drive is unrecoverable data loss.
-Close this by static analysis or not at all.
+**Which opcode and selector carry it could not be established** — it is reached
+through overlay-descriptor indirection, which at the time of the attempt looked
+like an unmapped region. Because its sub-sub space collides with the raw-read
+family's, **the possibility that some `0xCA` sub-sub value reaches a page program
+or block erase is UNRESOLVED, not excluded.** A raw block erase on a latched
+drive is unrecoverable data loss. Close this by static analysis or not at all.
+
+**This is now tractable and should be the first thing anyone picks up.** §6.1
+solved the indirection: overlay code is linked at `0x300xxxxx` but executes from
+`0x7ffbc000`, and `static = ddr_src + (runtime - 0x7ffbc000)` resolves the
+descriptors that blocked this. The identical technique settled `0xEC`, `0xFF`
+and `0xEF` (§4.8). Nothing about this question requires touching a drive.
 
 ### 4.5 `0x7ff861cc` is not a write primitive — **PROVEN**
 
@@ -663,63 +728,279 @@ On a drive already latched, that is precisely the class of action that converts 
 recoverable drive into an unrecoverable one, in exchange for a primitive that
 two independent arguments say does not escape its window. **Do not attempt.**
 
+### 4.8 `0xE6`, `0xFF`, `0xEC` — **no bug on any of the three**
+
+**`0xE6` — audited in full, no bug.** Handler `Admin_VucGetDiagnosticData`
+@ PROC8 `0x7ffb375c` (extent `0x7ffb375c-0x7ffb3cdf`), worker
+`Admin_BuildE6Entry` `0x7ffb2ef0-0x7ffb375b`.
+
+- **It has no sub-command structure at all.** The demux at
+  `0x7ffa7587-0x7ffa75a4` is an opcode range walk that installs a handler
+  pointer and parses no CDW. Neither function reads the SQE copy region
+  (`[req+0x174]+0x10..0x4F`); every access is at offset ≥ `0x10C`. **CDW10–CDW15
+  never reach it.** The only host quantities are the data pointer and transfer
+  length at `[req+0x200]`/`[req+0x204]`.
+- The one apparent arbitrary-offset write is bounded: an index from
+  `[req+0x19c]` scaled ×16 at `0x7ffb3aa5-0x7ffb3ad6`. That is a firmware
+  iterator over the 36-byte-record directory at `0x7ff80570`, which has exactly
+  40 records (0–39), matching the `movi a9,39` bound. Of 22 bank-wide writers of
+  `+0x19c`, **none is host-fed**. Maximum touched offset is `a5+0x2FF` inside a
+  1024-byte buffer.
+- The firmware **already implements the check an attacker would need missing**:
+  `0x7ffb3379-0x7ffb3389` computes capacity from the host transfer length and
+  **skips** the section rather than truncating into it. Every `memcpy`/`memset`/
+  `memcmp` length is a compile-time constant and no multiply can wrap.
+
+**`0xFF` — no controlled write.** Every store in `0x3003353c-0x30033821` targets
+a compile-time-constant offset of `a5` or `[a5+0x174]`. The call list is 8×
+logger, 8× submit, 2× constant-length fill, plus two others. **Nothing writes
+`request+0x18`**, so there is no PC control via the coroutine resume pointer
+(§1.2).
+
+**`0xEC` — resolved and audited: it is `Admin_VUC_Enable`, and it is clean.**
+Handler `0x3002b6c4` (runtime `0x7ffbc24c`), overlay 11, identified from its own
+log descriptors StrId 1920 *"ADM: Admin_VUC_Enable SUCCESSFUL. New State: %u"*
+and StrId 1919 *"…FAILED. Invalid input command parameters detected"*. It is the
+switch that turns the vendor-command surface on and off. Its complete parameter
+check:
+
+```asm
+3002b756: bnez CDW10[7:0]           -> FAIL      ; reserved, must be 0
+3002b75e..3002b77b: MPTR lo/hi, PRP1 lo/hi, PRP2 lo/hi all must be 0
+3002b780: l16ui ctx+0x13a ; bnez    -> FAIL      ; upper half reserved
+3002b785: CDW11 != 0x564F4944       -> FAIL      ; 'VOID'
+3002b78e: CDW12 != 0x57415252       -> FAIL      ; 'WARR'
+3002b797: CDW13 != 0x414E5459       -> FAIL      ; 'ANTY'
+3002b7a0: l8ui a12,a10,0x39                      ; requested state
+3002b7a3: beqi a12,1 -> OK ; beqz a12 -> OK ; else FAIL
+```
+
+Two sub-commands only — 0 disable, 1 enable — writing the byte at `0x7ff8f1dd`.
+**Memory-safety audit: negative.** No memcpy on the reachable path, the one
+memset has an immediate length of 24, no length or count field is read from the
+SQE at all, the single allocation is NULL-checked (`bnez a10,0x3002b729`), and no
+host value is used as or added to a pointer.
+
+Two non-memory findings, both **PROVEN** and neither useful for the objective:
+
+- **The vendor-command unlock is a hardcoded constant**, `VOIDWARRANTY` spread
+  big-endian across CDW11–CDW13, with no nonce, challenge or signature. Any host
+  that can send an admin command can flip the global VUC-enable flag. **This does
+  not widen the Post-Crash surface**: gate 1 is an allow-list evaluated first, so
+  enabling VUC only affects gate 2's `0xD8-0xDF` band, which gate 1 rejects in
+  mode 6 regardless.
+- **A malformed `0xEC` is a disable primitive** — the failure path at
+  `0x3002b7c4` clears the flag *before* returning Invalid Field, so a garbage
+  `0xEC` forcibly disables VUC rather than merely failing. Availability nit.
+
+**Correction to the `0xFF` entry point.** `0x3003353c` is **not** the `0xFF`
+handler entry — it is the OAM-ERASE sub-handler. The real entry is
+`Admin_OamCmd` at `0x30033448` (runtime `0x7ffbc110`), whose top-level dispatch
+at `0x300334b5`–`0x300334fd` admits exactly three selector values: **3** (OAM
+ERASE → `0x3003353c`), **4** (inline status read), **7** (OAM READ RAW SA →
+`0x30033824`), with a default logging StrId 1626 *"OAM CMD: Received Unsupported
+Command 0x%08x"*. Compare chain, explicit default, no table index.
+
+**A genuinely useful non-destructive read primitive** sits at selector 4:
+
+```asm
+30033500: l32r a9,-> 0x7ff87c64 ; l32i.n a10,a9,0x0
+30033505: bnei a10,128,0x30033519
+30033519: l32i.n a8,a9,0xc ; slli a11,a10,8 ; or a8,a8,a11
+30033521: s32i a8,a2,0x154                    ; -> completion DW0
+```
+
+`0xFF` with selector `0x04` returns `(startup_mode << 8) | [0x7ff87c70]` in
+CQE DW0. It only reads, transfers no data, touches no media, and is inside the
+allow-list. This is WD's `gf_nvme_sys_init_done` and it is the precise,
+non-inferential answer to "is this drive latched, and in what state" — worth
+knowing exactly because the destructive members of the same family are one
+selector byte away.
+
+**`Admin_VUC_Mi_Test_OVL022` is carried on `0xEF`, not `0xE6`/`0xEC` — and
+`0xEF` is not in the allow-list.** Relocating, `0x30033338 + 0x5f4 = 0x3003392c`
+→ runtime `0x7ffbc5f4`, which is exactly the pointer the demux installs for
+opcode `0xEF` at `0x7ffa757a`. **PROVEN.** On a latched drive `0xEF` is rejected
+with `0x7C5` before reaching any of it. Its own selectors are validated to
+`{0,1}` and `{0,1,2}` with a logging default, and its host↔DDR transfers use
+constant lengths (16, 259, 231) into fixed buffers. **Open question 6.2 #5 is
+closed: the MI command-injection surface is not reachable while latched.**
+
+**Residual, SPECULATIVE, denial-of-service only.** `0x7ffb3044` loads the global
+at `0x7ff827c4` (zero in flash) as a DMA source base; in mode 6, SAM/BlockMgr
+never initialise, so it may still be NULL → LoadProhibited → controller reset.
+Same shape at `0x7ffb3306` and `0x7ffb356a`. **Not attacker-steerable; no
+controlled read or write.** And per §2.5 a controller reset is an unclean stop
+that re-arms the latch, so it is not merely unhelpful, it is a net loss.
+
 ## 5. Ranked findings
 
-*(see §5 table)*
+Ranked by (a) likelihood of working and (b) risk of making a drive worse.
+**Nothing in this table is a recommendation to send a command.**
+
+| # | finding | class | works? | risk | verdict |
+|---|---|---|---|---|---|
+| 1 | **No controlled write to `0x7ff87c64` exists on the host surface** | — | — | — | The objective is unreachable by memory corruption. §3, §5.1 |
+| 2 | FW Download `OFST<<2` / `NUMD+OFST` 32-bit wrap (§4.7) | integer overflow, **real** | Very unlikely — use site mirrors the wrap; staging ≠ overlay bank | **HIGH, asymmetric** | Do not attempt |
+| 3 | `0xCA`/`0x03`/{0,1,2} raw NAND page **read** (§4.3) | surface expansion, correctly bounded | Works as designed | Low (read) | Info disclosure only; no path out of the latch |
+| 4 | Mode-6 NULL DMA base in `0xE6` (§4.8) | uninitialised pointer | Plausible | **Negative value** | Yields a reset, which re-arms the latch |
+| 5 | `0xC6`/`0x20` subs 7–8; `0xCA` subs 20–28 (§4.2) | undocumented, unidentified | Unknown | Unknown | **Do not probe** |
+| 6 | Raw NAND **write/erase** family sub-sub collision (§4.4) | UNRESOLVED | Unknown | **Catastrophic** | Close statically or not at all |
+
+### 5.1 The honest bottom line
+
+**I audited the Post-Crash-reachable surface and found no exploitable
+memory-safety bug.** That is the result, and it is a real one rather than a
+failure to look hard enough.
+
+**Coverage, stated exactly, because "every handler" would be an overstatement.**
+Audited: `0x00`, `0x01`, `0x02`, `0x04`, `0x05`, `0x06`, `0x08`, `0x09`, `0x0C`,
+`0x10`, `0x11`, `0xC6`, `0xCA`, `0xE6`, `0xEC`, `0xFF` — **sixteen of the
+seventeen allow-listed opcodes.** The sole gap is **`0x0A` Get Features**, whose
+descriptor was not chased through the overlay relocation of §6.1 before this
+document was closed; it is now tractable rather than blocked, and it is the first
+thing to pick up if this is resumed (§6.2). Everything below concerns the sixteen
+that were audited:
+
+- Every selector in the reachable surface — admin opcode, Get Log Page LID,
+  Identify CNS, Set Features FID, `0xFF` OAM sub-command, `0xC6` cmd byte,
+  `0xCA` sub-value — is either a hand-written compare chain with an explicit
+  default-reject arm, or (in the one table-driven case, `0xCA`) a jump table
+  whose bound is **provably exact by three independent measurements**.
+- Every length path is either a compile-time constant, a 16-bit-sourced value
+  that cannot overflow 32 bits, or explicitly clamped before use.
+- The one genuine integer wrap that does exist (§4.7) is mirrored at its use
+  site and lands in a buffer that is not the code bank.
+- The two "juicy" leads resolved as benign under scrutiny: `0x7ff861cc` receives
+  a constant `1`, and `0xC6`/`0x30` is a zero-length internal handshake.
+- WD's validation in the vendor commands turned out to be **thicker**, not
+  thinner, than the spec paths — `0xE6` already implements the capacity check an
+  attacker would want missing, and the raw-flash read clamps to 640 bytes before
+  use.
+
+And the objective was independently foreclosed from the other end: the mode word
+`0x7ff87c64` has exactly two writers in the entire firmware, both inside
+`Admin_IBQCommandReceiver`, reached only by inter-processor message (MSGID
+`0x10` "System Inited Done" at `0x7ffb014a`, and MSGID 260/261 "Startup Req" at
+`0x7ffb019c`). The enclosing function's only caller has **zero callers** — it is
+a task entry driven by the IBQ, not by any NVMe command. **No host opcode reaches
+it.** So even a hypothetical bug would have had to be a full write-anywhere
+primitive; nothing narrower would have sufficed.
+
+### 5.2 What this means for the five drives
+
+The memory-safety route is closed. That does not change the standing advice, and
+it removes a reason to gamble:
+
+- **Reading is safe and remains so.** `0xC6`/`0x20` crash-dump and drive-log
+  retrieval is unaffected by anything here, and §6.1 notes a zero-risk way it
+  might be extended to name the remaining unknown VUCs.
+- **Do not trade a recoverable drive for an experiment.** Every candidate in the
+  table above is either useless (#3, #4), unknown (#5), or carries a
+  drive-ending downside for a primitive two independent arguments say does not
+  work (#2, #6). A drive left latched still has intact media and intact data; a
+  drive that has taken a bad `0xFF` or a stray firmware download may not.
+- **The remaining live lines of enquiry are elsewhere**, not in this document:
+  `docs/sn200-logic-escapes.md` pursues legal state transitions (and reaches a
+  boot-mode conclusion worth reading alongside `sn200-independent-re.md` §6.2,
+  which they appear to disagree with — see §6.4 below), and
+  `sn200-nondestructive-recovery.md` covers the destructive-but-known path.
 
 ---
 
 ## 6. Open questions
 
-### 6.1 The `0x7ffbc000`–`0x7ffbef01` blob — a dead end, but not a missing image
+### 6.1 RESOLVED: `0x7ffbc000+` is the overlay **execution window**
 
-Both the `0x0A` Get Features descriptor and every `0xC6`/`0xCA` per-command
-descriptor point into `0x7ffbc000`–`0x7ffbef01`: ~12 KB, referenced 1271 times
-from the overlay bank, **913 of those references unaligned**.
+This section previously recorded the `0x7ffbc000`–`0x7ffbef01` region as an
+unresolvable runtime-populated string blob. **That was wrong, and the correct
+answer unlocks the rest of the bank.**
 
-`segparse.py` on `PROC8.bin` shows eleven segments ending at `0x7ffbb064`, and
-`FWHEADER.bin` is a bare 64-byte version stamp with no segment table. There is no
-missing file — the package contains only `PROC0-15.bin`, `FCC.bin`,
-`FWHEADER.bin`, `SECURITY.bin` and the string table. **PROVEN: the region is
-BSS, populated at runtime.**
+The overlay bank is **linked at `0x300xxxxx` but executes from a RAM window**,
+named in the bank header at `PROC8@30000000 0x30000000`:
+`"OVB\0", 0x7ff9f000 (rodata), 0x7ffbc000 (text)`. The descriptor table at
+`[0x7ff8197c] = 0x7ff81af4` holds 16-byte records
+`{load_addr, size, ddr_src, 0}`, two per overlay. The relocation is:
 
-The unaligned-reference pattern is the tell: aligned pointer tables do not
-produce 913 unaligned `l32r` targets, but a **blob of variable-length strings**
-does. **INFERRED: it is a runtime-populated trace-name area** (note
-`StringTable.csv.gz` ships compressed in the package alongside the plaintext
-`StringTable.csv`, so the drive decompresses string data into RAM at boot).
+```
+static_address = ddr_src + (runtime_address - 0x7ffbc000)
+```
 
-Consequence for future work: **stop looking for a missing segment.** Naming those
-VUCs requires reading that RAM range off a live drive, not a better extraction.
-That may well be obtainable non-destructively through the `0xC6`/`0x20` drive-log
-or crash-dump read path, which is already known safe — a worthwhile,
-zero-risk next step if this line is ever resumed.
+Overlay 11: `ddr_src = 0x3002b478`, size `0x380`. Overlay 22:
+`ddr_src = 0x30033338`, size `0xa00`. **PROVEN.**
+
+This explains every symptom that made the region look like a string blob: the
+demux stores **runtime** addresses, which is why `0x3003353c` has zero xrefs and
+why the literal `0x3003353c` appears in no image. The "913 unaligned references"
+were relocated code pointers, not string starts. My BSS/trace-name inference was
+a plausible reading of the evidence and it was still wrong; recorded here so the
+mistake is not repeated.
+
+Consequences, all now realised in §4:
+
+- `0xEC` **is** resolvable and was audited (§4.8).
+- The second-stage dispatcher is `0x7ffb9208`; `[obj+0x20]` is an **overlay id**,
+  not a handler index, and the handler PC travels separately in `[ctx+0x10]`.
+  Its index math `(id-1) << 5` is bounds-checked at `0x7ffb9314`
+  (`bltu count,id → reject`) and `0x7ffb9317` (`beqz id → reject`) **before any
+  dereference**, and the id comes only from `movi` immediates in the demux.
+  No off-by-one, not host-controlled.
+- **Every `call8`/`l32r` target inside overlay code must be relocated before it
+  means anything.** Overlay-22 `0x30030aa0` and overlay-11 `0x30028be0` are both
+  the scheduler `0x7ffb9768`. Any earlier analysis that treated raw overlay
+  branch targets as static addresses should be re-checked.
+- This is also the tool that could close §4.4, the one genuinely dangerous
+  open question.
 
 ### 6.2 Unresolved, ranked by how much they matter
 
 1. **Does any `0xCA/0x03` sub-sub value reach a page program or block erase?**
    (§4.4.) Highest-stakes open question in the document. Must be closed
    statically; probing it risks unrecoverable data loss.
-2. **`0x0A` Get Features is unaudited** — its handler is reached by message
-   dispatch through the unmapped blob. It is the only allow-listed opcode with
-   no coverage at all.
-3. **The CDW13 dword-offset bound on the `0xC6`/`0x20` read path.** `xdis.py`
+2. **Which CDW carries the vendor selector** (§1.3). Three readings, three
+   different answers, none of them agreeing with WD's own library. This is
+   safety-relevant, not merely tidy: it decides whether a "zeroed CDW12" command
+   is actually inert. Resolve by deriving the SQE base from the DMA that fills
+   it.
+3. **`0x0A` Get Features is unaudited** — the only allow-listed opcode with no
+   coverage. It was blocked on the unmapped-descriptor problem, which §6.1 has
+   since solved, so this is now straightforwardly tractable.
+4. **The CDW13 dword-offset bound on the `0xC6`/`0x20` read path.** `xdis.py`
    cannot decode two Xtensa TIE opcodes (`qrst op1=a op2={0,1}` and
    `qrst op1=b op2={0,1}`) that always appear adjacent around 64-bit address
    arithmetic (`0x30030de4`, `0x3003c017`); these are almost certainly the
    64-bit add applying CDW13 to a media base. The bound could not be verified.
    Reads are believed non-destructive regardless.
-4. **Whether an IBQ message can be posted with a host-controlled MSGID and
+5. **Whether an IBQ message can be posted with a host-controlled MSGID and
    payload** (§3). This is the highest-*value* unknown: it would be a legitimate,
    memory-safety-free route to setting the mode word. Nothing found so far
    suggests it is reachable, but the sender side was not exhaustively audited.
-5. **`Admin_VUC_Mi_Test_OVL022` / `VUC_MI_TEST_COMMAND_INJECT_CMD`** (StrId 3369,
-   log site `0x30033963`, handler region ~`0x30033820`–`0x300339c0`) performs
-   host↔DDR transfers of what appears to be an injected command. Which opcode
-   carries it, and whether an injected command is re-checked against the admin
-   gate, is unresolved.
+**Closed since the first draft:** the MI command-injection surface
+(`Admin_VUC_Mi_Test_OVL022` / `VUC_MI_TEST_COMMAND_INJECT_CMD`) is carried on
+opcode **`0xEF`**, which is not in the Post-Crash allow-list, so it is
+unreachable while latched (§4.8).
 
-### 6.3 Tooling fixes worth making if this is resumed
+### 6.3 A cross-document discrepancy someone should settle
+
+`docs/sn200-logic-escapes.md` (parallel investigation, legal state transitions
+only) concludes that a boot with firmware boot-mode `4` (`LOAD_N_GO`) **skips
+the crash-section latch entirely**, citing `0x7ffaae2d`
+(`beqi a12,4,0x7ffaae53`) jumping over all three marker-9 forcing routes at
+`0x7ffaae35`/`0x7ffaae3d`/`0x7ffaae4a`.
+
+`sn200-independent-re.md` §6.2 concludes the opposite: that the load-n-go
+override (StrId 3044) is reached only from `0x7ffaaf6b`, the convergence of
+startup states 5/6/7, and that state 9 has a different dispatch edge — so
+load-n-go overrides *"the shutdown didn't finish"*, not *"there is a crash
+record"*.
+
+These cannot both be right. They may be describing **two different mechanisms**
+— a boot-mode test *upstream* of marker selection versus a state-9 override
+*downstream* of it — in which case both stand and only the wording conflicts.
+Nothing in the present document depends on the answer, but anyone acting on the
+load-n-go route must resolve it first. **Not adjudicated here.**
+
+### 6.4 Tooling fixes worth making if this is resumed
 
 - `xdis.py` does not decode two FLIX slot-B classes (`pre=1`, and `pre=2` with
   `sub != 0xE`); they print as `?B`/`?Balu`. No control flow depends on them —
@@ -754,6 +1035,17 @@ landing somewhere terrible.
 typo, do not let shell history complete the wrong one, and do not write a script
 that can emit any `0xFF` sub-command it was not explicitly asked for.
 
+**And the selector may not be in the CDW you think.** Per §1.3 the CDW index
+carrying the vendor selector is unresolved, with static reads pointing at CDW10
+and WD's library at CDW12. Until that is settled, a command is only safely inert
+if **CDW10, CDW11 and CDW12 are all zero**. Zero all three on anything not
+deliberately using them, and do not reason "CDW12 is clear, therefore this is
+harmless".
+
+The complete `0xFF` selector space is identified — all of 0, 1, 2, 3, 4, 5, 6
+under OAM ERASE, plus top-level selectors 3, 4 and 7 — so there is no unknown
+value in it and no reason for anyone to go looking by trial.
+
 **Explicitly not recommended: blind probing of any unidentified vendor
 sub-command.** This document names several newly discovered ones
 (`0xC6`/`0x20` subs 7–8, `0xCA` subs 20–28, the `0x3003d5c0` raw-write family).
@@ -764,78 +1056,56 @@ opcode space whose neighbours destroy drives.
 
 ## 8. Reproducing this
 
+Everything above came from two helper scripts plus `disany.py`. Neither touches
+hardware.
 
-## Peer-session audit results (relayed 2026-08-04)
+**Find every reference to a global.** Per image, locate literals holding the
+target value, then find the `l32r` instructions pointing at those literals. The
+displacement formula is the part that is easy to get wrong:
 
-Independent audit of part of the reachable surface. Recorded here so it is not
-re-done; verify before relying on any single claim.
+```python
+import glob, os, struct, sys
+targets = set(int(x, 16) for x in sys.argv[1:])
+for p in sorted(glob.glob(os.path.expanduser('~/sn200fw/flat/*.bin'))):
+    base = int(os.path.basename(p)[:-4].rsplit('_', 1)[1], 16)
+    d = open(p, 'rb').read()
+    lits = {}
+    for o in range(0, len(d) - 3, 4):
+        w = struct.unpack_from('<I', d, o)[0]
+        if w in targets:
+            lits[base + o] = w
+    if not lits:
+        continue
+    for o in range(0, len(d) - 2):
+        if (d[o] & 0xF) != 1:            # l32r, narrow form
+            continue
+        imm16 = d[o + 1] | (d[o + 2] << 8)
+        pc = base + o
+        lit = ((pc + 3) & ~3) + ((imm16 - 0x10000) * 4)
+        if lit in lits:
+            print("%-22s %08x: l32r a%-2d,[%08x] = %08x"
+                  % (os.path.basename(p), pc, d[o] >> 4, lit, lits[lit]))
+```
 
-### `0xE6` — no bug, audited in full
+**Match literals per image, never by address across images.** Every core has its
+own literal pool at the same addresses holding different values; cross-image
+address matching produces a page of confident nonsense. This bit me first time.
 
-`Admin_VucGetDiagnosticData` at `PROC8@7ff80000 0x7ffb375c` (extent
-`…-0x7ffb3cdf`), worker `Admin_BuildE6Entry 0x7ffb2ef0-0x7ffb375b`.
+The same script with the match changed to `(w >> 16) == StrId and (w & 0xff) <= 12
+and ((w >> 8) & 0xf) == 0` finds log call sites, which is how most handlers here
+were located.
 
-- **No sub-command structure.** The demux at `0x7ffa7587-0x7ffa75a4` walks the
-  opcode range and installs a handler pointer; it parses no CDW. Neither
-  function reads the SQE copy region (`[req+0x174]+0x10..0x4F`) — all accesses
-  are at offset ≥ `0x10C`. **CDW10–CDW15 never reach it.** The only host-supplied
-  quantities are the PRP pointer and transfer length (`[req+0x200]/[req+0x204]`).
-- The apparent arbitrary-offset write at `0x7ffb3aa5-0x7ffb3ad6` (index ×16) is
-  bounded: the index is `jumpTableIndex`, a firmware iterator over the 40-record
-  directory at `0x7ff80570`, matching `movi a9,39`. 22 writers bank-wide, none
-  host-fed. Max touched `a5+0x2FF` inside a 1024-byte buffer.
-- The firmware **already implements** the bound an attacker would need missing:
-  `0x7ffb3379-0x7ffb3389` derives capacity from the host transfer length and
-  **skips** the section rather than truncating. All `memcpy`/`memset`/`memcmp`
-  lengths are compile-time constants; no multiply can wrap.
-- Residual **SPECULATIVE, DoS only**: `0x7ffb3044` uses the flash-zero global
-  `0x7ff827c4` as a DMA source base; in mode 6 SAM/BlockMgr never initialise, so
-  it may still be NULL → LoadProhibited → controller reset. Not steerable, no
-  controlled read/write — **and a controller reset is an unclean stop that
-  re-arms the latch**, so it is worse than useless to us.
+**Segment map**, used to establish that `0x7ffbc000+` is BSS rather than a
+missing file:
 
-### `0xFF` — no controlled write
+```sh
+cd tools/sn200-fw && python3 segparse.py ~/sn200fw/fw/KNGND122/PROC8.bin
+```
 
-Every store in `0x3003353c-0x30033821` targets a compile-time-constant offset of
-`a5` or `[a5+0x174]`. **Nothing writes `request+0x18`**, so there is no PC
-control via the coroutine resume pointer.
-
-Two structural details worth keeping:
-
-- **BIST Script and BIST Status are ONE chained arm**, not two sub-commands —
-  `0x30033643` → `0x3003372c` sets verb 3 section 8 and leads to `0x30033634`.
-  That is why there are 9 erase strings for 7 sub-commands.
-- The gate's `a4` and the erase sub-command are **two bytes of one dword** in the
-  parsed command object at `request+0x100` (`+0x38..0x3b` LSB-first, proven at
-  `PROC8@30000000 0x3003d6c9-0x3003d6f9`). Consistent with `(sub<<8)|cmd`. The
-  peer could **not** prove which CDW index that dword is and explicitly asks that
-  this not be cited as confirmation of CDW12.
-
-### The `0x7ff87c64` write does not exist on the host surface — CLOSES AN ATTACK
-
-The startup-mode word the gate tests (`== 6`) has 4 literal refs in PROC8 and
-only **2 writers**, both in `Admin_IBQCommandReceiver` (`0x7ffb014a`,
-`0x7ffb019c`, after log id 2051 `"Admin_IBQCommandReceiver Startup Req MSGID
-0x%x"`, MSGID 260/261). Enclosing function `0x7ffb0088` has one caller inside
-`0x7ffb0608`, which has **zero callers** — an **inter-processor message queue**
-task entry, not an NVMe command path.
-
-**"Write `0x7ff87c64` to lift the gate" is therefore dead from the host.** The
-mode word is writable only by another core over the IBQ.
-
-### Why `0xEC`/`0xFF`/`0xEF` handlers cannot be resolved statically
-
-The opcode demux stores only a constant tag into `[obj+0x20]` and a RAM
-descriptor pointer into `[a7+0x10]` — `0x7ffbc110` (`0xFF`), `0x7ffbc24c`
-(`0xEC`), `0x7ffbc5f4` (`0xEF`), `0x7ffbc308` (`0xDD`). `0xEF` and `0xFF` share
-tag 22 but get different descriptors, so the **descriptor** selects the handler.
-Those addresses are **runtime-built BSS** (last image load range ends
-`0x7ffbb064`), so the binding is installed at boot and is not in any image.
-`0xE6` resolved only because its demux installs a direct code pointer.
-
-### `0xCA` bounds are exact
-
-`bgeu a12,67` → default `0x7ffa75f6`; table `0x7ffa760e..0x7ffa76d6` = 201 bytes
-= 67 entries. **No off-by-one.** Note this 67-entry *dispatch* table is a
-different object from the 12-entry `0xCA` sub-list in the Post-Crash allow-list
-at `0x7ffa6d76`; do not conflate them.
+**Caveats that apply to every listing above.** A linear sweep desynchronises
+across data regions, so treat any single decoded line far from a known `entry`
+as suspect and re-anchor. `xdis.py` does not decode two FLIX slot-B classes or
+two Xtensa TIE opcodes (§6.3); those print as `?B`/`?Balu`/`qrst`. No control
+flow in this document depends on an undecoded slot — every branch is slot-B
+branch-format and decodes cleanly — but arithmetic shown as `?Balu` is inferred
+from context rather than read off.

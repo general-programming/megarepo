@@ -492,6 +492,27 @@ sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvmeN
 Re-run the same command line to resume after a reset. Full procedure and
 provenance: `docs/sn200-crash-dump-retrieval.md`.
 
+### ⚠ Zero CDW10, CDW11 AND CDW12 on any vendor command
+
+Three independent derivations place the vendor selector in **CDW12** (WD's own
+library), **CDW8**, and **CDW10** — and they do not agree. Until that is settled,
+**"CDW12 is clear so this is harmless" is not a safe inference.** A vendor
+command is only reliably inert when CDW10, CDW11 and CDW12 are *all* zero.
+
+This matters because the erase sub-command space is one digit from
+`Erase to SBL EEPROM` (permanent brick) and `Drive Uninit`, and because a raw
+NAND write/erase family shares a sub-sub space `{0,1,2}` whose full membership
+is **unresolved**. A stray non-zero CDW is the plausible route to firing one of
+those by accident.
+
+Empirically the probes and clears used here (`--cdw10=0 --cdw12=<v>`, with
+nvme-cli defaulting CDW11 to 0) behaved exactly as intended — but that is
+evidence about those specific encodings, not a licence to vary them.
+
+**Safe, confirmed non-destructive:** `0xFF` with `cdw12=0x0004` is a pure
+startup-mode read. It answers "is this drive latched?" directly instead of by
+inference, and is the right first command on any suspect drive.
+
 ### What a latched drive still accepts — PROVEN
 
 `PROC8 0x7ffa6b18` hosts **four separate gates**, which is why earlier readings
