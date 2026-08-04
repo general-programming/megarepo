@@ -49,13 +49,28 @@ causal — it is the peak dirty-state workload, not a special code path.
 
 ## Still INFERRED, and honestly so
 
-- **Which specific assert fired.** Not retrieved. The dump's 16 per-core log
-  regions need `0x52500` bytes; the kernel caps admin transfers at **128 KiB**,
-  which covers cores 0–3 only. This is a *host* limit — confirmed as `EINVAL`
-  from the ioctl, not an NVMe status — and the firmware's only clamp is
-  `minu a15,a7,a15` against the section size, so the drive would return all
-  3.2 MiB in one command. Closing this needs a patched driver
-  (`tools/nvme-noreset/`) on a diagnostics boot.
+- **Which specific assert fired.** Not retrieved — but **no longer blocked**.
+  The dump's 16 per-core log regions need `0x52500` bytes and only 128 KiB was
+  reachable, covering cores 0–3.
+
+  The cause is now understood and fixed. The ceiling is **not** a hardware
+  limit: `ctrl->max_hw_sectors` comes from
+  `min(NVME_MAX_KB_SZ << 1, dma_opt_mapping_size(dev) >> 9)`, and
+  `dma_opt_mapping_size()` is an IOMMU *optimal*-size **hint** —
+  `iova_rcache_range()` = 32 × PAGE_SIZE = 128 KiB. That is the observed
+  32-page cliff exactly. `tools/nvme-noreset/` now has a `max_admin_xfer_ids`
+  parameter that raises the admin queue's limit to 4 MiB for a matched device
+  only, with all 72 exported symbol CRCs still identical to stock.
+
+  Remaining practical bound: the 128-segment DMA cap means the buffer must be
+  backed by physically contiguous chunks — hugetlbfs / `MAP_HUGETLB` works,
+  ordinary `malloc()` may not.
+
+  **Also proven along the way: there is no windowing sub-command.** A
+  byte-exhaustive scan of the whole handler, decoding every offset without
+  assuming instruction boundaries, finds only `CDW10`. No arm takes a core,
+  block or region selector, and each recomputes its source from a
+  firmware-owned descriptor, so there is no cursor either.
 - **The GC deadlock.** The state machine and the PFail early-exit were found;
   the circular wait was not. Narrowed 2026-08-03 to two counters,
   `0x7ff810d0` / `0x7ff810d8`, that GC waits on and that only media-completion
