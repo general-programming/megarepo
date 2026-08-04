@@ -64,13 +64,18 @@ spec:
         k8sServiceHost: localhost
         k8sServicePort: 7445
 
-        # AUDIT ONLY. Policies are evaluated and would-be drops surface in
-        # Hubble as AUDIT verdicts, but nothing is dropped. sea1 has 16
-        # NetworkPolicies flannel never enforced; 27 pods are selected, 13 of
-        # them ArgoCD's. Set policyAuditMode=false to enforce for real, once
-        # `hubble observe --verdict AUDIT` is clean.
+        # Enforced. Pods selected by a NetworkPolicy get default-deny in the
+        # directions it declares; unselected pods are unrestricted. 27 pods are
+        # selected, 13 of them ArgoCD's.
+        #
+        # Enforcement was enabled only after a 40-minute audit-mode window
+        # (policyAuditMode=true) across all five nodes returned zero legitimate
+        # AUDIT verdicts -- the only hit was a deliberate probe on a disallowed
+        # port, which confirmed the mechanism fires.
+        #
+        # Revert with policyEnforcementMode: never.
         policyEnforcementMode: default
-        policyAuditMode: true
+        policyAuditMode: false
 
         # MANDATORY. The default strips foreign CNI configs including
         # 00-multus.conf, which would drop the LAN interface from every KubeVirt
