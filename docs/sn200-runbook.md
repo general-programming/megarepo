@@ -118,6 +118,19 @@ Is there data on this drive you want?
           see docs/sn200-data-recovery.md. It has never been run.
 ```
 
+**There is no NVMe-surface way to read the data off a latched drive.** This was
+chased to the end, not assumed. `Admin_VucFlashRead` (`0xCA`/`CDW12=0x0001`)
+does exactly what is wanted — real user data through the L2P — and is **not in
+the post-crash allow-list**, along with `Admin_VucFlashLogicalToPhysical`
+(`0xCA`/`0x0000`). Those two are the only `0xCA` sub-values below `0x02` and the
+only two that understand LBAs; everything the allow-list admits works in
+*physical* addresses. What is left is `0xCA`/`0x03` raw page read at **640 bytes
+per command** — ~1.2×10¹⁰ commands for 7.68 TB, on a controller resetting every
+~5 s, with no L2P to reassemble any of it. See `sn200-vuc-flash-read.md`.
+
+So "power it down and leave it" is not caution for its own sake — it is the
+only option that keeps the UART route alive.
+
 **Firmware activation is not a gentler alternative.** `--action=2` writes marker
 3 gated on **bit 0 of the target image's own flags word**, so whether it wipes
 is a property of the image in that slot, not of the action you chose. Same data

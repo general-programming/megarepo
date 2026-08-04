@@ -625,6 +625,18 @@ Both command bytes are in the 12-entry Post-Crash allow-list, and
 `0xCA` cmd `0x37` (multiplane write/erase) exists but is **not** allow-listed,
 so it cannot be reached while latched.
 
+**The allow-list also blocks the only useful read.** `Admin_VucFlashRead`
+(`0xCA`/`CDW12=0x0001`) reads real user data through the L2P — and is *absent*
+from the list, as is `Admin_VucFlashLogicalToPhysical` (`0x0000`). Those are the
+only two `0xCA` sub-values below `0x02` and the only two that take LBAs;
+everything admitted works in **physical** addresses. Do not re-chase this — it
+is closed, with the decode, in `docs/sn200-vuc-flash-read.md`. What remains is
+`0xCA`/`0x03` raw page read at **640 bytes/command**, i.e. ~1.2×10¹⁰ commands
+for 7.68 TB with no L2P to reassemble them.
+
+⚠ That row read `0xC6` in the command reference until 2026-08-04 and was wrong;
+raw page read is `0xCA`. The *destructive* rows above were always `0xCA`.
+
 **`CDW13` carries the raw physical flash address** for the whole raw-flash
 family, and `CDW10` carries the write length. So a vendor command is only
 reliably inert when **CDW10, CDW11, CDW12 *and* CDW13** are all zero. Nothing
