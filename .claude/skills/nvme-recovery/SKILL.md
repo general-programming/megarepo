@@ -296,15 +296,23 @@ flag bit (`0x80`) and falls straight into the **normal** boot path: L2P
 restored, namespace present, writes refused at the admin/IO layer. That is
 exactly what would be needed to get data off a latched drive.
 
-**Nothing can set it.** `0x80000008` exists in exactly two places in the whole
-firmware: PROC0 `0x7ff83478`, which is only ever *compared* in the boot
-dispatch, and PROC12 `0x7ffa0d94`, which is an **Event-Log record tag, not the
-startup marker** — a different enum that happens to share the `0x80000000|N`
-form. Independently, the sole marker setter PROC0 `0x7ffa84c8` has two callers
-and can emit only markers 3 and 4. Full disproof in
-`docs/sn200-readonly-startup.md`.
+**No host command can set it — in band or over SMBus.** The mechanism exists
+(PROC0 task `0x7ffa3e48` request code 6 hands `[ctx+0x50]` verbatim to the marker
+setter `0x7ffa84c8`, stored unchecked at `0x7ffa853b`), but **nothing constructs
+the value `0x80000008`**: it occurs twice in 18 images, once as a comparison in
+the boot dispatch and once as a NAND Event-Log tag in PROC12 — a different enum
+sharing the `0x80000000|N` form. That PROC12 site is *not* a marker writer;
+`sn200-firmware-re.md` §13.6 is retracted.
 
-Do not spend more time looking for a request path. There isn't one.
+Refuted individually: every allow-listed opcode, `0xFF`/`0xCA`, Set/Get Features,
+the firmware-download flags word (bit 0 is a yes/no gate on a hardcoded
+`0x80000003`), Commit action `011b`, and the NVMe-MI tunnel (six standard opcodes,
+no vendor channel). Startup type 3 and boot mode 4 (`LOAD_N_GO`) both live in
+PROC0-only words that PROC8's command handlers cannot name.
+
+So this is a **code-execution problem, not a command-encoding one** — the
+remaining candidate is the `DiagMgr>` UART / SBL console, i.e. physical access.
+Full analysis and the exhaustive sweeps: `docs/sn200-readonly-startup.md`.
 
 ### First thing to check on any SN200: the firmware revision
 
@@ -459,11 +467,19 @@ Precise bit mapping, PROVEN three ways (TOC at `0x7ff84a70`, producer
 
 **There is no non-destructive recovery IN BAND.** The one candidate — marker 8
 `READ ONLY` startup — is genuinely non-destructive (L2P restored, namespace
-present, writes refused at the admin/IO layer) but **no firmware code path
-writes it**; the sole marker setter PROC0 `0x7ffa84c8` can emit only markers 3
-and 4. Exhaustive disproof in `docs/sn200-readonly-startup.md`.
+present, writes refused at the admin/IO layer) but **nothing ever requests it**:
+the constant `0x80000008` is constructed nowhere in the firmware (two occurrences
+in 18 images — a comparison in the boot dispatch, and a NAND Event-Log tag in
+PROC12 that is a *different enum*, not a marker). Exhaustive disproof in
+`docs/sn200-readonly-startup.md`.
 
-**But "no firmware writer" is not "cannot be set".** The marker is *persistent
+Precisely: the setter PROC0 `0x7ffa84c8` is **not** value-restricted — it stores
+`[req+0x18]` verbatim at `0x7ffa853b`, and its third caller (`0x7ffa4709`,
+request code `[ctx+0x48] == 6`) passes an **arbitrary** word from `[ctx+0x50]`.
+The two other callers hardcode markers 3/4. So marker 8 is *unwired*, not
+impossible — which is exactly why code execution on PROC0 is enough to set it.
+
+**And "no firmware writer" is not "cannot be set".** The marker is *persistent
 state* — word 0 of a 244-byte record in EEPROM System-Area section 6, held in
 two redundant copies (copy 1 at `+0xF4`; the dispatcher heals the primary from
 the secondary, so a half-write is undone). Writing it **out of band** is a live
@@ -526,22 +542,34 @@ sudo ./pull-crash-dump.sh --section all --chunk-size 65536 /dev/nvmeN
 Re-run the same command line to resume after a reset. Full procedure and
 provenance: `docs/sn200-crash-dump-retrieval.md`.
 
-### ⚠ Zero CDW10, CDW11 AND CDW12 on any vendor command
+### ⚠ Commands that DESTROY a latched drive — never send these
 
-Three independent derivations place the vendor selector in **CDW12** (WD's own
-library), **CDW8**, and **CDW10** — and they do not agree. Until that is settled,
-**"CDW12 is clear so this is harmless" is not a safe inference.** A vendor
-command is only reliably inert when CDW10, CDW11 and CDW12 are *all* zero.
+**The selector is CDW12 — settled.** `ctx+0x38` = `CDW12[7:0]`, `ctx+0x39` =
+`CDW12[15:8]`, confirmed against Firmware Image Download (`0x11`) whose
+CDW10/CDW11 semantics are fixed by the NVMe spec. WD's `libdmi` was right; the
+earlier CDW8 and CDW10 readings were wrong because they assumed a verbatim
+64-byte SQE at `ctx+0x18` when the struct is actually **compacted**.
 
-This matters because the erase sub-command space is one digit from
-`Erase to SBL EEPROM` (permanent brick) and `Drive Uninit`, and because a raw
-NAND write/erase family shares a sub-sub space `{0,1,2}` whose full membership
-is **unresolved**. A stray non-zero CDW is the plausible route to firing one of
-those by accident.
+**Raw NAND erase and write are reachable on a LATCHED drive with no unlock.**
+Both command bytes are in the 12-entry Post-Crash allow-list, and
+`Admin_CheckCmdAllowed` and the `0xCA` dispatcher read the *same* byte:
 
-Empirically the probes and clears used here (`--cdw10=0 --cdw12=<v>`, with
-nvme-cli defaulting CDW11 to 0) behaved exactly as intended — but that is
-evidence about those specific encodings, not a licence to vary them.
+| Never send | Effect |
+|---|---|
+| `0xCA` `CDW12[7:0]=0x0F` | **NAND block erase.** `CDW12[15:8]` is *ignored* — there is no harmless sub-value |
+| `0xCA` `CDW12=0x0010` / `0x0110` | **Raw page write / program** |
+| `0xFF` `CDW12=0x0403` | OAM "Drive Uninit" — **no startup-type gate at all**, sets the FACTORY re-init marker |
+| `0xFF` `CDW12=0x0303` | Erase to SBL EEPROM — permanent brick |
+| `0xDD` | Start Secure Purge (rejected while latched, but never type it) |
+
+`0xCA` cmd `0x37` (multiplane write/erase) exists but is **not** allow-listed,
+so it cannot be reached while latched.
+
+**`CDW13` carries the raw physical flash address** for the whole raw-flash
+family, and `CDW10` carries the write length. So a vendor command is only
+reliably inert when **CDW10, CDW11, CDW12 *and* CDW13** are all zero. Nothing
+about these encodings is guessable — `0x0F` erase sits two values from `0x10`
+write, and `0x0403` sits one nibble from the `0x0503` used in recovery.
 
 **Safe, confirmed non-destructive:** `0xFF` with `cdw12=0x0004` is a pure
 startup-mode read. It answers "is this drive latched?" directly instead of by

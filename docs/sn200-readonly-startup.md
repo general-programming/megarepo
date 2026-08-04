@@ -2,21 +2,35 @@
 
 Firmware `KNGND122`. Static analysis only; no drive was touched.
 
-**Answer, up front: no — and not because the route is hard to find, but because
-the thing everyone has been chasing is not what it looked like.**
+**Answer, up front: no host command can do it — and the thing everyone has been
+chasing was the wrong object.**
 
 `docs/sn200-firmware-re.md` §13.6 claims *"PROC12 `0x7ffa7a68` writes marker 8
 when `[ctx+0x48] == 6`"*. The instruction decode in §13.6 is **correct**. The
 *interpretation* is **wrong**: the 32-bit word it stores is an **Event-Log record
 tag**, not the System-Area startup marker. The two enums share the
-`0x80000000 | N` encoding convention and overlap numerically, which is what
-produced the false positive. §13.6 is retracted here — see §5 for the disproof
-and §7 for what to change.
+`0x80000000 | N` encoding convention and overlap numerically. §13.6 is retracted
+here — see §5 for the disproof.
 
-The other half of §13.6 survives intact and is worth keeping: **if** marker 8
-could be set, it really would be a non-destructive recovery. That part is
-re-verified below (§2). It is simply not reachable — from a host command, from
-NVMe-MI, from the UART console, or from any other core.
+The real `[ctx+0x48] == 6` is on a **PROC0** task with an identical context
+layout (§6.0a). That one *does* feed the marker setter, and it passes an
+arbitrary value — so the mechanism to set marker 8 exists. What does not exist is
+any code that asks for it: the constant `0x80000008` is constructed **nowhere**
+in the firmware (§3).
+
+So the honest shape of the answer is not "impossible" but **"unwired, and
+unreachable in band"**:
+
+- **No** in-band route — every allow-listed opcode, the vendor `0xFF`/`0xCA`
+  surface, Set/Get Features, and the firmware-download flags word are all
+  refuted individually (§6.4, §6.6).
+- **No** out-of-band route via NVMe-MI/SMBus — that tunnel is *narrower* than
+  the PCIe path (§6.5).
+- The remaining candidate is the **`DiagMgr>` UART / SBL console**, i.e. code
+  execution or a direct EEPROM write. Not verified here; see §8.
+
+And **if** marker 8 could be set, it really would be a non-destructive recovery —
+that half of §13.6 is re-verified below (§2).
 
 ---
 
@@ -367,11 +381,57 @@ Corrected sweep (see §6.2) — three `l32r` sites load `0x7ff82b54`:
 | `0x7ffa4732` | same function, second submit path | from the same request object |
 | `0x7ffabccc` | firmware download / commit | `0x80000003` |
 
-Every one of them sources the value from PROC0's literal pool
-(`0x7ff82b4c = 0x80000004`, `0x7ff82b50 = 0x80000003`). **None can produce
-`0x80000008`** — and `0x7ff83478`, PROC0's only `0x80000008`, is loaded at
-`0x7ffaaed3` and nowhere else. Independent second proof of §3, from the consumer
-side.
+Two of them source the value from PROC0's literal pool
+(`0x7ff82b4c = 0x80000004`, `0x7ff82b50 = 0x80000003`):
+
+```asm
+; 0x7ffa4327 -- the verb-0x25 arm
+7ffa4306: l32r a10,0x7ff82b4c   ; 0x80000004 FACTORY
+7ffa430c: l32r a9,0x7ff82b50    ; 0x80000003 REINIT      (selected by [ctx+0x54])
+7ffa4327: { s32i a9,a5,0x18 ; mov a12,a5 }
+
+; 0x7ffabcdb -- the firmware-download arm
+7ffabcc3: l32i a9,a2,0x78       ; the FW image flags word
+7ffabcc6: bbci a9,0,0x7ffabd22  ; bit 0 clear -> skip entirely
+7ffabccf: { l32r a12,0x7ff82b50 ; movi a13,0 }   ; 0x80000003, hardcoded
+7ffabcdb: { s32i a12,a2,0x18 ; mov a10,a2 }
+```
+
+Note the firmware-download flags word: **bit 0 is a yes/no gate, not a value
+selector.** It cannot steer the marker to anything but `0x80000003`.
+
+### 6.0a ⚠ The third caller *is* generic — and this is the real `[ctx+0x48] == 6`
+
+The third site, `0x7ffa4709`, is a different shape and matters:
+
+```asm
+7ffa4709: l32i a9,a2,0x48                  ; the task's request code
+7ffa470c: { ... ; bnei a9,6,0x7ffa4760 }   ; proceed only if request code == 6
+7ffa4714: l32i a10,a2,0x50                 ; an ARBITRARY 32-bit word
+7ffa4717: s32i.n a10,a5,0x18               ; -> the marker setter's value field
+...
+7ffa4732: { l32r a12,0x7ff82b54 ; ... }    ; = 0x7ffa84c8, the setter
+7ffa4742: call8 0x7ffb32f8                 ; submit
+```
+
+`0x7ffa3e48` is a coroutine worker (`l32i.n a11,a2,0x10` / `jx a11`, pool created
+at `0x7ffa48f7`), so `a2` is its request context, `[ctx+0x48]` its request code,
+and `[ctx+0x50]` a caller-supplied payload.
+
+**This — not PROC12 `0x7ffa7a68` — is the `[ctx+0x48] == 6` the original brief was
+chasing.** The two objects have the same layout (free-list links at `+0x0/+0x4`,
+continuation at `+0x10`, request code at `+0x48`), which is how they came to be
+conflated.
+
+So a **generic, unrestricted marker-write mechanism does exist**: request code 6
+on PROC0 task `0x7ffa3e48`, marker value passed in `[ctx+0x50]`, stored verbatim
+by `0x7ffa853b`. Marker 8 is therefore **not** structurally impossible — it is
+merely *never asked for*. Nothing in the firmware ever puts `0x80000008` into
+`[ctx+0x50]`, because (§3) nothing anywhere constructs that value.
+
+That distinction is the practical crux: **anyone who can forge that request — i.e.
+anyone with code execution on PROC0 — can set marker 8.** That is why an
+out-of-band console route is credible where an in-band command route is not.
 
 ### 6.1 The one residual path, and why it is also closed
 
@@ -384,10 +444,12 @@ with the evidence.
 
 That makes the residual question: *can anything write an arbitrary SA Journal
 entry?* The journal writer is PROC0 `0x7ffa5584`, fed from PROC0's internal work
-queue (`0x7ffb4fec` → `0x7ffa3c28`, and `0x7ffb32f8`). Every submitter found
-stages a **compile-time constant** marker from PROC0's own literal pool
-(`0x80000000/3/4/5/6/7/9`) or PROC6's (`0x80000001/2`). No submitter copies a
-host-supplied word into that field.
+queue (`0x7ffb4fec` → `0x7ffa3c28`, and `0x7ffb32f8`). Every submitter stages a
+**compile-time constant** marker from PROC0's own literal pool
+(`0x80000000/3/4/5/6/7/9`) or PROC6's (`0x80000001/2`) — **except** the request-
+code-6 path of §6.0a, which forwards an arbitrary `[ctx+0x50]`. No submitter
+copies a *host-supplied* word into that field, and no code supplies the value 8
+to the one path that would accept it.
 
 And no raw System-Area *write* command exists: the only raw-SA string is
 StrId 2935 `"OAM READ RAW SA CMD: Read of System Area journal from EEPROM
@@ -476,7 +538,7 @@ not the marker setter.
 
 ---
 
-## 6.5 Out-of-band: NVMe-MI over SMBus, and the UART — both closed
+## 6.5 Out-of-band: NVMe-MI over SMBus is closed (the UART is **not** — see §8)
 
 **NVMe-MI (PROC9) — PROVEN.** Router `MI_CommandRouter` `0x7ffb1330`; the message
 type is extracted at `0x7ffb15ad` (`extui a10,a10,11,4`):
@@ -519,7 +581,42 @@ message type `0x7E` (vendor-defined PCI), but the SMB receive dispatch at
 (StrId 288). The endpoint claims a vendor channel it does not implement — which
 is probably why one would expect a vendor path to exist.
 
-## 6.6 The extra nail: a latched drive overwrites the marker anyway
+## 6.6 In-band routes to startup type 3 or boot mode 4 — refuted, one by one
+
+The narrowed question: can any host command set startup type 3, or boot mode 4
+(`LOAD_N_GO`)? No. Four candidates, all closed:
+
+**1. Startup type 3 directly.** The type word is `*(0x7ff8c788) + 0x30`. That
+address is referenced from **PROC0 only** (9 sites; `litref.py -v 7ff8c788`), and
+the single store is `0x7ffaac8a` (`s32i.n a5,a12,0x30`), fed exclusively by the
+marker dispatch. Type 3 is produced only by `0x7ffaaff5`, i.e. only by marker 8.
+Host commands execute on PROC8 and its overlays, which never name this address.
+
+**2. Boot mode 4 (`LOAD_N_GO`).** The mode word is `*(0x7ff9ff60) + 4`, and boot
+mode 4 is genuinely powerful — `0x7ffaae2d: beqi a12,4,0x7ffaae53` jumps over
+**both** crash-latch tests (`ball a9,mask 0x1` / `mask 0x4` at `0x7ffaae35` /
+`0x7ffaae3d`) **and** the empty-System-Area door, and `0x7ffaaf6b` uses it to
+override a failed shutdown (StrId 3043 *"SYS: Load-n-go boot override of failed
+shutdown"*). But `0x7ff9ff60` is likewise referenced from **PROC0 only** (30
+sites), and the only writer of `+4` found writes **5**, not 4
+(`0x7ffa3af1: s32i.n a9,a2,0x4` with `movi.n a9,5`). Boot mode 4 is selected
+before PROC0's image runs — i.e. by the SBL. No admin opcode reaches it.
+
+**3. The firmware-download flags word.** Bit 0 (`0x7ffabcc6: bbci a9,0`) gates
+whether the marker request is issued at all; the value is the hardcoded
+`0x80000003` (§6.0). It cannot express 8.
+
+**4. NVMe Firmware Commit action `011b`.** Already established as rejected
+(`extui a10,3,2` / `blti a8,3`), which closes the obvious in-band `LOAD_N_GO`
+door.
+
+Add the `0x80000008`-is-never-constructed result (§3) and the marker-setter
+caller enumeration (§6.0), and the in-band surface is exhausted.
+
+> **In-band verdict: no host command — standard, vendor, or MI-tunnelled — can
+> set startup type 3 or boot mode 4.**
+
+## 6.7 The extra nail: a latched drive overwrites the marker anyway
 
 Even granting a hypothetical writer, it would not help the drives in question.
 PROC0 `0x7ffaaf02`–`0x7ffaaf0b`:
@@ -572,18 +669,40 @@ New tooling: `tools/sn200-fw/litref.py` (+ `tests/test_litref.py`) does the
 
 | question | answer |
 |---|---|
-| What writes `[ctx+0x48]`? | PROC12 `0x7ffa2450` (constant 5) and `0x7ffa26d6` (`[msg+0x10]!=0 ? 6 : 4`), both on a pooled Journal-Manager request object, both driven by the IBQ task entry `0x7ffa28c0`. **PROVEN** |
-| Is it host-reachable? | No. `0x7ffa28c0` has no call sites; the operation code arrives as an inter-processor message. **PROVEN** |
-| Does `[ctx+0x48]==6` set startup marker 8? | **No.** It appends an Event-Log record tagged `0x80000008` to a NAND journal. Different enum, different medium, different structure. **PROVEN** |
-| Can anything set startup marker 8? | No. Exhaustive literal + xref sweep of all 18 images: `0x80000008` exists twice; PROC0's is a comparison, PROC12's is the Event-Log tag. **PROVEN** |
+| Which `[ctx+0x48]` is the real one? | **PROC0 `0x7ffa3e48`**, request code 6 → `0x7ffa4709`. PROC12 `0x7ffa7a68` has the same context layout but writes NAND **Event-Log tags**, not markers — that is the conflation §13.6 fell into. **PROVEN** |
+| What writes it? | PROC12's copy: `0x7ffa2450` (constant 5) and `0x7ffa26d6` (`[msg+0x10]!=0 ? 6 : 4`), driven by the IBQ task entry `0x7ffa28c0`. PROC0's copy: no constant-6 producer found. **PROVEN / INFERRED** |
+| Is a marker-8 *mechanism* present? | **Yes** — PROC0 request code 6 passes `[ctx+0x50]` verbatim to the setter `0x7ffa84c8`, which stores it at `0x7ffa853b` with no value check. **PROVEN** |
+| Does anything ever ask for 8? | **No.** `0x80000008` is constructed nowhere: two occurrences in 18 images, one a comparison, one an Event-Log tag. **PROVEN** |
+| Any **in-band** host route to startup type 3 or boot mode 4? | **No.** All four candidates refuted individually (§6.6). Both the type word and the boot-mode word are PROC0-only; host commands run on PROC8. **PROVEN** |
+| Out-of-band (NVMe-MI / SMBus)? | **No.** The MI admin tunnel is *narrower* than PCIe — six standard opcodes, no vendor channel; MI writes reach only volatile RAM and the FRU EEPROM (§6.5). **PROVEN** |
 | Exact command encoding to request it? | **None exists.** |
 
-**Marker 8 / READ ONLY startup is real, is genuinely non-destructive, and is
-unreachable.** The read-only posture was built into the firmware and then never
-wired to a producer — the handler is vestigial. There is no host command, no
-vendor sub-command, no out-of-band route and no other core that can set it,
-because nothing anywhere sets it.
+### What this means
 
-For the owner: **stop hoping for a software route to a read-only boot.** The
-decision on these five drives is now a hardware/vendor decision, not a
-reverse-engineering one.
+Marker 8 / READ ONLY startup is **real, genuinely non-destructive, and never
+requested**. The distinction that matters is not "impossible" but "unwired": the
+firmware contains a generic marker-write service that would happily accept 8, and
+a boot handler that would honour it — but no code path anywhere constructs the
+value, so nothing asks.
+
+Consequently **there is no in-band route, and this is not a command-encoding
+problem.** It is a code-execution problem: setting marker 8 requires writing the
+value into a request nothing in the firmware creates, which means either
+executing code on PROC0 or writing the EEPROM System-Area record directly.
+
+Both of those are **out-of-band** — the `DiagMgr>` UART on PROC0 and the SBL
+console behind it. That route is worked out in `docs/sn200-logic-escapes.md`:
+`DiagMgr>` at 115200 8N1 → `SYS SBL` → SBL console → either boot mode 4
+`LOAD_N_GO` or writing `0x80000008` into EEPROM System-Area section 6, copy 0,
+word 0. Two details from this document corroborate it: the redundant copy at
+`+0xF4` is real (the heal at `0x7ffaae1e` is `l32i a11,a7,0xf4 ; s32i.n a11,a7,0x0`,
+so **both copies must be written**), and boot mode 4 really does skip both latch
+tests and the empty-SA door (`0x7ffaae2d`, §6.6).
+
+**I did not verify the UART route myself** — my out-of-band sweep covered
+NVMe-MI/SMBus, not the console. Treat the pinout in particular as unconfirmed.
+
+For the owner: **this is a soldering-iron problem, not a software one.** No
+sequence of NVMe commands — standard, vendor, or over SMBus — will produce a
+read-only boot. Plan on physical access to the drive's serial console, or treat
+the five drives as a hardware/vendor matter.
