@@ -1,0 +1,58 @@
+---
+# Flow records are unauthenticated UDP: anyone who can reach the VIP can inject
+# fabricated traffic data. This restricts the collector ports to the fabric.
+#
+# Only enforceable since sea1 moved to Cilium (2026-08-04) -- flannel had no
+# policy engine, so an earlier version of this file would have been accepted
+# and silently ignored.
+#
+# FAILURE MODE, read before adding an exporter: this is default-deny, so a
+# device sourcing flows from a prefix not listed below is dropped SILENTLY --
+# akvorado simply shows no data for it, which looks like a device-side problem.
+# Diagnose with:
+#   hubble observe --namespace akvorado --verdict DROPPED
+#
+# Untested against real traffic: the flows table was empty when this landed, so
+# no exporter has ever reached the inlet. Verify with the first device.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: akvorado-inlet-flows
+  namespace: akvorado
+spec:
+  podSelector:
+    matchLabels:
+      app: akvorado-inlet
+  policyTypes:
+    - Ingress
+  ingress:
+    # Flow export from fabric devices. Prefixes are the RFC1918 ranges barf
+    # actually renders (projects/barf/network.yml): 10.255.1.0/24 transit and
+    # 10.255.2.0/24 loopbacks, the 10.3.x site LANs, plus the two one-off sites.
+    - from:
+        - ipBlock:
+            cidr: 10.255.0.0/16
+        - ipBlock:
+            cidr: 10.3.0.0/16
+        - ipBlock:
+            cidr: 10.65.67.0/24
+        - ipBlock:
+            cidr: 10.36.75.0/24
+        - ipBlock:
+            cidr: 2602:fa6d:10::/48
+        - ipBlock:
+            cidr: 2a0d:1a43:8008:420::/64
+      ports:
+        - port: 2055
+          protocol: UDP
+        - port: 4739
+          protocol: UDP
+        - port: 6343
+          protocol: UDP
+    # Metrics/HTTP on 8080, in-cluster only. Without this the ingress
+    # default-deny would cut the orchestrator and console off from the inlet.
+    - from:
+        - namespaceSelector: {}
+      ports:
+        - port: 8080
+          protocol: TCP
