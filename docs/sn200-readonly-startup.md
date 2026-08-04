@@ -249,9 +249,43 @@ by the inter-processor message queue. Operation code in `a11`, message pointer i
 ```
 
 `call8` passes the caller's `a10` as the callee's `a2`, so **`a2` of `0x7ffa2648`
-is the received message buffer** and `[msg+0x10]` is a message field — the same
-shape as PROC8's `Admin_IBQCommandReceiver`, which takes its startup-mode word
-from `[req+0x10]` of an IBQ message (MSGID 260/261).
+is the received message buffer** and `[msg+0x10]` is a message field.
+
+`a11` is not a small "operation" enum — it is a **MSGID** in a sparse space
+spanning 3…269 (Startup / Shutdown / Pause are MSGIDs 261 / 254 / 44). The 0..6
+enum is the *event code* one level down, at `[ctx+0x48]`.
+
+### 4.4a ⚠ And MSGID 6 **is** host-reachable — via TRIM
+
+The sender is **PROC13 (BackendMgr) `0x7ffa3478`**, the **Dataset Management /
+Deallocate** handler (StrId 318 `"BackendMgr: Deallocate for LBNs 0x%x - 0x%x
+complete with status %d"` at `0x7ffa364a`). Its message builder `0x7ffa31e0`:
+
+```asm
+7ffa31e0: entry a1,0x40
+7ffa31e3: s32i.n a3,a1,0x10                                  ; msg[0x10] = arg2
+7ffa31f1: { s32i a15,a1,0xc ; movi a13,0 ; movi a12,6 }
+7ffa3204: { s32i a12,a1,0x4 ; movi a14,1 ; movi a11,3 }      ; msg[0x4] = MSGID 6
+7ffa321d: call8 0x7ffbd5b8
+```
+
+Its two call sites differ by **one byte** — `movi a11,0` at `0x7ffa34b5` versus
+`movi a11,1` at `0x7ffa3810` — and `call8` maps caller `a11` → callee `a3`, i.e.
+`[msg+0x10]`. So `[msg+0x10]` is a **phase selector inside one deallocate
+transaction** (early = 0, late = 1), hardcoded, **not** a host-supplied field.
+
+**Consequence: `[ctx+0x48] == 6` runs on every TRIM.** It is routine, not
+privileged. That is a *reductio* on §13.6: a deallocate cannot possibly be
+setting the boot marker to *"READONLY Startup requested"*. It is setting
+range-invalidate log-record types 7 (started) and 8 (completed). Correspondingly
+MSGID 5 comes from PROC13 `0x7ffa3a78`, the **Format NVM / Secure Erase**
+handler — matching `0x7ffa2380` validating a *format type* (§5d).
+
+Neither reaches a latched drive anyway: Deallocate is NVM opcode `0x09` (an **I/O**
+command — the latched drive presents no namespace, and the allow-listed admin
+`0x09` is Set Features), and Format NVM `0x80` is off the allow-list entirely.
+
+### 4.5 The event-code space (`[ctx+0x48]`, 0..6)
 
 ### 4.5 The request-code space
 
@@ -308,6 +342,21 @@ the **EEPROM SA Journal**, owned entirely by PROC0 — StrIds 1247–1252
 (`"EEPROM: Creating new SA Journal"`, `"Scanning SA Journal"`,
 `"Index=%d. Written Journal Entry %d. Slot %d. CRC=%08X"`) are referenced only
 from PROC0 `0x7ffa5584`.
+
+**(e) PROC12 cannot address the marker word at all.** The cleanest proof, and it
+needs no interpretation. Searching every image for literals equal to the marker
+storage addresses (`litref.py -v`, unaligned-safe):
+
+| address | what it is | held by |
+|---|---|---|
+| `0x7ff8c7ec` | the word PROC0's boot dispatch reads | **PROC0 only** (`0x7ff83120`) |
+| `0x7ff8bbd0` / `0x7ff8bc0c` | PROC6 SAM's marker store target | **PROC6 only** (`0x7ffa2278` / `0x7ffa2284`) |
+
+**PROC12 holds none of them — zero sites for all three.** A core that never holds
+the address of the startup marker cannot write the startup marker.
+
+**(f) The reductio.** MSGID 6 fires on every host TRIM (§4.4a). If `0x80000008`
+were the boot marker, every deallocate would arm a read-only startup. It does not.
 
 > **Conclusion (PROVEN):** PROC12 `0x7ffa7d70` writes an **Event-Log record tag**
 > `0x80000008` into a NAND journal. It does not touch the System-Area startup
@@ -491,6 +540,16 @@ that rests on an aligned-only FLIX sweep should be re-run.
   submitted as a journal record — and none of those carries a computed word.
 - `0x80000000` is a common sign-bit constant, so an exhaustive "was it built by
   OR-ing" sweep is not tractable. This is the one gap I cannot fully close.
+- **One conflicting result, resolved.** A parallel sweep reported the StrId-1447
+  descriptor `0x7ffa0940` (*"Event for Format type %d not supported"*) as having
+  **no reference in any image**, which would undercut §5(d). It has exactly one:
+  PROC12 `0x7ffa2620`, `l32r a10,0x7ffa0940` in FLIX slot A, followed by
+  `call8 0x7ffa8e00` (the logger) — reached by `bnei a13,1,0x7ffa2620` at
+  `0x7ffa23a2`. Verified by direct decode of the branch *and* its target, and
+  reproduced by `litref.py -a 7ffa0940`. The likely cause of the miss is a
+  divergent slot-A `l32r` target formula: the correct one is
+  `((pc + 3) & ~3) + (imm16 << 2) - 0x40000` using the bundle's real PC.
+  §5(d) stands.
 
 ---
 
@@ -670,7 +729,8 @@ New tooling: `tools/sn200-fw/litref.py` (+ `tests/test_litref.py`) does the
 | question | answer |
 |---|---|
 | Which `[ctx+0x48]` is the real one? | **PROC0 `0x7ffa3e48`**, request code 6 → `0x7ffa4709`. PROC12 `0x7ffa7a68` has the same context layout but writes NAND **Event-Log tags**, not markers — that is the conflation §13.6 fell into. **PROVEN** |
-| What writes it? | PROC12's copy: `0x7ffa2450` (constant 5) and `0x7ffa26d6` (`[msg+0x10]!=0 ? 6 : 4`), driven by the IBQ task entry `0x7ffa28c0`. PROC0's copy: no constant-6 producer found. **PROVEN / INFERRED** |
+| What writes it? | PROC12's copy: `0x7ffa2450` (constant 5) and `0x7ffa26d6` (`[msg+0x10]!=0 ? 6 : 4`), driven by MSGID 6 from **PROC13 `0x7ffa3478`** — the Deallocate/TRIM handler. PROC0's copy: no constant-6 producer found. **PROVEN / INFERRED** |
+| Is the PROC12 path host-reachable? | **Yes — every TRIM does it.** Which is precisely why it is not a marker write: a deallocate cannot be arming a read-only boot. Unreachable while latched regardless (`0x09` DSM is an I/O command; no namespace). **PROVEN** |
 | Is a marker-8 *mechanism* present? | **Yes** — PROC0 request code 6 passes `[ctx+0x50]` verbatim to the setter `0x7ffa84c8`, which stores it at `0x7ffa853b` with no value check. **PROVEN** |
 | Does anything ever ask for 8? | **No.** `0x80000008` is constructed nowhere: two occurrences in 18 images, one a comparison, one an Event-Log tag. **PROVEN** |
 | Any **in-band** host route to startup type 3 or boot mode 4? | **No.** All four candidates refuted individually (§6.6). Both the type word and the boot-mode word are PROC0-only; host commands run on PROC8. **PROVEN** |

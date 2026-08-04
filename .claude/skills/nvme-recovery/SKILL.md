@@ -571,9 +571,26 @@ reliably inert when **CDW10, CDW11, CDW12 *and* CDW13** are all zero. Nothing
 about these encodings is guessable — `0x0F` erase sits two values from `0x10`
 write, and `0x0403` sits one nibble from the `0x0503` used in recovery.
 
-**Safe, confirmed non-destructive:** `0xFF` with `cdw12=0x0004` is a pure
-startup-mode read. It answers "is this drive latched?" directly instead of by
-inference, and is the right first command on any suspect drive.
+### Two safe reads — use these before inferring anything
+
+Both are allow-listed, so they work on a latched drive, and neither changes
+state:
+
+```sh
+# startup mode: is this drive latched at all?  byte[1]==6 => yes
+nvme admin-passthru /dev/nvmeN --opcode=0xff --namespace-id=0 \
+     --cdw10=0 --cdw12=0x0004 --data-len=0
+
+# OAM READ RAW SA CMD: read the System Area journal, i.e. the drive's ACTUAL
+# marker, rather than deducing it from symptoms
+nvme admin-passthru /dev/nvmeN --opcode=0xff --namespace-id=0 \
+     --cdw10=0 --cdw12=0x0007 --data-len=<n> -r
+```
+
+`0x0007` is the one that ends arguments: it reads the real marker out of the SA
+journal instead of inferring it. **Run it on every drive before deciding
+anything** — five drives reporting their own markers beats one drive's symptoms
+reasoned about at length.
 
 ### What a latched drive still accepts — PROVEN
 
