@@ -755,11 +755,16 @@ In value order. All of it is free and touches no drive.
      under that mapping, and no pointer to a known string is found under any base
      tried. Solve this and the SBL falls open.
 
-2. **Map `Admin_VucFlashLogicalToPhysical` (`PROC8` `0x30035830`) and
-   `Admin_VucFlashRead` (near `0x30036ad3`) to their opcode/sub-code.** If either
-   sits on `0xCA` at a permitted sub-code, **the data comes off a latched drive
-   with no state change at all** and none of this document is needed. Cheapest
-   possible win. Do this before anything else.
+2. ~~**Map `Admin_VucFlashLogicalToPhysical` and `Admin_VucFlashRead` to their
+   opcode/sub-code.**~~ **CLOSED — negative.** Both sit on `0xCA`:
+   `Admin_VucFlashLogicalToPhysical` is `CDW12 = 0x0000` (handler `0x30035680`),
+   `Admin_VucFlashRead` is `CDW12 = 0x0001` (handler `0x30036494`, reads one LBA
+   of user data through the live L2P). **Neither `0x00` nor `0x01` is in the
+   twelve-entry sub-list at `0x7ffa6d76`**, so a latched drive rejects both
+   `0x7C5` before the handler runs. This was not an accident of the allow-list:
+   every `0xCA` sub-value it *does* admit works in physical addresses, and these
+   two are the only ones that understand LBAs. Full evidence:
+   `sn200-vuc-flash-read.md`. This document is still needed.
 
 3. **Map the unmapped `0x7ffbc1xx`–`0x7ffbe6xx` region** holding the `0xFF`
    handler. `0xFF` passes the post-crash gate; its exact semantics are the

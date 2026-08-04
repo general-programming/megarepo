@@ -16,6 +16,7 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-logic-escapes.md` | the one route out (UART) |
 | `sn200-dangerous-commands.md` | commands that destroy a drive |
 | `sn200-field-evidence.md` | what was actually observed on hardware |
+| `sn200-vuc-flash-read.md` | the read-by-LBA VUC, and why the latch gates it off |
 
 Everything below is PROVEN from code unless marked otherwise.
 

@@ -77,7 +77,8 @@ selector-*grade* dangerous despite not being a selector.
 | `0xC6` size probes | `CDW10=2`, `CDW12 = 0x0320` (crash) / `0x0520` (pfail) / `0x0120` (drive-log + string-table, shared: dword[0]=drive-log size, dword[1]=string-table size), `--data-len=8` | 8-byte read. Success = section armed; **failure with SC `0xC3`** = not armed (the *value* returned, `0x00320000`, is a fixed reservation and is never informative — only the status code is). |
 | `0xC6` body reads | `CDW10=<dwords>`, `CDW12 = 0x0420` (crash) / `0x0620` (pfail) / `0x0220` (string table) / `0x0020` (drive log). **There is no offset field** — CDW11/13/14/15 are never read (PROVEN, `sn200-crash-dump-retrieval.md` §1.2.4), so the read must be single-shot and always starts at the section base. | Read of the section body, truncated to `min(section_size, CDW10*4)`. Side-effect-free: the arm stores only `ctx+0x28/0x2c` (source, recomputed from a firmware descriptor each call), `ctx+0x34` (length) and status; no store to the descriptor, no store to media, no erase primitive on any path. |
 | `0xC6` sub 7 / sub 8 | `CDW12 = 0x0720` / `0x0820` | **DO NOT SEND.** Unidentified 71808-byte region. Unlike subs 0–6 these do not point at an existing section — they spawn a producer coroutine (`0x7ffa972c` / `0x7ffa43c0`), and `0x7ffa43c0` mutates a DRAM counter table. Not certified as a pure read. |
-| `0xC6` raw NAND page read | `CDW12 = 0x0003`/`0x0103`/`0x0203` (i.e. cmd `0x03`, sub `0`/`1`/`2`), `CDW13=<flash addr>` | `Flash_ReadRawData`/`Flash_ReadCacheData`. Length clamped to 640 bytes before use (`minu a10,a10,640`). Data-disclosure surface, not a write path. Reachable while latched (`0x03` is allow-listed) — this is a real, if minor, surface expansion, not a way out of the latch. |
+| `0xCA` raw NAND page read | `CDW12 = 0x0003`/`0x0103`/`0x0203` (i.e. cmd `0x03`, sub `0`/`1`/`2`), `CDW13=<flash addr>` | `Flash_ReadRawData`/`Flash_ReadCacheData`, handler `0x30036e28` (OVL026). Length clamped to 640 bytes before use (`0x30037039: movi a11,640 / minu a10,a10,a11`). Data-disclosure surface, not a write path. Reachable while latched (`0x03` is allow-listed) — this is a real, if minor, surface expansion, not a way out of the latch. **This row said `0xC6` until 2026-08-04 and that was wrong.** The firmware's own strings spell the encoding `0xCA/0x03/0x01` and `0xCA/0x03/0x02`; `0xC6` does not use this dispatch table at all (opcode 198 dispatches at `0x7ffa7bf5` to one handler at `0x7ffbea44`), and the gate admits `0xC6` **only** with cmd byte `0x20`/`0x30`, so the row's own "reachable while latched" clause was self-inconsistent. See `sn200-vuc-flash-read.md` §5. |
+| `0xCA` `Admin_VucFlashVirtualToPhysical` | `CDW12 = 0x0008` | Handler `0x30035968`. Pure `remu`/`quou`/`mull` arithmetic over the geometry tables at `0x7ff821b0`/`0x7ff82110`; result to `ctx+0x54`. **No media access on any path.** Allow-listed while latched. Converts a virtual (die/blockset) address to a physical flash address — it is *not* an L2P lookup and cannot tell you where an LBA lives. |
 | `nvme fw-log` | opcode `0x02`, LID `0x02` | Reads slot revisions (`frsN`) and pending-activate state (`afi`). Always safe. |
 | `nvme id-ctrl` | opcode `0x06`, CNS `0x01` | Always safe; check `fr`, `frmw`, `tnvmcap`/`unvmcap`. |
 | `nvme smart-log` / `error-log` | opcode `0x02` | Always safe. |
@@ -190,6 +191,18 @@ re-read every command, not cached.
 
 (`0x03`, `0x07`, `0x0B` are simply reserved/unused opcode values in NVMe;
 their absence from the opcode list is not a rejection of anything.)
+
+**The two `0xCA` sub-values the list excludes are the only two that understand
+LBAs — PROVEN.** `0xCA`/`0x00` is `Admin_VucFlashLogicalToPhysical` (handler
+`0x30035680`) and `0xCA`/`0x01` is `Admin_VucFlashRead` (handler `0x30036494`,
+reads one LBA of user data through the live L2P: NSID validated `1..128`,
+`CDW14` = LBA, `CDW15` = data format `0`/`1`/`2`, `CDW10` = length in dwords).
+Both are rejected `0x7C5` on a latched drive. Everything the list *does* admit
+from this family — `0x03` read, `0x08` V2P, `0x0F` erase, `0x10` write — works
+in **physical** addresses. So the one command that could have pulled user data
+off a latched drive with no state change is gated off, and so is the one that
+could have told you where to look. Full sub-value map and the instruction-level
+re-read of the sub-list at `0x7ffa6d76`: `sn200-vuc-flash-read.md`.
 
 **Reject status:** the gate's reject path returns the literal constant
 `0x8F8A0000` (the only occurrence of that word in all 17 images). Shifted per
