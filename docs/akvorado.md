@@ -58,10 +58,10 @@ on the way in, every device collapses into one bogus exporter and the data is
 worthless. That constraint drives the whole ingress design:
 
 - `externalTrafficPolicy: Local` on the inlet Service — no cross-node SNAT.
-- It also keeps flow UDP off flannel's VXLAN overlay entirely, which this
-  cluster already has scar tissue around (see the `tx-checksum-ip-generic`
-  workaround in `infrastructure/talos/sea1/talconfig.yaml` and
-  `argocd/apps/infra/mss-clamp/`).
+- It also keeps flow UDP off any overlay. This mattered acutely under flannel's
+  VXLAN; since the 2026-08-04 move to Cilium native routing there is no
+  encapsulation at all, and the `tx-checksum-ip-generic` and `mss-clamp`
+  workarounds this once referenced are both gone.
 
 ### 1. MetalLB L2 in SEA1 (new)
 
@@ -128,13 +128,14 @@ Flow records are unauthenticated UDP by design: anyone who can reach the port ca
 inject fabricated traffic data. The obvious control would be a `NetworkPolicy`
 restricting UDP 2055/4739/6343 to the device management prefixes.
 
-**That control does not exist in this cluster.** SEA1 is Talos with the default
-flannel CNI, and flannel has no NetworkPolicy enforcement — there is no Cilium,
-Calico, or kube-router anywhere in `argocd/` or `infrastructure/`. A
-NetworkPolicy here is accepted by the API server and silently ignored. (The one
-in `argocd/apps/infra/monitoring/base/upstream_node_exporter/` is upstream
-boilerplate and is equally inert.) Shipping one would have looked like a control
-while enforcing nothing, so this change deliberately ships none.
+**That control is not yet enforceable.** This was written when SEA1 ran flannel,
+which has no NetworkPolicy engine at all. Cilium replaced it on 2026-08-04, so
+the engine now exists — but it runs `policyEnforcementMode: never` until the 16
+pre-existing policies (8 of them ArgoCD's, none ever enforced) have been audited
+with Hubble against live traffic. Until that flips, a NetworkPolicy here is
+still accepted and silently ignored, so this change ships none. **Once
+enforcement is on, ship the policy** — it is the right control and the only
+reason it was omitted has an end date.
 
 What actually constrains reach today:
 
