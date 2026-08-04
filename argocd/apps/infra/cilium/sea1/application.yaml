@@ -1,0 +1,159 @@
+---
+# Cilium replaces the Talos-default flannel CNI on sea1.
+#
+# ── BOOTSTRAP DEPENDENCY, read before rebuilding this cluster ──────────────
+# ArgoCD cannot install the CNI that ArgoCD needs in order to run. A
+# from-scratch sea1 rebuild must have Cilium installed by hand (helm, or a
+# Talos inlineManifest) BEFORE ArgoCD comes up. This app adopts it afterwards.
+# Do not discover that during a disaster.
+#
+# ── WHY NATIVE ROUTING IS LEGAL HERE ──────────────────────────────────────
+# Every node is on one L2 in both families -- 10.3.2.0/23 and
+# 2602:fa6d:10:ffff::/116. That became true on 2026-08-04 when sea1-k8s-103-0
+# (wobscale rack, 10.3.6.0/27) was decommissioned; it was the only node off
+# the site L2 and the sole reason this cluster needed an overlay at all.
+# With autoDirectNodeRoutes, pod-to-pod goes direct via an on-link next-hop
+# and pod-to-elsewhere masquerades to the node address, so the router never
+# sees pod traffic and no BGP is required.
+#
+# If a node is ever added off 10.3.2.0/23, native routing BREAKS for it and
+# this must go back to routingMode: tunnel.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium-helm
+  namespace: argocd
+  annotations:
+    # Ahead of everything else -- it is the pod network.
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  destination:
+    namespace: kube-system
+    server: https://kubernetes.default.svc
+  project: infra
+  source:
+    chart: cilium
+    repoURL: https://helm.cilium.io
+    # 1.20.0 supports k8s 1.33-1.36; this cluster is 1.36.2.
+    targetRevision: 1.20.0
+    helm:
+      valuesObject:
+        # Consume the podCIDRs kube-controller-manager already allocates, the
+        # same ones flannel used. Pod addressing does not move, which is what
+        # makes rollback cheap. NOT cluster-pool, which would renumber
+        # everything for no benefit.
+        ipam:
+          mode: kubernetes
+        k8s:
+          requireIPv4PodCIDR: true
+          requireIPv6PodCIDR: true
+
+        ipv4:
+          enabled: true
+        ipv6:
+          enabled: true
+
+        # No encapsulation. See the header for why this is safe here.
+        routingMode: native
+        autoDirectNodeRoutes: true
+        ipv4NativeRoutingCIDR: 10.244.0.0/16
+        ipv6NativeRoutingCIDR: fd40:10:244::/56
+
+        # Pods use ULA fd40:10:244::/56, so v6 egress still needs masquerade.
+        # (Giving pods globally routable v6 out of 2602:fa6d:10::/48 would
+        # remove this, but it renumbers every pod -- deliberately not now.)
+        #
+        # If bpf.masquerade is ever enabled (Phase D candidate), Talos requires
+        # CoreDNS `forwardKubeDNSToHost=false` alongside it or DNS breaks.
+        # Do not enable one without the other.
+        enableIPv4Masquerade: true
+        enableIPv6Masquerade: true
+
+        # Phase C. kube-proxy stays for the CNI cutover so that a failure has
+        # one candidate cause instead of two.
+        #
+        # When Phase C happens, the Talos guide's kube-proxy-free values are
+        # kubeProxyReplacement: true + k8sServiceHost: localhost +
+        # k8sServicePort: 7445 -- that is KubePrism, NOT a CP address. Verified
+        # live on this cluster: KubePrismStatus k8s-loadbalancer 127.0.0.1:7445
+        # HEALTHY. Pair it with `cluster: {proxy: {disabled: true}}` in
+        # talconfig.
+        kubeProxyReplacement: false
+
+        # Phase D. sea1 carries 16 NetworkPolicies that flannel never
+        # enforced -- argocd's 8 among them. Enforcing them at cutover would
+        # risk breaking ArgoCD, the thing that would fix them. Audit with
+        # Hubble against real traffic first, then flip to "default".
+        policyEnforcementMode: never
+
+        # MANDATORY -- do not set to true. Required by
+        # docs.siderolabs.com/kubernetes-guides/cni/multus.
+        #
+        # Multus stays for KubeVirt's L2 bridge NADs. The chart default
+        # (exclusive: true) moves every foreign CNI conf aside, INCLUDING
+        # 00-multus.conf, which would strip the LAN interface off every VM
+        # guest on the bridged nodes. The cost is that flannel's leftover
+        # 10-flannel.conflist is not cleaned up for us -- it sits on the
+        # /etc/cni overlay (backed by EPHEMERAL, survives reboot) and must be
+        # removed by hand, per node.
+        #
+        # SECOND Multus issue, same doc: Cilium does not ship the CNI
+        # REFERENCE PLUGINS. All three NADs here are {"type":"bridge"}
+        # (freeipa, freepbx, network-vpn), so the `bridge` binary in
+        # /opt/cni/bin is load-bearing for every VM's LAN interface.
+        # It is supplied by Talos, not by the flannel DaemonSet (whose only
+        # initContainer is install-config), and /opt is an overlay on
+        # EPHEMERAL, so the binaries survive both the flannel removal and a
+        # reboot. VERIFY that after the first node rolls -- if `bridge` ever
+        # goes missing, VM LAN interfaces fail and an init-container must
+        # install the reference plugins.
+        cni:
+          exclusive: false
+
+        # Talos-specific: Cilium cannot mount cgroups itself there.
+        cgroup:
+          autoMount:
+            enabled: false
+          hostRoot: /sys/fs/cgroup
+
+        # Talos-specific capability lists, taken verbatim from
+        # docs.siderolabs.com/kubernetes-guides/cni/deploying-cilium.
+        #
+        # Deliberately NOT the chart defaults, in two ways:
+        #  - SYS_MODULE and SYSLOG are dropped. Talos has no loadable modules,
+        #    so SYS_MODULE buys nothing.
+        #  - PERFMON and BPF are NOT added. The chart ships them commented out
+        #    because they are an ALTERNATIVE to SYS_ADMIN on kernels >= 5.8,
+        #    not an addition to it, and we keep SYS_ADMIN.
+        securityContext:
+          capabilities:
+            ciliumAgent:
+              - CHOWN
+              - KILL
+              - NET_ADMIN
+              - NET_RAW
+              - IPC_LOCK
+              - SYS_ADMIN
+              - SYS_RESOURCE
+              - DAC_OVERRIDE
+              - FOWNER
+              - SETGID
+              - SETUID
+            cleanCiliumState:
+              - NET_ADMIN
+              - SYS_ADMIN
+              - SYS_RESOURCE
+
+        hubble:
+          relay:
+            enabled: true
+          ui:
+            enabled: true
+
+  # DELIBERATELY MANUAL for the migration. Automated sync is restored in a
+  # follow-up commit once every node has rolled onto Cilium -- selfHeal
+  # fighting a half-migrated cluster is exactly the wrong failure mode.
+  syncPolicy:
+    syncOptions:
+      - allowEmpty=true
+      - ServerSideApply=true
