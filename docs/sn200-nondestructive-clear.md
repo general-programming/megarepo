@@ -321,7 +321,21 @@ See §4.
 
 ---
 
-## 4. The one lead left, stated with its risks — OPEN, do not run
+## 4. The one lead left — **CLOSED 2026-08-04, negative.** `docs/sn200-shn-overwrite.md`
+
+> Both gating questions below came back **no**, independently.
+> **(1)** A host `CC.SHN` produces shutdown-request type **1** or **7**, never 3
+> (`PCIe_SendShutdownReq` PROC9 `0x7ffaeba0` is the only producer; type 3 comes
+> only from `PCIe_PfailShutdown`), so `0x7ff8c7c4` is never set and the
+> System-Area save is skipped. A **third** writer of that flag was found —
+> PROC0 `0x7ffa46af` — and it is explicitly skipped when the startup type is 3
+> or 6; a Post-Crash boot *is* type 6.
+> **(2)** On startup type 6 SAM logs *"SAM: Unsupported startup type"* and never
+> reads the System Area, and the in-RAM SA image at `0x7ff8bbd0` is BSS. Forcing
+> the save would write a **blank** System Area over the good one.
+> The section below is kept as the record of what was asked.
+
+### 4 (as originally stated) — the lead, with its risks
 
 The full requirement for a non-destructive recovery is now exactly:
 
@@ -389,7 +403,7 @@ unchanged.**
 | Markers 3 and 4 both route to startup type 0; no lighter re-init exists | PROVEN |
 | No redundant/journalled L2P; no media-scan rebuild path anywhere | PROVEN |
 | The pending re-init is cancellable by a later marker write in the same power-on | INFERRED (mechanism PROVEN in `sn200-marker-write.md` §5) |
-| A host shutdown could supply that later marker write | **OPEN** — §4 |
+| A host shutdown could supply that later marker write | **NO** — refuted twice, `docs/sn200-shn-overwrite.md` |
 | A reset landing between erase-commit and resume would dodge the gate | SPECULATIVE — §2.4, do not attempt |
 
 Five leads died before this one; two more died here (a second host verb-3 path,

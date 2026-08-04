@@ -111,6 +111,33 @@ def test_slot_c_high_byte_is_mov_not_movi(proc8):
     assert "movi a5" not in insn.body
 
 
+def test_slot_b_addi_immediate_spans_two_nibbles():
+    """Slot-B `addi` has an 8-bit immediate split across non-adjacent nibbles.
+
+    imm8 = (bits40-43) << 4 | (bits32-35), signed. Reading only the low nibble
+    turns every multiple of 16 into 0 and every small negative into a large
+    positive, silently re-pointing a struct base.
+
+    The first case is anchored outside the decoder: PROC11 0x7ffa2d52 must
+    produce the list sentinel that PROC11 0x7ffa08b4 holds as a literal
+    (0x7ff80910 = 0x7ff80900 + 16), which is only true at imm=16.
+    """
+    proc11 = pcode.Image.load("PROC11")
+    assert int.from_bytes(proc11.read(0x7FFA08B4, 4), "little") == 0x7FF80910
+    cases = {
+        0x7FFA2D52: "addi a11,a7,0x10",
+        0x7FFA2142: "addi a4,a4,0x10",
+        0x7FFA2ED6: "addi a14,a14,-0x1",
+    }
+    for pc, want in cases.items():
+        assert pcode.lift(proc11, pc)[0].body.split(" | ")[1] == want, hex(pc)
+
+    # PROC0 0x7ffa8e83: the shutdown-request handler rebases its context by 20,
+    # so [ctx+0x3c] is the type word the same bundle stores at [obj+0x50].
+    proc0 = pcode.Image.load("PROC0")
+    assert pcode.lift(proc0, 0x7FFA8E83)[0].body.split(" | ")[1] == "addi a2,a11,0x14"
+
+
 def test_l32r_literal_needs_the_whole_instruction(proc8):
     """A buffer that stops mid-instruction relocates the literal it loads."""
     good = pcode.lift(proc8, 0x300335D0)[0]

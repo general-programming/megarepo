@@ -481,14 +481,20 @@ flixSlotB_E: "j "^flixBE_j_rel is flixBE_pre=3 & flixBE_j_rel {
     goto flixBE_j_rel;
 }
 
-# pre=1: addi at,as,imm4 -- [t@28-31][imm4@32-35][s@36-39]. Confirmed at
-# 0x7ffb4fda = addi a2,a2,4 inside a word-push loop (see
-# docs/sn200-independent-re.md addendum A.4). imm4 sign is unconfirmed;
-# treated as unsigned 0-15 since the only observed case is positive.
-flixSlotB_E: "addi "^flixBE_t^","^flixBE_r^","^flixBE_imm4 is flixBE_pre=1 & flixBE_t & flixBE_r & flixBE_imm4 {
-    local imm4:1 = flixBE_imm4;
-    local imm:4 = zext(imm4);
-    flixBE_t = flixBE_r + imm;
+# pre=1: addi at,as,imm8 -- [t@28-31][imm_lo@32-35][s@36-39][imm_hi@40-43].
+# The immediate is EIGHT bits, split across two nibbles that are not adjacent:
+# imm8 = (bits40-43) << 4 | (bits32-35), signed. An earlier rule read only the
+# low nibble and silently turned `addi a2,a11,20` into `addi a2,a11,0` -- see
+# docs/sn200-shn-overwrite.md §1.1. Pinned by
+# tests/test_pcode.py::test_slot_b_addi_immediate_spans_two_nibbles.
+flixBE_addi8: val is flixBE_sub & flixBE_imm4
+    [ val = ((flixBE_sub << 4) | flixBE_imm4) - (((flixBE_sub >> 3) & 1) * 0x100); ]
+{
+    export *[const]:4 val;
+}
+
+flixSlotB_E: "addi "^flixBE_t^","^flixBE_r^","^flixBE_addi8 is flixBE_pre=1 & flixBE_t & flixBE_r & flixBE_addi8 {
+    flixBE_t = flixBE_r + flixBE_addi8;
 }
 
 flixSlotB_E: "movi "^flixBE_t^","^flixBE_imm12 is flixBE_pre=2 & flixBE_opn=8 & flixBE_t & flixBE_imm12 {
