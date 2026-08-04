@@ -188,6 +188,13 @@ if [[ "$MODEL" != *HUSMR* ]]; then
 fi
 
 # --- startup mode: the definitive latch check -------------------------------
+# Every vendor encoding below is checked against the firmware itself, not
+# against a list someone typed here:
+#     SN200_FW=~/sn200fw .venv/bin/python tools/sn200-fw/sn200_oracle.py --ff
+# tests/test_oracle.py::test_triage_script_only_sends_read_only_vendor_commands
+# fails if this script ever grows a 0xFF encoding the oracle cannot show is
+# read-only. Adjacency to keep in mind while editing: 0x0003 is one nibble from
+# the 0x0004 probe below and erases the drive's boot-marker record.
 echo
 echo "--- startup mode (0xFF cdw12=0x0004, read-only) ---"
 probe=$(nq admin-passthru "$CTRL" --opcode=0xff --namespace-id=0 \

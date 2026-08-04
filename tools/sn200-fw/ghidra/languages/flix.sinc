@@ -41,12 +41,23 @@ define token flixtok(64)
     # Bits 4-23 mirror the base-ISA 24-bit instruction's operand layout
     # (t@4-7, s@8-11, r@12-15, imm8@16-23); only op0 is relocated, to
     # bits 24-27, to make room for the FLIX selector nibble at bits 0-3.
-    # Only the l32r case (op0=1) has been confirmed well enough to give
-    # real semantics; every other op0 value is left as an explicitly
-    # unresolved pcodeop. See docs/xtensa-flix-decoding.md.
+    # op0=1 (l32r) and op0=2 (the LSAI load/store/addi class) are decoded;
+    # every other op0 value is left as an explicitly unresolved pcodeop.
+    # See docs/xtensa-flix-decoding.md.
     flixA_op0   = (24,27)
     flixA_t     = (4,7)
     flixA_imm16 = (8,23)
+    flixA_s     = (8,11)
+    flixA_sReg  = (8,11)
+    flixA_r     = (12,15)
+    flixA_rReg  = (12,15)
+    flixA_imm8  = (16,23)
+    flixA_imm8s = (16,23) signed
+    flixA_tImm  = (4,7)
+    flixA_calln = (4,5)
+    flixA_calloff = (6,23) signed
+    flixA_op1   = (16,19)
+    flixA_op2   = (20,23)
 
     # --- Slot B, format 0xF (branch bundle) --------------------------------
     # r@28-31, s@32-35, signed 18-bit displacement@36-53, opcode index
@@ -79,9 +90,11 @@ define token flixtok(64)
     flixC_op    = (60,63)
     flixC_t     = (56,59)
     flixC_imm8  = (48,55)
+    flixC_imm8hi = (52,55)
+    flixC_movdst = (48,51)
 ;
 
-attach variables [ flixA_t flixBF_rReg flixBF_sReg flixBE_t flixBE_movsrc flixBE_s flixBE_r flixC_t ] [
+attach variables [ flixA_t flixA_sReg flixA_rReg flixC_movdst flixBF_rReg flixBF_sReg flixBE_t flixBE_movsrc flixBE_s flixBE_r flixC_t ] [
     a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15
 ];
 
@@ -104,8 +117,173 @@ flixSlotA: "l32r "^flixA_t^","^flixA_l32r_rel is flixA_op0=1 & flixA_t & flixA_l
     flixA_t = flixA_l32r_rel;
 }
 
+# ---------------------------------------------------------------------------
+# Slot A op0=2: the base ISA's LSAI class, field-for-field (r selects the
+# operation, t is the data register, s the base, imm8 the scaled offset).
+# The relocation of op0 to bits 24-27 is the only difference from the 24-bit
+# core encoding, so these are the core semantics verbatim. Cross-checked
+# instruction-for-instruction against xdis.py over all 18 images
+# (tests/test_pcode.py::test_slot_a_lsai_matches_reference_decoder).
+# ---------------------------------------------------------------------------
+
+# The `+ 0` is load-bearing: an identity disassembly action (`off = flixA_imm8;`)
+# makes pypcode's bundled sleigh compiler exit 1 with no diagnostic.
+flixA_off1: off is flixA_imm8       [ off = flixA_imm8 + 0; ]  { export *[const]:4 off; }
+flixA_off2: off is flixA_imm8       [ off = flixA_imm8 << 1; ] { export *[const]:4 off; }
+flixA_off4: off is flixA_imm8       [ off = flixA_imm8 << 2; ] { export *[const]:4 off; }
+# movi's 12-bit signed immediate is split: s supplies bits 8-11, imm8 the low byte.
+flixA_movi: val is flixA_s & flixA_imm8 [
+    val = ((flixA_s << 8) | flixA_imm8) | (0xfffff000 * ((flixA_s >> 3) & 1));
+] { export *[const]:4 val; }
+
+flixSlotA: "l8ui "^flixA_t^","^flixA_sReg^","^flixA_off1 is flixA_op0=2 & flixA_r=0 & flixA_t & flixA_sReg & flixA_off1 {
+    flixA_t = zext(*:1 (flixA_sReg + flixA_off1));
+}
+flixSlotA: "l16ui "^flixA_t^","^flixA_sReg^","^flixA_off2 is flixA_op0=2 & flixA_r=1 & flixA_t & flixA_sReg & flixA_off2 {
+    flixA_t = zext(*:2 (flixA_sReg + flixA_off2));
+}
+flixSlotA: "l32i "^flixA_t^","^flixA_sReg^","^flixA_off4 is flixA_op0=2 & flixA_r=2 & flixA_t & flixA_sReg & flixA_off4 {
+    flixA_t = *:4 (flixA_sReg + flixA_off4);
+}
+flixSlotA: "s8i "^flixA_t^","^flixA_sReg^","^flixA_off1 is flixA_op0=2 & flixA_r=4 & flixA_t & flixA_sReg & flixA_off1 {
+    *:1 (flixA_sReg + flixA_off1) = flixA_t:1;
+}
+flixSlotA: "s16i "^flixA_t^","^flixA_sReg^","^flixA_off2 is flixA_op0=2 & flixA_r=5 & flixA_t & flixA_sReg & flixA_off2 {
+    *:2 (flixA_sReg + flixA_off2) = flixA_t:2;
+}
+flixSlotA: "s32i "^flixA_t^","^flixA_sReg^","^flixA_off4 is flixA_op0=2 & flixA_r=6 & flixA_t & flixA_sReg & flixA_off4 {
+    *:4 (flixA_sReg + flixA_off4) = flixA_t;
+}
+flixSlotA: "l16si "^flixA_t^","^flixA_sReg^","^flixA_off2 is flixA_op0=2 & flixA_r=9 & flixA_t & flixA_sReg & flixA_off2 {
+    flixA_t = sext(*:2 (flixA_sReg + flixA_off2));
+}
+flixSlotA: "movi "^flixA_t^","^flixA_movi is flixA_op0=2 & flixA_r=0xa & flixA_t & flixA_movi {
+    flixA_t = flixA_movi;
+}
+# l32ai / s32ri are the acquire/release forms; the ordering is not modelled.
+flixSlotA: "l32ai "^flixA_t^","^flixA_sReg^","^flixA_off4 is flixA_op0=2 & flixA_r=0xb & flixA_t & flixA_sReg & flixA_off4 {
+    flixA_t = *:4 (flixA_sReg + flixA_off4);
+}
+flixSlotA: "addi "^flixA_t^","^flixA_sReg^","^flixA_imm8s is flixA_op0=2 & flixA_r=0xc & flixA_t & flixA_sReg & flixA_imm8s {
+    flixA_t = flixA_sReg + flixA_imm8s;
+}
+flixA_immhi: v is flixA_imm8s       [ v = flixA_imm8s << 8; ]  { export *[const]:4 v; }
+flixSlotA: "addmi "^flixA_t^","^flixA_sReg^","^flixA_immhi is flixA_op0=2 & flixA_r=0xd & flixA_t & flixA_sReg & flixA_immhi {
+    flixA_t = flixA_sReg + flixA_immhi;
+}
+flixSlotA: "s32ri "^flixA_t^","^flixA_sReg^","^flixA_off4 is flixA_op0=2 & flixA_r=0xf & flixA_t & flixA_sReg & flixA_off4 {
+    *:4 (flixA_sReg + flixA_off4) = flixA_t;
+}
+
+# ---------------------------------------------------------------------------
+# Slot A op0=0, op1=0: the RST0 arithmetic/logic class (r = dest, s/t = srcs).
+# ---------------------------------------------------------------------------
+
+flixSlotA: "and "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=1 & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg & flixA_t;
+}
+flixSlotA: "or "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=2 & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg | flixA_t;
+}
+flixSlotA: "xor "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=3 & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg ^ flixA_t;
+}
+flixSlotA: "add "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=8 & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg + flixA_t;
+}
+flixSlotA: "addx2 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=9 & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 1) + flixA_t;
+}
+flixSlotA: "addx4 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xa & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 2) + flixA_t;
+}
+flixSlotA: "addx8 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xb & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 3) + flixA_t;
+}
+flixSlotA: "sub "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xc & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg - flixA_t;
+}
+flixSlotA: "subx2 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xd & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 1) - flixA_t;
+}
+flixSlotA: "subx4 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xe & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 2) - flixA_t;
+}
+flixSlotA: "subx8 "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0 & flixA_op1=0 & flixA_op2=0xf & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = (flixA_sReg << 3) - flixA_t;
+}
+# extw/sync: an ordering barrier with no register effect. Modelled as a nop
+# because this spec models no memory ordering at all.
+flixSlotA: "extw" is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=2 {
+}
+
+# ---------------------------------------------------------------------------
+# Slot A narrow-format encodings (op0 8..0xD). Same field positions.
+# The op0=0xC branch forms (beqz.n/bnez.n) are deliberately NOT decoded --
+# a bogus branch out of slot A would corrupt every control-flow claim built
+# on this spec, and no confirmed example exists.
+# ---------------------------------------------------------------------------
+
+flixA_n4: off is flixA_r            [ off = flixA_r << 2; ]    { export *[const]:4 off; }
+
+flixSlotA: "l32i.n "^flixA_t^","^flixA_sReg^","^flixA_n4 is flixA_op0=8 & flixA_t & flixA_sReg & flixA_n4 {
+    flixA_t = *:4 (flixA_sReg + flixA_n4);
+}
+flixSlotA: "s32i.n "^flixA_t^","^flixA_sReg^","^flixA_n4 is flixA_op0=9 & flixA_t & flixA_sReg & flixA_n4 {
+    *:4 (flixA_sReg + flixA_n4) = flixA_t;
+}
+flixSlotA: "add.n "^flixA_rReg^","^flixA_sReg^","^flixA_t is flixA_op0=0xa & flixA_rReg & flixA_sReg & flixA_t {
+    flixA_rReg = flixA_sReg + flixA_t;
+}
+flixSlotA: "addi.n "^flixA_rReg^","^flixA_sReg^",-1" is flixA_op0=0xb & flixA_t=0 & flixA_rReg & flixA_sReg {
+    flixA_rReg = flixA_sReg - 1;
+}
+flixSlotA: "addi.n "^flixA_rReg^","^flixA_sReg^","^flixA_tImm is flixA_op0=0xb & flixA_rReg & flixA_sReg & flixA_tImm {
+    local imm:1 = flixA_tImm;
+    flixA_rReg = flixA_sReg + zext(imm);
+}
+flixSlotA: "mov.n "^flixA_t^","^flixA_sReg is flixA_op0=0xd & flixA_r=0 & flixA_t & flixA_sReg {
+    flixA_t = flixA_sReg;
+}
+
+# ---------------------------------------------------------------------------
+# Slot A op0=5: call0/4/8/12, plus the RST0 indirect forms. Decoding these is
+# what makes the call graph complete -- FLIX-bundled calls are ~740 sites
+# across the images and every one is invisible while this slot stays opaque.
+# The register-window rotation is NOT modelled (no swap8/restore8), so only
+# the edge is trustworthy, not the register state across it.
+# ---------------------------------------------------------------------------
+
+flixA_calltgt: rel is flixA_calloff [ rel = (inst_start & ~3) + (flixA_calloff << 2) + 4; ] { export *:4 rel; }
+
+flixSlotA: "call"^flixA_calln^" "^flixA_calltgt is flixA_op0=5 & flixA_calln & flixA_calltgt {
+    call flixA_calltgt;
+}
+
+flixSlotA: "ret" is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=8 {
+    return [a0];
+}
+flixSlotA: "retw" is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=9 {
+    return [a0];
+}
+flixSlotA: "jx "^flixA_sReg is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=0xa & flixA_sReg {
+    goto [flixA_sReg];
+}
+flixSlotA: "callx0 "^flixA_sReg is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=0xc & flixA_sReg {
+    call [flixA_sReg];
+}
+flixSlotA: "callx4 "^flixA_sReg is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=0xd & flixA_sReg {
+    call [flixA_sReg];
+}
+flixSlotA: "callx8 "^flixA_sReg is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=0xe & flixA_sReg {
+    call [flixA_sReg];
+}
+flixSlotA: "callx12 "^flixA_sReg is flixA_op0=0 & flixA_op1=0 & flixA_op2=0 & flixA_r=0 & flixA_tImm=0xf & flixA_sReg {
+    call [flixA_sReg];
+}
+
 # Every other op0: unresolved. Do not trust any decompiled effect that
-# depends on this slot for op0 values other than 1.
+# depends on this slot for op0 values other than 0/1/2/8/9/0xa/0xb/0xd.
 flixSlotA: "?slotA op="^flixA_op0 is flixA_op0 {
     local op:1 = flixA_op0;
     flix_slotA_unknown(op);
@@ -119,6 +297,13 @@ flixSlotA: "?slotA op="^flixA_op0 is flixA_op0 {
 
 flixSlotC: "nop" is flixC_op=0xc & flixC_t=0 & flixC_imm8=0x90 {
     # canonical NOP'd-slot encoding -- no operation.
+}
+
+# imm8 with bit 7 set is NOT movi: high nibble 8 is `mov a<imm8&0xf>,a<t>`.
+# Decoding it as movi writes a small constant over a live pointer -- the
+# 0x3003377a case in docs/sn200-oam-dispatch.md 1.2.
+flixSlotC: "mov "^flixC_movdst^","^flixC_t is flixC_op=0xc & flixC_imm8hi=8 & flixC_t & flixC_movdst {
+    flixC_movdst = flixC_t;
 }
 
 flixSlotC: "movi "^flixC_t^","^flixC_imm8 is flixC_op=0xc & flixC_t & flixC_imm8 {
@@ -337,11 +522,14 @@ flixSlotB_E: "?B pre="^flixBE_pre is flixBE_pre {
 # exhaustive over that space.
 # ===========================================================================
 
-:flix8 flixSlotA^" | "^flixSlotB_F^" | "^flixSlotC
-    is flix_op0=0xf & flixSlotA & flixSlotB_F & flixSlotC
+# Format 0xF has NO slot C: the branch opcode index k occupies bits 55-63,
+# which is inside what the 0xE format uses for slot C. Decoding a slot C here
+# invents a `movi`/`mov` out of the branch opcode -- 846 sites across the
+# images, any one of which would silently overwrite a live register.
+:flix8 flixSlotA^" | "^flixSlotB_F
+    is flix_op0=0xf & flixSlotA & flixSlotB_F
 {
     build flixSlotA;
-    build flixSlotC;
     build flixSlotB_F;
 }
 

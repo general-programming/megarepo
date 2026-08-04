@@ -23,6 +23,7 @@ The detail lives in sibling docs; this is the map that makes them navigable:
 | `sn200-c6-30-family.md` | `0xC6`/`0x30` fully traced — SMART/statistics collection, no escape; corrects the `CDW10 == 0` claim |
 | `sn200-section-arming.md` | what arms CLOG and PFCL, and why `0x0603` can never help |
 | `sn200-marker-write.md` | the generic marker-write (verb 1 + section 6), why no host command reaches it, and what a serial-console primitive would actually be worth |
+| `sn200-pcode-toolchain.md` | lifting the firmware to p-code and **executing** it — the claims above as tests, and what the lifter cannot read |
 
 Everything below is PROVEN from code unless marked otherwise.
 
