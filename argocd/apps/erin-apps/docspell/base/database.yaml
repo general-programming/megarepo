@@ -22,7 +22,7 @@ spec:
                 operator: DoesNotExist
   storage:
     storageClass: ceph-rbd-xfs
-    size: 1Gi
+    size: 4Gi
   bootstrap:
     initdb:
       database: docspell

@@ -64,7 +64,7 @@ spec:
                 operator: DoesNotExist
   storage:
     storageClass: ceph-rbd-xfs
-    size: 1Gi
+    size: 8Gi
   bootstrap:
     initdb:
       database: matrix_mas

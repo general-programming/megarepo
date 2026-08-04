@@ -22,7 +22,7 @@ spec:
                 operator: DoesNotExist
   storage:
     storageClass: ceph-rbd-xfs
-    size: 2Gi
+    size: 16Gi
   bootstrap:
     initdb:
       database: coder
