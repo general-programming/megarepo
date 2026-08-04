@@ -23,11 +23,9 @@ nodes:
     # voter, so never take two of the three down at once.
     nodeTaints:
       node-role.kubernetes.io/control-plane: ":NoSchedule"
-    # VM-ONLY. These moved out of the cluster-level patches when metal
-    # nodes were introduced: metal has no TPM available to Talos, and
-    # `ens18` does not exist there. Cluster-wide they would collide with
-    # the metal nodes' nodeID LUKS keys on slot 0 (talhelper hard-errors:
-    # partition "STATE": encryption key slot 0 is already in use).
+    # VM-ONLY: metal has no TPM available to Talos. Cluster-wide this would
+    # collide with the metal nodes' nodeID LUKS keys on slot 0 (talhelper
+    # hard-errors: partition "STATE": encryption key slot 0 is already in use).
     patches:
     - &vm-tpm-luks # Encrypt system disk with TPM
       |-
@@ -43,16 +41,6 @@ nodes:
             keys:
               - slot: 0
                 tpm: {}
-    - &vm-ens18-checksum # Disable NIC tx checksum offload — works around the flannel VXLAN bad-UDP-checksum
-      # bug (virtio_net + kernel offload corrupts inner checksums on encapsulated traffic,
-      # silently dropping cross-node UDP/DNS). All nodes use ens18 (virtio_net).
-      # ref: flannel-io/flannel#1279, siderolabs/talos#8873
-      |-
-      apiVersion: v1alpha1
-      kind: EthernetConfig
-      name: ens18
-      features:
-        tx-checksum-ip-generic: false
     ipAddress: "10.3.2.16"
     installDisk: /dev/sda
     controlPlane: true
@@ -119,18 +107,14 @@ nodes:
         routes: *k8s-cp-routes
   # nvme passthrough, single nic for v4/v6.
   #
-  # These three are bridged: KubeVirt VMs need a LAN-attached secondary
-  # network, because sea1-core serves DHCP and DNS and that is broadcast
-  # traffic no Service can front. With one NIC per node, the node's own
-  # addresses have to move off the NIC and onto br0, and the NIC becomes a
-  # bridge port. The wobscale one-off below is deliberately left alone: it
-  # sits on a different subnet in a different rack, so a LAN bridge there
-  # would attach VMs to the wrong L2 entirely.
+  # These three are bridged: KubeVirt VMs need a LAN-attached secondary network,
+  # because sea1-core serves DHCP/DNS and that is broadcast traffic no Service
+  # can front. With one NIC per node the node addresses move onto br0 and the
+  # NIC becomes a bridge port.
   - &k8s-worker-nvme
     hostname: sea1-k8s-0
     patches:
       - *vm-tpm-luks
-      - *vm-ens18-checksum
     ipAddress: "10.3.2.10"
     installDisk: /dev/sda
     controlPlane: false
@@ -545,24 +529,15 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
-  - # Cilium is the CNI, deployed by ArgoCD from
-    # argocd/apps/infra/cilium/sea1. Talos must not install flannel.
-    #
-    # DO NOT REMOVE. This was applied live on 2026-08-04 during the migration
-    # and only recorded here afterwards; while the two disagreed, any
-    # `talhelper genconfig` + `talosctl apply-config` would have reinstalled
-    # flannel underneath a running Cilium cluster and broken pod networking
-    # a second time.
+  - # DO NOT REMOVE. Cilium is the CNI (argocd/apps/infra/cilium/sea1);
+    # dropping this reinstalls flannel under a running Cilium cluster.
     |-
     cluster:
       network:
         cni:
           name: none
-  - # Raise kubelet max pods from the Talos default of 110. 200 leaves room to
-    # absorb a whole node's workload during a drain, and for the bare-metal
-    # nodes which have far more RAM than the VMs. Each node still gets a single
-    # /24 from kube-controller-manager (Cilium runs ipam.mode=kubernetes and
-    # reuses it), so ~250 remains the hard ceiling.
+  - # Raise kubelet max pods from the Talos default of 110. 200 absorbs a whole
+    # node's workload during a drain. Each node gets one /24, so ~250 is the ceiling.
     |-
     machine:
       kubelet:

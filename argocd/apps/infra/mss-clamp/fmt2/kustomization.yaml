@@ -1,4 +1,0 @@
-# fmt2 has no off-site node behind a small-MTU path; nothing to clamp.
-apiVersion: kustomize.config.k8s.io/v1beta1
-kind: Kustomization
-resources: []
