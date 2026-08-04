@@ -4,25 +4,361 @@
 #
 # This file is specialised for the HGST/WDC Ultrastar SN200 controller
 # (PROC0..PROC15 firmware images), where the bundle width was determined
-# empirically to be 8 bytes for both reserved opcodes op0=0xE and op0=0xF.
-# See docs/xtensa-flix-decoding.md for the evidence.
+# empirically to be 8 bytes for both reserved opcodes op0=0xE and op0=0xF,
+# and where slots A (ALU/load/store-class), B (branch/jump/movi/mov-class)
+# and C (movi-class) have been reverse engineered well enough to give real
+# p-code semantics instead of an opaque pseudo-op. See
+# docs/xtensa-flix-decoding.md for the evidence and tools/sn200-fw/xdis.py
+# for the reference decoder this spec mirrors.
 #
-# Stock Ghidra decodes these as a 3-byte opaque `FLIX` pseudo-instruction, which
-# desynchronises the instruction stream and fabricates instructions out of
-# bundle payload. Getting the LENGTH right is what fixes that.
+# Ground truth is xdis.py / disany.py, not this file. When in doubt, re-derive
+# from there.
+#
+# Slot execution order note: real VLIW hardware executes all three slots in
+# parallel, reading pre-bundle register state. SLEIGH constructors execute
+# their p-code sequentially, so this spec builds slot A, then slot C, then
+# slot B (branch/jump) last -- guaranteeing A's and C's register writes are
+# never skipped by B's goto, matching hardware. It does NOT model true
+# parallel reads: if a bundle's slot B condition or slot A operand happened
+# to read a register that another slot in the *same* bundle also writes, the
+# emitted p-code would see the new value instead of the pre-bundle value.
+# No such collision has been observed in the slots implemented here (they
+# use disjoint registers in every confirmed case), but it has not been
+# exhaustively ruled out either -- see docs/xtensa-flix-decoding.md.
 
 @if ENDIAN == "little"
 
-# 64-bit FLIX bundle. op0 occupies the low nibble of the first byte.
+# 64-bit FLIX bundle. op0 occupies the low nibble of the first byte. Field
+# bit numbers below match tools/sn200-fw/xdis.py's `q = int.from_bytes(...,
+# "little")` bit numbering exactly, bit 0 = LSB of byte 0.
 define token flixtok(64)
     flix_op0    = (0,3)
     flix_op0h   = (1,3)
     flix_lo     = (0,31)
     flix_hi     = (32,63)
+
+    # --- Slot A -----------------------------------------------------------
+    # Bits 4-23 mirror the base-ISA 24-bit instruction's operand layout
+    # (t@4-7, s@8-11, r@12-15, imm8@16-23); only op0 is relocated, to
+    # bits 24-27, to make room for the FLIX selector nibble at bits 0-3.
+    # Only the l32r case (op0=1) has been confirmed well enough to give
+    # real semantics; every other op0 value is left as an explicitly
+    # unresolved pcodeop. See docs/xtensa-flix-decoding.md.
+    flixA_op0   = (24,27)
+    flixA_t     = (4,7)
+    flixA_imm16 = (8,23)
+
+    # --- Slot B, format 0xF (branch bundle) --------------------------------
+    # r@28-31, s@32-35, signed 18-bit displacement@36-53, opcode index
+    # k@55-63 (bit 54 always 0). k indexes BRK in xdis.py (1-based,
+    # alphabetical branch mnemonics).
+    flixBF_r    = (28,31)
+    flixBF_rReg = (28,31)
+    flixBF_sReg = (32,35)
+    flixBF_imm18 = (36,53) signed
+    flixBF_k    = (55,63)
+
+    # --- Slot B, format 0xE (j / movi / mov / alu bundle) ------------------
+    flixBE_pre    = (46,47)      # class selector
+    flixBE_opn    = (44,47)      # opcode nibble for movi/alu classes
+    flixBE_movchk = (40,45)      # 6-bit check pattern for the "mov" class
+    flixBE_t      = (28,31)
+    flixBE_disp18 = (28,45) signed
+    flixBE_imm12  = (32,43)
+    flixBE_movsrc = (36,39)
+    flixBE_sub    = (40,43)
+    flixBE_s      = (32,35)
+    flixBE_r      = (36,39)
+    flixBE_imm4   = (32,35)      # pre=1 "addi at,as,imm4" immediate (raw, unattached)
+
+    # --- Slot C (bits 48-63): movi at, imm8 --------------------------------
+    # op@60-63 (class 0xC), t@56-59, imm8@48-55. 0xC090 is the canonical
+    # NOP'd-slot encoding (t=a0, imm8=0x90) -- proven statistically to be
+    # ~68% of all 0xE-format bundles' slot C, and confirmed semantically
+    # at 0x7ffaad0c / 0x7ffa6b28 (see docs/xtensa-flix-decoding.md).
+    flixC_op    = (60,63)
+    flixC_t     = (56,59)
+    flixC_imm8  = (48,55)
 ;
+
+attach variables [ flixA_t flixBF_rReg flixBF_sReg flixBE_t flixBE_movsrc flixBE_s flixBE_r flixC_t ] [
+    a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15
+];
+
+define pcodeop flix_slotA_unknown;
+define pcodeop flix_slotB_unknown;
+define pcodeop flix_slotB_unknown_alu;
+define pcodeop flix_slotC_unknown;
+
+# ===========================================================================
+# Slot A: the l32r case is the only confirmed op0 in this priority pass.
+# Formula matches the base ISA's srel_oex_sh2 (see xtensaMain.sinc), applied
+# to the field at bundle bits 8-23 instead of the base ISA's ri16_i16.
+# ===========================================================================
+
+flixA_l32r_rel: rel is flixA_imm16 [
+    rel = ((inst_start + 3) & ~3) + ((flixA_imm16 | 0xffff0000) << 2);
+] { export *:4 rel; }
+
+flixSlotA: "l32r "^flixA_t^","^flixA_l32r_rel is flixA_op0=1 & flixA_t & flixA_l32r_rel {
+    flixA_t = flixA_l32r_rel;
+}
+
+# Every other op0: unresolved. Do not trust any decompiled effect that
+# depends on this slot for op0 values other than 1.
+flixSlotA: "?slotA op="^flixA_op0 is flixA_op0 {
+    local op:1 = flixA_op0;
+    flix_slotA_unknown(op);
+}
+
+# ===========================================================================
+# Slot C: movi at, imm8 (class 0xC). Zero-extended per xdis.py's display
+# (it never showed a signed 8-bit form); if this is ever seen driving a
+# negative-looking constant, that assumption is the first thing to revisit.
+# ===========================================================================
+
+flixSlotC: "nop" is flixC_op=0xc & flixC_t=0 & flixC_imm8=0x90 {
+    # canonical NOP'd-slot encoding -- no operation.
+}
+
+flixSlotC: "movi "^flixC_t^","^flixC_imm8 is flixC_op=0xc & flixC_t & flixC_imm8 {
+    local imm8:1 = flixC_imm8;
+    local val:4 = zext(imm8);
+    flixC_t = val;
+}
+
+flixSlotC: "?slotC "^flixC_op^","^flixC_t^","^flixC_imm8 is flixC_op & flixC_t & flixC_imm8 {
+    local op:1 = flixC_op;
+    flix_slotC_unknown(op);
+}
+
+# ===========================================================================
+# Slot B, format 0xF: the branch slot. This is the highest-value fix in this
+# spec -- getting this wrong (or leaving it opaque) makes the decompiler
+# silently drop roughly half of all conditional control flow in FLIX-heavy
+# functions. imm18 (bits 36-53), NOT imm12 -- see docs/xtensa-flix-decoding.md
+# for the 0x7ffa6d1b backward-branch counter-example that ruled out imm12.
+# ===========================================================================
+
+flixBF_rel: rel is flixBF_imm18 [ rel = inst_start + 4 + flixBF_imm18; ] { export *:4 rel; }
+
+# B4CONST(r)/B4CONSTU(r) lookups, keyed on the FLIX slot-B r field (bits
+# 28-31), which is NOT the same token as the base ISA's `ar` field -- do not
+# reuse the base module's r_b4const/r_b4constu, they read the wrong bits.
+flixBF_b4const: tmp is flixBF_r=0  [ tmp = 0xffffffff; ] { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=1  [ tmp = 0x1; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=2  [ tmp = 0x2; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=3  [ tmp = 0x3; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=4  [ tmp = 0x4; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=5  [ tmp = 0x5; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=6  [ tmp = 0x6; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=7  [ tmp = 0x7; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=8  [ tmp = 0x8; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=9  [ tmp = 0xa; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=10 [ tmp = 0xc; ]        { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=11 [ tmp = 0x10; ]       { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=12 [ tmp = 0x20; ]       { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=13 [ tmp = 0x40; ]       { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=14 [ tmp = 0x80; ]       { export *[const]:4 tmp; }
+flixBF_b4const: tmp is flixBF_r=15 [ tmp = 0x100; ]      { export *[const]:4 tmp; }
+
+flixBF_b4constu: tmp is flixBF_r=0  [ tmp = 0x8000; ] { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=1  [ tmp = 0x1000; ] { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=2  [ tmp = 0x2; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=3  [ tmp = 0x3; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=4  [ tmp = 0x4; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=5  [ tmp = 0x5; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=6  [ tmp = 0x6; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=7  [ tmp = 0x7; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=8  [ tmp = 0x8; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=9  [ tmp = 0xa; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=10 [ tmp = 0xc; ]    { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=11 [ tmp = 0x10; ]   { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=12 [ tmp = 0x20; ]   { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=13 [ tmp = 0x40; ]   { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=14 [ tmp = 0x80; ]   { export *[const]:4 tmp; }
+flixBF_b4constu: tmp is flixBF_r=15 [ tmp = 0x100; ]  { export *[const]:4 tmp; }
+
+# ball/bany take a single-bit MASK (1<<r), not a register -- PROVEN, see
+# docs/xtensa-flix-decoding.md. The bb{c,ci,s,si} class also uses r as a raw
+# bit index (1<<r), never a mask register, in this encoding.
+flixBF_bit: tmp is flixBF_r [ tmp = 1 << flixBF_r; ] { export *[const]:4 tmp; }
+
+# --- register-operand branches (as, at) ---
+flixSlotB_F: "beq "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=7 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg == flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "bge "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=9 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg s>= flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "bgeu "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=0xb & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg >= flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "blt "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=13 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg s< flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "bltu "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=15 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg < flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "bnall "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=0x11 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    local test:4 = ~flixBF_sReg & flixBF_rReg;
+    if (test != 0) goto flixBF_rel;
+}
+flixSlotB_F: "bne "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=18 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    if (flixBF_sReg != flixBF_rReg) goto flixBF_rel;
+}
+flixSlotB_F: "bnone "^flixBF_sReg^","^flixBF_rReg^","^flixBF_rel is flixBF_k=20 & flixBF_sReg & flixBF_rReg & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_rReg;
+    if (test == 0) goto flixBF_rel;
+}
+
+# --- immediate (B4CONST) branches ---
+flixSlotB_F: "beqi "^flixBF_sReg^","^flixBF_b4const^","^flixBF_rel is flixBF_k=8 & flixBF_sReg & flixBF_b4const & flixBF_rel {
+    if (flixBF_sReg == flixBF_b4const) goto flixBF_rel;
+}
+flixSlotB_F: "bnei "^flixBF_sReg^","^flixBF_b4const^","^flixBF_rel is flixBF_k=19 & flixBF_sReg & flixBF_b4const & flixBF_rel {
+    if (flixBF_sReg != flixBF_b4const) goto flixBF_rel;
+}
+flixSlotB_F: "blti "^flixBF_sReg^","^flixBF_b4const^","^flixBF_rel is flixBF_k=14 & flixBF_sReg & flixBF_b4const & flixBF_rel {
+    if (flixBF_sReg s< flixBF_b4const) goto flixBF_rel;
+}
+flixSlotB_F: "bgei "^flixBF_sReg^","^flixBF_b4const^","^flixBF_rel is flixBF_k=10 & flixBF_sReg & flixBF_b4const & flixBF_rel {
+    if (flixBF_sReg s>= flixBF_b4const) goto flixBF_rel;
+}
+
+# --- immediate (B4CONSTU) branches ---
+flixSlotB_F: "bltui "^flixBF_sReg^","^flixBF_b4constu^","^flixBF_rel is flixBF_k=16 & flixBF_sReg & flixBF_b4constu & flixBF_rel {
+    if (flixBF_sReg < flixBF_b4constu) goto flixBF_rel;
+}
+flixSlotB_F: "bgeui "^flixBF_sReg^","^flixBF_b4constu^","^flixBF_rel is flixBF_k=12 & flixBF_sReg & flixBF_b4constu & flixBF_rel {
+    if (flixBF_sReg >= flixBF_b4constu) goto flixBF_rel;
+}
+
+# --- compare-against-zero branches ---
+flixSlotB_F: "beqz "^flixBF_sReg^","^flixBF_rel is flixBF_k=21 & flixBF_sReg & flixBF_rel {
+    if (flixBF_sReg == 0) goto flixBF_rel;
+}
+flixSlotB_F: "bnez "^flixBF_sReg^","^flixBF_rel is flixBF_k=24 & flixBF_sReg & flixBF_rel {
+    if (flixBF_sReg != 0) goto flixBF_rel;
+}
+flixSlotB_F: "bltz "^flixBF_sReg^","^flixBF_rel is flixBF_k=23 & flixBF_sReg & flixBF_rel {
+    if (flixBF_sReg s< 0) goto flixBF_rel;
+}
+flixSlotB_F: "bgez "^flixBF_sReg^","^flixBF_rel is flixBF_k=22 & flixBF_sReg & flixBF_rel {
+    if (flixBF_sReg s>= 0) goto flixBF_rel;
+}
+
+# --- mask branches (ball/bany) ---
+flixSlotB_F: "ball "^flixBF_sReg^",mask:"^flixBF_bit^","^flixBF_rel is flixBF_k=1 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = ~flixBF_sReg & flixBF_bit;
+    if (test == 0) goto flixBF_rel;
+}
+flixSlotB_F: "bany "^flixBF_sReg^",mask:"^flixBF_bit^","^flixBF_rel is flixBF_k=2 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_bit;
+    if (test != 0) goto flixBF_rel;
+}
+
+# --- bit-test branches (bbc/bbci/bbs/bbsi) ---
+flixSlotB_F: "bbc "^flixBF_sReg^",bit:"^flixBF_bit^","^flixBF_rel is flixBF_k=3 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_bit;
+    if (test == 0) goto flixBF_rel;
+}
+flixSlotB_F: "bbci "^flixBF_sReg^",bit:"^flixBF_bit^","^flixBF_rel is flixBF_k=4 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_bit;
+    if (test == 0) goto flixBF_rel;
+}
+flixSlotB_F: "bbs "^flixBF_sReg^",bit:"^flixBF_bit^","^flixBF_rel is flixBF_k=5 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_bit;
+    if (test != 0) goto flixBF_rel;
+}
+flixSlotB_F: "bbsi "^flixBF_sReg^",bit:"^flixBF_bit^","^flixBF_rel is flixBF_k=6 & flixBF_sReg & flixBF_bit & flixBF_rel {
+    local test:4 = flixBF_sReg & flixBF_bit;
+    if (test != 0) goto flixBF_rel;
+}
+
+# k=0 or k>0x18: not in BRK. Left opaque -- do not trust control flow here.
+flixSlotB_F: "?bk"^flixBF_k is flixBF_k {
+    local k:2 = flixBF_k;
+    flix_slotB_unknown(k);
+}
+
+# ===========================================================================
+# Slot B, format 0xE: j / movi(12-bit) / mov / or. This is the majority
+# (~72%) bundle format, but its slot B is NOT a conditional branch except
+# via the unconditional `j` case -- the conditional branches all live in
+# format 0xF's slot B above. Only sub=0xE ("or") of the ALU class is
+# confirmed; every other ALU sub-opcode is left unresolved.
+# ===========================================================================
+
+flixBE_j_rel: rel is flixBE_disp18 [ rel = inst_start + 4 + flixBE_disp18; ] { export *:4 rel; }
+
+flixSlotB_E: "j "^flixBE_j_rel is flixBE_pre=3 & flixBE_j_rel {
+    goto flixBE_j_rel;
+}
+
+# pre=1: addi at,as,imm4 -- [t@28-31][imm4@32-35][s@36-39]. Confirmed at
+# 0x7ffb4fda = addi a2,a2,4 inside a word-push loop (see
+# docs/sn200-independent-re.md addendum A.4). imm4 sign is unconfirmed;
+# treated as unsigned 0-15 since the only observed case is positive.
+flixSlotB_E: "addi "^flixBE_t^","^flixBE_r^","^flixBE_imm4 is flixBE_pre=1 & flixBE_t & flixBE_r & flixBE_imm4 {
+    local imm4:1 = flixBE_imm4;
+    local imm:4 = zext(imm4);
+    flixBE_t = flixBE_r + imm;
+}
+
+flixSlotB_E: "movi "^flixBE_t^","^flixBE_imm12 is flixBE_pre=2 & flixBE_opn=8 & flixBE_t & flixBE_imm12 {
+    local imm12:2 = flixBE_imm12;
+    local val:4 = zext(imm12);
+    flixBE_t = val;
+}
+
+flixSlotB_E: "mov "^flixBE_t^","^flixBE_movsrc is flixBE_pre=2 & flixBE_movchk=0x23 & flixBE_t & flixBE_movsrc {
+    flixBE_t = flixBE_movsrc;
+}
+
+flixSlotB_E: "or "^flixBE_t^","^flixBE_s^","^flixBE_r is flixBE_pre=2 & flixBE_opn=9 & flixBE_sub=0xe & flixBE_t & flixBE_s & flixBE_r {
+    flixBE_t = flixBE_s | flixBE_r;
+}
+
+flixSlotB_E: "?Balu sub="^flixBE_sub^" "^flixBE_t^","^flixBE_s^","^flixBE_r is flixBE_pre=2 & flixBE_opn=9 & flixBE_sub & flixBE_t & flixBE_s & flixBE_r {
+    local sub:1 = flixBE_sub;
+    flix_slotB_unknown_alu(sub);
+}
+
+# pre=0/1, or pre=2 outside the movi/mov/or classes above: not recovered.
+flixSlotB_E: "?B pre="^flixBE_pre is flixBE_pre {
+    local pre:1 = flixBE_pre;
+    flix_slotB_unknown(pre);
+}
+
+# ===========================================================================
+# Top-level bundles. flix_op0h=0b111 (checked implicitly by flix_op0's exact
+# value below) selects op0 in {0xE, 0xF}; these two constructors are
+# exhaustive over that space.
+# ===========================================================================
+
+:flix8 flixSlotA^" | "^flixSlotB_F^" | "^flixSlotC
+    is flix_op0=0xf & flixSlotA & flixSlotB_F & flixSlotC
+{
+    build flixSlotA;
+    build flixSlotC;
+    build flixSlotB_F;
+}
+
+:flix8 flixSlotA^" | "^flixSlotB_E^" | "^flixSlotC
+    is flix_op0=0xe & flixSlotA & flixSlotB_E & flixSlotC
+{
+    build flixSlotA;
+    build flixSlotC;
+    build flixSlotB_E;
+}
 
 @else
 
+# Big-endian FLIX bundles have not been analysed for this project (the
+# SN200 controller is little-endian) -- keep the stock-shaped opaque
+# pseudo-op so xtensa_be.sla still compiles, but treat any BE decode of
+# this spec as untrusted.
 define token flixtok(64)
     flix_op0    = (60,63)
     flix_op0h   = (60,62)
@@ -30,14 +366,10 @@ define token flixtok(64)
     flix_hi     = (0,31)
 ;
 
-@endif
-
-# Opaque: the per-slot operation encoding is config-specific and has not been
-# recovered. The bundle is presented as a single pseudo-op of the correct
-# length so the surrounding instruction stream stays in sync.
 define pcodeop flix_bundle;
 
-# flix_op0h == 0b111 matches both op0=0xE and op0=0xF.
 :flix.8 flix_hi^","^flix_lo is flix_op0h=7 & flix_hi & flix_lo {
 	flix_bundle(flix_hi:4, flix_lo:4);
 }
+
+@endif

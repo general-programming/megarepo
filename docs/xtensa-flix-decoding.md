@@ -29,6 +29,24 @@ Xtensa reserves `op0 = 0xE` and `0xF` for wide/FLIX instructions and leaves the
 encoding to the per-core TIE configuration, so there is no generic answer —
 this had to be solved from the binaries.
 
+### ⚠ If you write a literal/xref scanner, scan slot A at **every byte offset**
+
+"Bundle alignment: none" above is not a footnote — it is the single easiest way
+to produce a false negative. A scanner that walks 8-byte bundles at 4-aligned
+offsets only (the natural thing to write) silently misses every bundle that
+starts at an odd address, and a missed `l32r` looks exactly like "this constant
+is never loaded".
+
+Ground truth to validate any such scanner against: PROC0 `0x7ffa430f`,
+`0x7ffa4317`, `0x7ffa431f`, `0x7ffa4327` are four consecutive 8-byte bundles at
+addresses ≡ 3 (mod 4). **`0x7ffa431f` must appear as `l32r a11,0x7ff82b54`.** If
+your sweep does not find it, it is aligned-only and its negative results are
+worthless. (This cost a retraction during the marker-8 work; the corrected sweep
+also turned up a third loader, `0x7ffa4732`, that the aligned scan had hidden.)
+
+Note the target formula still uses `((pc + 3) & ~3)`, so the bundle's own
+(unaligned) PC must be fed in — do not round it first.
+
 ## Evidence
 
 Reproduce everything with:
@@ -273,39 +291,155 @@ bundle starting at `0x30033546`. Its apparent target `0x30033576` was
 therefore also spurious, which is why nothing was there. This does not affect
 the conclusion; it is an example of how convincing the desynced output was.
 
-## What this does NOT fix
+## What the length-only fix did NOT fix (historical — superseded below)
 
-Be explicit about this when reasoning about firmware behaviour.
+The bundle-length fix above shipped with the bundle rendered as one **opaque**
+`flix_bundle(...)` pseudo-op: no register reads/writes, no branches. That is
+no longer the current state of `flix.sinc` — see "Real p-code semantics for
+slots A/B/C" below — but the list is kept here because it explains *why* the
+follow-up work happened, and because slot A still falls back to the same
+opaque behaviour for every op0 other than `l32r`.
 
-1. **~50.5% of executable bytes are FLIX bundles** and remain undecoded
-   (200,504 of 397,044 bytes swept; per-image range 45.6%–53.2%, except FCC at
-   3.6%). Per-image counts are in the `flix_analysis.py` census output.
-   Decompiled functions will show `flix_bundle(...)` calls where half the work
-   happens.
-2. **No p-code semantics.** The bundle has no register reads or writes modelled.
-   The decompiler will therefore **propagate stale register values across
-   bundles** and can produce clean-looking but wrong dataflow. Treat any
-   decompiled variable whose definition crosses a bundle as unknown. This is
-   the most dangerous residual failure mode — output looks confident.
-3. **Residual off-boundary targets** (6.6% on the PROC8 overlay bank). The
-   overlay bank is the worst case; its `callN` targets mostly leave the bank,
-   so cross-bank references cannot be checked from that image alone.
-4. **Control flow inside bundles is unproven-absent**, not proven-absent. If
-   some bundles do branch, the CFG is incomplete in ways this analysis would
-   not have detected.
-5. `entry`-based function discovery misses `call0`-ABI leaf functions, which
-   have no `entry` prologue. Function counts above are lower bounds.
+1. Roughly half of all executable bytes are FLIX bundles.
+2. **No p-code semantics** meant the decompiler could not see roughly half of
+   all conditional control flow — slot B carries a real branch on this core —
+   which is a materially dangerous failure mode: straight-line code appears
+   where a conditional exists. This was a live risk in this project's own
+   conclusions before the fix below.
+3. Residual off-boundary targets, unproven-absent in-bundle control flow, and
+   `call0`-ABI leaf function under-counting (all still true, see below).
+
+## Real p-code semantics for slots A/B/C
+
+`tools/sn200-fw/xdis.py` / `disany.py` decode slots A, B and C well enough to
+be ground truth (see the corrections list in
+`docs/sn200-independent-re.md`'s "Addendum: re-derivation with slot-B-aware
+FLIX decoding" — that addendum is itself downstream of a previous version of
+this file and is more current than the tables above for slot B/C specifics).
+`flix.sinc` now mirrors that decoder as real SLEIGH constructors instead of
+one opaque pseudo-op, in three independent sub-tables (`flixSlotA`,
+`flixSlotB_F`/`flixSlotB_E`, `flixSlotC`) built in that order — slot A and C
+always execute before slot B's `goto`, matching VLIW "all slots fire, then PC
+updates" semantics even when B branches away.
+
+**Two bundle formats, both op0 ∈ {0xE, 0xF}, dispatched by the exact op0
+nibble** (not just `bits(1,3)==0b111`, since the two formats' slot B layouts
+are unrelated):
+
+- **op0 = 0xF (~28% of bundles): slot B is the branch slot.** `r@28-31`,
+  `s@32-35`, signed `imm18@36-53`, mnemonic index `k@55-63` (1-based into
+  `xdis.py`'s `BRK` table). All 24 `BRK` mnemonics are implemented with real
+  p-code (`if (...) goto rel;`), split into register, B4CONST/B4CONSTU
+  immediate, compare-zero, mask (`ball`/`bany`, `1<<r`), and bit-test
+  (`bbc`/`bbci`/`bbs`/`bbsi`, also `1<<r`) forms. `k` outside `BRK`'s range
+  falls back to an explicit `flix_slotB_unknown(k)` pcodeop call.
+- **op0 = 0xE (~72% of bundles): slot B is j / addi / movi(12-bit) / mov / or.**
+  Selected by a 2-bit `pre` field at bits 46-47: `pre=3` is an unconditional
+  `j` (18-bit signed disp @28-45, real `goto`); `pre=1` is `addi at,as,imm4`
+  (confirmed at `0x7ffb4fda`, `docs/sn200-independent-re.md` addendum A.4);
+  `pre=2` splits by an opcode nibble @44-47 into `movi at,imm12` (nibble
+  `0x8`, zero-extended — sign is unconfirmed), `mov at,as` (6-bit check
+  `0x23` @40-45), and an ALU class (nibble `0x9`) of which only `sub=0xE`
+  (`or`) is confirmed; every other ALU sub and every other `pre`/opcode
+  combination falls back to `flix_slotB_unknown`/`flix_slotB_unknown_alu`.
+  **This format's slot B is *not* a conditional branch** except via `j` —
+  the conditional branches all live in format 0xF's slot B.
+- **Slot C** (both formats, bits 48-63): `movi at,imm8`, class nibble `0xC`
+  @60-63, `t@56-59`, `imm8@48-55`, zero-extended. `0xC090` (t=a0, imm8=0x90)
+  is modelled as a true no-op (no p-code at all), matching the ~68%
+  NOP'd-slot finding — assigning `a0 = 0x90` on every one of those bundles
+  would have been a worse, silently-wrong alternative.
+- **Slot A**: only `op0=1` (`l32r`, the base-ISA formula applied to bundle
+  bits 8-23, dest register bits 4-7) has real semantics. Every other op0 —
+  including the very common `op0=2` (base-ISA `movi`/load/store family) —
+  still falls back to `flix_slotA_unknown(op0)`. This was priority (c) in the
+  task and was deliberately not chased further so as not to risk (a)/(b).
+
+### Validation against hand-traced ground truth
+
+Done with a disposable headless Ghidra project (`analyzeHeadless`), not the
+shared interactive instance — a live GUI session with unrelated open work was
+running under the same MCP bridge and restarting it to pick up the new `.sla`
+would have risked that work. A fresh headless process has no cached-`.sla`
+problem to begin with.
+
+- **`0x3003353c` (OAM erase handler).** The `cVar1`/erase-sub-command `beqi`
+  ladder decompiles as a real `if`/`else if` chain (previously would have
+  been straight-line). The crash-dump-only second call
+  (`FUN_30030aa0` gated on `*DAT_30033350 == 6`, i.e. mode 6) is correct
+  **when the block at `0x300335ca` is decompiled directly** — see the caveat
+  below.
+- **`0x7ffa6b30` (Post-Crash admin gate).** Decompiles as an **allow-list**:
+  a chain of `if (param_2 == 0x..) goto LAB_7ffa6cfb;` covering exactly the
+  opcode set in `docs/sn200-independent-re.md`'s membership table (`0x00,
+  0x01, 0x02, 0x04, 0x05, 0x06, 0x08, 0x09, 0x0a, 0x0c, 0x10, 0x11, 0xec,
+  0xff, 0xca`, plus the `0xca` sub-list on `param_3`). This was previously
+  invisible; the fix makes the allow-list polarity visually unambiguous.
+- **`0x7ffaae35` / `0x7ffaae3d` (PROC0 latch tests).** Both decompile to
+  `if ((~unaff_a9 & 1) == 0) { LAB_7ffaaf02: ... }` and
+  `if ((~unaff_a9 & 4) == 0) goto LAB_7ffaaf02;` — the `ball` mask semantics
+  (`1<<r`) are correct and **both branches converge on the same label**,
+  which falls through into the forced-marker write at `0x7ffaaf08`.
+- **`0x7ffabbf0` (PROC0 marker-3 writer).** The `bbci a9,0,0x7ffabd22` gate at
+  `0x7ffabcc6` is a plain base-ISA instruction (unaffected by this spec) and
+  decompiles correctly as `if ((*(uint *)(param_1 + 0x78) & 1) != 0) { ... }`
+  **when the block at `0x7ffabcc3` is decompiled directly** — see the caveat
+  below.
+
+**Caveat found during validation, orthogonal to this spec:** all four target
+functions contain a `jx aN` computed jump (`0x30033556`, `0x7ffabc08`, and
+similar in the admin-gate/latch functions) implementing a multi-way dispatch.
+Ghidra's decompiler cannot recover the jump table (`Could not recover
+jumptable ... Too many branches`) and falls back to treating the indirect
+jump as a call that returns immediately, truncating the decompiled function
+there. This is a pre-existing Ghidra limitation for computed jumps, present
+before this work and unrelated to FLIX slot semantics — it affects any
+Xtensa binary, FLIX or not. **Practical consequence: decompiling the outer
+entry point (e.g. `0x3003353c` or `0x7ffabbf0`) will not show the code past
+the `jx`.** To see it, decompile the specific dispatch target directly (force
+a function there, e.g. via the MCP `create_function` + `decompile_function`
+tools) — the branch semantics inside that block are then correct, as shown
+above.
+
+## What this still does not fix
+
+1. **Slot A is opaque for every op0 except `l32r` (1)** — most commonly
+   `op0=2` (movi/load/store), which is common in every function shown above
+   (`flix_slotA_unknown(2)` calls). Do not trust any dataflow through a
+   register that a decompiled function only ever seems to read, never write —
+   it may be written by an unresolved slot A.
+2. **Most of slot B format 0xE's ALU class is opaque** — only `sub=0xE`
+   (`or`) is confirmed; any other value shows as
+   `flix_slotB_unknown_alu(sub)` with no effect modelled.
+3. **The `jx`/computed-jump function-boundary limitation above** — applies
+   independently of this spec but was encountered in every one of the four
+   validation targets, so it is likely to recur. Ground truth for code
+   reachable only through a computed jump still requires `disany.py`, or
+   manually decompiling the target block.
+4. **Slot ordering is sequential in p-code, not truly parallel** — A, then C,
+   then B. If a real bundle ever has slot B read a register that slot A or C
+   in the *same* bundle also writes, the emitted p-code will see the
+   post-write value instead of the true pre-bundle value. Not observed in any
+   confirmed case, not exhaustively ruled out.
+5. **`movi at,imm12` (slot B, format 0xE) is treated as zero-extended.** The
+   only confirmed example uses a small positive value; if this is ever seen
+   producing an implausibly large positive constant where a small negative
+   one would make more sense, revisit the sign.
+6. Everything in the original "What this does NOT fix" list that isn't
+   superseded above: off-boundary target residue, unproven-absent in-bundle
+   control flow beyond what's now decoded, and `call0`-ABI leaf function
+   under-counting.
 
 ## Files
 
 | Path | Purpose |
 |---|---|
 | `tools/sn200-fw/flix_analysis.py` | reproduces all width/slot evidence above |
-| `tools/sn200-fw/ghidra/languages/flix.sinc` | the SLEIGH fix |
+| `tools/sn200-fw/ghidra/languages/flix.sinc` | the SLEIGH fix (length + slot A/B/C semantics) |
 | `tools/sn200-fw/ghidra/languages/flix.sinc.orig` | stock Ghidra 12.1.2 spec, for reference |
 | `tools/sn200-fw/ghidra/install.sh` | install / undo + recompile |
 | `tools/sn200-fw/ghidra/FlixMetrics.java` | headless validation metrics script |
-| `tools/sn200-fw/xdis.py` | pre-existing standalone disassembler (owned elsewhere) |
+| `tools/sn200-fw/xdis.py` | ground truth for slot A/B/C decode (owned elsewhere) |
 
 ## Next steps for cracking the slots
 
