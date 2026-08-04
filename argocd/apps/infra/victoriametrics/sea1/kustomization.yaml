@@ -9,4 +9,5 @@ resources:
   - ingress-vmalert.yaml
   - sea1_scrape.yaml
   - scrape-kubevirt.yaml
+  - scrape-cilium.yaml
   - alerts-kubevirt.yaml
