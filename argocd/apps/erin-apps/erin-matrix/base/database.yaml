@@ -34,19 +34,10 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    # Ceph, NOT local-path. 32Gi is sized from measured usage: pgdata was 9.7G
-    # against an 8Gi declared PVC, because local-path is a hostPath directory
-    # and enforces no quota. Ceph RBD does enforce it, so the old figure would
-    # have under-provisioned and filled mid-basebackup.
-    #
-    # resizeInUseVolumes MUST be false while the old local-path PVC still
-    # exists: CNPG otherwise tries to expand THAT PVC to 32Gi, local-path has
-    # allowVolumeExpansion=false, and the error aborts the reconcile before the
-    # replacement instance is ever created. Remove once no local-path PVC
-    # remains in this cluster.
+    # 32Gi from measured usage: pgdata was 9.7G against the old 8Gi local-path
+    # declaration, which being a hostPath enforced no quota. Ceph RBD does.
     storageClass: ceph-rbd-xfs
     size: 32Gi
-    resizeInUseVolumes: false
   bootstrap:
     initdb:
       database: matrix
