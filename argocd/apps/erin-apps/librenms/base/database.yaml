@@ -23,14 +23,23 @@ spec:
     generate: true
   database: librenms
   storage:
-    # Ceph, NOT local-path. Measured usage is 396M against 16Gi, so the size is
-    # already generous; only the class needed to change.
+    # STAYS local-path, unlike every other sea1 database. Not an oversight:
+    # mariadb-operator's validating webhook (vmariadb-v1alpha1.kb.io) treats
+    # storageClassName as immutable on an existing MariaDB CR --
     #
-    # A StatefulSet's volumeClaimTemplates are IMMUTABLE, so this does not
-    # migrate anything on its own -- mariadb-operator's StatefulSet must be
-    # deleted with --cascade=orphan and the PVCs replaced one at a time, letting
-    # Galera re-sync each member from its peers.
+    #   spec.storage.storageClassName: Invalid value: "ceph-rbd-xfs":
+    #   'spec.storage.storageClassName' field is immutable
+    #
+    # so the change is rejected at the CR, upstream of the StatefulSet. Setting
+    # it here does not migrate anything; it only wedges the ArgoCD app in a
+    # failing sync retry loop. Deleting the STS with --cascade=orphan does not
+    # help either: the operator just recreates it from the unchanged CR.
+    #
+    # Moving this needs a CR-level path (operator-sanctioned migration flow, or
+    # recreate the MariaDB CR -- which tears down Galera and must not be done
+    # without a verified dump first). Data is 396M, so a dump/restore into a
+    # fresh ceph-backed CR is the realistic route when someone picks this up.
     size: 16Gi
-    storageClassName: ceph-rbd-xfs
+    storageClassName: local-path
   updateStrategy:
     autoUpdateDataPlane: true
