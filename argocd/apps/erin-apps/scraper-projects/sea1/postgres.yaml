@@ -21,7 +21,11 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    storageClass: local-path
+    # Ceph, NOT local-path. Size stays 128Gi despite measured usage of only
+    # 2.3G: CNPG's webhook rejects any decrease in spec.storage.size, so 64Gi
+    # would fail to sync with "can't shrink existing storage". RBD is thin-
+    # provisioned, so the oversized declaration costs nothing real.
+    storageClass: ceph-rbd-xfs
     size: 128Gi
   enableSuperuserAccess: true
   bootstrap:

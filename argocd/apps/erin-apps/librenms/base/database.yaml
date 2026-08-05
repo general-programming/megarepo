@@ -23,7 +23,14 @@ spec:
     generate: true
   database: librenms
   storage:
+    # Ceph, NOT local-path. Measured usage is 396M against 16Gi, so the size is
+    # already generous; only the class needed to change.
+    #
+    # A StatefulSet's volumeClaimTemplates are IMMUTABLE, so this does not
+    # migrate anything on its own -- mariadb-operator's StatefulSet must be
+    # deleted with --cascade=orphan and the PVCs replaced one at a time, letting
+    # Galera re-sync each member from its peers.
     size: 16Gi
-    storageClassName: local-path
+    storageClassName: ceph-rbd-xfs
   updateStrategy:
     autoUpdateDataPlane: true

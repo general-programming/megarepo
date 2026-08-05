@@ -21,7 +21,11 @@ spec:
               - key: generalprogramming.org/no-database
                 operator: DoesNotExist
   storage:
-    storageClass: local-path
+    # Ceph, NOT local-path. local-path at sea1 lands on an HGST SN200, which
+    # latches into a state with no proven way to read the data back off it
+    # (docs/sn200-runbook.md). Size stays 128Gi (measured usage 6.4G) because
+    # CNPG's webhook rejects any decrease; RBD is thin-provisioned anyway.
+    storageClass: ceph-rbd-xfs
     size: 128Gi
   bootstrap:
     initdb:
