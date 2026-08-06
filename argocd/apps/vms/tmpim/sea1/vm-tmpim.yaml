@@ -7,6 +7,10 @@
 # /32 (199.255.18.164) routed to its MAC, so the MAC below is load-bearing
 # twice over -- the upstream router's ARP entry depends on it.
 #
+# It also fstab-mounts CephFS at /mnt/data (client.tmpim, mons on the hv v6
+# addresses) -- that data is not on this PVC and rides along untouched, but a
+# boot with no LAN v6 leaves /mnt/data empty rather than failing loudly.
+#
 # SeaBIOS guest: no `bios:` line, no efidisk, no tpmstate on the Proxmox side,
 # so firmware.bootloader stays unset and KubeVirt defaults to BIOS. Do not add
 # an efi block; it would hand the guest a fresh OVMF NVRAM it cannot boot from.
@@ -38,10 +42,7 @@ metadata:
   name: tmpim
   namespace: tmpim
 spec:
-  # Halted while the 256 GiB disk is copied in; flipped to Always once the
-  # image is populated. Otherwise ArgoCD boots the guest off an empty disk the
-  # moment the PVC binds.
-  runStrategy: Halted
+  runStrategy: Always
   template:
     metadata:
       labels:
