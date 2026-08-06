@@ -1,0 +1,103 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: nix-cache-builder
+spec:
+  # comin polls every 600s (nix/modules/gitops.nix), so a five-minute tick keeps
+  # the cache ahead of the fleet without a webhook. build.sh no-ops when main
+  # has not moved, so most ticks cost one git fetch.
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  startingDeadlineSeconds: 300
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # No retries: the next tick is the retry, and a failed build re-running
+      # six times in a row would just pin 48 cores.
+      backoffLimit: 0
+      activeDeadlineSeconds: 14400
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: nix-cache-builder
+        spec:
+          restartPolicy: Never
+          affinity:
+            nodeAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+                # Soft, not a pin: both candidates are control-plane + OSD
+                # hosts, but sea1-k8s-2 also runs every CNPG primary.
+                - weight: 100
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: In
+                        values: ["sea1-k8s-1"]
+                - weight: 50
+                  preference:
+                    matchExpressions:
+                      - key: kubernetes.io/hostname
+                        operator: NotIn
+                        values: ["sea1-k8s-2"]
+          initContainers:
+            - name: seed-store
+              image: nixos/nix:2.35.1@sha256:377d4887aca98f0dfa12971c1ea6d6a625a435d8b610d4c95a436843da6fbfd1
+              command: ["bash", "/scripts/seed-store.sh"]
+              volumeMounts:
+                - name: nix-store
+                  mountPath: /mnt/nix
+                - name: scripts
+                  mountPath: /scripts
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: 1Gi
+                limits:
+                  cpu: "4"
+                  memory: 4Gi
+          containers:
+            - name: build
+              image: nixos/nix:2.35.1@sha256:377d4887aca98f0dfa12971c1ea6d6a625a435d8b610d4c95a436843da6fbfd1
+              command:
+                - bash
+                - -c
+                - |
+                  set -euo pipefail
+                  nix-store --load-db </nix/.image-db.dump
+                  exec bash /scripts/build.sh
+              securityContext:
+                # Nix's build sandbox needs mount + user namespaces. The
+                # alternative is sandbox = false, which is strictly worse.
+                privileged: true
+              env:
+                - name: ATTIC_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: nix-cache-builder
+                      key: ATTIC_TOKEN
+              volumeMounts:
+                - name: nix-store
+                  mountPath: /nix
+                - name: scripts
+                  mountPath: /scripts
+                - name: nix-conf
+                  mountPath: /etc/nix/nix.conf
+                  subPath: nix.conf
+              resources:
+                requests:
+                  cpu: "8"
+                  memory: 32Gi
+                limits:
+                  cpu: "48"
+                  memory: 256Gi
+          volumes:
+            - name: nix-store
+              persistentVolumeClaim:
+                claimName: nix-store
+            - name: scripts
+              configMap:
+                name: nix-cache-builder-scripts
+            - name: nix-conf
+              configMap:
+                name: nix-cache-builder-nix-conf

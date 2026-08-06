@@ -16,8 +16,10 @@ Components:
   (`radosgw.service.consul`).
 
 The Nix-side counterpart is `nix/modules/nix-cache.nix` (client substituter
-config, all machines). Cache population is manual for now: `just build_cache`
-in `nix/` builds every machine's closure and pushes it.
+config, all machines). Population is automated by
+[`nix-cache-builder`](../nix-cache-builder/README.md) — a CronJob on sea1 that
+runs `just build_cache` whenever `nix/` or `go/` moves on `main`. Running
+`just build_cache` in `nix/` by hand still works and does the same thing.
 
 ## Bootstrap runbook
 
@@ -71,9 +73,8 @@ in `nix/` builds every machine's closure and pushes it.
 5. **Enable the client on all machines**: set `gpNixCache.enable = true` in
    `nix/machines/base.nix` and paste the public key from step 4.
 
-6. **Populate the cache** whenever you want fresh closures pushed (run from
-   `nix/`, needs the login from step 4 — or mint a narrower push-only token
-   with `atticadm make-token --sub builder --validity 1y --pull general-programming --push general-programming`):
+6. **Populate the cache.** `nix-cache-builder` does this automatically; to
+   push by hand, run this from `nix/` with the login from step 4:
 
    ```sh
    just build_cache

@@ -1,0 +1,15 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: nix-cache-builder
+resources:
+  - pvc.yaml
+  - secrets.yaml
+  - cronjob.yaml
+configMapGenerator:
+  - name: nix-cache-builder-scripts
+    files:
+      - build.sh
+      - seed-store.sh
+  - name: nix-cache-builder-nix-conf
+    files:
+      - nix.conf

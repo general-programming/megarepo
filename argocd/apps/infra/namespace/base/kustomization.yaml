@@ -20,6 +20,7 @@ resources:
   - mariadb-operator.yaml
   - clickhouse-operator.yaml
   - shared-db.yaml
+  - nix-cache-builder.yaml
 
   # apps
   - akvorado.yaml

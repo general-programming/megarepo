@@ -1,4 +1,6 @@
 ---
+# Evaluation only. Building the fleet's closures and pushing them to Attic
+# happens in-cluster; see argocd/apps/infra/nix-cache-builder.
 name: nix
 
 on:

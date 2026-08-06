@@ -1,0 +1,14 @@
+# A warm /nix is an optimisation, not state worth protecting. build_cache runs
+# with --always-allow-substitutes against caches we trust, so a lost PVC costs a
+# long re-download, not a fleet-wide rebuild -- delete it freely.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nix-store
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ceph-rbd-xfs
+  resources:
+    requests:
+      storage: 300Gi
