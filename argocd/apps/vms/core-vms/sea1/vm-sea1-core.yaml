@@ -56,9 +56,9 @@ metadata:
   name: sea1-core
   namespace: core-vms
 spec:
-  # Halted until the disk is copied; flipping this early would boot the guest
-  # off an empty image the moment the claim binds.
-  runStrategy: Halted
+  # Disk copied from the local-zfs zvol 2026-08-06 (64 GiB at 898 MB/s, first
+  # 2 GiB cmp-verified). Copy once, boot once.
+  runStrategy: Always
   template:
     metadata:
       labels:
