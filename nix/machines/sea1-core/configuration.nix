@@ -164,8 +164,25 @@ in
           "2602:fa6d:10:ffff::f00/116"
         ];
 
+        # MTUBytes on the DEFAULT ROUTE ONLY. The LAN link stays at its
+        # native MTU so on-link jumbo still works, but anything leaving via
+        # the gateway is capped at 1500 -- which also caps the MSS we
+        # advertise, and that is the part that matters.
+        #
+        # Without this, HTTPS to our own IPv4 services black-holes. Both sites
+        # run jumbo (sea1 9000, fmt2 pods 8950), so each end happily sends
+        # segments the 1500 internet between them cannot carry, and PMTU
+        # discovery cannot rescue it: the gateway (10.3.2.1, itself a VM)
+        # silently drops oversized DF packets instead of returning ICMP
+        # frag-needed -- verified, no PMTU is ever learned for ANY
+        # destination. Large CDNs survive only because they clamp their own
+        # MSS; our own Traefik honours what we advertise, so attic.owo.me
+        # times out and this host cannot substitute from the Nix cache.
         routes = [
-          { Gateway = "10.3.2.1"; }
+          {
+            Gateway = "10.3.2.1";
+            MTUBytes = 1500;
+          }
         ];
 
         # Static v6 address, but the default route comes from SLAAC/RA.
