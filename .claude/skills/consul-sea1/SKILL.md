@@ -1,6 +1,6 @@
 ---
 name: consul-sea1
-description: Operate the sea1 consul cluster — where the servers live after the Proxmox→Talos migration, why the gossip pool is IPv4, and the chart/GitOps traps that make "just enable servers" fail. Use when sea1 consul agents log "No known Consul servers", the consul DaemonSet/StatefulSet is not Ready, vmagent's consul SD returns no node_exporter targets, or a consul topology change is being planned for sea1.
+description: Operate the sea1 consul cluster — where the servers live after the Proxmox→Talos migration, why the gossip pool is IPv4, the hostPort reply-SNAT trap that breaks every LAN agent, and the GitOps loop that makes "just enable servers" fail. Use when sea1 consul agents log "No known Consul servers" or "rpc error making call: EOF", the consul StatefulSet is not Ready, vmagent's consul SD returns no node_exporter targets, or a consul topology or ACL change is being planned for sea1.
 ---
 
 # sea1 consul
@@ -23,43 +23,89 @@ The pool is **IPv4 on 10.3.2.0/23**. Nodes are `10.3.2.10/11/12`, sea1-core is
 (`nix/machines/sea1-core/consul.nix`, `salt/pillar/consul/init.sls`).
 
 fmt2 is unchanged and unrelated: servers still on its hypervisors,
-`10.65.67.100-104`, and it is a separate unfederated DC.
+`10.65.67.100-104`, and it is a separate unfederated DC
+(`consul catalog datacenters` on a sea1 server returns only `sea1`).
+
+## The blocker: hostPort replies get re-SNAT'd, so LAN agents cannot RPC
+
+**Known broken. sea1-core gossips but every RPC fails.** Symptom on the agent:
+
+```
+[ERROR] agent: yamux: keepalive failed: i/o deadline reached
+[ERROR] agent.client: RPC failed to server: method=Catalog.ListServices error="rpc error making call: EOF"
+[WARN]  agent: (LAN) couldn't join: Failed to join 10.3.2.10:8301: i/o timeout
+```
+
+`consul members` still looks perfect on both sides — that converges over UDP,
+and the servers can open TCP *to* sea1-core, which works. Only LAN→hostPort TCP
+is broken, so this misreads as healthy.
+
+Cause: Cilium runs `enable-ipv4-masquerade` in **iptables** mode
+(`enable-bpf-masquerade` is unset). A hostPort reply leaves the pod still
+carrying its pod IP, so `CILIUM_POST_nat` matches it:
+
+```
+-A CILIUM_POST_nat -s 10.244.2.0/24 -m set --match-set cilium_node_set_v4 dst -j ACCEPT
+-A CILIUM_POST_nat -s 10.244.2.0/24 ! -d 10.244.0.0/16 ! -o cilium_+ -j MASQUERADE
+```
+
+and SNATs it to the node IP with a **fresh ephemeral source port**, destroying
+the hostPort tuple. Visible in `cilium-dbg monitor --type trace`: the SYN-ACK
+leaves correctly as `10.3.2.10:8301 -> 10.3.2.6:x`, then every later packet
+leaves as `10.3.2.10:53204 -> 10.3.2.6:x` and the client ignores it.
+
+The first rule is why nobody noticed: cluster **nodes** are exempted, so
+node→hostPort and pod→hostPort both work. Only a LAN peer that is not a k8s
+node — sea1-core, and any VM or salt host — hits it.
+
+Fix is `bpf.masquerade: true` in `argocd/apps/infra/cilium/sea1/application.yaml`.
+It is deliberately off there and the comment states the prerequisite: it also
+needs CoreDNS `forwardKubeDNSToHost=false` or DNS breaks on Talos. That is a
+cluster-wide datapath change — get sign-off, do not fold it into a consul
+change.
+
+Do not chase this as an MTU problem. Everything is 9000 end to end and
+`ping -M do -s 8972` succeeds in both directions.
+
+## Stale hostPort after a pod restart
+
+Cilium sometimes fails to reprogram a hostPort when a server pod is replaced —
+the entry keeps pointing at the dead pod IP, and that server is isolated
+(`Voter false`, trailing the leader, `UDP probes failed` against every peer).
+Check before assuming a consul fault:
+
+```sh
+kubectl -n kube-system exec <cilium-pod-on-that-node> -c cilium-agent -- \
+  cilium-dbg service list | grep '0.0.0.0:830'
+kubectl -n consul get pods -o wide     # backend IP must match the live pod
+```
+
+`kubectl -n consul delete pod sea1-server-N` reprograms it. Autopilot then
+re-promotes the server to voter after its stabilization window — wait, do not
+assume the delete failed.
 
 ## The chart traps
 
 - **There is no `server.hostNetwork`.** The consul-k8s chart (2.0.x) exposes
-  `client.hostNetwork` only. Confirm before designing around it:
-  `grep hostNetwork templates/server-statefulset.yaml` returns nothing.
-- **That is why the pool is v4, not a preference.** The v6 advertise trick the
-  clients used —
+  `client.hostNetwork` and `meshGateway.hostNetwork` only. So hostPort is the
+  only way to reach the servers from the LAN, which is what makes the SNAT trap
+  unavoidable rather than a design choice.
+- **That is also why the pool is v4.** The v6 advertise trick the clients used —
   `ADVERTISE_IP: '{{ GetPublicInterfaces | include "type" "IPv6" | ... }}'` —
   only works inside the node netns. A server pod sees only the ULA
   `fd40:10:244::/56`, which go-sockaddr classifies as private, so the template
-  resolves to nothing and **the agent refuses to start**. Servers therefore take
-  the chart default `ADVERTISE_IP: status.hostIP`, which is v4 here.
+  resolves to nothing and **the agent refuses to start**. Servers take the chart
+  default `ADVERTISE_IP: status.hostIP`, which is v4 here.
 - **hostNetwork clients and hostPort servers cannot coexist.** The client
   DaemonSet binds `:8301` on the host; the server hostPort wants the same port
   on the same nodes. Enabling servers without disabling clients breaks both.
 - Chart default server resources are `100m`/`200Mi` with limits == requests.
   That starves the agent exactly like it starved the clients (throttled >99% of
   CPU periods, dies on "timeout starting DNS servers"). Base sets 500m/512Mi.
-
-## Why advertising the node IP is correct from a pod
-
-Cilium here is `enable-ipv4-masquerade=true`,
-`ipv4-native-routing-cidr=10.244.0.0/16`. Pod traffic to `10.3.2.0/23` is
-masqueraded to the node's LAN address, which is the same address the agent
-advertises, so memberlist's source check matches. Verified: a pod on
-`sea1-k8s-0` (10.244.2.30) reaches sea1-core as `10.3.2.10`.
-
-Re-verify with sshd's journal rather than tcpdump — sea1-core has no tcpdump and
-no conntrack CLI:
-
-```sh
-kubectl run t --image=busybox:1.36 --restart=Never --command -- \
-  sh -c 'for i in 1 2 3; do echo hi | nc -w2 10.3.2.6 22; sleep 2; done'
-vssh 10.3.2.6 'journalctl -u sshd --since -2min | grep "Connection from"'
-```
+- A hostPort inside the NodePort range (30000-32767) is silently refused —
+  `node-port-bind-protection`. It never appears in `cilium-dbg service list`.
+  Relevant when building a synthetic hostPort test; pick a port outside it *and*
+  inside the Talos firewall allow list, or you will debug the wrong thing.
 
 ## Catalog contents are not automatic
 
@@ -67,33 +113,12 @@ vssh 10.3.2.6 'journalctl -u sshd --since -2min | grep "Connection from"'
 three hypervisors. They are gone, so **a healthy server cluster still yields an
 empty `/v1/health/service/node_exporter`** until something registers it.
 sea1-core does that via a `services` block in its `consul.nix`; base.nix already
-runs the exporter on `:9100`. vmagent's consul SD
-(`argocd/apps/infra/victoriametrics/sea1/sea1_scrape.yaml`, the `VMScrapeConfig`
-misleadingly named `mongodb`) discovers an empty target list silently — no
-error, just no series.
+runs the exporter on `:9100` and opens the port. That registration is currently
+blocked by the RPC trap above, so the catalog is empty.
 
-## Rebuilding the servers strands vmagent on a stale index
-
-An empty catalog is silent; a *rebuilt* catalog is not. Consul blocking queries
-carry an `index`, and a fresh server cluster restarts its index near zero. Any
-consul SD client still polling the old value asks for a future index that will
-never arrive, so every watch hangs until timeout and logs:
-
-```
-cannot perform blocking Consul API request at "/v1/catalog/services?dc=sea1&stale&index=21806314&wait=525s"
-```
-
-vmagent never recovers on its own — it keeps reusing the dead index. Confirm by
-comparing the index it asks for against the live one, which will be tiny:
-
-```sh
-kubectl -n consul exec sea1-server-0 -- \
-  sh -c 'wget -S -qO- http://127.0.0.1:8500/v1/catalog/services 2>&1 >/dev/null | grep -i x-consul-index'
-```
-
-Fix is a vmagent restart (`kubectl -n victoriametrics rollout restart deploy/vmagent-vmagent`).
-This fires `TooManyScrapeErrors` and `TooManyLogs` against job `vmagent-vmagent`
-— neither names consul, so they read as a metrics problem rather than a consul one.
+vmagent's consul SD (`argocd/apps/infra/victoriametrics/sea1/sea1_scrape.yaml`,
+the `VMScrapeConfig` misleadingly named `mongodb`) discovers an empty target
+list silently — no error, just no series. Check the target count, not the logs.
 
 sea1-core's NixOS firewall does not open `8301` by default, so servers cannot
 probe it inbound and it flaps alive/failed. Its `consul.nix` opens 8301 tcp+udp
@@ -108,32 +133,50 @@ reverted within seconds — the AppSet rewrites the child. There is no pause
 short of disabling the ApplicationSet, which manages every infra app.
 
 **A sea1 consul change lands only by committing and pushing to `main`.** Plan
-for that; do not budget time for an imperative fix.
+for that; do not budget time for an imperative fix. A reverted imperative
+attempt still leaves its PVCs behind — `data-consul-sea1-server-{0,1,2}` bind
+and survive, so the next real sync reuses them.
 
 Do not `kubectl apply -n argocd -f <kustomize output>` either: the sea1 overlay
 includes `base/service.yaml`, so that creates a stray `consul-http` Service in
 the `argocd` namespace.
 
+## ACLs
+
+**Enabled, permissive.** `acl.enabled = true`, `default_policy = "allow"`, set
+via `server.extraConfig` in the sea1 overlay. Every request still succeeds with
+or without a token — that is the window for proving each consumer presents its
+own. Gossip encryption is still off; ACLs govern the API, not the serf pool.
+
+Bootstrapped. Tokens live in Vault under `secret/infra/consul-sea1/`, and the
+`consul-bootstrap-acl-token` Secret in the `consul` namespace is staged for
+phase 4. Policies `anonymous`, `metrics-discovery` and `agent-sea1-core` exist;
+`anonymous` is attached to the built-in anonymous token.
+
+`infrastructure/consul/acl/README.md` has the phase list and what breaks.
+**`global.acls.manageSystemACLs` has no permissive setting — turning it on
+writes `default_policy = "deny"`, so enabling it *is* the flip.** Do not reach
+for it to "manage tokens".
+
 ## Verifying after a change
 
 ```sh
 kubectl -n consul get pods,pvc
-kubectl -n consul exec sea1-server-0 -- consul operator raft list-peers   # 3 voters
-kubectl -n consul exec sea1-server-0 -- consul members                    # servers + sea1-core
-kubectl run q --rm -i --image=curlimages/curl --restart=Never -- \
-  curl -s 'http://consul-http.consul.svc.cluster.local:8500/v1/health/service/node_exporter?dc=sea1'
-vssh 10.3.2.6 'consul members; consul catalog services'
+kubectl -n consul exec sea1-server-0 -c consul -- consul operator raft list-peers  # 3 voters
+kubectl -n consul exec sea1-server-0 -c consul -- consul members                   # servers + sea1-core
+kubectl -n consul exec sea1-server-0 -c consul -- \
+  wget -qO- 'http://127.0.0.1:8500/v1/health/service/node_exporter?dc=sea1'
+vssh 10.3.2.6 'consul members; consul catalog services'   # catalog needs working RPC
 ```
 
-Stale members survive the migration in sea1-core's serf state (`sea1-hv-0` as a
-`failed` server, the old k8s clients at their v6 addresses). Prune them or
-agents keep trying to RPC a host that no longer exists:
+`consul members` agreeing on both sides proves only UDP gossip. **Prove RPC
+separately** — `consul catalog services` from sea1-core is the cheap check, and
+it is the one that catches the SNAT trap.
 
-```sh
-vssh 10.3.2.6 'consul force-leave -prune sea1-hv-0'
-```
+vmagent's active target count is the most sensitive signal that something
+stopped being scraped; a consul SD regression shows up there and nowhere else.
 
-ACLs and gossip encryption are still off. The plan lives in
-`infrastructure/consul/acl/` — read its README before touching
-`acl.default_policy`; `global.acls.manageSystemACLs` has no permissive setting
-and turning it on *is* the flip to deny.
+Stale members from the migration prune with
+`vssh 10.3.2.6 'consul force-leave -prune sea1-hv-0'`, but a sea1-core consul
+restart under the new `bind_addr` already discards that serf state, so the
+fossils usually clear themselves.

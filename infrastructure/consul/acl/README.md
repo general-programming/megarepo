@@ -1,7 +1,30 @@
-# sea1 Consul ACLs — draft
+# sea1 Consul ACLs
 
-**Status: draft. Nothing here has been applied.** No `consul acl bootstrap` has
-been run and `acl.default_policy` is still the built-in `allow`.
+**Status: phases 1-3 applied, except sea1-core's agent token. Phase 4 not
+started and gated on human sign-off.**
+
+| phase | state |
+|---|---|
+| 1 — permissive | done. `acl.enabled = true`, `default_policy = "allow"`, in the sea1 overlay's `server.extraConfig`. Verified: 3 raft voters, agent banner reads `ACL Enabled: true` / `Default Policy: allow`. |
+| 2 — bootstrap | done. SecretID in Vault at `secret/infra/consul-sea1/bootstrap-token`, and in the `consul-bootstrap-acl-token` Secret in the `consul` namespace for phase 4. |
+| 3 — policies and tokens | policies `anonymous`, `metrics-discovery`, `agent-sea1-core` created; `anonymous` attached to the built-in anonymous token; both tokens minted and in Vault under `secret/infra/consul-sea1/`. vmagent is wired and verified. **sea1-core is not wired** — see below. |
+| 4 — flip to deny | **not started. Do not start it.** |
+
+`bpf.masquerade` blocks the rest. sea1-core's consul agent can gossip but every
+RPC fails, because a hostPort reply from a server pod is re-SNAT'd to an
+ephemeral source port — see `.claude/skills/consul-sea1/SKILL.md`. Until that is
+fixed, sea1-core cannot register `node_exporter`, the catalog is empty, and
+there is no way to confirm sea1-core presents an agent token. Wiring its token
+blind would mean discovering at the phase 4 flip whether it works, which is
+exactly what the permissive window exists to avoid.
+
+**Phase 4 preconditions, all of which must hold:**
+
+1. `bpf.masquerade` landed and sea1-core's `consul catalog services` succeeds.
+2. sea1-core holds `acl.tokens.agent` (token already minted; render it through
+   `nix/modules/vault-agent.nix`, never in `consul.nix` directly) and its
+   `node_exporter` registration is back in the catalog.
+3. vmagent's consul SD returns a non-empty target list *with* its token.
 
 ## What changed since this was first written
 
@@ -34,7 +57,7 @@ advertise `status.hostIP`. Anything below that names an address uses that.
 
 ## Why bother
 
-Straight from a live agent's banner:
+The agent banner before any of this:
 
 ```
 Gossip Encryption: false
@@ -45,13 +68,15 @@ ACL Default Policy: allow
 ```
 
 Anything that can reach the API can read and write the KV store, register or
-deregister catalog entries, and force other agents to leave.
+deregister catalog entries, and force other agents to leave. Permissive mode
+does not close that — only phase 4 does. What phases 1-3 buy is the ability to
+reach phase 4 without an outage.
 
-## Phase 1 — enable ACLs in permissive mode
+## Phase 1 — enable ACLs in permissive mode — DONE
 
-Merge the phase 1 block of `acl-values.draft.yaml` into
-`argocd/apps/infra/consul/sea1/consul.yaml`. It sets `acl.enabled = true` with
-`default_policy = "allow"`, so nothing breaks yet.
+Lives in `argocd/apps/infra/consul/sea1/consul.yaml` as `server.extraConfig`.
+`acl.enabled = true` with `default_policy = "allow"`, so nothing breaks yet.
+`acl-values.draft.yaml` keeps the same block for reference.
 
 This is a rolling restart of the server StatefulSet. Take one pod at a time and
 confirm quorum between each:
@@ -60,24 +85,20 @@ confirm quorum between each:
 kubectl -n consul exec sea1-server-0 -- consul operator raft list-peers
 ```
 
-## Phase 2 — bootstrap, still permissive
+## Phase 2 — bootstrap, still permissive — DONE
 
-```sh
-kubectl -n consul exec sea1-server-0 -- consul acl bootstrap
-```
+`consul acl bootstrap` prints the SecretID exactly once and cannot be repeated.
+Losing it before phase 4 means a `consul acl bootstrap-reset` against the raft
+index — recoverable, but only with server filesystem access. It is stored twice:
 
-This prints the SecretID exactly once and cannot be repeated. Put it in Vault
-immediately, and also create the Secret the chart will need in phase 4:
+- Vault, `secret/infra/consul-sea1/bootstrap-token` (`secret_id`, `accessor_id`)
+- the `consul-bootstrap-acl-token` Secret in the `consul` namespace, which is
+  what `global.acls.bootstrapToken` reads at phase 4
 
-```sh
-kubectl -n consul create secret generic consul-bootstrap-acl-token \
-  --from-literal=token=<SecretID>
-```
+The Secret is deliberately **not** in git and not ArgoCD-managed; it is
+annotated with its Vault source.
 
-Losing this token before phase 4 means a `consul acl bootstrap-reset` against
-the raft index — recoverable, but only with server filesystem access.
-
-## Phase 3 — policies and tokens, still permissive
+## Phase 3 — policies and tokens, still permissive — vmagent DONE, sea1-core NOT
 
 ```sh
 consul acl policy create -name anonymous         -rules @policies/anonymous.hcl
@@ -96,22 +117,36 @@ Attach the anonymous policy to the built-in anonymous token:
 consul acl token update -id 00000000-0000-0000-0000-000000000002 -policy-name anonymous
 ```
 
+All three policies and both tokens exist, and `anonymous` is attached to the
+built-in anonymous token (`00000000-0000-0000-0000-000000000002`). Tokens are in
+Vault under `secret/infra/consul-sea1/token-*`.
+
 Then wire the two consumers, both of which are repo changes:
 
-- **sea1-core**, via `acl.tokens.agent` in `services.consul.extraConfig`. The
-  token is a secret, so it does not go in `consul.nix` directly — use the
-  vault-agent template path the rest of the fleet uses
-  (`nix/modules/vault-agent.nix`).
-- **vmagent**, in `argocd/apps/infra/victoriametrics/sea1/sea1_scrape.yaml`.
-  The `consulSDConfigs` entry there has no token today; it needs a `tokenRef`
-  pointing at a Secret holding the `metrics-discovery` token.
+- **vmagent** — DONE. `tokenRef` in
+  `argocd/apps/infra/victoriametrics/sea1/sea1_scrape.yaml`, fed by a
+  `VaultStaticSecret` from `secret/app/consul-sea1/metrics-discovery`.
+  Verified: vmagent's generated config carries the minted SecretID as
+  `bearer_token`, and `consul acl token read -self` with it returns the
+  `metrics-discovery` policy.
+- **sea1-core** — NOT DONE, and deliberately so. It would go in
+  `acl.tokens.agent`; the token is a secret so it does not belong in
+  `consul.nix` directly — render it through `nix/modules/vault-agent.nix`,
+  which sea1-core already runs. The token is minted and in Vault. It is not
+  wired because sea1-core's agent cannot currently complete any RPC (the
+  `bpf.masquerade` blocker at the top), so there is no way to observe it using
+  the token. Wiring it now would defer that discovery to the phase 4 flip.
 
 Because the default is still `allow`, both keep working with or without the
 token. That is the entire point of the permissive window: it is the only chance
 to confirm each consumer is *using* its token rather than coasting on the
 permissive default.
 
-## Phase 4 — flip to deny
+## Phase 4 — flip to deny — NOT STARTED, needs sign-off
+
+Do not begin until all three preconditions at the top of this file hold. This is
+the lockout step: it is the only phase that can take `.consul` DNS down
+fleet-wide, and it does so silently.
 
 Swap the phase 1 block for the phase 4 block in `acl-values.draft.yaml`
 (`global.acls.manageSystemACLs: true` plus `bootstrapToken`). **There is no
