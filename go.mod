@@ -12,7 +12,7 @@ require (
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5
 	github.com/bytedance/sonic v1.15.2
 	github.com/hashicorp/vault/api v1.23.0
-	github.com/klauspost/compress v1.19.1
+	github.com/klauspost/compress v1.19.2
 	github.com/redis/go-redis/v9 v9.22.0
 	github.com/spf13/cobra v1.10.2
 	go.uber.org/zap v1.28.0
