@@ -502,10 +502,12 @@ hosts:
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
       - set high-availability vrrp group internal priority 200
-  # Second sea1 leaf, built from scratch rather than migrated. Deliberately
-  # has NO vrrp and NO nat: it joins the fabric as a passive BGP participant
-  # first and only takes gateway duties once proven. Adding those two blocks,
-  # mirroring sea1-vpn-leaf-1 with a lower vrrp priority, is what promotes it.
+  # Second sea1 leaf, built from scratch rather than migrated. It started
+  # passive -- no vrrp, no nat -- and has since been PROMOTED: it now mirrors
+  # sea1-vpn-leaf-1's vrrp group at a lower priority and masquerades the same
+  # source, so the LAN's v4 gateway is a real pair rather than a single point
+  # of failure. Verified live 2026-08-06: leaf-1 MASTER/200, leaf-2
+  # BACKUP/100, both with the masquerade rule installed.
   #
   # Shares ASN 4280805534 with sea1-vpn-leaf-1, matching how the sea1 spines
   # share 4280805529 and the fmt2 leaves share 4280805526.
