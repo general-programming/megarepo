@@ -37,11 +37,6 @@ module "authentik_app_netbox" {
   group_uuids = module.authentik.group_uuids
 }
 
-module "authentik_app_sentry" {
-  source      = "./authentik/app-sentry"
-  group_uuids = module.authentik.group_uuids
-}
-
 module "authentik_app_argocd_sea1" {
   source      = "./authentik/app-argocd"
   group_uuids = module.authentik.group_uuids

@@ -35,7 +35,6 @@ resources:
   - coder-workspaces.yaml
   - deluge.yaml
   - netbox.yaml
-  - sentry.yaml
 
   # users
   - erin/
