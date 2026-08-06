@@ -32,7 +32,15 @@ data:
             fallthrough in-addr.arpa ip6.arpa
             ttl 30
         }
-        forward . /etc/resolv.conf {
+        # Explicit upstreams, NOT /etc/resolv.conf. CoreDNS runs dnsPolicy:
+        # Default, so resolv.conf is the *node's* -- which under Talos hostDNS
+        # is the link-local 169.254.116.108. That address only answers kube-dns
+        # traffic while machine.features.hostDNS.forwardKubeDNSToHost is true,
+        # and that flag has to go false for Cilium's bpf.masquerade. Depending
+        # on it here couples pod DNS to a node feature we need to turn off;
+        # verified by breaking it (external names NXDOMAIN'd cluster-wide while
+        # cluster.local kept resolving).
+        forward . 1.1.1.1 1.0.0.1 {
            max_concurrent 1000
         }
         cache 30 {
