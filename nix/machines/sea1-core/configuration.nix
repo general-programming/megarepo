@@ -118,6 +118,23 @@ in
     hostId = "f7074b51";
   };
 
+  # Pin the primary NIC's name to `ens18` by MAC.
+  #
+  # kea and dnsmasq both take an interface NAME, not a MAC, and there is no
+  # name-free way to express either. Under KubeVirt the card lands on a
+  # different PCI slot, so the kernel called it enp1s0 -- kea hard-failed with
+  # "interface 'ens18' doesn't exist in the system" and dnsmasq did the silent
+  # thing the comment below warns about, serving loopback only. The site lost
+  # DHCP and DNS together.
+  #
+  # Renaming by MAC keeps every name-based consumer working unchanged, which is
+  # the opposite trade-off from systemd.network's own match (MAC there, name
+  # here) and deliberately so: networkd can match a MAC, these two cannot.
+  systemd.network.links."10-lan" = {
+    matchConfig.MACAddress = "bc:24:11:63:39:12";
+    linkConfig.Name = "ens18";
+  };
+
   # dnsmasq listens on the box's single internal-facing NIC. Must be the
   # PRIMARY kernel name: dnsmasq does not match altnames (enp6s18 is an
   # altname of ens18 on this VM), and a non-matching filter silently
