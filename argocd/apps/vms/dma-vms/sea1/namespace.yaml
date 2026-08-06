@@ -1,0 +1,13 @@
+# Shared namespace for DMA-owned guests, following the network-vpn precedent
+# rather than the one-VM-per-namespace pattern used for freepbx and freeipa.
+# These are a fleet under one owner, so they share isolation, quota and netpol
+# scope.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: dma-vms
+  labels:
+    kubernetes.io/metadata.name: dma-vms
+    # virt-launcher needs it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest

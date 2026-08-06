@@ -1,0 +1,127 @@
+# dma-colo-erin-00, migrated off Proxmox VM 106 on sea1-hv-0 -- the last
+# Proxmox host. NixOS, systemd-boot 261, btrfs on a LUKS2 root.
+#
+# It holds a routed public /32 (199.255.18.182) plus 2602:fa6d:10:ffff::f12,
+# and also runs Tailscale (100.70.98.47) and NetBird (10.20.66.106). The MAC
+# below is load-bearing twice over: the upstream router's ARP entry for the /32
+# depends on it, and the guest pins its NIC name from it (see below).
+#
+# ── THE LUKS ROOT WILL NOT AUTO-UNLOCK ON FIRST BOOT ─────────────────────────
+# /dev/sda2 is LUKS2 with a systemd-tpm2 token sealed to PCR 7 (sha256, no
+# PIN). PCR 7 measures SecureBoot state plus PK/KEK/db/dbx, and the sealed blob
+# is additionally bound to the old vTPM's SRK. Neither survives the move:
+# KubeVirt supplies a fresh vTPM, and its EDK II build carries a different dbx
+# than Proxmox's, so PCR 7 cannot be reproduced even in principle. Transferring
+# the Proxmox tpmstate volume would not help.
+#
+# So first boot drops to a passphrase prompt on `virtctl console`. The
+# passphrase is the `password` field (user root) of the Vaultwarden item
+# `nixos-colo-komo-00` -- the item is named for the guest's ORIGINAL identity
+# at SEA4/Komo Plaza, which is also why its device-mapper node is still
+# nixos-colo-komo-00-luks. Verified against the header 2026-08-05.
+#
+# After it boots, re-seal against the new vTPM:
+#   systemd-cryptenroll --wipe-slot=tpm2 --tpm2-device=auto /dev/sda2
+# That only sticks because devices.tpm.persistent is set below.
+#
+# Secure Boot is deliberately OFF for the migration even though the guest ran
+# "enabled (user)" with lanzaboote keys. Fewer variables during the risky step,
+# and PCR 7 is still deterministic with SB disabled. The keys survive in the
+# guest at /var/lib/sbctl/keys, so it can be turned back on later.
+#
+# EFI NVRAM is not persisted: /boot/EFI/BOOT/BOOTX64.EFI already exists on the
+# ESP (verified), so KubeVirt's fresh NVRAM boots the removable path without
+# the shim/grub copy the runbook describes for Debian and Fedora guests.
+#
+# Rollback: pool/vm-106-disk-0@pre-kubevirt (protected) and VM 106 left defined
+# but stopped on the hypervisor.
+---
+# RWX Block from the first commit -- accessModes is immutable once bound, so
+# getting this wrong means a second PVC and a second 128 GiB copy.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: dma-colo-erin-00-root
+  namespace: dma-vms
+spec:
+  # Retain, so removing the claim leaves the image intact.
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 128Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: dma-colo-erin-00
+  namespace: dma-vms
+spec:
+  # Halted until the disk is copied. Flipping this before the copy would boot
+  # the guest off an empty image the moment the claim binds.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: dma-colo-erin-00
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            # Must land on a bridged node; br0 is where the LAN is.
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          # Proxmox: cores 8, sockets 1. Model left at KubeVirt's host-model
+          # default rather than Proxmox's host-passthrough, so live migration
+          # is not gated on identical silicon.
+          cores: 8
+        memory:
+          guest: 16Gi
+        firmware:
+          # Preserved from the Proxmox smbios1 uuid.
+          uuid: 3c7cb17c-e326-4e0a-b7ff-c0a70fd57bf0
+          bootloader:
+            efi:
+              # Proxmox had bios: ovmf with pre-enrolled-keys. See the header:
+              # off on purpose, re-enrollable from /var/lib/sbctl/keys later.
+              secureBoot: false
+        devices:
+          # Persistent, or the vTPM is regenerated every boot and the
+          # post-migration cryptenroll is undone on the next start. Requires
+          # the VMPersistentState feature gate and vmStateStorageClass, both
+          # set on the KubeVirt CR.
+          tpm:
+            persistent: true
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                # Matches Proxmox's virtio-scsi-single.
+                bus: scsi
+          interfaces:
+            - name: lan
+              bridge: {}
+              # Carries the public /32's upstream ARP entry, AND the guest's
+              # 10-primary.network matches on Name=ens18 with no .link file of
+              # its own -- a 10-lan.link keyed to this MAC is written onto the
+              # image before the copy so the NIC keeps that name on a different
+              # PCI slot. Without it the guest boots with no network.
+              macAddress: "BC:24:11:95:6F:AD"
+      networks:
+        - name: lan
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: dma-colo-erin-00-root

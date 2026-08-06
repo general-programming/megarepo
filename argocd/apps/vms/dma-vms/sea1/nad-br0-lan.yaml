@@ -1,0 +1,18 @@
+# NetworkAttachmentDefinitions are namespaced, so this namespace carries its
+# own rather than reaching cross-namespace into virt/.
+#
+# No IPAM: the guests address themselves (systemd-networkd, static).
+#
+# mtu 9000 is NOT the default and NOT optional -- the bridge plugin builds the
+# pod interface at 1500 unless told otherwise, and KubeVirt sizes the tap from
+# it. dma-colo-erin-00's ens18 runs at mtu 9000; without this, normal traffic
+# works and only oversized frames disappear, which is a slow bug to find.
+# br0/bond0 on sea1-k8s-{1,2} are already 9000.
+
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: br0-lan
+  namespace: dma-vms
+spec:
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'

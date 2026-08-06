@@ -10,7 +10,28 @@ metadata:
 spec:
   certificateRotateStrategy: {}
   configuration:
+    # Backing store for persistent vTPM / EFI NVRAM state. Required by
+    # VMPersistentState below -- without it KubeVirt falls back to the default
+    # StorageClass, which here is ceph-rbd-xfs (Block, RWO). Backend storage
+    # must be Filesystem mode, and RWX or a guest with a persistent vTPM cannot
+    # live-migrate. cephfs is the only class that satisfies both.
+    vmStateStorageClass: cephfs
     developerConfiguration:
+      featureGates:
+        # Persists vTPM and EFI NVRAM across restarts in a per-VM backend PVC.
+        #
+        # Needed because dma-colo-erin-00 has a LUKS root sealed to the TPM.
+        # A non-persistent vTPM is regenerated every boot, so ANY TPM
+        # enrolment would break on the next start -- the guest would need its
+        # passphrase typed at the console forever. Note this switches the
+        # emulated device from tpm-tis to tpm-crb for VMs that opt in.
+        #
+        # The Proxmox vTPM state is NOT transferable: the sealed blob is bound
+        # to that TPM's SRK *and* to PCR 7, which measures SecureBoot state
+        # plus PK/KEK/db/dbx. dbx ships with the firmware build and Proxmox's
+        # EDK II differs from KubeVirt's, so PCR 7 cannot be reproduced. The
+        # supported path is re-enrolling against the new vTPM after migration.
+        - VMPersistentState
       # Nested virt is live: the workers run `cpu: host` on hypervisors with
       # kvm_amd nested=Y, and /dev/kvm is present on the Talos nodes. Leaving
       # useEmulation unset keeps QEMU on hardware virt -- if it ever silently
