@@ -3,7 +3,7 @@ apiVersion: ceph.rook.io/v1
 kind: CephBlockPoolRadosNamespace
 metadata:
   name: alyx
-  namespace: rook-ceph
+  namespace: ceph
 spec:
   # The name of the CephBlockPool CR where the namespace is created.
   blockPoolName: k8s-rbd
