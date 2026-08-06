@@ -9,7 +9,6 @@ resources:
   - consul.yaml
   - vault.yaml
   - external-dns.yaml
-  - grafana-operator.yaml
   - reloader.yaml
   - tailscale.yaml
   - tempo.yaml
