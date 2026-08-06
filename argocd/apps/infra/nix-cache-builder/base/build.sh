@@ -85,8 +85,10 @@ cd "$SRC/nix"
 # floods the container log, rotates the interesting lines away, and ships to
 # Loki. Strip the escape sequences and drop the redraw frames; nix's own
 # messages and any build failure survive. pipefail keeps build_cache's status.
+# The image ships coreutils and git but no sed, so resolve one from nixpkgs.
+sed_bin=$(nix build --no-link --print-out-paths "${nixpkgs}#gnused")/bin/sed
 nix run "${nixpkgs}#just" -- build_cache 2>&1 |
-  sed -uE $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g; /^[┏┃┗┣│]/d' |
+  "$sed_bin" -uE $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g; /^[┏┃┗┣│]/d' |
   tee "$STATE_DIR/last-run.log"
 
 echo "$head" >"$STATE"
