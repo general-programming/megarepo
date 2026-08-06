@@ -51,8 +51,30 @@ spec:
         directRoutingDevice: "ens18"
 
         # Pods are on ULA fd40:10:244::/56, so v6 egress still needs masquerade.
-        # bpf.masquerade would additionally require CoreDNS
-        # forwardKubeDNSToHost=false, or DNS breaks on Talos.
+        #
+        # iptables, NOT bpf.masquerade -- TRIED AND REVERTED 2026-08-06 (aeff6eb0,
+        # reverted in 7e420b62). It would fix a real bug: the iptables path SNATs
+        # hostPort *replies* to a fresh source port for LAN peers that are not
+        # cluster nodes, which silently kills every consul RPC from sea1-core.
+        #
+        # What actually happened on the k8s-0 canary: port 53 broke, and only
+        # port 53. From a pod on that node, TCP to 1.1.1.1:443 was fine while
+        # BOTH udp/53 and tcp/53 to 1.1.1.1 and 8.8.8.8 timed out -- so this is
+        # not "UDP egress is broken", it is something intercepting :53. Prime
+        # suspect is Talos hostDNS: `enabled: true` still redirects :53 to
+        # 169.254.116.108 even with forwardKubeDNSToHost false, and that redirect
+        # does not survive the switch to BPF host routing.
+        #
+        # Both documented prerequisites were already in place and verified when
+        # this failed, so they are NOT the missing piece:
+        #   - coredns forwards to explicit upstreams, not /etc/resolv.conf
+        #     (be3e9133, kept -- it is correct regardless)
+        #   - machine.features.hostDNS.forwardKubeDNSToHost: false
+        #
+        # Next thing to try is hostDNS.enabled: false outright, on one node,
+        # with a pod on that node testing dig @1.1.1.1 before anything else.
+        # Note bpf.masquerade also flips host routing Legacy -> BPF and makes
+        # IPv6 masquerade (upstream BETA) load-bearing for all pod v6 egress.
         enableIPv4Masquerade: true
         enableIPv6Masquerade: true
 
