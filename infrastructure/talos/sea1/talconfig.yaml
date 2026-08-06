@@ -11,191 +11,131 @@ nodes:
   # Split per-node for static IPs; DHCPv6 leases churn (Talos remints its DUID each boot).
   # Do NOT re-add ignoreHostname: with DHCP off there is no other hostname source and Talos
   # invents one, which re-registers the node in k8s and leaves a duplicate behind.
-  - &k8s-cp
-    hostname: sea1-k8s-cp-0
-    # allowSchedulingOnControlPlanes is set cluster-wide for the metal nodes,
-    # which are control-plane AND worker. These two VM control planes are
-    # 8 GiB / 4 vCPU and exist only to hold etcd, so re-assert the taint the
-    # flag would otherwise remove. Metal nodes deliberately carry no taint.
-    #
-    # etcd is three members: this one plus the two metal nodes, sea1-k8s-1 and
-    # sea1-k8s-2. cp-1 and cp-2 were removed when hv-1 and hv-2 were converted
-    # to metal and merged into the worker entries of the same name -- there is
-    # no spare voter, so never take two of the three down at once.
-    nodeTaints:
-      node-role.kubernetes.io/control-plane: ":NoSchedule"
-    # VM-ONLY: metal has no TPM available to Talos. Cluster-wide this would
-    # collide with the metal nodes' nodeID LUKS keys on slot 0 (talhelper
-    # hard-errors: partition "STATE": encryption key slot 0 is already in use).
-    patches:
-    - &vm-tpm-luks # Encrypt system disk with TPM
-      |-
-      machine:
-        systemDiskEncryption:
-          ephemeral:
-            provider: luks2
-            keys:
-              - slot: 0
-                tpm: {}
-          state:
-            provider: luks2
-            keys:
-              - slot: 0
-                tpm: {}
-    ipAddress: "10.3.2.16"
-    installDisk: /dev/sda
-    controlPlane: true
-    # Public resolvers, deliberately: sea1-core must not be on the boot path,
-    # or a cold start deadlocks once it becomes a guest of this cluster. Every
-    # name a node resolves while booting is public -- the API endpoint
-    # kube.sea1.generalprogramming.org, time.cloudflare.com, discovery.talos.dev
-    # and the registries -- and etcd peers by IP, so nothing here needs the
-    # internal zones.
-    #
-    # Internal names still work for pods: CoreDNS routes generalprogramming.org,
-    # the NetBox reverse zones and .consul straight to sea1-core
-    # (argocd/apps/infra/coredns/sea1). Nothing in this cluster bypasses
-    # CoreDNS -- every hostNetwork pod is ClusterFirstWithHostNet or
-    # ClusterFirst.
-    #
-    # Do NOT append sea1-core as an extra entry here. Talos hostDNS forwards
-    # with a random upstream policy, and NXDOMAIN is a valid answer that never
-    # triggers failover, so mixing an internal-authoritative resolver with a
-    # public one makes internal lookups succeed only some of the time.
-    nameservers: &k8s-cp-dns
-      - 1.1.1.1
-      - 1.0.0.1
-      - 2606:4700:4700::1111
-      - 2606:4700:4700::1001
-    networkInterfaces:
-      - deviceSelector:
-          driver: virtio_net
-        dhcp: false
-        mtu: 9000
-        addresses:
-          - "10.3.2.16/23"
-          - "2602:fa6d:10:ffff::116/116"   # /116 is the on-link prefix the RA advertises
-        routes: &k8s-cp-routes
-          - network: "0.0.0.0/0"
-            gateway: "10.3.2.1"
-            # Cap only what leaves via the gateway; the on-link LAN route keeps
-            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
-            # 10.3.2.1 drops oversized DF packets without returning ICMP
-            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
-            # IPv4 services black-holes. See sea1-core for the full writeup.
-            mtu: 1500
-          # Standby, not primary. These were never bridged, so accept_ra was
-          # never reconciled away and they still hold an RA-learned default --
-          # working by inheritance, which is exactly the state the workers were
-          # in right up until it silently stopped.
-          #
-          # The metric matters. At the default 1024 this collides with the RA
-          # route and the kernel rejects it EEXIST, which leaves
-          # network.RouteSpecController crash-looping on retry -- verified on
-          # cp-0. At 2048 it installs alongside as a lower-priority backup: RA
-          # keeps winning while it works, and this takes over if it ever stops.
-          # The workers do not need the offset, having no RA route to collide
-          # with.
-          - network: "::/0"
-            gateway: "2602:fa6d:10:ffff::1"
-            metric: 2048
-  # sea1-k8s-cp-1 (10.3.2.17) was retired 2026-08-05: drained, graceful
-  # `talosctl reset` out of etcd, Proxmox VM 115 stopped. It lived on hv-1, so
-  # it could not outlive that host's conversion to metal. Its control-plane role
-  # is taken over by the sea1-k8s-1 metal entry below.
-  #
-  # nvme passthrough, single nic for v4/v6.
-  #
-  # These three are bridged: KubeVirt VMs need a LAN-attached secondary network,
-  # because sea1-core serves DHCP/DNS and that is broadcast traffic no Service
-  # can front. With one NIC per node the node addresses move onto br0 and the
-  # NIC becomes a bridge port.
-  - &k8s-worker-nvme
-    hostname: sea1-k8s-0
-    patches:
-      - *vm-tpm-luks
+  # ── METAL (hv-0 converted 2026-08-06). The LAST Proxmox host. Replaced the
+  # ── sea1-k8s-0 VM entry AND absorbed sea1-k8s-cp-0's control-plane role, so
+  # ── every node in this cluster is now bare metal and no VM control planes
+  # ── remain. The vm-tpm-luks patch went with them: it was VM-only.
+  - hostname: sea1-k8s-0
     ipAddress: "10.3.2.10"
-    installDisk: /dev/sda
-    controlPlane: false
-    # Inherited by sea1-k8s-1 and -2 through the merge key. Marks the nodes
-    # that actually have br0, so Multus and LAN-attached VMs can select them.
-    nodeLabels: &k8s-worker-nvme-labels
+    controlPlane: true
+
+    # Pin by WWID, not serial -- behind megaraid_sas Talos reports an EMPTY
+    # serial for both SATA SSDs. Verified on hv-0 2026-08-06: sda is
+    # A0070D8D, sdb is A0062F31, and both are halves of the live rpool mirror.
+    installDiskSelector:
+      wwid: "naa.5001173100a5f280"
+
+    # Secure Boot is off in firmware (mokutil: SecureBoot disabled), so this
+    # must be the NON-secureboot image. Node-level machineSpec.secureboot is
+    # silently ignored; pinning the URL is the only reliable override.
+    talosImageURL: factory.talos.dev/metal-installer/7e1f6386358eb4d68cf5a947ce712411b656380140d20539357e4a9a627b76a5
+
+    schematic:
+      customization:
+        extraKernelArgs:
+          - console=tty0
+          - console=ttyS0,115200n8
+        systemExtensions:
+          officialExtensions:
+            - siderolabs/intel-ucode
+            - siderolabs/lldpd
+            - siderolabs/util-linux-tools
+            - siderolabs/nvme-cli
+            - siderolabs/mellanox-mstflint
+
+    nodeLabels:
       generalprogramming.org/lan-bridge: "true"
+
     nodeAnnotations:
-      # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
-      # IPv4 one on these dual-stack nodes. Ceph's public_network is
-      # 2602:fa6d:10:ffff::/116, so a mon launched on 10.3.2.x binds an address
-      # no other mon can reach and hangs in probing. This annotation overrides
-      # the choice.
       network.rook.io/mon-ip: "2602:fa6d:10:ffff::110"
-    # Same reasoning as the control planes above: public only, no sea1-core.
-    nameservers: &k8s-worker-nvme-dns
+
+    nameservers:
       - 1.1.1.1
       - 1.0.0.1
-      - 2606:4700:4700::1111
-      - 2606:4700:4700::1001
+
     networkInterfaces:
-      # MTU stays on the port too: a bridge cannot exceed its members, so
-      # leaving this at the 1500 default would silently cap br0.
-      - deviceSelector:
-          driver: virtio_net
+      # Read off the running host: eno1np0 98:03:9b:6a:7f:b2 / eno2np1 ...:b3.
+      - interface: bond0
         dhcp: false
         mtu: 9000
+        bond:
+          interfaces:
+            - eno1np0
+            - eno2np1
+          mode: 802.3ad
+          xmitHashPolicy: layer3+4
+          lacpRate: slow
+          miimon: 100
+
       - interface: br0
         dhcp: false
         mtu: 9000
         addresses:
           - "10.3.2.10/23"
           - "2602:fa6d:10:ffff::110/116"
-        routes: &k8s-worker-nvme-routes
+        routes:
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
-            # Cap only what leaves via the gateway; the on-link LAN route keeps
-            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
-            # 10.3.2.1 drops oversized DF packets without returning ICMP
-            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
-            # IPv4 services black-holes. See sea1-core for the full writeup.
+            # See sea1-core: 10.3.2.1 drops oversized DF packets without
+            # returning frag-needed, so jumbo egress black-holes.
             mtu: 1500
-          # The v6 default is declared rather than learned. It used to arrive
-          # by RA, which worked only because br0 inherited
-          # net.ipv6.conf.default.accept_ra=2 at link-creation time; a later
-          # config apply had Talos reconcile the bridge to accept_ra=0 and the
-          # learned route aged out, leaving all three workers with no IPv6
-          # egress at all (ping6 to any global address: network unreachable).
-          # The control planes were unaffected because they are not bridged.
-          #
-          # Gateway is the router's assigned global address, not its
-          # link-local. Both answer on the same MAC (e4:dc:5f:f0:03:a0) and
-          # both are flagged router, but ::1 is administratively chosen and so
-          # survives a NIC swap or hardware replacement, whereas the link-local
-          # is EUI-64 derived from that one MAC and would not. It is also what
-          # the rest of the LAN already uses -- sea1-vpn guests and the
-          # KubeVirt-hosted freepbx all point at ::1.
           - network: "::/0"
             gateway: "2602:fa6d:10:ffff::1"
-        bridge: &k8s-worker-nvme-bridge
+        bridge:
           stp:
             enabled: false
-          # ethSel0 is the alias talhelper generates for the deviceSelector
-          # above. Naming the alias rather than ens18 keeps this portable to
-          # bare metal, where the NIC will not be called ens18.
-          # NB: bridgePort.master is silently dropped by talhelper v3.1.15 --
-          # it generates a memberless bridge. Membership has to be declared
-          # from this side.
           interfaces:
-            - ethSel0
-    userVolumes: &k8s-worker-nvme-volumes
-      - name: data
-        provisioning:
-          # The size guard is load-bearing on bare metal: these hosts carry
-          # seven 2TB SSDPE2KX020T8 NVMe reserved for Rook OSDs alongside the
-          # 7.68TB HUSMR7676BDP3Y1. A bare transport=="nvme" match would let
-          # Talos format an OSD disk.
-          diskSelector:
-            match: disk.transport == "nvme" && disk.size > 5000000000000u
-          minSize: 500GiB
-        filesystem:
-          type: xfs
+            - bond0
+
+    # `data` userVolume deliberately omitted at first boot: sdb is still the
+    # surviving half of the rpool mirror and hv-0's only rollback. Add it as a
+    # second apply once this node is Ready and its OSDs are adopted.
+
+    patches:
+      - # lldpd is an extension SERVICE; with no ExtensionServiceConfig it
+        # blocks startAllServices and Talos never leaves stage=booting.
+        |-
+        apiVersion: v1alpha1
+        kind: ExtensionServiceConfig
+        name: lldpd
+        configFiles:
+          - content: |-
+              configure lldp portidsubtype ifname
+              configure system description "Talos metal node"
+            mountPath: /usr/local/etc/lldpd/lldpd.conf
+      - # nodeID LUKS, NOT tpm -- hv-0 has a working TPM (/dev/tpm0) but Talos
+        # seals to PCR 11, which systemd-stub only measures under Secure Boot.
+        |-
+        machine:
+          systemDiskEncryption:
+            ephemeral:
+              provider: luks2
+              keys:
+                - slot: 0
+                  nodeID: {}
+            state:
+              provider: luks2
+              keys:
+                - slot: 0
+                  nodeID: {}
+      - |-
+        machine:
+          kubelet:
+            extraConfig:
+              systemReserved:
+                cpu: 2000m
+                memory: 4Gi
+              kubeReserved:
+                cpu: 2000m
+                memory: 8Gi
+      - # Refuse DISCARD on the 7.68T HGST SN200 at b2:00.0. It is vfio-pci
+        # today (passed to the k8s-0 VM) and becomes a normal NVMe on metal,
+        # so this rule must be in place from first boot.
+        |-
+        machine:
+          udev:
+            rules:
+              - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
   # ── METAL (hv-1 converted 2026-08-05). Replaced the VM entry of the same
   # ── name AND absorbed sea1-k8s-cp-1's control-plane role.
   - hostname: sea1-k8s-1
