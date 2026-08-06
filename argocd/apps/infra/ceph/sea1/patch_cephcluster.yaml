@@ -40,6 +40,15 @@ spec:
           # register these as `nvme`, and any class-restricted CRUSH rule would
           # then place zero PGs here -- silently, with the migration looking fine.
           deviceClass: ssd
+      # sea1-hv-0 -> metal Talos, 2026-08-06. The LAST host; with this the
+      # cluster runs no Proxmox at all. Same in-place adoption of seven
+      # encrypted Intel SSDPE2KX020T8 already in CRUSH host sea1-hv-0.
+      - name: sea1-k8s-0
+        # This host's nvme7n1 is the 7.68T HGST SN200, live and healthy.
+        deviceFilter: "^nvme[0-6]n1$"
+        config:
+          encryptedDevice: "true"
+          deviceClass: ssd
       # sea1-hv-1 -> metal Talos, 2026-08-05. Same adoption, same seven Intel
       # SSDPE2KX020T8 (OSDs 1,4,6,10,12,15,18 in CRUSH host sea1-hv-1). The
       # bucket keeps its old name because osd_crush_update_on_start=false --
