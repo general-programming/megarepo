@@ -34,7 +34,7 @@ and outlet) and **ClickHouse**.
 | Concern | Decision |
 | --- | --- |
 | Cluster | SEA1 Talos (`argocd/apps/erin-apps/akvorado/`), alongside librenms |
-| ClickHouse | Single-replica `ClickHouseCluster` + `KeeperCluster` via the existing `clickhouse-operator` (same CRDs sentry uses) |
+| ClickHouse | Single-replica `ClickHouseCluster` + `KeeperCluster` via the existing `clickhouse-operator` |
 | Kafka | Single-broker KRaft StatefulSet in-namespace, 2h retention. It is a buffer, not a system of record — no Strimzi. |
 | Flow ingress | MetalLB L2 VIP `10.3.3.1` in SEA1, `externalTrafficPolicy: Local` |
 | Console | Tailscale ingress only, never public |

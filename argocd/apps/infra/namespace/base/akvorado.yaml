@@ -4,5 +4,5 @@ metadata:
   name: akvorado
   labels:
     # clickhouse-operator pods add IPC_LOCK/PERFMON/SYS_PTRACE, which the
-    # cluster-default baseline PodSecurity rejects; same as the sentry ns.
+    # cluster-default baseline PodSecurity rejects.
     pod-security.kubernetes.io/enforce: privileged
