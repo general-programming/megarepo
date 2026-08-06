@@ -30,9 +30,16 @@
 # applies here. The ESP already has /boot/EFI/BOOT/BOOTX64.EFI, so KubeVirt's
 # fresh OVMF NVRAM boots the removable path unaided.
 #
-# NOTE: VM 103 is `onboot: 1` on the hypervisor. It MUST be set to onboot: 0
-# after the cutover, or a reboot of hv-0 starts a second sea1-core with the
-# same MAC and IP -- two DHCP servers and an address conflict on the LAN.
+# VM 103 was `onboot: 1`; that is now cleared to 0. Do not set it back -- a
+# reboot of hv-0 would otherwise start a second sea1-core on the same MAC and
+# IP, giving the LAN two DHCP servers and an address conflict.
+#
+# POST-CUTOVER FINDING: fixing networkd was necessary but NOT sufficient. kea
+# and dnsmasq also take an interface NAME and neither can match a MAC, so with
+# the card on a new PCI slot (enp1s0) kea hard-failed and dnsmasq silently fell
+# back to loopback only -- the site lost DHCP and DNS. Fixed in f8a2bfb0 with a
+# systemd.network.links pin that renames the NIC to ens18 by MAC. When
+# migrating any guest, grep it for interface names, not just its networkd unit.
 ---
 # RWX Block from the first commit -- accessModes is immutable once bound.
 apiVersion: v1
