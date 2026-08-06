@@ -702,17 +702,6 @@ patches:
       kubelet:
         extraConfig:
           maxPods: 200
-  - # Cilium's bpf.masquerade requires this false, or pod DNS breaks: with it
-    # true, CoreDNS (dnsPolicy: Default) forwards to the node resolver, which is
-    # the link-local 169.254.116.108, and BPF masquerade does not carry that
-    # path. Pair it with the explicit upstreams in the coredns ConfigMap --
-    # flipping this alone NXDOMAINs every non-cluster.local name.
-    |-
-    machine:
-      features:
-        hostDNS:
-          enabled: true
-          forwardKubeDNSToHost: false
   - # IPv6 support
     |-
     cluster:

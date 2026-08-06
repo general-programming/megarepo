@@ -51,32 +51,10 @@ spec:
         directRoutingDevice: "ens18"
 
         # Pods are on ULA fd40:10:244::/56, so v6 egress still needs masquerade.
+        # bpf.masquerade would additionally require CoreDNS
+        # forwardKubeDNSToHost=false, or DNS breaks on Talos.
         enableIPv4Masquerade: true
         enableIPv6Masquerade: true
-
-        # BPF masquerade, not iptables. The iptables path SNATs hostPort
-        # *replies* to a fresh ephemeral source port when the peer is a LAN host
-        # that is not a cluster node -- the rule above it exempts nodes, so
-        # node->hostPort and pod->hostPort work and only LAN peers break. That
-        # silently killed every consul RPC from sea1-core while `consul members`
-        # still looked healthy.
-        #
-        # Prerequisites, both landed first and verified:
-        #   - machine.features.hostDNS.forwardKubeDNSToHost: false (talconfig)
-        #   - coredns Corefile forwarding to explicit upstreams, not
-        #     /etc/resolv.conf
-        #
-        # Two documented side effects, accepted deliberately:
-        #   - IPv6 BPF masquerade is upstream BETA. Pod v6 egress depends on it
-        #     (ULA is not routable), so watch v6 egress after any Cilium bump.
-        #   - It also switches host routing from Legacy to BPF, and stops
-        #     masquerading pod -> node-external-IP (cilium#17177).
-        #
-        # `devices` above is the control-plane value; the lan-bridge
-        # CiliumNodeConfig overrides it to br0, which is what BPF masquerade
-        # actually attaches to here.
-        bpf:
-          masquerade: true
 
         # Replaces kube-proxy. k8sServiceHost/Port are KubePrism, not a
         # control-plane address: without kube-proxy the agent cannot resolve the
