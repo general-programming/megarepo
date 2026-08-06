@@ -1,0 +1,113 @@
+# sea1-core, migrated off Proxmox VM 103 on sea1-hv-0 -- the last Proxmox host.
+#
+# This is the site's DHCP (kea-dhcp4/6), DNS (dnsmasq), salt master, consul
+# server and cloudflared tunnel, on 10.3.2.6 / 2602:fa6d:10:ffff::f00. It is
+# the highest-consequence guest in the fleet: if it does not come back, the LAN
+# loses name resolution and new leases, and this box has no network to fix it
+# over.
+#
+# Putting it INSIDE the cluster it serves is only safe because the bootstrap
+# deadlock was removed first: every Talos node now has a static address and
+# public resolvers (1.1.1.1 / 1.0.0.1), so nothing in a node's boot path
+# resolves through here. Do not reintroduce sea1-core as a node resolver.
+#
+# ── THE NIC RENAME, ALREADY DEFUSED ──────────────────────────────────────────
+# Its systemd-networkd unit used to match `Name=enp6s18`, which was never the
+# interface's real name (`ens18`) -- it only bound because the kernel exposes
+# enp6s18 as a PCI-path altname (bus 6, slot 18) and networkd matches altnames.
+# Moving to KubeVirt changes the slot, so that match would have failed and the
+# site would have lost DHCP and DNS. Fixed declaratively in
+# nix/machines/sea1-core/configuration.nix (matchConfig.MACAddress) and
+# deployed via comin BEFORE this migration, verified with `networkctl status`.
+# The MAC below is therefore load-bearing for the guest's own addressing.
+#
+# Unlike the other migrated guests this one is on local-zfs, not ceph, so the
+# copy is a real transfer from the zvol rather than intra-ceph. Rollback is the
+# ZFS snapshot rpool/data/vm-103-disk-0@pre-kubevirt.
+#
+# Root is ZFS (zroot) with no LUKS and no TPM, and Secure Boot reads "disabled
+# (setup)", so none of the encryption/vTPM handling the dma-vms guest needed
+# applies here. The ESP already has /boot/EFI/BOOT/BOOTX64.EFI, so KubeVirt's
+# fresh OVMF NVRAM boots the removable path unaided.
+#
+# NOTE: VM 103 is `onboot: 1` on the hypervisor. It MUST be set to onboot: 0
+# after the cutover, or a reboot of hv-0 starts a second sea1-core with the
+# same MAC and IP -- two DHCP servers and an address conflict on the LAN.
+---
+# RWX Block from the first commit -- accessModes is immutable once bound.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: sea1-core-root
+  namespace: core-vms
+spec:
+  # Retain, so removing the claim leaves the image intact.
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 64Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: sea1-core
+  namespace: core-vms
+spec:
+  # Halted until the disk is copied; flipping this early would boot the guest
+  # off an empty image the moment the claim binds.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: sea1-core
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            # Must land on a bridged node; br0 is where the LAN is.
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          # Proxmox: cores 2, sockets 1.
+          cores: 2
+        memory:
+          guest: 8Gi
+        firmware:
+          # Preserved from the Proxmox smbios1 uuid.
+          uuid: b001c957-2518-4b76-810e-9580190fcd39
+          bootloader:
+            efi:
+              # Proxmox had bios: ovmf; the guest reports Secure Boot
+              # "disabled (setup)", so there is nothing to carry over.
+              secureBoot: false
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                # Matches Proxmox's virtio-scsi-single.
+                bus: scsi
+          interfaces:
+            - name: lan
+              bridge: {}
+              # The guest's own networkd unit matches on this MAC, so it is
+              # what gives sea1-core its address at all. See the header.
+              macAddress: "BC:24:11:63:39:12"
+      networks:
+        - name: lan
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: sea1-core-root

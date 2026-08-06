@@ -1,0 +1,16 @@
+# NetworkAttachmentDefinitions are namespaced, so this namespace carries its
+# own rather than reaching cross-namespace into virt/.
+#
+# No IPAM: sea1-core addresses itself statically -- it IS the DHCP server, so
+# it must never depend on one.
+#
+# mtu 9000 is NOT the default: the bridge plugin builds the pod interface at
+# 1500 unless told otherwise, and sea1-core's NIC runs at 9000. Without this,
+# ordinary traffic works and only oversized frames vanish.
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: br0-lan
+  namespace: core-vms
+spec:
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'

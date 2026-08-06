@@ -1,0 +1,11 @@
+# Shared namespace for core site infrastructure guests, following the
+# network-vpn / dma-vms precedent rather than one-namespace-per-VM.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: core-vms
+  labels:
+    kubernetes.io/metadata.name: core-vms
+    # virt-launcher needs it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest
