@@ -1,6 +1,6 @@
 # sea420-core: DNS + DHCP + consul server for the sea420 site, replacing the
-# Salt-managed Ubuntu LXC (CT 1003 on the sea420 PVE). Stays an LXC — same
-# pattern as sea1-nix-builder; services mirror sea1-core minus its extras
+# Salt-managed Ubuntu LXC (CT 1003 on the sea420 PVE). Stays an LXC; services
+# mirror sea1-core minus its extras
 # (no tailscale/cloudflared/holepunch/salt-master here).
 {
   modulesPath,
@@ -99,7 +99,7 @@
 
   proxmoxLXC = {
     # Proxmox's net/hostname injection doesn't know NixOS; configure both
-    # from Nix instead (same reasoning as sea1-nix-builder).
+    # from Nix instead.
     manageNetwork = false;
     manageHostName = true;
   };

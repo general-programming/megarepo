@@ -24,9 +24,6 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   sea420-desktop = {
     machineID = "30b7aad6952aeda770f149286983149d";
   };
-  sea1-nix-builder = {
-    machineID = "85e731458ce145deb2ccd3288703af90";
-  };
   fmt2-vault-0 = {
     machineID = "7f66954a5515488582054e6e96cd1dfc";
   };
@@ -35,8 +32,5 @@ nixpkgs.lib.mapAttrs (_: nixpkgs.lib.attrsets.recursiveUpdate base) {
   };
   fmt2-vault-2 = {
     machineID = "ce407f7032bb4988969406fa2a0244ec";
-  };
-  pipebomb = {
-    machineID = "509b69a73338bc2bf6d47da9f78fc69f";
   };
 }

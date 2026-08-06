@@ -108,10 +108,6 @@ in
     };
   };
 
-  # First real consumer of the shared builder host (base.nix has vaultAgent
-  # as a prerequisite, and this is the only machine with it enabled so far).
-  nixBuilder.enable = true;
-
   # Second salt master (multi-master with the sea1 box); states via gitfs,
   # secrets via vault-agent. See docs/salt/secrets.md.
   saltMaster.enable = true;

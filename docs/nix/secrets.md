@@ -14,7 +14,6 @@ separately in [../salt/secrets.md](../salt/secrets.md).
 | `secret/infra/tailscale` | `authkey` | `tailscale` (join key; per-host routing policy stays in machine configs) | `/run/vault-agent/tailscale-authkey` | Generate a new pre-auth key in the admin console, update KV. Only consumed while a node is logged out — existing nodes keep their state in `/var/lib/tailscale` |
 | `secret/infra/dhcp-webhook` | `url` | `dhcp` (Discord lease webhook; URL contains the worker's secret path segment) | `/run/vault-agent/dhcp-webhook.env` (group `dnsmasq`, 0640) | Rotate the `HOOK_SECRET` on the `cfworker-dhcp-discord` worker, update KV **and** `salt/kv/dhcp_webhook` (legacy dhcpd hosts bake it at highstate) |
 | `secret/infra/holepunch` | `key` | `holepunch` (hourly vault-proxy port knock) | `/run/vault-agent/holepunch.env` | Rotate on the punch server, update KV **and** `webscale-scrape/ansible_vars_server` (ansible cluster hosts use the same knock) |
-| `secret/app/nix-builder-ssh` | ssh key | `nix-builder-client` | `/run/vault-agent/nix-builder-key` | Re-key the builder, update KV |
 
 Host bootstrap: the vault-agent AppRole pair itself is seeded by
 `just provision <machine>` / rotated by `just rekey <machine>`

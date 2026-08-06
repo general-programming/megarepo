@@ -14,7 +14,6 @@
   imports = [
     (self.lib.nixosModule "nixos-tags")
     (self.lib.nixosModule "nix-cache")
-    (self.lib.nixosModule "nix-builder-client")
     (self.lib.nixosModule "glances")
     (self.lib.nixosModule "ssh-ca")
   ];
@@ -26,16 +25,6 @@
     publicKey = "general-programming:wrpHyA9Gfx0BSA3vlxeESq+VSP+wvr5zSAgC3rXLN+8=";
   };
 
-  # Remote Nix builder: CT 9000 (sea1-nix-builder) on sea1-hv-0, provisioned via
-  # scripts/provision-lxc.py. Off by default fleet-wide because it
-  # also needs vaultAgent.enable (per-host AppRole creds from `just
-  # provision`/`rekey`), which not every machine has yet; enable per-host
-  # once that's seeded (see fmt2-core/configuration.nix for the first one).
-  nixBuilder = {
-    enable = lib.mkDefault false;
-    hostName = "2602:fa6d:10:ffff::f14";
-    publicHostKey = "c3NoLWVkMjU1MTkgQUFBQUMzTnphQzFsWkRJMU5URTVBQUFBSU54QWRFdnRqSEUyNCtyOWFIUTVIOHg0eGlGamNjSTV3QUozaUVSM09SWEMgcm9vdEBidWlsZGVy";
-  };
 
   # nix configs
   nix.settings.substituters = [
