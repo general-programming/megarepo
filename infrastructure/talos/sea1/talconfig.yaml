@@ -270,33 +270,55 @@ nodes:
           interfaces:
             - bond0
 
-    # DELIBERATELY ABSENT AT FIRST BOOT -- do not add it back in the same apply
-    # that installs this node.
+    # Enabled 2026-08-05 as a deliberate SECOND apply, after the node was Ready
+    # and all 7 OSDs were adopted. Held back from first boot because sdb was
+    # then the surviving half of the rpool mirror and hv-1's only rollback.
     #
-    # The volume belongs on sdb (wwid naa.5001173100a7d5cc), NOT on the 7.68T
-    # HGST SN200: round 1 put it there and partitioning re-latched the drive's
-    # firmware lockup, taking the whole node NotReady.
+    # READ THIS BEFORE CHANGING diskSelector -- IT IS NOT WHAT PICKS THE DISK.
     #
-    # But on hv-1 sdb is *also* the surviving half of the live rpool ZFS mirror
-    # and carries the ESP that Proxmox currently boots from (PARTUUID
-    # c348a3b7-..., BootCurrent 0005). The install writes Talos to sda only, so
-    # sdb stays a complete, bootable Proxmox fallback -- right up until Talos
-    # provisions a volume on it. Enabling `data` here therefore destroys the
-    # rollback at the exact moment of first boot, before the node has proven it
-    # can join.
+    # This volume is LIVE ON THE SN200 (nvme7n1p2), not on sdb, and the selector
+    # below did not decide that. Talos matches a userVolume by its LOCATOR
+    # (volume.partition_label == "u-data") first; diskSelector only chooses
+    # where to PROVISION when no existing partition already carries the label.
+    # nvme7n1p2 still had the u-data PARTLABEL from when this disk was passed
+    # through to the sea1-k8s-1 VM, so Talos adopted it in place -- preserving
+    # the old contents, and never looking at sdb. Editing the selector alone
+    # will NOT move the volume.
     #
-    # Add this back as a SECOND apply once the node is Ready and the OSDs are
-    # adopted. Rook cannot touch sdb either way -- its deviceFilter is
-    # ^nvme[0-6]n1$:
+    # Accepted deliberately (2026-08-05): the data came back intact and
+    # storage-mariadb-librenms-1 -- a local-path PV pinned by node affinity to
+    # this node, backed by /var/mnt/data -- rejoined Galera with no SST.
     #
-    # userVolumes:
-    #   - name: data
-    #     provisioning:
-    #       diskSelector:
-    #         match: disk.wwid == "naa.5001173100a7d5cc"
-    #       minSize: 500GiB
-    #     filesystem:
-    #       type: xfs
+    # The risk being accepted: this is the drive that latched on hv-2 on
+    # 2026-08-04, reset-looping every ~5s and taking that node NotReady with 6
+    # OSDs down, DESPITE discard suppression. The udev rule below (which forces
+    # discard_max_bytes=0, verified 0 on this host) is the only thing making it
+    # survivable. If this node ever goes NotReady with nvme7 resetting, this
+    # volume is why.
+    #
+    # BREAKGLASS -- move the volume to sdb (currently an empty 1.9T GPT):
+    #   1. Clear the u-data PARTLABEL on nvme7n1p2, or the locator keeps
+    #      winning. With discard_max_bytes=0 a fast wipe falls back to zeroing
+    #      head/tail rather than issuing a 7.7T TRIM, so this is safe NOW in a
+    #      way it was not before the udev rule existed.
+    #   2. Swap the diskSelector below for the sdb WWID and re-apply.
+    #   3. Accept that librenms-1's PV comes back empty and Galera SSTs from the
+    #      other two members.
+    # Pin by WWID, not serial: behind megaraid_sas both SATA SSDs report an
+    # EMPTY serial, sda/sdb ordering is not stable, and both are the same
+    # SDLF1CRR-019T-1H model.
+    #     diskSelector:
+    #       match: disk.wwid == "naa.5001173100a7d5cc"   # sdb
+    #
+    # Rook cannot claim either disk: its deviceFilter is ^nvme[0-6]n1$.
+    userVolumes:
+      - name: data
+        provisioning:
+          diskSelector:
+            match: disk.wwid == "naa.5001173100a7d5cc"
+          minSize: 500GiB
+        filesystem:
+          type: xfs
 
     patches:
       - # lldpd is an extension SERVICE, unlike the other extensions above. With
