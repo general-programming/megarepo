@@ -24,59 +24,6 @@
 apiVersion: ceph.rook.io/v1
 kind: CephFilesystem
 metadata:
-  name: cephfs
-  namespace: ceph
-spec:
-  preservePoolNames: true
-  preserveFilesystemOnDelete: true
-  preservePoolsOnDelete: true
-  metadataPool:
-    name: cephfs_metadata
-    replicated:
-      size: 3
-      requireSafeReplicaSize: true
-  dataPools:
-    - name: cephfs_data
-      replicated:
-        size: 3
-        requireSafeReplicaSize: true
-  metadataServer:
-    activeCount: 1
-    activeStandby: true
-    placement:
-      # The CephCluster-level placement.all replaces Rook's built-in MDS
-      # anti-affinity, so both daemons for a filesystem land on one node and a
-      # single node loss takes the active AND its standby. Restore it here.
-      podAntiAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-                # Scoped to THIS filesystem. A cluster-wide app=rook-ceph-mds
-                # selector would cap all MDS at one per node -- 3 filesystems
-                # x 2 daemons needs 6 pods across 3 lan-bridge nodes.
-                - key: rook_file_system
-                  operator: In
-                  values:
-                    - cephfs
-            topologyKey: kubernetes.io/hostname
-      nodeAffinity:
-        requiredDuringSchedulingIgnoredDuringExecution:
-          nodeSelectorTerms:
-            - matchExpressions:
-                - key: generalprogramming.org/lan-bridge
-                  operator: In
-                  values:
-                    - "true"
-    resources:
-      requests:
-        cpu: "500m"
-        memory: 5Gi
-      limits:
-        memory: 8Gi
----
-apiVersion: ceph.rook.io/v1
-kind: CephFilesystem
-metadata:
   name: k8s-cephfs
   namespace: ceph
 spec:
