@@ -72,6 +72,29 @@ runs the exporter on `:9100`. vmagent's consul SD
 misleadingly named `mongodb`) discovers an empty target list silently — no
 error, just no series.
 
+## Rebuilding the servers strands vmagent on a stale index
+
+An empty catalog is silent; a *rebuilt* catalog is not. Consul blocking queries
+carry an `index`, and a fresh server cluster restarts its index near zero. Any
+consul SD client still polling the old value asks for a future index that will
+never arrive, so every watch hangs until timeout and logs:
+
+```
+cannot perform blocking Consul API request at "/v1/catalog/services?dc=sea1&stale&index=21806314&wait=525s"
+```
+
+vmagent never recovers on its own — it keeps reusing the dead index. Confirm by
+comparing the index it asks for against the live one, which will be tiny:
+
+```sh
+kubectl -n consul exec sea1-server-0 -- \
+  sh -c 'wget -S -qO- http://127.0.0.1:8500/v1/catalog/services 2>&1 >/dev/null | grep -i x-consul-index'
+```
+
+Fix is a vmagent restart (`kubectl -n victoriametrics rollout restart deploy/vmagent-vmagent`).
+This fires `TooManyScrapeErrors` and `TooManyLogs` against job `vmagent-vmagent`
+— neither names consul, so they read as a metrics problem rather than a consul one.
+
 sea1-core's NixOS firewall does not open `8301` by default, so servers cannot
 probe it inbound and it flaps alive/failed. Its `consul.nix` opens 8301 tcp+udp
 and nothing else — no 8300 (it is a client), no 8302 (sea1 is not federated).
