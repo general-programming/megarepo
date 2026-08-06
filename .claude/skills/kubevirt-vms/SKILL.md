@@ -5,8 +5,9 @@ description: Run and migrate virtual machines on the sea1 Kubernetes cluster wit
 
 # KubeVirt guests on sea1
 
-Proven migrating `freepbx` (Proxmox VM 911) and `freeipa` (VM 113) off
-`sea1-hv-1`. Everything is GitOps: guests live in `argocd/apps/vms/<name>/`
+Proven migrating `freepbx` (Proxmox VM 911) and `freeipa` (VM 113) off the
+host then called `sea1-hv-1`, and later every remaining sea1 guest.
+Everything is GitOps: guests live in `argocd/apps/vms/<name>/`
 under the `vms` AppProject. Never `kubectl apply` a guest.
 
 ## Layout
@@ -54,10 +55,14 @@ serial console with `virtctl` — is in **`iso-install.md`** beside this file.
 
 ## Migrating a Proxmox guest
 
+**sea1 has no Proxmox left** — the hypervisors became bare-metal Talos in
+2026-08 and are now `sea1-k8s-{0,1,2}`. This section applies only to guests
+coming from another site's Proxmox; run the survey against that host.
+
 ### 1. Survey before touching anything
 
 ```bash
-./bin/vssh localadmin@sea1-hv-1.generalprogramming.org 'sudo qm config <vmid>'
+./bin/vssh localadmin@<proxmox-host> 'sudo qm config <vmid>'
 ```
 
 Check for, in order of how badly they hurt:
