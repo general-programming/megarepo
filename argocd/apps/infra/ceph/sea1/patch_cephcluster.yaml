@@ -40,6 +40,25 @@ spec:
           # register these as `nvme`, and any class-restricted CRUSH rule would
           # then place zero PGs here -- silently, with the migration looking fine.
           deviceClass: ssd
+      # sea1-hv-1 -> metal Talos, 2026-08-05. Same adoption, same seven Intel
+      # SSDPE2KX020T8 (OSDs 1,4,6,10,12,15,18 in CRUSH host sea1-hv-1). The
+      # bucket keeps its old name because osd_crush_update_on_start=false --
+      # verified false again immediately before this was applied. That setting
+      # is what decouples node naming from CRUSH and must stay false until all
+      # three hosts are converted.
+      - name: sea1-k8s-1
+        # Same bound, and it matters more here: this host's nvme7n1 is the
+        # 7.68T HGST SN200, which is live and healthy. Rook must never see it.
+        deviceFilter: "^nvme[0-6]n1$"
+        config:
+          # Selects the lockbox branch (and sets hostIPC, which cryptsetup
+          # needs). Does NOT re-encrypt: the passphrase is fetched from the
+          # cluster's config-key store using the cephx identity in the LV tag.
+          encryptedDevice: "true"
+          # The existing 21 OSDs are class `ssd`. Left to itself Rook would
+          # register these as `nvme`, and any class-restricted CRUSH rule would
+          # then place zero PGs here -- silently, with the migration looking fine.
+          deviceClass: ssd
   mon:
     # mon.d proved the join works (quorum sea1-hv-0,sea1-hv-1,sea1-hv-2,d).
     # Going to 3 Rook mons -> 6 total during coexistence. Six is even, which is
