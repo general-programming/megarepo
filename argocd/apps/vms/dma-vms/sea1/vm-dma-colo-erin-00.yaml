@@ -59,9 +59,10 @@ metadata:
   name: dma-colo-erin-00
   namespace: dma-vms
 spec:
-  # Halted until the disk is copied. Flipping this before the copy would boot
-  # the guest off an empty image the moment the claim binds.
-  runStrategy: Halted
+  # Disk copied from pool/vm-106-disk-0 2026-08-06 (128 GiB intra-ceph, first
+  # 2 GiB cmp-verified). Copy once, boot once -- re-copying after the guest has
+  # run rolls its database back in time.
+  runStrategy: Always
   template:
     metadata:
       labels:
