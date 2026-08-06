@@ -18,9 +18,10 @@ nodes:
     # 8 GiB / 4 vCPU and exist only to hold etcd, so re-assert the taint the
     # flag would otherwise remove. Metal nodes deliberately carry no taint.
     #
-    # etcd is three members: these two plus sea1-k8s-2. cp-2 was removed when
-    # hv-2 was converted to metal and merged into k8s-2 -- there is no spare
-    # voter, so never take two of the three down at once.
+    # etcd is three members: this one plus the two metal nodes, sea1-k8s-1 and
+    # sea1-k8s-2. cp-1 and cp-2 were removed when hv-1 and hv-2 were converted
+    # to metal and merged into the worker entries of the same name -- there is
+    # no spare voter, so never take two of the three down at once.
     nodeTaints:
       node-role.kubernetes.io/control-plane: ":NoSchedule"
     # VM-ONLY: metal has no TPM available to Talos. Cluster-wide this would
@@ -92,19 +93,11 @@ nodes:
           - network: "::/0"
             gateway: "2602:fa6d:10:ffff::1"
             metric: 2048
-  - <<: *k8s-cp
-    hostname: sea1-k8s-cp-1
-    ipAddress: "10.3.2.17"
-    nameservers: *k8s-cp-dns
-    networkInterfaces:
-      - deviceSelector:
-          driver: virtio_net
-        dhcp: false
-        mtu: 9000
-        addresses:
-          - "10.3.2.17/23"
-          - "2602:fa6d:10:ffff::117/116"
-        routes: *k8s-cp-routes
+  # sea1-k8s-cp-1 (10.3.2.17) was retired 2026-08-05: drained, graceful
+  # `talosctl reset` out of etcd, Proxmox VM 115 stopped. It lived on hv-1, so
+  # it could not outlive that host's conversion to metal. Its control-plane role
+  # is taken over by the sea1-k8s-1 metal entry below.
+  #
   # nvme passthrough, single nic for v4/v6.
   #
   # These three are bridged: KubeVirt VMs need a LAN-attached secondary network,
@@ -191,32 +184,187 @@ nodes:
           minSize: 500GiB
         filesystem:
           type: xfs
-  - <<: *k8s-worker-nvme
-    hostname: sea1-k8s-1
+  # ── METAL (hv-1 converted 2026-08-05). Replaced the VM entry of the same
+  # ── name AND absorbed sea1-k8s-cp-1's control-plane role.
+  - hostname: sea1-k8s-1
     ipAddress: "10.3.2.11"
-    nodeLabels: *k8s-worker-nvme-labels
+    controlPlane: true
+
+    # Pin by WWID, NOT serial -- behind the megaraid_sas HBA Talos reports an
+    # EMPTY serial for both SATA SSDs, so a serial selector matches nothing and
+    # the install picks a disk itself. Device names are not stable either.
+    # This value is PER HOST; verified on hv-1 2026-08-05.
+    installDiskSelector:
+      wwid: "naa.5001173100a329d8"
+
+    # Non-secureboot image: Secure Boot is off in firmware and enrolling the
+    # Sidero key needs a console we do not have. Node-level
+    # `machineSpec: {secureboot: false}` is silently ignored -- the controlPlane
+    # block's `secureboot: true` wins -- so the URL must be pinned explicitly.
+    talosImageURL: factory.talos.dev/metal-installer/7e1f6386358eb4d68cf5a947ce712411b656380140d20539357e4a9a627b76a5
+
+    schematic:
+      # Same schematic as sea1-k8s-2 -- same chassis, same extensions.
+      customization:
+        extraKernelArgs:
+          - console=tty0
+          - console=ttyS0,115200n8
+        systemExtensions:
+          officialExtensions:
+            - siderolabs/intel-ucode
+            - siderolabs/lldpd
+            - siderolabs/util-linux-tools
+            - siderolabs/nvme-cli
+            - siderolabs/mellanox-mstflint
+
+    nodeLabels:
+      generalprogramming.org/lan-bridge: "true"
+
     nodeAnnotations:
-      # Rook's getNodeInfoFromNode takes the FIRST NodeInternalIP, which is the
-      # IPv4 one on these dual-stack nodes. Ceph's public_network is
-      # 2602:fa6d:10:ffff::/116, so a mon launched on 10.3.2.x binds an address
-      # no other mon can reach and hangs in probing. This annotation overrides
-      # the choice.
+      # Rook takes the FIRST NodeInternalIP, which is IPv4 here, while ceph's
+      # public_network is 2602:fa6d:10:ffff::/116. Without this a mon binds an
+      # address no other mon can reach and hangs in probing.
       network.rook.io/mon-ip: "2602:fa6d:10:ffff::111"
-    nameservers: *k8s-worker-nvme-dns
+
+    nameservers:
+      - 1.1.1.1
+      - 1.0.0.1
+
     networkInterfaces:
-      - deviceSelector:
-          driver: virtio_net
+      # LACP bond to the provider's MLAG pair. Members named literally because
+      # they were read off the running host: eno1np0 b8:ce:f6:43:f7:be,
+      # eno2np1 b8:ce:f6:43:f7:bf, both mlx5_core, OVS bond_mode balance-tcp
+      # with lacp_status negotiated (== 802.3ad + layer3+4).
+      - interface: bond0
         dhcp: false
         mtu: 9000
+        bond:
+          interfaces:
+            - eno1np0
+            - eno2np1
+          mode: 802.3ad
+          xmitHashPolicy: layer3+4
+          lacpRate: slow
+          miimon: 100
+
+      # br0 carries the node address and is what Multus/KubeVirt attach LAN
+      # guests to. MTU 9000 must appear on the members, the bond and the bridge.
       - interface: br0
         dhcp: false
         mtu: 9000
         addresses:
           - "10.3.2.11/23"
           - "2602:fa6d:10:ffff::111/116"
-        routes: *k8s-worker-nvme-routes
-        bridge: *k8s-worker-nvme-bridge
-    userVolumes: *k8s-worker-nvme-volumes
+        routes:
+          - network: "0.0.0.0/0"
+            gateway: "10.3.2.1"
+          # Declared, not learned. Gateway is the router's administratively
+          # chosen global address, not its EUI-64 link-local.
+          - network: "::/0"
+            gateway: "2602:fa6d:10:ffff::1"
+        bridge:
+          stp:
+            enabled: false
+          # NB: bridgePort.master is silently dropped by talhelper v3.1.15 --
+          # membership must be declared from this side.
+          interfaces:
+            - bond0
+
+    # DELIBERATELY ABSENT AT FIRST BOOT -- do not add it back in the same apply
+    # that installs this node.
+    #
+    # The volume belongs on sdb (wwid naa.5001173100a7d5cc), NOT on the 7.68T
+    # HGST SN200: round 1 put it there and partitioning re-latched the drive's
+    # firmware lockup, taking the whole node NotReady.
+    #
+    # But on hv-1 sdb is *also* the surviving half of the live rpool ZFS mirror
+    # and carries the ESP that Proxmox currently boots from (PARTUUID
+    # c348a3b7-..., BootCurrent 0005). The install writes Talos to sda only, so
+    # sdb stays a complete, bootable Proxmox fallback -- right up until Talos
+    # provisions a volume on it. Enabling `data` here therefore destroys the
+    # rollback at the exact moment of first boot, before the node has proven it
+    # can join.
+    #
+    # Add this back as a SECOND apply once the node is Ready and the OSDs are
+    # adopted. Rook cannot touch sdb either way -- its deviceFilter is
+    # ^nvme[0-6]n1$:
+    #
+    # userVolumes:
+    #   - name: data
+    #     provisioning:
+    #       diskSelector:
+    #         match: disk.wwid == "naa.5001173100a7d5cc"
+    #       minSize: 500GiB
+    #     filesystem:
+    #       type: xfs
+
+    patches:
+      - # lldpd is an extension SERVICE, unlike the other extensions above. With
+        # no ExtensionServiceConfig it sits in "Waiting for extension service
+        # config" forever, blocking the startAllServices boot task -- the node
+        # runs fine and reports Ready to Kubernetes while Talos never leaves
+        # stage=booting. `talosctl upgrade` gates on stage=running, so this is
+        # not cosmetic.
+        |-
+        apiVersion: v1alpha1
+        kind: ExtensionServiceConfig
+        name: lldpd
+        configFiles:
+          - content: |-
+              configure lldp portidsubtype ifname
+              configure system description "Talos metal node"
+            mountPath: /usr/local/etc/lldpd/lldpd.conf
+      - # nodeID LUKS, NOT tpm -- even though hv-1's TPM 2.0 works (/dev/tpm0,
+        # tpm_version_major 2). Talos seals against PCR 11, the UKI measurement
+        # made by systemd-stub, and that only happens under Secure Boot. With
+        # Secure Boot off the node fails at boot with "PCR 11 not available" and
+        # leaves a HALF-FORMED LUKS header behind, recoverable only via
+        # `talosctl reset --system-labels-to-wipe EPHEMERAL`. Do not "fix" this
+        # by enabling tpm without also enrolling Secure Boot keys.
+        |-
+        machine:
+          systemDiskEncryption:
+            ephemeral:
+              provider: luks2
+              keys:
+                - slot: 0
+                  nodeID: {}
+            state:
+              provider: luks2
+              keys:
+                - slot: 0
+                  nodeID: {}
+      - # Combined CP+worker on a box that also hosts KubeVirt guests. Reserve
+        # enough that etcd is never starved.
+        |-
+        machine:
+          kubelet:
+            extraConfig:
+              systemReserved:
+                cpu: 2000m
+                memory: 4Gi
+              kubeReserved:
+                cpu: 2000m
+                memory: 8Gi
+      - # Refuse DISCARD on the 7.68T HGST SN200 at b2:00.0.
+        #
+        # A large deallocate races the drive's L2P journal flush and drops it
+        # into "Post Crash Startup" -- no namespace, kernel reset loop, udevd's
+        # queue never drains and KUBELET NEVER STARTS. WD errata
+        # OM-6588/6836/6850/7044; see docs/sn200-firmware-re.md.
+        #
+        # Matched on MODEL, never on kernel name: nvmeN numbering is not stable
+        # and a KERNEL=="nvme7n1" rule could land on a ceph OSD after a reorder.
+        #
+        # This host's SN200 is on KNGND112 with discard_max_bytes at
+        # 2199023255040 -- it has been live and unprotected inside the k8s-1 VM
+        # all along. It is vfio-pci bound today and becomes a normal NVMe the
+        # moment VM 109 is gone, so this rule must be in place from first boot.
+        |-
+        machine:
+          udev:
+            rules:
+              - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
   # ── METAL (hv-2 converted 2026-08-03). Replaced the VM entry of the same
   # ── name; identity reuse keeps labels, affinities, NADs and ceph intact.
   - hostname: sea1-k8s-2
@@ -441,14 +589,14 @@ nodes:
         # and a KERNEL=="nvme7n1" rule could land on a ceph OSD after a reorder.
         #
         # SCOPE, deliberately: this is a NODE patch, so it protects this host
-        # only. sea1-k8s-0 and sea1-k8s-1 each have an SN200 passed through from
-        # their hypervisor (invisible in the HV's own /sys/class/nvme, which is
-        # why they read as a clean negative), both live and both with
-        # discard_max_bytes at 2199023255040. sea1-k8s-1 is also still on
-        # KNGND112 rather than KNGND122.
+        # only. sea1-k8s-1 carries the same rule since hv-1 went metal
+        # 2026-08-05. That leaves sea1-k8s-0, whose SN200 is still passed
+        # through from hv-0 (invisible in the HV's own /sys/class/nvme, which is
+        # why it reads as a clean negative), live and with discard_max_bytes at
+        # 2199023255040.
         #
-        # Leaving them exposed is an accepted decision (2026-08-03), not an
-        # oversight: they hold production data, and acting on a working SN200 is
+        # Leaving it exposed is an accepted decision (2026-08-03), not an
+        # oversight: it holds production data, and acting on a working SN200 is
         # itself a risk. Generalise this rule when that data is replicated or
         # evacuated -- see docs/sn200-runbook.md section 0a.
         |-

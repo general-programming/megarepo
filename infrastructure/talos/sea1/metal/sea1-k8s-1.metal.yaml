@@ -1,0 +1,204 @@
+# PROPOSED metal node definition for sea1-k8s-1 (round 2: hv-1 -> Talos).
+#
+# NOT wired into talconfig.yaml yet. At cutover this block REPLACES the existing
+# `sea1-k8s-1` VM entry (two entries cannot share a hostname), and the
+# `sea1-k8s-cp-1` entry is DELETED -- this node is CP *and* worker, exactly as
+# sea1-k8s-2 replaced sea1-k8s-cp-2 in round 1.
+#
+# Identity is reused deliberately: hostname sea1-k8s-1, 10.3.2.11,
+# 2602:fa6d:10:ffff::111. That keeps the lan-bridge label, KubeVirt node
+# affinities, the br0-lan NAD, ceph's public_network membership and the Rook
+# mon-ip annotation working untouched. CRUSH is unaffected while
+# osd_crush_update_on_start=false freezes the existing `sea1-hv-1` bucket.
+#
+# ── VERIFIED ON hv-1, 2026-08-04 ─────────────────────────────────────────────
+#   NICs      eno1np0 b8:ce:f6:43:f7:be / eno2np1 b8:ce:f6:43:f7:bf, mlx5_core
+#             (same names as hv-2 -- not a coincidence to rely on, but verified)
+#   LAN       OVS bond_mode balance-tcp, lacp_status negotiated
+#             (balance-tcp == 802.3ad + layer3+4 hashing)
+#   SATA      sda SDLF1CRR-019T-1HA1 wwn 0x5001173100a329d8  <- install target
+#             sdb SDLF1CRR-019T-1HA1 wwn 0x5001173100a7d5cc  <- data volume
+#             BOTH are halves of the `rpool` ZFS mirror (sda3 + sdb3). Unlike
+#             hv-2, where sdb was a leftover, here the mirror is LIVE and holds
+#             the running Proxmox install plus the k8s-1/cp-1 VM zvols. Both
+#             disks are destroyed by this migration; nothing on rpool survives.
+#   OSDs      7x INTEL SSDPE2KX020T8 1.8T (nvme0n1..nvme6n1) -- NEVER touch.
+#             Currently cephadm OSDs 1,4,6,10,12,15,18 in CRUSH host sea1-hv-1.
+#   SN200     HGST Ultrastar SN200 7.68T at b2:00.0, currently vfio-pci (passed
+#             through to the k8s-1 VM); becomes a normal NVMe on metal.
+#             firmware KNGND112, discard_max_bytes 2199023255040 -- i.e. the
+#             drive is UNPROTECTED today. The udev rule below is what protects
+#             it, and it must be in place from first boot. Do NOT put the data
+#             volume here (see the k8s-2 entry for what that cost).
+#   firmware  UEFI, Secure Boot DISABLED (mokutil: SecureBoot disabled)
+#   TPM       present and working: /dev/tpm0, tpm_version_major 2.
+#             Still NOT usable -- Talos seals to PCR 11, which systemd-stub only
+#             measures under Secure Boot. nodeID LUKS, same as hv-2.
+# ─────────────────────────────────────────────────────────────────────────────
+
+- hostname: sea1-k8s-1
+  ipAddress: "10.3.2.11"
+  controlPlane: true
+
+  # Pin by WWID, NOT serial: behind the megaraid_sas HBA Talos reports an EMPTY
+  # serial for both SATA SSDs, so any serial selector matches nothing and the
+  # install falls back to picking a disk itself. Device names are not stable
+  # either. This value is PER HOST.
+  installDiskSelector:
+    wwid: "naa.5001173100a329d8"
+
+  # Secure Boot is off in firmware and enrolling the Sidero key needs a console
+  # we do not have, so this must be the NON-secureboot image. Node-level
+  # `machineSpec: {secureboot: false}` DOES NOT WORK -- the controlPlane block's
+  # `secureboot: true` wins. Pinning the image URL is the only reliable override.
+  talosImageURL: factory.talos.dev/metal-installer/7e1f6386358eb4d68cf5a947ce712411b656380140d20539357e4a9a627b76a5
+
+  schematic:
+    # factory.talos.dev schematic 7e1f6386358eb4d68cf5a947ce712411b656380140d20539357e4a9a627b76a5
+    # Identical to sea1-k8s-2 -- same chassis, same extensions.
+    customization:
+      extraKernelArgs:
+        - console=tty0
+        - console=ttyS0,115200n8
+      systemExtensions:
+        officialExtensions:
+          - siderolabs/intel-ucode
+          - siderolabs/lldpd
+          - siderolabs/util-linux-tools
+          - siderolabs/nvme-cli
+          - siderolabs/mellanox-mstflint
+
+  nodeLabels:
+    generalprogramming.org/lan-bridge: "true"
+
+  nodeAnnotations:
+    # Rook takes the FIRST NodeInternalIP, which is IPv4 here, while ceph's
+    # public_network is 2602:fa6d:10:ffff::/116. Without this a mon binds an
+    # address no other mon can reach and hangs in probing.
+    network.rook.io/mon-ip: "2602:fa6d:10:ffff::111"
+
+  # Public resolvers only, deliberately excluding sea1-core: nothing in a node's
+  # boot path may depend on a service that runs on the cluster.
+  nameservers:
+    - 1.1.1.1
+    - 1.0.0.1
+
+  networkInterfaces:
+    # LACP bond to the provider's MLAG pair. Members named literally because
+    # they were read off the running host.
+    - interface: bond0
+      dhcp: false
+      mtu: 9000
+      bond:
+        interfaces:
+          - eno1np0
+          - eno2np1
+        mode: 802.3ad
+        xmitHashPolicy: layer3+4
+        lacpRate: slow
+        miimon: 100
+
+    # br0 carries the node address and is what Multus/KubeVirt attach LAN guests
+    # to. MTU 9000 must appear on the members, the bond and the bridge.
+    - interface: br0
+      dhcp: false
+      mtu: 9000
+      addresses:
+        - "10.3.2.11/23"
+        - "2602:fa6d:10:ffff::111/116"
+      routes:
+        - network: "0.0.0.0/0"
+          gateway: "10.3.2.1"
+        # Declared, not learned. Gateway is the router's administratively chosen
+        # global address, not its EUI-64 link-local.
+        - network: "::/0"
+          gateway: "2602:fa6d:10:ffff::1"
+      bridge:
+        stp:
+          enabled: false
+        # NB: bridgePort.master is silently dropped by talhelper v3.1.15 --
+        # membership must be declared from this side.
+        interfaces:
+          - bond0
+
+  # On sdb, NOT the SN200. Round 1 put this on the 7.68T HGST and the drive
+  # latched, reset-looped every ~5s and took the whole node NotReady -- runtime
+  # down, 6 OSDs down, 31% of objects degraded. There is no proven way to read
+  # data back off a latched SN200, so it is not a place to put a volume at all.
+  #
+  # sdb is currently the second half of the live rpool ZFS mirror. Talos will
+  # not provision over an existing pool signature -- wipe it (see the runbook).
+  # Rook cannot touch it: its deviceFilter excludes non-nvme entirely.
+  userVolumes:
+    - name: data
+      provisioning:
+        diskSelector:
+          match: disk.wwid == "naa.5001173100a7d5cc"
+        minSize: 500GiB
+      filesystem:
+        type: xfs
+
+  patches:
+    - # lldpd is an extension SERVICE, unlike the other extensions above. With no
+      # ExtensionServiceConfig it sits in "Waiting for extension service config"
+      # forever, blocking the startAllServices boot task -- the node runs fine
+      # and reports Ready to Kubernetes while Talos never leaves stage=booting.
+      # `talosctl upgrade` gates on stage=running, so this is not cosmetic.
+      |-
+      apiVersion: v1alpha1
+      kind: ExtensionServiceConfig
+      name: lldpd
+      configFiles:
+        - content: |-
+            configure lldp portidsubtype ifname
+            configure system description "Talos metal node"
+          mountPath: /usr/local/etc/lldpd/lldpd.conf
+    - # nodeID LUKS, NOT tpm -- even though hv-1's TPM 2.0 works. Talos seals
+      # against PCR 11, the UKI measurement made by systemd-stub, and that only
+      # happens under Secure Boot. With Secure Boot off the node fails at boot
+      # with "PCR 11 not available" and leaves a HALF-FORMED LUKS header behind,
+      # recoverable only via `talosctl reset --system-labels-to-wipe EPHEMERAL`.
+      # Do not "fix" this by enabling tpm without enrolling Secure Boot keys.
+      |-
+      machine:
+        systemDiskEncryption:
+          ephemeral:
+            provider: luks2
+            keys:
+              - slot: 0
+                nodeID: {}
+          state:
+            provider: luks2
+            keys:
+              - slot: 0
+                nodeID: {}
+    - # Combined CP+worker on a box that also hosts KubeVirt guests. Reserve
+      # enough that etcd is never starved.
+      |-
+      machine:
+        kubelet:
+          extraConfig:
+            systemReserved:
+              cpu: 2000m
+              memory: 4Gi
+            kubeReserved:
+              cpu: 2000m
+              memory: 8Gi
+    - # Refuse DISCARD on the 7.68T HGST SN200.
+      #
+      # A large deallocate races the drive's L2P journal flush and drops it into
+      # "Post Crash Startup" -- no namespace, kernel reset loop, udevd's queue
+      # never drains and KUBELET NEVER STARTS. WD errata OM-6588/6836/6850/7044;
+      # see docs/sn200-firmware-re.md.
+      #
+      # Matched on MODEL, never on kernel name: nvmeN numbering is not stable and
+      # a KERNEL=="nvme7n1" rule could land on a ceph OSD after a reorder.
+      #
+      # This host's SN200 is on KNGND112 with discard_max_bytes unset -- it is
+      # live and exposed right now, inside the k8s-1 VM. This rule is the first
+      # protection it has ever had.
+      |-
+      machine:
+        udev:
+          rules:
+            - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
