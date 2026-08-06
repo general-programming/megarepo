@@ -25,6 +25,12 @@ guest keeps its own hostname internally regardless.
 `NetworkAttachmentDefinition`s are namespaced, so each VM carries its own
 copy of `br0-lan`. Six lines beats cross-namespace coupling.
 
+**Jumbo guests must set `"mtu":9000` in the NAD.** The bridge plugin builds the
+pod interface at 1500 regardless of `br0`'s MTU, and KubeVirt sizes the tap
+from it, so a 9000-MTU guest is silently capped — it still pings, and only
+oversized frames disappear. Confirm with `ping -M do -s 8972 <guest>` from the
+hypervisor both before and after. `br0`/`bond0` on `sea1-k8s-{1,2}` are 9000.
+
 **One overlay per cluster, always.** The infra/vms ApplicationSets are a
 matrix of clusters × directories, so a missing `fmt2/` yields an Application
 pointing at a path that does not exist, stuck in `Unknown/ComparisonError`
@@ -243,6 +249,30 @@ when every session returns with the same counts.
 That baseline also catches asymmetry the migration did not cause: it is how
 sea1-vpn-spine-1 turned out to be the only spine holding a peer up, making it
 the riskier half of a "redundant" pair.
+
+**A long-uptime guest hides config drift, and your reboot is what exposes it.**
+Expect to fix things the migration did not break. `tmpim` had 199 days of
+uptime and an `/etc/ceph/ceph.conf` still naming the retired cephadm mons —
+the running kernel client had tracked the monmap live, so the stale file was
+only consulted at mount time. It failed with `no mds (Metadata Server) is up`
+while the MDS was `up:active`; that message also means *cannot reach a mon*.
+Diff the guest's client config against `ceph mon dump` rather than trusting it.
+
+Capture, before shutdown, everything that will not come back by itself:
+
+```bash
+docker ps -q | xargs docker inspect --format '{{.Name}} {{.HostConfig.RestartPolicy.Name}}'
+ss -lntpH | awk '{print $4, $6}' | sort -u
+systemctl --failed --no-legend        # so pre-existing failures are not blamed on you
+```
+
+Only `restart=always` containers return, and only once `dockerd` runs — Debian
+socket-activates it, so `systemctl is-enabled docker` reads `disabled` while
+`docker.socket` is enabled, and nothing starts the daemon at boot until
+something connects. Start it explicitly, then `docker start` the
+`restart=no` ones. Hand-started processes in someone's shell (dev servers, a
+stray `meilisearch`) are gone for good; list them for the owner instead of
+guessing how to relaunch them.
 
 `vssh` may fail on non-fleet guests (its CA certs exhaust `MaxAuthTries`);
 plain `ssh -o BatchMode=yes root@<ip>` usually works where vssh does not. For
