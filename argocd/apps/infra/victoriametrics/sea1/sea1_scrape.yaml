@@ -1,3 +1,12 @@
+# Named "mongodb" for historical reasons; it has nothing to do with mongo.
+# This is the consul service-discovery scrape for sea1's node_exporter.
+#
+# The catalog is not populated automatically. node_exporter was only ever in it
+# because salt registered it on the three Proxmox hypervisors; those are Talos
+# nodes now and sea1-core registers it instead
+# (nix/machines/sea1-core/consul.nix). If that registration is missing, consul
+# SD returns an empty target list silently -- no error, no series. Check the
+# target count, not the logs.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMScrapeConfig
 metadata:
@@ -7,6 +16,12 @@ spec:
   - server: http://consul-http.consul.svc.cluster.local:8500
     services:
     - node_exporter
+    # ACL phase 3. Inert while default_policy is "allow" -- deliberately so:
+    # the permissive window is the only chance to prove SD works *with* the
+    # token before phase 4 makes it mandatory. See consul-sd-secret.yaml.
+    tokenRef:
+      name: consul-sd-token
+      key: token
   relabelConfigs:
   - action: replace
     sourceLabels:
