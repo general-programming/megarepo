@@ -13,4 +13,12 @@ data:
         hs = {}
         hs.status = "Healthy"
         return hs
+    # The VM operator defaults every alerting rule to `record: ""`, a key our
+    # manifests never set, so all 11 VMRules sit permanently OutOfSync. Drop the
+    # key only when it is empty -- a genuine recording rule has a non-empty
+    # value and stays diffed.
+    operator.victoriametrics.com/VMRule:
+      ignoreDifferences: |
+        jqPathExpressions:
+          - '.spec.groups[]?.rules[]? | select(.record == "") | .record'
   kustomize.buildOptions: "--enable-helm"

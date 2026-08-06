@@ -51,6 +51,18 @@ alloy:
           target_label = "node_name"
           action = "replace"
         }
+
+        // Terminated pods linger (CronJob history, failed and evicted pods) and
+        // their log stream replays the whole file then EOFs. The tailer treats
+        // that as a failure and retries, replaying the same lines forever --
+        // every one of them older than the 1h cutoff below, so every pass is
+        // discarded. That loop, not a real backlog, is what produces `too old`
+        // drops in steady state.
+        rule {
+          source_labels = ["__meta_kubernetes_pod_phase"]
+          regex = "Succeeded|Failed"
+          action = "drop"
+        }
       }
 
       loki.source.kubernetes "pods" {

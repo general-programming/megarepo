@@ -8,6 +8,12 @@ resources:
   # these alerts query. Evaluated in sea1, LokiAbsent could never be satisfied.
   - alerts-loki.yaml
   - scrape-smartctl.yaml
+  # fmt2-only: sea1 replaced MetalLB with Cilium L2 announcement + LB IP pools
+  # during the Cilium migration, so in base/ these scrapes matched nothing there
+  # and stuck three ScrapePoolHasNoTargets alerts on permanently. fmt2 still runs
+  # the controller plus seven frr-k8s daemons, and this is where BGP session
+  # state lives -- see scrape-cilium.yaml in the sea1 overlay for its counterpart.
+  - agent_scrape_metallb.yaml
   - cluster.yaml
   - vmagent.yaml
   - vmalert.yaml

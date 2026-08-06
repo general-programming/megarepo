@@ -68,15 +68,20 @@ spec:
             summary: "ArgoCD git operations are slow"
             description: "99th percentile git request latency is {{ $value | humanize }}s, threshold is 10s. This may indicate issues with the git repository or network connectivity."
 
+        # This metric is time-since-last-full-relist, not staleness: ArgoCD keeps
+        # the cache current from watch events and only re-lists on the resync
+        # interval, which defaults to 24h. Any threshold below that fires
+        # permanently -- the old 300s one did, while ArgoCD was demonstrably
+        # reconciling fine. 26h means "a resync was actually missed".
         - alert: ArgoCDClusterCacheStale
           expr: |
-            argocd_cluster_cache_age_seconds > 300
-          for: 5m
+            argocd_cluster_cache_age_seconds > 93600
+          for: 15m
           labels:
             severity: warning
           annotations:
-            summary: "ArgoCD cluster cache is stale ({{ $labels.server }})"
-            description: "Cluster {{ $labels.server }} cache age is {{ $value | humanize }}s (>5 minutes), sync status may not be accurate."
+            summary: "ArgoCD cluster cache has not re-listed ({{ $labels.server }})"
+            description: "Cluster {{ $labels.server }} cache age is {{ $value | humanize }}s, past the 26h resync deadline. The watch connection is likely wedged; sync status may not be accurate."
 
         - alert: ArgoCDOrphanedResources
           expr: |
