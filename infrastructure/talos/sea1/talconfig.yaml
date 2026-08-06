@@ -87,9 +87,31 @@ nodes:
           interfaces:
             - bond0
 
-    # `data` userVolume deliberately omitted at first boot: sdb is still the
-    # surviving half of the rpool mirror and hv-0's only rollback. Add it as a
-    # second apply once this node is Ready and its OSDs are adopted.
+    # Enabled as the deliberate SECOND apply, after the node was Ready and its
+    # OSDs adopted.
+    #
+    # READ THIS BEFORE CHANGING diskSelector -- IT IS NOT WHAT PICKS THE DISK.
+    # Talos matches a userVolume by its LOCATOR (partition_label == "u-data")
+    # first; diskSelector only chooses where to PROVISION when no partition
+    # already carries the label. nvme7n1p1 on the SN200 still has it from when
+    # that drive was passed through to the sea1-k8s-0 VM, so Talos adopts it
+    # in place -- which is exactly what we want here, because two local-path
+    # PVs pinned to this node live on it: shared-timescaledb-7 (the timescale
+    # PRIMARY) and storage-mariadb-librenms-0. Without it they sit Pending.
+    #
+    # The selector names sdb on purpose, as the safe fallback: if that u-data
+    # partition ever disappears, Talos provisions a fresh volume on a SATA SSD
+    # rather than repartitioning the SN200, which is what latched hv-2. The
+    # discard-refusal udev rule below is verified applying here
+    # (discard_max_bytes = 0) and is what makes living on this drive tolerable.
+    userVolumes:
+      - name: data
+        provisioning:
+          diskSelector:
+            match: disk.wwid == "naa.5001173100a2d12c"
+          minSize: 500GiB
+        filesystem:
+          type: xfs
 
     patches:
       - # lldpd is an extension SERVICE; with no ExtensionServiceConfig it
