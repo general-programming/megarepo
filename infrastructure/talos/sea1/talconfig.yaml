@@ -727,9 +727,10 @@ patches:
   #
   # NOTE: `ingress: block` makes Talos add an unconditional
   #   meta l4proto ipv6-icmp limit rate 5/second accept
-  # There is no way to opt out. That budget covers NDP *and* PMTUD on nodes
-  # running MTU 9000 -- if v6 neighbours start flapping or large flows stall,
-  # this is the first thing to suspect.
+  # The 5 is hardcoded in the nftables chain controller and no config field
+  # feeds it (siderolabs/talos#11546 is open, nothing shipped). The rule is an
+  # `accept` with a limit, so over-budget packets do NOT drop there -- they fall
+  # through to the rules below, which is what the icmpv6-ndp-pmtud rule exploits.
   - |-
     apiVersion: v1alpha1
     kind: NetworkRuleConfig
@@ -829,6 +830,34 @@ patches:
     ingress:
       - subnet: 0.0.0.0/0
       - subnet: ::/0
+  - # Lifts the generated 5/second ICMPv6 cap for internal sources. Talos'
+    # limit rule sits ahead of these, but it only *accepts* within budget, so
+    # anything over 5/s falls through to here and is accepted unconditionally.
+    #
+    # `ports` is mandatory even for icmpv6, and the controller compiles it to a
+    # destination-port match at transport offset 2 -- for ICMPv6 those bytes are
+    # the checksum, so 1-65535 matches every packet except a checksum of exactly
+    # 0x0000 (never produced in practice). Undocumented but stable; re-verify on
+    # Talos upgrades with `talosctl get nftableschains`.
+    #
+    # Scoped to link-local + internal on purpose. NDP is the load that matters
+    # (the gateway floods unsolicited NAs to ff02::1 from fe80::e6dc:5fff:fef0:3a0
+    # at ~2/s baseline, peaking at the full 5/s budget), and PMTUD Packet-Too-Big
+    # for a node-originated flow is already conntrack RELATED and accepted higher
+    # up. Leaving ::/0 out keeps public ICMPv6 floods rate-limited.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: icmpv6-ndp-pmtud
+    portSelector:
+      ports:
+        - 1-65535
+      protocol: icmpv6
+    ingress:
+      - subnet: fe80::/10
+      - subnet: fd00::/8
+      - subnet: 2602:fa6d:10:ffff::/116
+      - subnet: 2a0d:1a43::/32
   - # Enforcement. Keep this LAST -- with it absent the rules above are inert,
     # which is the safe way to stage a change to them.
     #

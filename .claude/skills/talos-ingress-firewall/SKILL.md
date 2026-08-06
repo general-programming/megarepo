@@ -43,10 +43,22 @@ outside the cluster.
 
 ## Traps
 
-- **ICMP is rate-limited to 5/s and you cannot opt out.** Block mode always adds
-  `meta l4proto ipv6-icmp limit rate 5/second accept`. That budget covers NDP
-  *and* PMTUD. On MTU 9000 nodes this is the first thing to suspect when v6
-  neighbours flap or large flows stall.
+- **ICMP is rate-limited to 5/s and there is no knob for it.** Block mode always
+  adds `meta l4proto ipv6-icmp limit rate 5/second accept`; the `5` is hardcoded
+  in the chain controller (siderolabs/talos#11546 open, nothing shipped). The
+  gateway's unsolicited NAs to `ff02::1` alone use ~2/s and peak at the full
+  budget, so there is no headroom. Measured: NEW ICMPv6 flows lose 53% at 10 pps
+  and 92% at 100 pps.
+  **You can still lift it**, because the generated rule is an *accept within
+  budget* — over-budget packets fall through to later rules. A user
+  `NetworkRuleConfig` with `protocol: icmpv6` and `ports: [1-65535]` accepts them
+  (`ports` is mandatory and compiles to a match on the ICMPv6 checksum bytes, so
+  the full range matches everything). Verified: 0% loss at 100 pps. See
+  `icmpv6-ndp-pmtud` in `talconfig.yaml`. Scope it to internal subnets, not
+  `::/0`, or you hand the internet an unmetered ICMP path.
+- **Established/related is accepted ahead of the limit**, so a single ping
+  session runs at 100 pps loss-free and PMTUD Packet-Too-Big for a node flow is
+  never rate-limited. Only *new* ICMP flows and NDP pay the 5/s.
 - **`Apply was skipped: no changes detected`** after a `--mode=try` apply is
   expected — the try config is already live and identical. It persists past the
   window anyway. Verify with `talosctl get nftableschains`, not by trusting the
@@ -78,7 +90,8 @@ and confirm the repo renders what is live:
 
 ```bash
 talhelper genconfig -c talconfig.yaml -s talsecret.sops.yaml -o /tmp/gen
-grep -c 'kind: NetworkRuleConfig' /tmp/gen/sea1-sea1-k8s-0.yaml   # expect 5
+# must equal the NetworkRuleConfig count in talconfig.yaml
+grep -c 'kind: NetworkRuleConfig' /tmp/gen/sea1-sea1-k8s-0.yaml
 ```
 
 ## Verification set
