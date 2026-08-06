@@ -40,19 +40,22 @@ spec:
           # register these as `nvme`, and any class-restricted CRUSH rule would
           # then place zero PGs here -- silently, with the migration looking fine.
           deviceClass: ssd
-      # DO NOT set osd_crush_update_on_start=true while the CRUSH buckets are
-      # still named sea1-hv-N and the nodes are named sea1-k8s-N. Tried it
-      # 2026-08-06 once all three hosts were metal: the next OSD restart
-      # re-registered hv-0's seven OSDs under a NEW auto-created bucket
-      # `sea1-k8s-0`, and a new bucket id means recomputed placement --
-      # 29.7% of objects went misplaced and started backfilling, one pg hit
-      # backfill_toofull. Fixed by moving the OSDs back into bucket -7 and
-      # deleting the stray bucket; the setting is false again.
+      # RESOLVED 2026-08-06. The CRUSH host buckets are now named sea1-k8s-N,
+      # matching the nodes, and osd_crush_update_on_start is back to `true`
+      # where it is a genuine no-op.
       #
-      # The zero-cost way to make the names match reality is
-      # `ceph osd crush rename-bucket sea1-hv-N sea1-k8s-N`, which keeps the
-      # bucket ID and therefore the placement. Only after that is
-      # crush_update_on_start=true safe, because it then becomes a no-op.
+      # Getting here was not free. Flipping the setting to true while the
+      # buckets were still named sea1-hv-N made the next OSD restart
+      # re-register hv-0's seven OSDs under a NEW auto-created `sea1-k8s-0`
+      # bucket -- and a new bucket id recomputes placement, so 29.7% of
+      # objects went misplaced and began backfilling, one pg hitting
+      # backfill_toofull. Recovered by moving the OSDs back into bucket -7 and
+      # deleting the stray bucket.
+      #
+      # The correct tool is `ceph osd crush rename-bucket sea1-hv-N
+      # sea1-k8s-N`: it keeps the bucket id, so placement is untouched --
+      # verified one bucket at a time, misplaced went 0.854% -> 0.838% with no
+      # jump. Rename FIRST, enable auto-update SECOND. Never the other way.
       #
       # sea1-hv-0 -> metal Talos, 2026-08-06. The LAST host; with this the
       # cluster runs no Proxmox at all. Same in-place adoption of seven
