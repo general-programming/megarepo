@@ -1,8 +1,15 @@
-# DHCPv6 instability — blocks the v6 gossip reimplementation
+# DHCPv6 instability on the sea1 k8s nodes
 
-Found 2026-08-02 while pre-flighting the `hostNetwork` + v6-advertise change.
-**Do not roll that change until this is fixed** — advertising an address that
-moves every reboot would replace a constant flap with an address-churn flap.
+**Resolved for consul, twice over.** The three nodes now hold static v6 in
+`infrastructure/talos/sea1/talconfig.yaml` (`::110`, `::111`, `::112`), which
+takes DHCPv6 out of the path; and consul no longer advertises v6 at all — the
+sea1 gossip pool moved to IPv4 on `10.3.2.0/23` when the servers moved into
+k8s. Kept for the Kea findings at the bottom, which are still live and are not
+consul-specific.
+
+The original problem, for context: advertising a DHCPv6 address that moves
+every reboot would have replaced consul's gossip flap with an address-churn
+flap.
 
 ## Symptom
 

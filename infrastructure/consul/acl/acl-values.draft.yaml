@@ -1,0 +1,65 @@
+# DRAFT — not wired into argocd. Do not merge into
+# argocd/apps/infra/consul/sea1/consul.yaml until the phases in README.md have
+# run, in order. Kept outside argocd/ deliberately so selfHeal cannot pick it up.
+#
+# Two blocks, for two different phases. They are NOT applied at the same time.
+
+# ---------------------------------------------------------------------------
+# PHASE 1 — permissive. Turns the ACL subsystem on without denying anything.
+#
+# This is the block that goes in first. `default_policy = "allow"` means every
+# request still succeeds whether or not it carries a token, so nothing breaks
+# while tokens are minted and each consumer is confirmed to be using its own.
+#
+# server.extraConfig is rendered into the server ConfigMap, so a change here is
+# a rolling restart of the StatefulSet. Restart one pod at a time and confirm
+# `consul operator raft list-peers` shows 3 voters between each.
+# ---------------------------------------------------------------------------
+server:
+  extraConfig: |
+    {
+      "acl": {
+        "enabled": true,
+        "default_policy": "allow",
+        "down_policy": "extend-cache",
+        "enable_token_persistence": true
+      },
+      "http_config": {
+        "allow_write_http_from": [
+          "127.0.0.1/32",
+          "::1/128",
+
+          "10.3.2.0/23",
+          "2602:fa6d:10:ffff::/116",
+
+          "10.244.0.0/16",
+          "fd40:10:244::/56"
+        ]
+      }
+    }
+
+# ---------------------------------------------------------------------------
+# PHASE 4 — deny. ONLY after phases 1-3 in README.md are complete and verified.
+#
+# manageSystemACLs hands ACL ownership to the chart's server-acl-init job. It is
+# only correct now that the servers are chart-managed; while they were the salt
+# hypervisors the job had nothing it could reach, which is what the older draft
+# meant by "prefer chart-managed tokens, but it may not work".
+#
+# !! It writes `"default_policy": "deny"` into the server config itself. There is
+# !! no permissive setting of this flag. Enabling it IS the flip. Every consumer
+# !! must already hold a working token, or it locks out at the moment of sync.
+#
+# bootstrapToken points the job at the token from `consul acl bootstrap`
+# (phase 2) so it adopts the existing ACL system instead of trying to bootstrap
+# a second time and failing.
+#
+# global:
+#   acls:
+#     manageSystemACLs: true
+#     bootstrapToken:
+#       secretName: consul-bootstrap-acl-token
+#       secretKey: token
+#
+# and the phase 1 server.extraConfig above drops its "acl" block at the same
+# time — leave "http_config" in place, the chart does not manage that.

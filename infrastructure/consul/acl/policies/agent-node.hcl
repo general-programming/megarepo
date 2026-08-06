@@ -1,14 +1,10 @@
 # Per-agent token policy. One policy + token PER AGENT -- substitute NODE_NAME
-# with the agent's -node value, which must match exactly:
+# with the agent's -node value, which must match exactly.
 #
-#   sea1-hv-0
-#   sea1-hv-1.generalprogramming.org   <- note: FQDN, unlike its siblings
-#   sea1-hv-2
-#   sea1-core
-#
-# The k8s clients take their name from spec.nodeName (sea1-k8s-0, sea1-k8s-1,
-# sea1-k8s-2, sea1-k8s-103-0); prefer letting the helm chart mint those --
-# see k8s-client.hcl and the README.
+# Only ONE agent in sea1 needs this now: `sea1-core`. The hypervisors that used
+# to need it are gone, and the k8s server agents take their name from the pod
+# hostname (sea1-server-0/1/2) and get chart-minted tokens via
+# global.acls.manageSystemACLs -- do not hand-mint those.
 #
 # node:write on its own node is what anti-entropy needs to sync the node's
 # registration and its health checks. Without it the agent logs
@@ -25,7 +21,7 @@ service_prefix "" {
   policy = "read"
 }
 
-# The sea1 HVs and sea1-core both run with enable_local_script_checks = true.
+# sea1-core runs with enable_local_script_checks = true.
 # Script checks execute locally and register their results against the node
 # above, so they need no extra grant -- but it does mean a stolen agent token
 # is enough to define a check that runs a command on that host. Treat the agent

@@ -1,0 +1,102 @@
+# DRAFT — not merged into infrastructure/talos/sea1/talconfig.yaml.
+#
+# The network half of "only sea1/fmt2/internal may talk to consul". ACL tokens
+# cannot be CIDR-bound in Consul the way Vault tokens can — a token is valid
+# from wherever it is presented — so the source-address restriction has to come
+# from the packet filter, and Consul's own `allow_write_http_from` covers only
+# HTTP writes.
+#
+# This used to be firewalld's job on the Proxmox hypervisors, via salt's
+# `managed_firewall` tag. Those hosts are Talos now: there is no firewalld and
+# no salt. Talos' own ingress firewall is the replacement.
+#
+# What is actually exposed on a node today, after the servers moved into k8s:
+#
+#   8300/tcp  server RPC    hostPort  <- must be reachable by every agent
+#   8301/tcp  serf LAN      hostPort  <- must be reachable by every agent
+#   8301/udp  serf LAN      hostPort  <- must be reachable by every agent
+#   8302/*    serf WAN      hostPort  <- sea1 is NOT federated; deny outright
+#   8502/tcp  grpc          hostPort  <- connectInject is off; deny outright
+#
+# 8500 (HTTP API) and 8600 (DNS) are NOT host-published any more. The client
+# DaemonSet used to run `hostNetwork: true` and put a wide-open 8500 on every
+# node; with the servers as a StatefulSet the API is reachable only through the
+# `consul-http` ClusterIP, from inside the cluster. That is a large reduction in
+# exposure that happened as a side effect of the server move — do not undo it by
+# adding a hostPort or a LoadBalancer for 8500.
+#
+# Prefixes below are from NetBox (ipam/prefixes), not guessed.
+
+# Apply as a machine-level patch on all three sea1 nodes.
+apiVersion: v1alpha1
+kind: NetworkDefaultActionConfig
+ingress: block
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: consul-server-rpc-and-serf
+portSelector:
+  ports:
+    - 8300
+    - 8301
+  protocol: tcp
+ingress:
+  # sea1 internal — the nodes themselves, sea1-core, and the KubeVirt guests on
+  # the LAN bridge. This is the only prefix that carries consul agents today.
+  - subnet: 10.3.2.0/23
+  - subnet: 2602:fa6d:10:ffff::/116
+
+  # k8s pod network. Needed because the server pods sit on the pod network and
+  # reach each other through the headless service by pod IP before they learn
+  # each other's advertised node address.
+  - subnet: 10.244.0.0/16
+  - subnet: fd40:10:244::/56
+
+  # fmt2. Included because it was asked for, but see README.md: fmt2 is a
+  # separate, unfederated consul DC — `/v1/catalog/datacenters` on a sea1 server
+  # returns ["sea1"] only. No fmt2 host has any reason to reach sea1's serf
+  # pool, and opening a WAN-reachable prefix to serf without gossip encryption
+  # lets anything in it join the pool as a trusted member. Prefer leaving this
+  # block commented until either (a) the two DCs are actually WAN-federated, or
+  # (b) gossip encryption is on. See gossip-encryption.md.
+  # - subnet: 10.3.4.0/23              # FMT2 Kubernetes
+  # - subnet: 10.65.67.0/24            # fmt2 core
+  # - subnet: 10.255.1.0/24            # fmt2
+  # - subnet: 2a0d:1a43:f::/48         # fmt2 Ave Legal
+  # - subnet: 2a0d:1a43:dab::/48       # fmt2 Laserjet
+  # - subnet: 2a0d:1a43:c010::/48      # fmt2 Laserjet
+  # - subnet: 2a0d:1a43:4242::/48      # fmt2 VPN
+
+  # Deliberately NOT listed:
+  #   199.255.18.160/27   sea1's own Cofractal public transit. It is a sea1
+  #                       prefix in NetBox, which makes it look internal, but it
+  #                       is internet-facing and holds no consul agent.
+  #   209.251.245.0/24    Wobscale. sea1-k8s-103-0 is gone from the cluster;
+  #                       re-add 10.3.6.0/27 and 2620:fc:c000::/48 only if it
+  #                       comes back.
+  #   79.110.170.0/24     fmt2 public.
+---
+apiVersion: v1alpha1
+kind: NetworkRuleConfig
+name: consul-serf-udp
+portSelector:
+  ports:
+    - 8301
+  protocol: udp
+ingress:
+  - subnet: 10.3.2.0/23
+  - subnet: 2602:fa6d:10:ffff::/116
+  - subnet: 10.244.0.0/16
+  - subnet: fd40:10:244::/56
+
+# Pre-flight before applying any of this:
+#
+#   1. `ingress: block` is a default-deny for the whole node, not just consul.
+#      Every other ingress port on these nodes needs its own NetworkRuleConfig
+#      first — kube-apiserver 6443, kubelet 10250, etcd 2379/2380, ceph
+#      6789/3300/6800-7300, MetalLB, the KubeVirt bridge. Landing default-deny
+#      without that inventory takes the cluster down. Do the inventory, ship the
+#      rules with `ingress: accept` still in place, then flip the default.
+#   2. Talos applies this without a reboot, but a wrong rule is not
+#      self-correcting from the network side — have console/BMC access, and roll
+#      one node at a time.
