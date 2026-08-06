@@ -5,14 +5,11 @@ metadata:
   namespace: argocd
 spec:
   syncPolicy:
-    # Required by the ADVERTISE_IP override below. The chart emits its own
-    # ADVERTISE_IP (a fieldRef) and ours (a literal) as two env entries; on
-    # create that is fine and the last wins, but Kubernetes strategic-merge
-    # patches env by `name`, so a patching sync collapses them into one entry
-    # holding both value and valueFrom, which is invalid:
-    #   env[0].valueFrom: may not be specified when `value` is not empty
-    # Replace does a whole-object update instead of a merge. It does not
-    # restart pods unless the pod template actually changed.
+    # Replace does a whole-object update instead of a strategic merge. Keep it:
+    # Argo patches env lists by `name`, so any future duplicate-env override
+    # (the old client ADVERTISE_IP trick) collapses into one invalid entry
+    # holding both value and valueFrom. Replace does not restart pods unless
+    # the pod template actually changed.
     syncOptions:
       - allowEmpty=true
       - Replace=true
@@ -22,35 +19,50 @@ spec:
         global:
           name: sea1
           datacenter: sea1
+
+        # sea1's consul servers used to live on the Proxmox hypervisors
+        # (2602:fa6d:10:ffff::101/102/103). Those hosts were rebuilt as
+        # bare-metal Talos nodes, which cannot run a packaged consul, so the DC
+        # was left with clients and no servers at all -- every agent logged
+        # "No known Consul servers" and the DaemonSet never went Ready.
+        #
+        # The servers come back on the same physical hosts, now as a StatefulSet
+        # on the three sea1 k8s nodes. bootstrapExpect 3 == replicas 3; the old
+        # raft state died with the hypervisors, so this bootstraps a fresh
+        # cluster.
         server:
-          enabled: false
-        client:
           enabled: true
-          # The sea1 servers (the HVs) bind a concrete IPv6 address, so a v6-bound
-          # socket cannot sendto() a v4 peer -- ENETUNREACH. The chart used to
-          # advertise status.hostIP, which is v4 in this v4-primary dual-stack
-          # cluster, so every UDP liveness probe between the k8s clients and the
-          # rest of the DC failed and members flapped constantly. TCP still worked,
-          # which is why the pool looked "alive" while failure detection did not.
-          #
-          # hostNetwork puts the agent in the node's netns so it can see the node's
-          # global v6 and advertise it. On the pod network the only v6 is the ULA
-          # fd40:10:244::/56, which is not routable to 2602:fa6d:10:ffff::/116.
-          hostNetwork: true
-          dnsPolicy: ClusterFirstWithHostNet
-          # Redundant under hostNetwork, and it is what pinned ADVERTISE_IP to v4.
-          exposeGossipPorts: false
-          extraEnvironmentVars:
-            # The chart sets ADVERTISE_IP from a fieldRef earlier in the env list;
-            # Kubernetes takes the last duplicate, so this wins without forking the
-            # chart. go-sockaddr classifies the ULA as private and 2602::/2620:: as
-            # public; consul evaluates the template per-agent. limit 1 guards against
-            # a node ever holding two globals (the template must resolve to exactly
-            # one address or the agent refuses to start).
-            ADVERTISE_IP: '{{ GetPublicInterfaces | include "type" "IPv6" | sort "address" | limit 1 | attr "address" }}'
-          join:
-            - consul.service.consul
-            # fallback to HVs if DNS is broke
-            - 2602:fa6d:10:ffff::101
-            - 2602:fa6d:10:ffff::102
-            - 2602:fa6d:10:ffff::103
+          replicas: 3
+          bootstrapExpect: 3
+          # Publishes 8300/8301/8302 as hostPorts so agents outside the cluster
+          # (sea1-core, and anything else on the sea1 LAN) can reach the
+          # servers at the node address the chart already advertises.
+          exposeGossipAndRPCPorts: true
+          # Raft needs to survive a pod restart; the client DaemonSet's EmptyDir
+          # would not. ceph-rbd-xfs is the cluster default, named explicitly so
+          # a future default change cannot silently move raft storage.
+          storageClass: ceph-rbd-xfs
+          storage: 10Gi
+
+        # Disabled deliberately, and it is not a regression.
+        #
+        # 1. It cannot coexist with the servers. The clients ran
+        #    `hostNetwork: true` and bound :8301 on every node; the server
+        #    hostPort wants the same port on the same three nodes.
+        # 2. It is redundant. Every sea1 node now runs a server, and a server is
+        #    a superset of an agent. The `consul-http` and `sea1-dns` Services
+        #    select `app: consul, hasDNS: "true"`, which the server pods carry,
+        #    so both keep resolving to a live agent.
+        # 3. Nothing depended on the node-local agents: connectInject is off,
+        #    no pod registers a service, and CoreDNS forwards `consul:53` to
+        #    sea1-core rather than to a node's :8600.
+        #
+        # This also retires the ADVERTISE_IP go-sockaddr override the clients
+        # needed. The whole sea1 gossip pool is now IPv4 on 10.3.2.0/23: the
+        # chart advertises status.hostIP (10.3.2.10/11/12) and the server config
+        # binds 0.0.0.0, so there is no longer a v4/v6 family split to manage.
+        # The server pods sit on the pod network, and Cilium masquerades
+        # pod -> 10.3.2.0/23 to the node address, which is the same address the
+        # agent advertises.
+        client:
+          enabled: false

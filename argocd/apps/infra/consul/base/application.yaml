@@ -43,6 +43,18 @@ spec:
         server:
           replicas: 5
           exposeGossipAndRPCPorts: true
+          # Chart default is 100m/200Mi with limits == requests, which starves a
+          # server the same way it starved the clients (see the client block).
+          # A server also carries raft, so give it more headroom than an agent.
+          resources:
+            requests:
+              cpu: 500m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: "1Gi"
+          extraEnvironmentVars:
+            GOMAXPROCS: "2"
     repoURL: https://helm.releases.hashicorp.com
     targetRevision: 2.0.2
   syncPolicy:
