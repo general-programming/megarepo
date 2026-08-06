@@ -65,8 +65,11 @@ nix registry add nixpkgs "$nixpkgs"
 # attic.owo.me is unreachable until this is clamped; cache.nixos.org and github
 # happen to survive it. Both the link and the route need it, and the pod is
 # privileged, so it can fix its own netns. Remove once the CNI clamps egress.
+# No awk or other userland in this image, so parse the route with bash.
 echo "==> clamping egress MTU to 1500"
-gw=$(nix shell "${nixpkgs}#iproute2" -c ip -4 route show default | awk '{print $3; exit}')
+route=$(nix shell "${nixpkgs}#iproute2" -c ip -4 route show default)
+gw=${route#*via }
+gw=${gw%% *}
 nix shell "${nixpkgs}#iproute2" -c ip link set eth0 mtu 1500
 nix shell "${nixpkgs}#iproute2" -c ip route change default via "$gw" dev eth0 mtu 1500
 curl -sSf -m 20 -o /dev/null https://attic.owo.me/general-programming/nix-cache-info
