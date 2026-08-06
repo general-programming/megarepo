@@ -43,6 +43,43 @@ spec:
           # a future default change cannot silently move raft storage.
           storageClass: ceph-rbd-xfs
           storage: 10Gi
+          # ACL phase 1 (infrastructure/consul/acl/README.md): the subsystem is
+          # on, but `default_policy = "allow"` means every request still
+          # succeeds with or without a token. That permissive window is the
+          # only chance to confirm each consumer actually presents its token
+          # rather than coasting on the default.
+          #
+          # Do NOT reach phase 4 by editing this block. `default_policy` is
+          # written by `global.acls.manageSystemACLs`, which has no permissive
+          # setting -- enabling it *is* the flip to deny, and it needs every
+          # consumer already holding a working token.
+          #
+          # allow_write_http_from gates the write HTTP endpoints by source
+          # CIDR. It does not cover RPC (:8300) or gossip (:8301); the Talos
+          # ingress firewall does that. The pod network has to be here -- the
+          # server pods reach each other by pod IP through the headless
+          # service before they learn each other's advertised node address.
+          # fmt2 is deliberately absent: it is a separate unfederated DC and
+          # gossip encryption is still off.
+          extraConfig: |
+            {
+              "acl": {
+                "enabled": true,
+                "default_policy": "allow",
+                "down_policy": "extend-cache",
+                "enable_token_persistence": true
+              },
+              "http_config": {
+                "allow_write_http_from": [
+                  "127.0.0.1/32",
+                  "::1/128",
+                  "10.3.2.0/23",
+                  "2602:fa6d:10:ffff::/116",
+                  "10.244.0.0/16",
+                  "fd40:10:244::/56"
+                ]
+              }
+            }
 
         # Disabled deliberately, and it is not a regression.
         #
