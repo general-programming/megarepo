@@ -11,7 +11,10 @@ spec:
   interval: 30s
   path: /metrics/cadvisor
   scheme: https
-  scrapeTimeout: 5s
+  scrapeTimeout: 15s
+  # Dense nodes blow past the 16MiB vmagent default; the drops below only apply
+  # after the body is read, so the limit has to be raised here.
+  max_scrape_size: 64MB
   metricRelabelConfigs:
     - action: drop
       regex: >-

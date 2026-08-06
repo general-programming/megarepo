@@ -8,6 +8,12 @@ spec:
   jobLabel: "app.kubernetes.io/name"
   endpoints:
     - port: metrics
+      relabelConfigs:
+        # KubeVirt's :8443 metrics port is TLS-only and already has a dedicated
+        # https scrape; the catch-all would hit it over plain http and get a 400.
+        - action: drop
+          sourceLabels: [__meta_kubernetes_service_label_prometheus_kubevirt_io]
+          regex: "true"
   namespaceSelector:
     any: true
   selector: {}
