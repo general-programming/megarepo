@@ -502,6 +502,13 @@ hosts:
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
       - set high-availability vrrp group internal priority 200
+      # The LAN runs mtu 9000 but both of this router's ports are 1500, so a
+      # jumbo frame is dropped by the NIC before IP sees it and no
+      # frag-needed is ever generated -- PMTUD gets no feedback and every
+      # 9000-mtu host black-holes on our own v4 services. Clamping the SYN in
+      # both directions keeps TCP inside 1500 regardless.
+      - set interfaces ethernet eth0 ip adjust-mss 1460
+      - set interfaces ethernet eth1 ip adjust-mss 1460
   # Second sea1 leaf, built from scratch rather than migrated. It started
   # passive -- no vrrp, no nat -- and has since been PROMOTED: it now mirrors
   # sea1-vpn-leaf-1's vrrp group at a lower priority and masquerades the same
@@ -568,6 +575,10 @@ hosts:
       - set high-availability vrrp group internal interface eth1
       - set high-availability vrrp group internal address 10.3.2.1/23
       - set high-availability vrrp group internal priority 100
+      # Mirrors leaf-1's MSS clamp. This has to move with the VIP: a failover
+      # onto an unclamped leaf would reinstate the black hole.
+      - set interfaces ethernet eth0 ip adjust-mss 1460
+      - set interfaces ethernet eth1 ip adjust-mss 1460
 links:
   fmt2-vpn-leaf-1:
     fmt2-vpn-spine-1: {}     # rotated to derived port + pair keys
