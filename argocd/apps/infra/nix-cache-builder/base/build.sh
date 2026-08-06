@@ -77,7 +77,14 @@ nix run "${nixpkgs}#attic-client" -- login general-programming \
 
 echo "==> building $head"
 cd "$SRC/nix"
-nix run "${nixpkgs}#just" -- build_cache
+# build_cache pipes nix through nix-output-monitor, which redraws its summary
+# table even with no TTY and TERM=dumb -- ~3KB/s of cursor-control noise that
+# floods the container log, rotates the interesting lines away, and ships to
+# Loki. Strip the escape sequences and drop the redraw frames; nix's own
+# messages and any build failure survive. pipefail keeps build_cache's status.
+nix run "${nixpkgs}#just" -- build_cache 2>&1 |
+  sed -uE $'s/\x1b\\[[0-9;?]*[a-zA-Z]//g; /^[┏┃┗┣│]/d' |
+  tee "$STATE_DIR/last-run.log"
 
 echo "$head" >"$STATE"
 echo "==> done, cache is current as of $head"
