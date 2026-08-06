@@ -59,6 +59,18 @@ nixpkgs=$(nix eval --raw --impure --expr "
 echo "==> pinning nixpkgs registry to $nixpkgs"
 nix registry add nixpkgs "$nixpkgs"
 
+# Cilium hands pods a jumbo default route (`default via ... mtu 9000`). Nothing
+# clamps that on the way out, so a TLS handshake with our own Traefik dies after
+# the ClientHello -- the oversized reply is dropped and no ICMP comes back.
+# attic.owo.me is unreachable until this is clamped; cache.nixos.org and github
+# happen to survive it. Both the link and the route need it, and the pod is
+# privileged, so it can fix its own netns. Remove once the CNI clamps egress.
+echo "==> clamping egress MTU to 1500"
+gw=$(nix shell "${nixpkgs}#iproute2" -c ip -4 route show default | awk '{print $3; exit}')
+nix shell "${nixpkgs}#iproute2" -c ip link set eth0 mtu 1500
+nix shell "${nixpkgs}#iproute2" -c ip route change default via "$gw" dev eth0 mtu 1500
+curl -sSf -m 20 -o /dev/null https://attic.owo.me/general-programming/nix-cache-info
+
 echo "==> logging in to attic"
 nix run "${nixpkgs}#attic-client" -- login general-programming \
   https://attic.owo.me/ "$ATTIC_TOKEN"

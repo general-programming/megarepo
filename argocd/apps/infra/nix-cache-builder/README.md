@@ -55,6 +55,25 @@ The namespace is `pod-security enforce: privileged`: Nix's build sandbox wants
 mount and user namespaces. The alternative is `sandbox = false`, which is
 worse.
 
+## Trap: jumbo pod MTU black-holes our own Traefik
+
+Cilium gives sea1 pods a jumbo default route (`default via ... dev eth0 mtu
+9000`) and nothing clamps it on egress. TLS to `attic.owo.me` (and to sea1's
+own Traefik) then hangs immediately after the ClientHello — the oversized
+reply is dropped and no ICMP fragmentation-needed comes back. Plain HTTP to
+the same IP returns instantly, and `cache.nixos.org` and `github.com` happen
+to survive it, which makes this look like an Attic problem rather than an MTU
+problem.
+
+`build.sh` clamps its own netns to 1500 (it is privileged, so it can) and
+fails fast on a probe if that did not help. **Note that both the link and the
+route need clamping** — `ip link set eth0 mtu 1500` alone changes nothing
+while the route carries an explicit `mtu 9000`.
+
+This is not specific to this workload; any sea1 pod talking HTTPS to our
+Traefik hits it. The real fix belongs in the CNI config, at which point the
+clamp here can go.
+
 ## Runbook
 
 Force a run now:
