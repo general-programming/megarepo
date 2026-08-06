@@ -712,3 +712,135 @@ patches:
         serviceSubnets:
           - 10.96.0.0/12
           - d40:10:96::/108
+
+  # ── Ingress firewall ────────────────────────────────────────────────────
+  # These nodes carry globally routable GUAs (2602:fa6d:10:ffff::110/111/112)
+  # and nothing filters upstream, so every host service was reachable from the
+  # public internet -- including ceph-mgr :9283, ceph-exporter :9926, cilium
+  # :9962 and consul :8500, all of which answer unauthenticated. Rook runs ceph
+  # as hostNetwork, so the ceph daemons bind those GUAs directly.
+  #
+  # Policy: anything internal (RFC1918, CGNAT/tailnet, ULA, the sea1 GUA /116,
+  # fmt2) may reach every host service. The public internet gets only the web
+  # ingress path. The default action lives in its own patch at the end so it can
+  # be flipped independently of the rules.
+  #
+  # NOTE: `ingress: block` makes Talos add an unconditional
+  #   meta l4proto ipv6-icmp limit rate 5/second accept
+  # There is no way to opt out. That budget covers NDP *and* PMTUD on nodes
+  # running MTU 9000 -- if v6 neighbours start flapping or large flows stall,
+  # this is the first thing to suspect.
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: control-plane-apis
+    portSelector:
+      ports:
+        - 6443          # kube-apiserver
+        - 50000         # apid -- the talosctl path; losing it loses the cluster
+        - 50001         # trustd, node-to-node cert issuance
+        - 2379-2380     # etcd peer + client
+        - 10250         # kubelet; POD is required or the cadvisor scrape breaks
+      protocol: tcp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+      - subnet: 2602:fa6d:10:ffff::/116
+      - subnet: 2a0d:1a43::/32
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: cluster-services-tcp
+    portSelector:
+      ports:
+        - 4240          # cilium health
+        - 4244          # hubble peer
+        - 9100          # node-exporter via kube-rbac-proxy
+        - 9962-9965     # cilium agent/operator/envoy metrics (unauthenticated)
+        - 30798         # cilium
+        - 3300          # ceph-mon v2
+        - 6789          # ceph-mon v1
+        - 6800-6900     # ceph osd/mds/mgr; ports shift as daemons restart
+        - 9283          # ceph-mgr metrics (unauthenticated)
+        - 9926          # ceph-exporter metrics (unauthenticated)
+        - 8300-8302     # consul server RPC + serf LAN/WAN
+        - 8500          # consul HTTP API (unauthenticated until ACLs land)
+        - 8502          # consul gRPC
+        - 8600          # consul DNS
+      protocol: tcp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+      - subnet: 2602:fa6d:10:ffff::/116
+      - subnet: 2a0d:1a43::/32
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: cluster-services-udp
+    portSelector:
+      ports:
+        - 8301-8302     # consul serf gossip
+        - 8600          # consul DNS
+        - 2055          # akvorado netflow
+        - 4739          # akvorado ipfix
+        - 6343          # akvorado sflow
+      protocol: udp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+      - subnet: 2602:fa6d:10:ffff::/116
+      - subnet: 2a0d:1a43::/32
+  - # The only deliberately public listener. Traffic for the traefik LB VIP
+    # (2602:fa6d:10:ffff::e00) arrives on a node before Cilium translates it, so
+    # 80/443 must be open here or every public site behind traefik goes dark.
+    # The NodePort range goes with it -- Cilium may or may not hand these to
+    # nftables at all (see the hostPort/NodePort caveat in docs/), and a rule
+    # that is never consulted is harmless while a missing one is an outage.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: public-web-ingress
+    portSelector:
+      ports:
+        - 80
+        - 443
+        - 30000-32767
+      protocol: tcp
+    ingress:
+      - subnet: 0.0.0.0/0
+      - subnet: ::/0
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: public-web-ingress-udp
+    portSelector:
+      ports:
+        - 30000-32767
+      protocol: udp
+    ingress:
+      - subnet: 0.0.0.0/0
+      - subnet: ::/0
+  - # Enforcement. Keep this LAST -- with it absent the rules above are inert,
+    # which is the safe way to stage a change to them.
+    #
+    # Talos generates more than what is written above: it always accepts
+    # established/related, drops invalid, permits lo/siderolink/kubespan, and
+    # auto-allows the pod and service subnets for native-routing CNIs. Node
+    # egress and pod->node traffic therefore need no rules of their own.
+    #
+    # Verified on the ingress chain at priority -140, ahead of the DNAT hook at
+    # -110, so Cilium's BPF does not bypass it. Bridged KubeVirt guests are
+    # unaffected -- their traffic never enters the host input chain.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkDefaultActionConfig
+    ingress: block
