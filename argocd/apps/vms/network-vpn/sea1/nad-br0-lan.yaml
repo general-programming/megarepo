@@ -3,10 +3,27 @@
 # were on the same Proxmox vmbr0 to begin with.
 #
 # No IPAM -- the guest owns its addressing, and barf owns the guest.
+#
+# mtu 9000 raises the CEILING only; the bridge plugin otherwise builds the pod
+# interface at 1500 and KubeVirt sizes the tap from it. Each VyOS interface
+# still uses whatever barf configures:
+#
+#   eth1 (LAN)      -> wants 9000, to match br0 and the rest of the LAN
+#   eth0 (upstream) -> stays 1500, the provider link is not jumbo
+#
+# This matters because it is the root cause of the sea1 jumbo black hole. While
+# eth1 was pinned at 1500 by this NAD, a 9000-byte frame from the LAN was
+# dropped by the NIC before IP saw it, so the router could not emit a
+# frag-needed and PMTUD had nothing to work with. Raising eth1 lets the leaf
+# receive the frame and fragment/signal correctly at the 1500 eth0 hop.
+#
+# Takes effect only when the VMI restarts. The MSS clamp in barf stays either
+# way -- it is belt-and-braces, and it covers TCP during the window before the
+# leaves are restarted.
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: br0-lan
   namespace: network-vpn
 spec:
-  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","ipam":{}}'
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'

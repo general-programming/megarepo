@@ -59,19 +59,18 @@ nixpkgs=$(nix eval --raw --impure --expr "
 echo "==> pinning nixpkgs registry to $nixpkgs"
 nix registry add nixpkgs "$nixpkgs"
 
-# Cilium hands pods a jumbo default route (`default via ... mtu 9000`). Nothing
-# clamps that on the way out, so a TLS handshake with our own Traefik dies after
-# the ClientHello -- the oversized reply is dropped and no ICMP comes back.
-# attic.owo.me is unreachable until this is clamped; cache.nixos.org and github
-# happen to survive it. Both the link and the route need it, and the pod is
-# privileged, so it can fix its own netns. Remove once the CNI clamps egress.
-# No awk or other userland in this image, so parse the route with bash.
-echo "==> clamping egress MTU to 1500"
-route=$(nix shell "${nixpkgs}#iproute2" -c ip -4 route show default)
-gw=${route#*via }
-gw=${gw%% *}
-nix shell "${nixpkgs}#iproute2" -c ip link set eth0 mtu 1500
-nix shell "${nixpkgs}#iproute2" -c ip route change default via "$gw" dev eth0 mtu 1500
+# This pod used to clamp its own netns to 1500: Cilium hands it a jumbo default
+# route, and while the sea1 leaf routers' ports were 1500 an oversized frame was
+# dropped by the NIC before IP saw it, so no frag-needed came back and a TLS
+# handshake with our own Traefik died after the ClientHello.
+#
+# Fixed properly 2026-08-06 -- both leaves now clamp MSS (`ip adjust-mss 1460`,
+# barf), so egress is capped at the router and the local hack is redundant.
+# Verified from a pod at mtu 9000: attic returns 200 on the first attempt.
+#
+# The reachability check below stays as the canary. If attic ever starts timing
+# out here again, suspect the leaf clamp before anything in this script.
+echo "==> checking attic reachability at the pod's native MTU"
 curl -sSf -m 20 -o /dev/null https://attic.owo.me/general-programming/nix-cache-info
 
 echo "==> logging in to attic"
