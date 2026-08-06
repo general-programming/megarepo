@@ -78,6 +78,12 @@ nodes:
         routes: &k8s-cp-routes
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+            # Cap only what leaves via the gateway; the on-link LAN route keeps
+            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
+            # 10.3.2.1 drops oversized DF packets without returning ICMP
+            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
+            # IPv4 services black-holes. See sea1-core for the full writeup.
+            mtu: 1500
           # Standby, not primary. These were never bridged, so accept_ra was
           # never reconciled away and they still hold an RA-learned default --
           # working by inheritance, which is exactly the state the workers were
@@ -144,6 +150,12 @@ nodes:
         routes: &k8s-worker-nvme-routes
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+            # Cap only what leaves via the gateway; the on-link LAN route keeps
+            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
+            # 10.3.2.1 drops oversized DF packets without returning ICMP
+            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
+            # IPv4 services black-holes. See sea1-core for the full writeup.
+            mtu: 1500
           # The v6 default is declared rather than learned. It used to arrive
           # by RA, which worked only because br0 inherited
           # net.ipv6.conf.default.accept_ra=2 at link-creation time; a later
@@ -258,6 +270,12 @@ nodes:
         routes:
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+            # Cap only what leaves via the gateway; the on-link LAN route keeps
+            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
+            # 10.3.2.1 drops oversized DF packets without returning ICMP
+            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
+            # IPv4 services black-holes. See sea1-core for the full writeup.
+            mtu: 1500
           # Declared, not learned. Gateway is the router's administratively
           # chosen global address, not its EUI-64 link-local.
           - network: "::/0"
@@ -481,6 +499,12 @@ nodes:
         routes:
           - network: "0.0.0.0/0"
             gateway: "10.3.2.1"
+            # Cap only what leaves via the gateway; the on-link LAN route keeps
+            # the interface MTU so ceph stays jumbo. Both sites run jumbo and
+            # 10.3.2.1 drops oversized DF packets without returning ICMP
+            # frag-needed, so PMTU discovery never learns -- HTTPS to our own
+            # IPv4 services black-holes. See sea1-core for the full writeup.
+            mtu: 1500
           # Declared, not learned. RA was only ever working by inherited
           # accept_ra and a later apply reconciled it away, costing all three
           # workers their IPv6 egress. Gateway is the router's administratively
