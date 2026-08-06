@@ -74,6 +74,34 @@ This is not specific to this workload; any sea1 pod talking HTTPS to our
 Traefik hits it. The real fix belongs in the CNI config, at which point the
 clamp here can go.
 
+## Trap: never let the build start with Attic unreachable
+
+`nix-cache.nix` sets `fallback = true`, so an unreachable Attic does not fail a
+build — it silently builds instead. That is right for a fleet host and wrong
+here: the fleet's `nix.package` is **Lix**, built from a git flake input that
+no public cache carries, and Lix's `installCheckPhase` (pytest functional2)
+**deadlocks in this container** — a worker blocks forever in `fifo_open` /
+`wait_for_partner` at 0% CPU. The first run wedged for 40 minutes that way,
+purely because the MTU bug above hid Attic while nix was making its plan.
+
+Hence the `curl -sSf` probe in `build.sh` between the MTU clamp and the build:
+if Attic is not reachable, fail the run in seconds rather than discover it as a
+hung Lix an hour later. `activeDeadlineSeconds: 14400` is the backstop.
+
+If a Lix bump ever lands that nothing has built yet, this builder cannot be the
+first to build it. Push it from a fleet host that already has it:
+
+```sh
+nix run nixpkgs#attic-client -- push general-programming:general-programming \
+  "$(readlink -f /run/current-system)"
+```
+
+## Trap: the nix image has almost no userland
+
+`nixos/nix` ships nix, coreutils, git and curl — but **no `sed`, no `awk`**.
+Resolve anything else from the pinned nixpkgs rather than assuming it is on
+PATH.
+
 ## Runbook
 
 Force a run now:
