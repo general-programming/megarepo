@@ -1,0 +1,18 @@
+# NetworkAttachmentDefinitions are namespaced, so each VM namespace carries its
+# own rather than reaching cross-namespace into virt/.
+#
+# No IPAM: the guest addresses itself (static, see vm-tmpim.yaml).
+#
+# mtu 9000 is NOT optional here and NOT the default -- the bridge plugin builds
+# the pod interface at 1500 unless told otherwise, and KubeVirt sizes the tap
+# from it. This guest is a 10 GbE jumbo-frame host whose ens18 is configured
+# `mtu 9000`; without this the frames are silently capped. br0/bond0 on
+# sea1-k8s-{1,2} are already 9000.
+
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata:
+  name: br0-lan
+  namespace: tmpim
+spec:
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'

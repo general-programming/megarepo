@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: tmpim
+  labels:
+    kubernetes.io/metadata.name: tmpim
+    # virt-launcher needs it.
+    pod-security.kubernetes.io/enforce: privileged
+    pod-security.kubernetes.io/enforce-version: latest

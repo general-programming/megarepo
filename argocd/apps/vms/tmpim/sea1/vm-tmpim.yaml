@@ -1,0 +1,105 @@
+# tmpim-10gbe, migrated off Proxmox VM 107 on sea1-hv-0 -- the last Proxmox
+# host. The guest calls itself `10gbps` internally; these object names are the
+# service.
+#
+# A 10 GbE jumbo-frame lab/dev box: Docker (krb5 lab, data-* stack), Caddy on
+# 80/443, Meilisearch, Tailscale exit node, node_exporter. It holds a public
+# /32 (199.255.18.164) routed to its MAC, so the MAC below is load-bearing
+# twice over -- the upstream router's ARP entry depends on it.
+#
+# SeaBIOS guest: no `bios:` line, no efidisk, no tpmstate on the Proxmox side,
+# so firmware.bootloader stays unset and KubeVirt defaults to BIOS. Do not add
+# an efi block; it would hand the guest a fresh OVMF NVRAM it cannot boot from.
+#
+# Rollback: pool/vm-107-disk-0@pre-kubevirt (protected snapshot) and VM 107
+# left defined but stopped on the hypervisor.
+---
+# RWX Block from the first commit -- accessModes is immutable once bound, so
+# getting this wrong means a second PVC and a second 256 GiB copy. RWX is only
+# about the live-migration handover; the guest filesystem stays single-writer.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: tmpim-root
+  namespace: tmpim
+spec:
+  # Retain, so removing the claim leaves the image intact.
+  storageClassName: ceph-rbd-retain
+  volumeMode: Block
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 256Gi
+---
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: tmpim
+  namespace: tmpim
+spec:
+  # Halted while the 256 GiB disk is copied in; flipped to Always once the
+  # image is populated. Otherwise ArgoCD boots the guest off an empty disk the
+  # moment the PVC binds.
+  runStrategy: Halted
+  template:
+    metadata:
+      labels:
+        kubevirt.io/vm: tmpim
+    spec:
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            # Must land on a bridged node; br0 is where the LAN is.
+            - weight: 100
+              preference:
+                matchExpressions:
+                  - key: generalprogramming.org/lan-bridge
+                    operator: In
+                    values:
+                      - "true"
+            # 384 GiB only fits on sea1-k8s-{1,2} (742 GiB allocatable each);
+            # sea1-k8s-0 has 125 GiB. Prefer the emptier of the two rather than
+            # hard-pinning, so a drain still has somewhere to go.
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - sea1-k8s-1
+      evictionStrategy: LiveMigrate
+      domain:
+        cpu:
+          # Proxmox: cores 16, sockets 1. CPU model is left at KubeVirt's
+          # host-model default rather than Proxmox's host-passthrough, so a
+          # live migration to sea1-k8s-2 is not gated on identical silicon.
+          cores: 16
+        memory:
+          guest: 384Gi
+        firmware:
+          # Preserved from the Proxmox smbios1 uuid.
+          uuid: 9adbc2b6-918c-465d-8ec1-33ebee1db577
+        devices:
+          autoattachPodInterface: false
+          disks:
+            - name: rootdisk
+              disk:
+                # Matches Proxmox's virtio-scsi-single.
+                bus: scsi
+          interfaces:
+            - name: lan
+              bridge: {}
+              # Carries the public /32's upstream ARP entry. The guest also
+              # pins its NIC name to this MAC via a .link file on the image,
+              # because its ifupdown config is keyed to `ens18` and the card
+              # lands on a different PCI slot under KubeVirt.
+              macAddress: "BC:24:11:A5:CC:00"
+      networks:
+        - name: lan
+          multus:
+            networkName: br0-lan
+      volumes:
+        - name: rootdisk
+          persistentVolumeClaim:
+            claimName: tmpim-root
