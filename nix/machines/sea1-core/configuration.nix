@@ -136,9 +136,12 @@ in
 
   systemd.network = {
     networks = {
-      # Primary is enp6s18
+      # Matched by MAC, not by name. `enp6s18` is a PCI-path altname
+      # (bus 6, slot 18) -- it survives only while the NIC stays on that
+      # slot, and moving this guest to KubeVirt moves it. A miss here means
+      # the site loses DHCP and DNS.
       "10-primary" = {
-        matchConfig.Name = "enp6s18";
+        matchConfig.MACAddress = "bc:24:11:63:39:12";
         address = [
           "10.3.2.6/23"
           "2602:fa6d:10:ffff::f00/116"
