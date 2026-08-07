@@ -175,6 +175,22 @@ elasticsearch:
       registry: docker.io
       repository: bitnamilegacy/elasticsearch-exporter
       tag: 1.7.0-debian-12-r11
+    # Same treatment for the exporter's own 9114. Nothing scrapes it today —
+    # there is no ServiceMonitor or VMServiceScrape for it in the namespace — so
+    # this allow is pre-emptive rather than load-bearing. If you add a scrape and
+    # it comes back empty, this rule is the first thing to check.
+    networkPolicy:
+      enabled: true
+      allowExternal: false
+      allowExternalEgress: true
+      extraIngress:
+        - ports:
+            - port: 9114
+              protocol: TCP
+          from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: victoriametrics
 
   master:
     replicaCount: 3
@@ -187,6 +203,55 @@ elasticsearch:
         memory: 2Gi
       limits:
         memory: 2Gi
+    # The chart creates NetworkPolicies by default, but with allowExternal=true,
+    # which renders `ingress: [{ports: [9200, 9300]}]` — a port filter with no
+    # `from:` selector, i.e. any pod in any namespace. That is why ES was
+    # reachable from busyboxtest. allowExternal=false is what adds the `from:`.
+    #
+    # This has to be fixed in the chart values rather than by adding a second,
+    # tighter NetworkPolicy: policies are additive (union), so a restrictive
+    # policy layered on top of the chart's open one changes nothing.
+    #
+    # allowExternal=false on its own permits `mastodon-elasticsearch-client:
+    # "true"` pods plus the ES pods themselves — that is what keeps master<->data
+    # transport on 9300 and the metrics exporter working. Everything else comes
+    # from extraIngress. Anchored here and aliased by `data` below; the two must
+    # stay identical or transport breaks asymmetrically.
+    #
+    # NOTE this narrows *reachability* only. ES still runs with xpack security
+    # disabled, so any client that does get through is an unauthenticated
+    # superuser. Do not read this policy as making ES safe to expose.
+    networkPolicy: &esNetworkPolicy
+      enabled: true
+      allowExternal: false
+      # Egress deliberately left open. Locking it down is a separate change with
+      # its own breakage surface (snapshot repos, plugin installs), and the
+      # exposure being fixed here is inbound.
+      allowExternalEgress: true
+      extraIngress:
+        # Mastodon's own pods on the REST port. Namespace-wide rather than a
+        # label selector because the hourly `mastodon-update-search-index-
+        # mappings` Jobs carry only batch/job-name labels — there is no app label
+        # to match, and a selector that missed them would break search indexing
+        # an hour later, not at deploy time.
+        - ports:
+            - port: 9200
+              protocol: TCP
+          from:
+            - podSelector: {}
+        # cerebro is the ES admin UI. Its image ships an empty host list, so
+        # operators type the cluster URL at runtime — without this rule that
+        # workflow silently breaks. It sits behind Cloudflare Access at the edge,
+        # but be clear-eyed: while ES has no authentication this is an
+        # unauthenticated admin path. Drop this rule and use port-forward if you
+        # would rather not keep it.
+        - ports:
+            - port: 9200
+              protocol: TCP
+          from:
+            - namespaceSelector:
+                matchLabels:
+                  kubernetes.io/metadata.name: cerebro
 
   data:
     replicaCount: 3
@@ -198,6 +263,7 @@ elasticsearch:
         memory: 4Gi
       limits:
         memory: 4Gi
+    networkPolicy: *esNetworkPolicy
 
   coordinating:
     replicaCount: 0
