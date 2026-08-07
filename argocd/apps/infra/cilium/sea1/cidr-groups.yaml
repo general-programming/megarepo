@@ -1,0 +1,155 @@
+---
+# CiliumCIDRGroups are named lists of *external* CIDRs, referenced from
+# CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy so an address list is
+# written once instead of copied into every policy that needs it.
+#
+# Adding these on their own is a NO-OP: a CIDRGroup is inert until a policy
+# references it. Nothing in this file changes a single packet. That is the point
+# of landing it first -- the address lists can be reviewed and corrected on their
+# own, before any policy depends on them being right.
+#
+# TWO THINGS TO KNOW BEFORE USING THEM
+#
+# 1. They are CLUSTER-SCOPED (`kubectl api-resources` -> NAMESPACED=false), so
+#    there is no namespace to put them in and they are visible to policies in
+#    every namespace automatically.
+#
+# 2. Only CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy can reference
+#    them. Native networking.k8s.io/v1 NetworkPolicy has no equivalent -- its
+#    only address construct is `ipBlock.cidr`. A native policy that needs one of
+#    these lists has to be converted to a CNP first.
+#
+# Referenced as:
+#   toCIDRSet:
+#     - cidrGroupRef: sea1-rfc1918
+# or by label, which lets a policy pick up new groups without being edited:
+#   toCIDRSet:
+#     - cidrGroupSelector:
+#         matchLabels:
+#           sea1.cidr/class: private
+#
+# WHAT A CIDR SELECTOR DOES NOT MATCH, which is the thing that makes these
+# subtle: Cilium is identity-based, so a CIDR only matches a peer that carries a
+# CIDR identity. Pods (10.244.0.0/16, fd40:10:244::/56) each have their own
+# identity; ClusterIPs (10.96.0.0/12, d40:10:96::/108) are DNAT'd before policy
+# is evaluated; and the three nodes carry host/remote-node identity. None of
+# those are matched by anything in this file. For in-cluster peers use
+# toEndpoints; for nodes use `toEntities: [host, remote-node]`.
+---
+# The whole RFC1918 space. This is the group that does the real work: it is what
+# separates "may reach the internet" from "may reach the house". Everything in
+# 10/8 that is not a cluster node or pod -- the LAN, the switches, the NAS, the
+# hypervisors, the bridged VMs on br0-lan -- is matched by this.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: sea1-rfc1918
+  labels:
+    sea1.cidr/class: private
+spec:
+  externalCIDRs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+---
+# The SEA1 LAN segments the nodes sit on. The LAN is 10.3.2.0/23 (see
+# akvorado's `sea1-lan` network definition and the lb-ipam comment); this covers
+# the .2 half, where every static host lives, plus the v6 prefix.
+#
+# Node addressing, verified against the live nodes:
+#   sea1-k8s-0  10.3.2.10  2602:fa6d:10:ffff::110
+#   sea1-k8s-1  10.3.2.11  2602:fa6d:10:ffff::111
+#   sea1-k8s-2  10.3.2.12  2602:fa6d:10:ffff::112
+# 10.3.2.6 also appears in flow data as an external Consul agent, so the subnet
+# is not exclusively Kubernetes.
+#
+# CAVEAT: with policy-cidr-match-mode unset (the current state), CIDR selectors
+# do NOT match the node IPs -- v4 or v6. They carry remote-node identity instead.
+# This group therefore covers 10.3.2.6, the gateway, and any other non-node host
+# in these prefixes, but NOT the six node addresses above. To reach the nodes in
+# a policy, use `toEntities: [host, remote-node]`.
+#
+# Note the v6 prefix also contains the sea1-external-v6 LoadBalancer pool, which
+# is called out separately in sea1-loadbalancers below -- the two overlap by
+# design, so a deny on this group also denies the v6 VIPs.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: sea1-nodes
+  labels:
+    sea1.cidr/class: private
+    sea1.cidr/role: infrastructure
+spec:
+  externalCIDRs:
+    - 10.3.2.0/24
+    - 2602:fa6d:10:ffff::/64
+---
+# The Cilium LoadBalancer VIP pools. Pods reaching a service through its VIP
+# instead of its ClusterIP is a common way to accidentally route around policy,
+# which is what this group is for.
+#
+# These are the exact blocks from apps/infra/cilium/sea1/lb-ipam.yaml, confirmed
+# against the live CiliumLoadBalancerIPPools:
+#   sea1-lan          10.3.3.0/28
+#   sea1-external-v6  2602:fa6d:10:ffff::e00/120   <- traefik's ingress VIP
+#
+# KEEP IN SYNC WITH lb-ipam.yaml. Adding a pool block there without adding it
+# here silently widens what can be reached via a VIP.
+#
+# Deliberately NOT 10.3.3.0/24: the rest of that /24 is sea1-core's Kea DHCP
+# pool (starts at 10.3.3.128), which is ordinary LAN clients, not VIPs. Those are
+# already covered by sea1-rfc1918, so nothing is left unmatched -- but calling
+# them "loadbalancers" would make any policy referencing this group mean
+# something other than it says.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: sea1-loadbalancers
+  labels:
+    sea1.cidr/class: private
+    sea1.cidr/role: infrastructure
+spec:
+  externalCIDRs:
+    - 10.3.3.0/28
+    - 2602:fa6d:10:ffff::e00/120
+---
+# Link-local and cloud metadata. Nothing in SEA1 should ever reach these.
+# 169.254.169.254 is the cloud metadata address; SEA1 is bare metal so there is
+# nothing there to steal credentials from, but workloads are not always aware of
+# where they are running and the deny costs nothing.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: link-local-metadata
+  labels:
+    sea1.cidr/class: never
+spec:
+  externalCIDRs:
+    - 169.254.0.0/16
+    - fe80::/10
+---
+# Non-routable / bogon space that has no legitimate destination from a workload.
+# Grouping it means the "untrusted workload" policies stay readable.
+#
+# CAREFUL WITH 100.64.0.0/10: that is CGNAT space, and it is what Tailscale uses.
+# SEA1 runs a tailscale-operator with proxies fronting the akvorado, openviking
+# and vmalert Ingresses. Referencing this group from a workload that is supposed
+# to be reachable over Tailscale will break it. Only reference `bogons` from
+# workloads that are not Tailscale-exposed, or split the CGNAT entry out into its
+# own group first.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: bogons
+  labels:
+    sea1.cidr/class: never
+spec:
+  externalCIDRs:
+    - 0.0.0.0/8
+    - 100.64.0.0/10
+    - 127.0.0.0/8
+    - 192.0.2.0/24
+    - 198.18.0.0/15
+    - 198.51.100.0/24
+    - 203.0.113.0/24
+    - 240.0.0.0/4
