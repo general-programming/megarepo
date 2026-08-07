@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: mastodon-coolmathgames
 resources:
   - "database.yaml"
+  - "es-certificates.yaml"
 helmCharts:
   - name: mastodon
     releaseName: mastodon
