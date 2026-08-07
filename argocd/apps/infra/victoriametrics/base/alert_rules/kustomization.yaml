@@ -14,4 +14,5 @@ resources:
   - alerts-logging.yaml
   - alerts-smart.yaml
   - node-disk.yaml
+  - pvc-usage.yaml
   - resources-memory.yaml

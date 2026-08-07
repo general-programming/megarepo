@@ -1,0 +1,30 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: pvc-usage
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: pvc-usage
+      rules:
+        # local-path PVCs don't enforce a quota, so kubelet reports the
+        # underlying node disk's capacity here instead of the declared PVC
+        # size — those series will look artificially under-utilized and
+        # effectively never fire. That's expected, not a bug.
+        - alert: PVCNearFull
+          expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.8
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is nearing full"
+            description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} on {{ $labels.node }} is {{ $value | humanizePercentage }} full."
+
+        - alert: PVCCriticalFull
+          expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} is critically full"
+            description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} on {{ $labels.node }} is {{ $value | humanizePercentage }} full."
