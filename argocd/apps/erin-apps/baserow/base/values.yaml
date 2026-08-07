@@ -1,0 +1,115 @@
+global:
+  baserow:
+    domain: base.owo.me
+    backendDomain: api.base.owo.me
+    objectsDomain: base-objects.owo.me
+    securityContext:
+      enabled: true
+      fsGroup: 9999
+      fsGroupChangePolicy: OnRootMismatch
+      sysctls: []
+      supplementalGroups: []
+    containerSecurityContext:
+      enabled: true
+      runAsUser: 9999
+      runAsGroup: 9999
+      runAsNonRoot: true
+      privileged: false
+      # The images write to /baserow and /tmp at runtime.
+      readOnlyRootFilesystem: false
+      allowPrivilegeEscalation: false
+      capabilities:
+        add: []
+        drop:
+          - ALL
+      seccompProfile:
+        type: RuntimeDefault
+
+# The chart's generator reads the existing key with a cluster `lookup`, which
+# ArgoCD cannot do -- it would remint SECRET_KEY every sync and log everyone
+# out. Both keys come from Vault instead.
+generateJwtSecret: false
+
+# Traefik fronts this, and the chart's ingress carries a hostless catch-all
+# rule that would become the default backend for the whole cluster.
+ingress:
+  enabled: false
+
+# CNPG runs postgres (see database.yaml); R2 holds the uploads.
+postgresql:
+  enabled: false
+minio:
+  enabled: false
+caddy:
+  enabled: false
+
+redis:
+  enabled: true
+  architecture: standalone
+  auth:
+    enabled: true
+    password: baserow
+  master:
+    persistence:
+      storageClass: ceph-rbd-xfs
+      size: 8Gi
+
+backendConfigMap:
+  DATABASE_USER: baserow
+  DATABASE_NAME: baserow
+  DATABASE_HOST: baserow-db-rw
+  DATABASE_PORT: "5432"
+  AWS_STORAGE_BUCKET_NAME: baserow-objects
+  AWS_S3_REGION_NAME: auto
+  # Objects are served straight off the bucket's R2 custom domain, so URLs
+  # must not be presigned.
+  AWS_S3_CUSTOM_DOMAIN: base-objects.owo.me
+  AWS_QUERYSTRING_AUTH: "false"
+
+# The chart migrates with a Job annotated `helm.sh/hook: post-install,
+# pre-upgrade`. ArgoCD turns that into a PostSync/PreSync hook and only runs
+# PostSync once every other resource is *healthy* -- but the backends are not
+# healthy until the schema exists, so a fresh install deadlocks. wsgi migrates
+# on startup instead; everything else waits it out and recovers.
+migration:
+  enabled: false
+
+# baserow-secrets is rendered from Vault (see sea1/vault-secret.yaml) and holds
+# DATABASE_PASSWORD, the R2 keypair + endpoint, SECRET_KEY and
+# BASEROW_JWT_SIGNING_KEY. Only the backend components get it -- the frontend
+# has no business holding the database password.
+baserow-backend-asgi:
+  # The chart defaults to /baserow-saas, which only exists in the SaaS image.
+  workingDir: ""
+  envFrom:
+    - secretRef:
+        name: baserow-secrets
+
+baserow-backend-wsgi:
+  workingDir: ""
+  # Keep this the only migrating component, and the only one at replicaCount 1,
+  # or concurrent `manage.py migrate` runs will collide.
+  extraEnv:
+    - name: MIGRATE_ON_STARTUP
+      value: "true"
+  envFrom:
+    - secretRef:
+        name: baserow-secrets
+
+baserow-celery-beat-worker:
+  workingDir: ""
+  envFrom:
+    - secretRef:
+        name: baserow-secrets
+
+baserow-celery-export-worker:
+  workingDir: ""
+  envFrom:
+    - secretRef:
+        name: baserow-secrets
+
+baserow-celery-worker:
+  workingDir: ""
+  envFrom:
+    - secretRef:
+        name: baserow-secrets

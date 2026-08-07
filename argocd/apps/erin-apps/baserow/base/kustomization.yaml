@@ -1,0 +1,47 @@
+---
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: baserow
+resources:
+  - database.yaml
+helmCharts:
+  - name: baserow
+    releaseName: baserow
+    namespace: baserow
+    repo: https://baserow.github.io/baserow-chart
+    version: 1.0.56
+    valuesFile: values.yaml
+patches:
+  # The chart stamps a random `rollme` annotation on every render, which reads
+  # as permanent drift to ArgoCD and restarts every pod on each self-heal.
+  - target:
+      kind: Deployment
+    patch: |-
+      - op: remove
+        path: /spec/template/metadata/annotations/rollme
+  # These are plain config, not hooks. Left annotated, ArgoCD would delete and
+  # recreate them on every sync (BeforeHookCreation) under the pods using them.
+  - target:
+      kind: ConfigMap
+      name: (backend|shared)-config
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook-weight
+  - target:
+      kind: ServiceAccount
+      name: ^baserow$
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook-weight
+  - target:
+      kind: Secret
+      name: backend-secret
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook-weight

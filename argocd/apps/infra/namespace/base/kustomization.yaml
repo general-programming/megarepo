@@ -25,6 +25,7 @@ resources:
   - akvorado.yaml
   - attic.yaml
   - authentik.yaml
+  - baserow.yaml
   - grafana.yaml
   - librenms.yaml
   - docspell.yaml
