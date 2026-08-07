@@ -39,6 +39,21 @@ spec:
     metadata:
       labels:
         app: akvorado-console
+      annotations:
+        # The console fetches its whole config from the orchestrator over HTTP
+        # *at startup only*, so a credential that changes in Vault does not reach
+        # a console that is already running -- it keeps using the value it got
+        # when it booted. That is exactly what broke on 2026-08-07: the
+        # ClickHouse password landed, the orchestrator restarted (it mounts the
+        # secret, so `auto` covered it), and the console carried on presenting an
+        # empty password until it was restarted by hand:
+        #
+        #   code: 516 -- default: Authentication failed: password is incorrect
+        #
+        # `auto` cannot help here, because it only watches ConfigMaps and Secrets
+        # the pod actually mounts and the console mounts neither. Naming the
+        # secret explicitly is what makes Reloader watch it anyway.
+        secret.reloader.stakater.com/reload: "akvorado-secrets"
     spec:
       containers:
         - name: console
