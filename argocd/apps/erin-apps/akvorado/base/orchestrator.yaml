@@ -33,6 +33,17 @@ spec:
           args:
             - orchestrator
             - /etc/akvorado/akvorado.yaml
+          env:
+            # akvorado maps AKVORADO_CFG_ORCHESTRATOR_<PATH> onto the config
+            # tree (underscores nest, dashes are stripped) and env wins over the
+            # file. clickhousedb is an orchestrator-level section, and the other
+            # services fetch their resolved config from the orchestrator over
+            # HTTP, so setting it here covers outlet and console too.
+            - name: AKVORADO_CFG_ORCHESTRATOR_CLICKHOUSEDB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: akvorado-secrets
+                  key: clickhouse-password
           ports:
             - containerPort: 8080
               name: http

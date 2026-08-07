@@ -1,0 +1,128 @@
+---
+# ClickHouse holds the flow tables and, until the password change in this same
+# commit, accepted unauthenticated queries as `default` from any pod in any of
+# the 55 namespaces. Proven from a pod in `busyboxtest`:
+#
+#   SELECT currentUser()      -> default
+#   SHOW DATABASES            -> default, system, INFORMATION_SCHEMA, ...
+#   SHOW GRANTS FOR default   -> GRANT ALL ON *.* TO default
+#
+# Authentication is the real fix; this is the second layer, so that a leaked
+# password is not immediately reachable from every workload in the cluster.
+#
+# NO CIDR SELECTORS HERE, deliberately. Every client of ClickHouse is an
+# in-cluster pod, and per sea1-netpol/CIDR-SEMANTICS.md a CIDR selector does not
+# match pod or ClusterIP peers at all -- Cilium resolves those to per-pod
+# identities, and with kube-proxy replacement the DNAT happens before policy is
+# evaluated. A CIDRGroup here would apply cleanly, report no error, and enforce
+# nothing. Endpoint selectors are the construct that actually works.
+#
+# FAILURE MODE: this is default-deny once it applies. A client that is not listed
+# below is dropped silently -- akvorado shows stalled ingestion or an empty
+# console rather than a connection error. Diagnose with:
+#   hubble observe --namespace akvorado --verdict DROPPED
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: akvorado-clickhouse
+  namespace: akvorado
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      clickhouse.com/role: clickhouse-server
+  policyTypes:
+    - Ingress
+  ingress:
+    # akvorado's own services: orchestrator provisions the schema and TTLs,
+    # outlet writes flows, console reads them. The configured endpoint is
+    # akvorado-clickhouse-headless:9000 (native protocol). 8123 is included
+    # because schema provisioning can use the HTTP interface, and a miss there
+    # surfaces as a stalled migration rather than a clean failure.
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - akvorado-orchestrator
+                  - akvorado-outlet
+                  - akvorado-console
+      ports:
+        - port: 8123
+          protocol: TCP
+        - port: 9000
+          protocol: TCP
+    # The operator manages users, schema sync and health, authenticating as the
+    # `operator` user with management-password from the akvorado-clickhouse
+    # secret it owns. Omitting this does not take ClickHouse down -- it keeps
+    # serving queries while quietly becoming unmanageable, which is worse.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clickhouse-operator
+      ports:
+        - port: 8123
+          protocol: TCP
+        - port: 9000
+          protocol: TCP
+    # Replica-to-replica. replicas=1 today so this currently selects nothing; it
+    # is here so that scaling up does not fail on the interserver port.
+    - from:
+        - podSelector:
+            matchLabels:
+              clickhouse.com/role: clickhouse-server
+      ports:
+        - port: 9000
+          protocol: TCP
+        - port: 9009
+          protocol: TCP
+    # Prometheus metrics. Nothing scrapes 9363 today -- there is no
+    # VMServiceScrape for it -- so this is pre-emptive. If you add a scrape and
+    # it returns nothing, check this rule first.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 9363
+          protocol: TCP
+---
+# Keeper is only ever spoken to by ClickHouse itself. It exists solely because
+# ClickHouseCluster requires keeperClusterRef (see clickhouse.yaml), so its
+# client list is the narrowest in the namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: akvorado-keeper
+  namespace: akvorado
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      clickhouse.com/role: clickhouse-keeper
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              clickhouse.com/role: clickhouse-server
+        - podSelector:
+            matchLabels:
+              clickhouse.com/role: clickhouse-keeper
+      ports:
+        # 2181 client, 9234 Raft between keeper replicas.
+        - port: 2181
+          protocol: TCP
+        - port: 9234
+          protocol: TCP
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: clickhouse-operator
+      ports:
+        - port: 2181
+          protocol: TCP
