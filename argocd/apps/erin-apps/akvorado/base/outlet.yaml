@@ -44,6 +44,16 @@ spec:
     metadata:
       labels:
         app: akvorado-outlet
+      annotations:
+        # Same startup-only config fetch as the console (see console.yaml). The
+        # outlet does not use the ClickHouse password -- it writes to Kafka and
+        # ClickHouse pulls via its Kafka-engine views -- so it was not caught by
+        # the 2026-08-07 breakage. But it does consume snmp-credentials.yaml,
+        # which reaches it the same way: Vault -> akvorado-secrets -> orchestrator
+        # -> HTTP at boot. Rotating the SNMP community today would leave this pod
+        # on the old value indefinitely, and the symptom would be flows silently
+        # dropped for unresolved interfaces rather than an error.
+        secret.reloader.stakater.com/reload: "akvorado-secrets"
     spec:
       # This is the component that polls exporters over SNMP, so it needs egress
       # to device management addresses across the fabric.
