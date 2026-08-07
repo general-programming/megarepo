@@ -32,6 +32,28 @@ spec:
     resources:
       requests:
         storage: 200Gi
+  settings:
+    # The `default` user ships with `no_password` and `GRANT ALL ON *.*`. The
+    # operator's own `operator` user is fine (sha256_password, managed via the
+    # akvorado-clickhouse secret) -- it is `default`, the account akvorado
+    # actually connects as, that was unauthenticated:
+    #
+    #   SELECT name, auth_type FROM system.users
+    #     operator  ['sha256_password']
+    #     default   ['no_password']
+    #   SHOW GRANTS FOR default  ->  GRANT ALL ON *.* TO default
+    #
+    # Only the `readonly=2` profile setting stood between an anonymous caller and
+    # the flow tables, and a settings profile is not an authorization boundary.
+    #
+    # passwordType is left at its default so the operator writes the value as a
+    # plaintext <password> element; akvorado has to authenticate with the same
+    # string, so a hashed type here would need a second, pre-hashed copy in Vault
+    # and the two would drift.
+    defaultUserPassword:
+      secret:
+        name: akvorado-secrets
+        key: clickhouse-password
   containerTemplate:
     image:
       repository: clickhouse/clickhouse-server

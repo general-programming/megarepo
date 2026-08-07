@@ -27,6 +27,15 @@ data:
       servers:
         - akvorado-clickhouse-headless:9000
       username: default
+      # Overridden at runtime by AKVORADO_CFG_ORCHESTRATOR_CLICKHOUSEDB_PASSWORD
+      # on the orchestrator Deployment, sourced from the Vault-backed
+      # akvorado-secrets. Env vars take precedence over this file, and the
+      # orchestrator serves the resolved config to inlet/outlet/console over
+      # HTTP, so it only needs to be set in the one place.
+      #
+      # Left as an empty literal rather than deleted so this stays greppable --
+      # but note that means dropping the env var silently restores a passwordless
+      # connection rather than failing loudly.
       password: ""
       database: default
 

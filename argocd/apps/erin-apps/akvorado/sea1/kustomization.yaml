@@ -6,6 +6,7 @@ resources:
   - secret.yaml
   - flow-lb.yaml
   - inlet-netpol.yaml
+  - clickhouse-netpol.yaml
   - ingress.yaml
 patches:
   - path: inlet-nodes.yaml
