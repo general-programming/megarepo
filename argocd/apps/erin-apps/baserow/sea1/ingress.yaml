@@ -20,7 +20,7 @@ spec:
                 name: baserow-baserow-frontend
                 port:
                   number: 80
-    - host: api.base.owo.me
+    - host: base-api.owo.me
       http:
         paths:
           # Websockets, MCP and the assistant stream, so they go to asgi.

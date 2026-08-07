@@ -1,6 +1,6 @@
 # baserow
 
-`base.owo.me` (frontend) / `api.base.owo.me` (backend) / `base-objects.owo.me`
+`base.owo.me` (frontend) / `base-api.owo.me` (backend) / `base-objects.owo.me`
 (uploads). Upstream chart, pinned, with postgres, minio and caddy swapped out
 for CNPG, R2 and traefik.
 
@@ -12,8 +12,11 @@ for CNPG, R2 and traefik.
   world-readable over that hostname, and uploads are served unsigned
   (`AWS_QUERYSTRING_AUTH=false`) — obscure object keys are the only thing
   gating them.
-- **TLS for `api.base.owo.me`** — `crt-base-owo` in the traefik app; `*.owo.me`
-  does not cover a second label.
+
+Every hostname here is one label under `owo.me` on purpose. Cloudflare's
+Universal SSL stops at one level, this zone has no Advanced Certificate
+Manager, and a proxied `api.base.owo.me` fails the TLS handshake at the edge
+before it ever reaches traefik — no origin certificate can fix that.
 
 ## Chart traps
 

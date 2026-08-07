@@ -1,7 +1,7 @@
 global:
   baserow:
     domain: base.owo.me
-    backendDomain: api.base.owo.me
+    backendDomain: base-api.owo.me
     objectsDomain: base-objects.owo.me
     securityContext:
       enabled: true
