@@ -19,6 +19,18 @@ patches:
     patch: |-
       - op: remove
         path: /spec/template/metadata/annotations/rollme
+  # With `rollme` gone, nothing rolls the pods when the config changes -- and
+  # every component reads its whole environment from those configmaps, so a
+  # changed hostname would sit unapplied until something else restarted them.
+  - target:
+      kind: Deployment
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: all
+        annotations:
+          reloader.stakater.com/auto: "true"
   # These are plain config, not hooks. Left annotated, ArgoCD would delete and
   # recreate them on every sync (BeforeHookCreation) under the pods using them.
   - target:
