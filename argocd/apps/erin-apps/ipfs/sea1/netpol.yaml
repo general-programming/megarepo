@@ -1,0 +1,80 @@
+---
+# ipfs is a P2P daemon that dials arbitrary internet peers on :4001 and serves
+# whatever it fetches. Same threat model as deluge, with one addition: kubo will
+# dial addresses that *peers advertise to it*, which without filtering is an SSRF
+# primitive pointed at the LAN.
+#
+# NOT STARTING FROM ZERO. This node already runs IPFS_PROFILE=server, and its
+# live Swarm.AddrFilters cover 10/8, 172.16/12, 192.168/16, 100.64/10,
+# 169.254/16, the TEST-NETs, 240/4, fc00::/7 and fe80::/10 -- i.e. very nearly
+# what this policy denies. So this is defence in depth, not a hole being closed:
+#
+#   - AddrFilters is application-level and advisory. An `ipfs config` write, a
+#     profile change, or an image update that resets config silently removes it.
+#     A NetworkPolicy is enforced in the datapath and cannot be edited from
+#     inside the pod.
+#   - AddrFilters governs the *swarm dialer* only. It says nothing about any
+#     other egress the process makes -- remote pinning services, gateway
+#     fetches over non-swarm transports, or anything a future feature adds.
+#
+# The practical consequence is that this policy should be a no-op for legitimate
+# traffic, which is what makes it a low-risk one to land.
+#
+# See deluge/sea1/netpol.yaml for why the allow-list (not the CIDR deny) is what
+# removes in-cluster reach, and why the node entities need their own rule.
+#
+# EVIDENCE: `hubble observe --namespace ipfs` over 3000 flows showed heavy DNS to
+# coredns, swarm peers on :4001 over v4 and v6, and nothing in-cluster except
+# itself. No cross-namespace traffic to preserve.
+#
+# FAILURE MODE: default-deny egress drops silently -- the symptom is a peer count
+# that will not climb, not an error. Check with:
+#   hubble observe --namespace ipfs --verdict DROPPED
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: ipfs-internet-only
+  namespace: ipfs
+  labels:
+    sea1.policy/tier: untrusted
+spec:
+  endpointSelector:
+    matchLabels:
+      app: ipfs
+  egressDeny:
+    # `bogons` includes 100.64.0.0/10, which is also Tailscale's range -- safe
+    # here only because ipfs is not Tailscale-exposed (it is fronted by traefik
+    # at ipfs.owo.me, and there is no ts-ipfs proxy). Do not copy this stanza to
+    # a Tailscale-reachable workload.
+    - toCIDRSet:
+        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: sea1-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
+    - toEntities:
+        - host
+        - remote-node
+    # Runs as the default ServiceAccount with its token automounted.
+    - toEntities:
+        - kube-apiserver
+  egress:
+    # L4 rather than the L7 `rules.dns` form -- see the note in
+    # deluge/sea1/netpol.yaml. It matters more here: ipfs is by far the heaviest
+    # DNS user of the two, so proxying every lookup is a real cost for what, with
+    # `matchPattern: "*"`, would be visibility rather than policy.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    # Same-namespace. The ipfs namespace contains only ipfs, so this grants
+    # nothing beyond the pod itself -- it exists so self-dial and any future
+    # sidecar keep working.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: ipfs
+    - toEntities:
+        - world

@@ -4,3 +4,4 @@ namespace: ipfs
 resources:
   - ../base
   - ingress.yaml
+  - netpol.yaml

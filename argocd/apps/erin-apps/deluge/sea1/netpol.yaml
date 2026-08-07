@@ -1,0 +1,92 @@
+---
+# deluge runs a BitTorrent client that connects to arbitrary internet peers and
+# parses untrusted data off the open network. It needs the internet and nothing
+# else, which makes it the cleanest lockdown in SEA1.
+#
+# Before this, deluge could open a socket to every datastore in the cluster, the
+# kubelet, etcd, the Talos API and the Ceph mons -- verified from a pod on the
+# same flat network.
+#
+# STRUCTURE, and why it is not the obvious one:
+#
+#   - The `egress` allow-list is what does the real work. Specifying any egress
+#     rule puts the endpoint into default-deny for egress, which is what removes
+#     its reach into the rest of the cluster. No CIDR deny can do that job: pods
+#     and ClusterIPs are never matched by CIDR selectors, because Cilium gives
+#     pods their own identities and DNATs ClusterIPs before policy is evaluated.
+#     See sea1-netpol/CIDR-SEMANTICS.md.
+#
+#   - `toEntities: world` is broad, and from Cilium's point of view the home LAN
+#     *is* world. Without the egressDeny below, "allow world" would hand deluge
+#     the entire 10/8. The CIDRGroup deny is what makes this internet-only.
+#
+#   - The three nodes are NOT covered by any CIDRGroup -- they carry host /
+#     remote-node identity, not a CIDR identity. `toEntities: [host, remote-node]`
+#     is the rule that actually keeps deluge off the kubelet, etcd, Talos apid
+#     and the Ceph storage plane.
+#
+#   - egressDeny beats any allow, including one a future chart or policy adds.
+#
+# EVIDENCE: `hubble observe --namespace deluge` over 3000 flows showed egress to
+# arbitrary internet peers on random high ports and to nothing in-cluster except
+# itself. There is no cross-namespace traffic to preserve.
+#
+# FAILURE MODE: default-deny egress drops silently. If deluge stops finding
+# peers, check before assuming it is a tracker problem:
+#   hubble observe --namespace deluge --verdict DROPPED
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: deluge-internet-only
+  namespace: deluge
+  labels:
+    sea1.policy/tier: untrusted
+spec:
+  endpointSelector:
+    matchLabels:
+      app: deluge
+  egressDeny:
+    # By reference, so widening the LAN later is an edit to one CIDRGroup rather
+    # than to every policy that mentions it.
+    #
+    # `bogons` includes 100.64.0.0/10, which is also Tailscale's range -- safe
+    # here only because deluge is not Tailscale-exposed (no ts-deluge proxy in
+    # the tailscale-operator namespace). Do not copy this stanza to a workload
+    # that is reachable over Tailscale.
+    - toCIDRSet:
+        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: sea1-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
+    - toEntities:
+        - host
+        - remote-node
+    # deluge runs as the default ServiceAccount with its token automounted, so
+    # without this it can talk to the API server as that SA. The allow-list below
+    # would already exclude the API server, but egressDeny is the rule that
+    # survives someone later adding a broader allow.
+    - toEntities:
+        - kube-apiserver
+  egress:
+    # DNS. Deliberately L4 rather than the L7 `rules.dns` form the drafts used:
+    # with `matchPattern: "*"` the L7 form allows every name anyway, so it buys
+    # Hubble visibility rather than policy, at the cost of routing every lookup
+    # through Cilium's DNS proxy. That is an added failure mode on a workload
+    # whose whole job is name resolution against trackers. Add the L7 form later
+    # if per-name control or DNS visibility is wanted -- it is a small edit.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    # Same-namespace, so the web UI and daemon can reach each other and any
+    # future sidecar works. The deluge namespace contains only deluge, so this
+    # grants nothing beyond the pod itself.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: deluge
+    - toEntities:
+        - world
