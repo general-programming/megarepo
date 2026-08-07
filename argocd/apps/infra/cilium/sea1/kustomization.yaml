@@ -4,3 +4,4 @@ resources:
   - application.yaml
   - nodeconfig-lan-bridge.yaml
   - lb-ipam.yaml
+  - cidr-groups.yaml
