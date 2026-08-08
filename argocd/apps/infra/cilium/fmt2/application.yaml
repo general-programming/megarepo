@@ -135,6 +135,12 @@ spec:
             enabled: true
 
         hubble:
+          # 8x the 4095 default (~32 MB/agent). The Hubble ring buffer -- not the
+          # BPF perf ring or the observer queue, both of which are clean -- drops
+          # events under burst: SEA1 lost 249k of 282M, 0.088%. Low overall, but a
+          # single lost event can erase a rare (src->dst:port) tuple from the flow
+          # graph entirely, and those are exactly the ones policy authoring misses.
+          eventBufferCapacity: 32767
           # cronJob, not the chart default of helm. With method=helm the certs
           # are minted at render time, so whenever ArgoCD's render cache misses
           # it produces fresh ones and the three secrets sit permanently
