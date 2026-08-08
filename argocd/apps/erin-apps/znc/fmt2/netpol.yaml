@@ -33,11 +33,29 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
+    # znc runs dnsPolicy: Default, so it inherits the NODE's resolv.conf and
+    # queries the site resolver at 10.65.67.5 directly rather than coredns. The
+    # audit window caught this: without the allow below, and the matching except
+    # in the deny, every DNS lookup znc makes is dropped and the bouncer cannot
+    # resolve a single IRC server.
+    #
+    # Note this only became visible once the CIDRGroups existed. Before them
+    # 10.65.67.5 carried `world` identity and the flow graph recorded it as
+    # world:53; defining an RFC1918 group gave it a CIDR identity, so
+    # `toEntities: world` stopped matching it.
+    - toCIDR:
+        - 10.65.67.5/32
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
     - toEntities:
         - world
   egressDeny:
     - toCIDRSet:
         - cidrGroupRef: fmt2-rfc1918
+          except:
+            - 10.65.67.5/32
         - cidrGroupRef: fmt2-loadbalancers
         - cidrGroupRef: link-local-metadata
         - cidrGroupRef: bogons
