@@ -271,7 +271,10 @@ node-4, roll forward.
 Order matters and is sea1-proven: **Cilium takes over service handling first,
 kube-proxy is removed second, so services are never unhandled by both.**
 
-- **2.0** *Commit:* **enable KubePrism** — `machine.features.kubePrism
+- **2.0** ~~*Commit:* **enable KubePrism**~~ — **DONE 2026-08-08** in Phase A of
+  `docs/fmt2-talos-k8s-update.md`. Verified healthy on `127.0.0.1:7445` on all 8
+  nodes. Original text kept below for context.
+- **2.0 (original)** *Commit:* **enable KubePrism** — `machine.features.kubePrism
   {enabled: true, port: 7445}` — by surgical patch on all 8 nodes, committed to
   talconfig in the same step. **Window 0 found it is absent from fmt2's live
   config on every node**, and 2.2 depends on it entirely. sea1 already had it,
