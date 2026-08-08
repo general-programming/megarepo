@@ -82,9 +82,10 @@ spec:
         k8sServiceHost: localhost
         k8sServicePort: 7445
 
-        # Phase 3, step 1: evaluate the 11 policies that flannel never enforced,
-        # but AUDIT rather than deny. Nothing is dropped; anything that would be
-        # is reported as an AUDIT verdict in Hubble.
+        # Phase 3, step 1: the 11 policies flannel never enforced are now
+        # ENFORCED. Audit ran first and returned zero verdicts across all eight
+        # nodes over two independent windows totalling ~17 minutes of continuous
+        # watching, with argocd at 0 unhealthy apps and 0 pod restarts.
         #
         # `default` and not `always` deliberately -- this step is only about the
         # existing rules. Under `default` just the 13 pods those policies select
@@ -96,7 +97,7 @@ spec:
         # 8 pods but they are all hostNetwork, where CNP does not apply. Both
         # victoriametrics policies select 0 pods -- their labels match nothing.
         policyEnforcementMode: default
-        policyAuditMode: true
+        policyAuditMode: false
 
         # MANDATORY even though fmt2 has no Multus today: the chart default
         # moves foreign CNI configs aside, and flannel's conflist must be
