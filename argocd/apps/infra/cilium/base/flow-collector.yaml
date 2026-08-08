@@ -1,0 +1,107 @@
+---
+# TEMPORARY -- phase 3 stage 1 of docs/netpol-phase3-sea1-fmt2.md.
+# Builds the traffic graph the NetworkPolicy work is written from. Delete this
+# file once the graph is collected; it has no purpose afterwards.
+#
+# Reads the LOCAL agent's Hubble socket rather than hubble-relay: no network hop
+# to lose flows across, and no dependency on relay being up. Runs the cilium
+# image itself, which already carries hubble v1.20.0, jq, bash and awk, so there
+# is nothing to pull.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hubble-flow-collector
+  namespace: kube-system
+data:
+  tuple.jq: |
+    # Connection-initiating flows only. On replies the ports are swapped, so
+    # destination_port is the client's ephemeral port -- unbounded noise that
+    # would bury the real service ports.
+    select((.flow.is_reply // false) == false)
+    | def ep($e):
+        if (($e.namespace // "") != "") then
+          ($e.namespace + "/" +
+            ((($e.workloads // [])[0].name)
+             // (($e.pod_name // "?")
+                 | sub("-[a-f0-9]{6,10}-[a-z0-9]{5}$";"")
+                 | sub("-[a-z0-9]{5}$";"")
+                 | sub("-[0-9]+$";""))))
+        else
+          ((($e.labels // []) | map(select(startswith("reserved:"))) | .[0]) // "unknown")
+        end;
+      def proto: if .flow.l4.TCP then "TCP" elif .flow.l4.UDP then "UDP"
+                 elif .flow.l4.ICMPv4 then "ICMPv4" elif .flow.l4.ICMPv6 then "ICMPv6"
+                 elif .flow.l4.SCTP then "SCTP" else "OTHER" end;
+      def dport: (.flow.l4.TCP.destination_port // .flow.l4.UDP.destination_port
+                  // .flow.l4.SCTP.destination_port // 0);
+      [ ep(.flow.source), ep(.flow.destination), proto, (dport|tostring),
+        ((.flow.destination_names // [])[0] // "") ] | @tsv
+  collect.sh: |
+    #!/usr/bin/env bash
+    set -uo pipefail
+    OUT=/out/tuples.tsv
+    mkdir -p /out && touch "$OUT"
+    echo "collector up on ${NODE_NAME:-?}; ${
+      }$(wc -l < "$OUT" 2>/dev/null || echo 0) tuples already recorded"
+    while true; do
+      # awk holds the dedup set in memory and reloads it from disk on start, so
+      # a restart neither loses the set nor re-emits what is already recorded.
+      hubble observe --follow --verdict FORWARDED -o jsonpb 2>/dev/null \
+        | jq -r -f /etc/collector/tuple.jq 2>/dev/null \
+        | awk -v out="$OUT" '
+            BEGIN { while ((getline l < out) > 0) seen[l]=1; close(out) }
+            length($0) > 0 && !($0 in seen) {
+              seen[$0]=1; print $0 >> out; fflush(out);
+              print "NEW\t" $0; fflush("")
+            }'
+      echo "hubble stream ended; reconnecting in 5s"
+      sleep 5
+    done
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: hubble-flow-collector
+  namespace: kube-system
+  labels: {app: hubble-flow-collector}
+spec:
+  selector:
+    matchLabels: {app: hubble-flow-collector}
+  template:
+    metadata:
+      labels: {app: hubble-flow-collector}
+    spec:
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      terminationGracePeriodSeconds: 5
+      containers:
+        - name: collector
+          image: quay.io/cilium/cilium:v1.20.0
+          command: ["/usr/bin/bash", "/etc/collector/collect.sh"]
+          env:
+            - name: HUBBLE_SERVER
+              value: unix:///var/run/cilium/hubble.sock
+            - name: NODE_NAME
+              valueFrom: {fieldRef: {fieldPath: spec.nodeName}}
+          # jq parses every flow, so this is the CPU-hungry part. sea1 agents see
+          # ~490 flows/s each; the limit is deliberately generous, and this is a
+          # temporary workload that should be deleted when stage 1 ends.
+          resources:
+            requests: {cpu: 100m, memory: 128Mi}
+            limits: {cpu: "1", memory: 512Mi}
+          securityContext:
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+            capabilities: {drop: ["ALL"]}
+          volumeMounts:
+            - {name: cilium-run, mountPath: /var/run/cilium, readOnly: true}
+            - {name: out, mountPath: /out}
+            - {name: script, mountPath: /etc/collector}
+      volumes:
+        - name: cilium-run
+          hostPath: {path: /var/run/cilium, type: Directory}
+        - name: out
+          hostPath: {path: /var/lib/hubble-flow-collector, type: DirectoryOrCreate}
+        - name: script
+          configMap: {name: hubble-flow-collector, defaultMode: 0755}
