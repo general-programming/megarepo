@@ -1,0 +1,93 @@
+---
+# Named lists of *external* CIDRs for CiliumNetworkPolicy to reference, so an
+# address list is written once instead of copied into every policy.
+#
+# Landing these alone is a NO-OP: a CIDRGroup is inert until a policy references
+# one, and nothing here does yet. That is why they go first -- the addresses get
+# reviewed on their own terms, before any policy depends on them being right.
+#
+# Cluster-scoped (NAMESPACED=false), so no namespace, and visible to policies in
+# every namespace. Only CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy can
+# reference them -- native networking.k8s.io/v1 NetworkPolicy has no equivalent,
+# which is the main argument for writing fmt2's new policies as CNP.
+#
+# What these do NOT match, which is the subtle part: Cilium is identity-based, so
+# a CIDR only matches peers carrying a CIDR identity. Pods (10.244.0.0/16) have
+# their own identities, ClusterIPs (10.96.0.0/12) are DNAT'd before policy is
+# evaluated, and the nodes carry host/remote-node identity. For in-cluster peers
+# use toEndpoints; for nodes use toEntities: [host, remote-node].
+#
+# Mirrors argocd/apps/infra/cilium/sea1/cidr-groups.yaml, kept per-cluster because
+# the node and load-balancer ranges differ and these are separate cluster-scoped
+# objects in separate clusters. Uses cilium.io/v2 -- sea1's file is still on
+# v2alpha1, which the API server now warns is deprecated, so that is worth
+# migrating there separately.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: fmt2-rfc1918
+  labels:
+    fmt2.cidr/class: private
+spec:
+  externalCIDRs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+---
+# The node LAN. All eight nodes carry their node IP on ens18 in this /24, which
+# is also what makes native routing legal. No IPv6: fmt2's nodes have only
+# link-local v6, which is why dual-stack is still blocked.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: fmt2-nodes
+  labels:
+    fmt2.cidr/class: infra
+spec:
+  externalCIDRs:
+    - 10.65.67.0/24
+---
+# MetalLB's pools. fmt2-pool is the internal /23 announced to both leaves;
+# 79.110.170.65 is the single external VIP shared by traefik and znc-external,
+# announced only to the external BGP peer.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: fmt2-loadbalancers
+  labels:
+    fmt2.cidr/class: infra
+spec:
+  externalCIDRs:
+    - 10.3.4.0/23
+    - 79.110.170.65/32
+---
+# Cloud metadata and link-local. Nothing in this cluster has a reason to reach
+# these, and they are a standard SSRF target.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: link-local-metadata
+  labels:
+    fmt2.cidr/class: deny
+spec:
+  externalCIDRs:
+    - 169.254.0.0/16
+    - fe80::/10
+---
+# Ranges that should never appear as a real destination.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: bogons
+  labels:
+    fmt2.cidr/class: deny
+spec:
+  externalCIDRs:
+    - 0.0.0.0/8
+    - 100.64.0.0/10
+    - 127.0.0.0/8
+    - 192.0.2.0/24
+    - 198.18.0.0/15
+    - 198.51.100.0/24
+    - 203.0.113.0/24
+    - 240.0.0.0/4
