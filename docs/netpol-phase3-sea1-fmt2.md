@@ -117,10 +117,15 @@ ever had series for `cluster="sea1-k8s"`. Fixed by moving the scrape into
 `victoriametrics/base/`, since both clusters run Cilium now.
 
 Gate: flow, drop and enforcement series present for **both** clusters, and
-`hubble_lost_events_total` flat — see R4, which is **not currently satisfied**:
-SEA1 is dropping 0.6 events/sec at the default buffer, so
-`hubble.eventBufferCapacity` has to be raised on both clusters and confirmed flat
-before Stage 1 collects anything worth trusting.
+`hubble.eventBufferCapacity` raised from the 4095 default before Stage 1 collects
+anything — see R4. SEA1's measured loss is only 0.088%, so this is a quality
+gate rather than a blocker, but it cannot be applied retroactively to a graph
+already gathered.
+
+Sized at **32767** (8× the default, ~32 MB per agent). FMT2's control planes have
+**8 GB** of RAM, which is the constraint worth checking before going higher — its
+workers have 32 GB and SEA1's nodes have 791 GB, where the cost is irrelevant.
+Raise further if ring-buffer loss persists after a day.
 
 ### Stage 1 — observe before changing anything
 
@@ -214,24 +219,37 @@ out CoreDNS and therefore the cluster. *Mitigation:* kube-system stays
 unrestricted until the very end, and gets an explicit allow-all-egress-to-DNS
 rule everywhere before anything else is tightened.
 
-**R4 — an incomplete graph produces confidently wrong policies. This one is
-already happening.** Measured on SEA1 on 2026-08-08:
+**R4 — the flow graph has gaps, and they are exactly the flows that matter.**
+Measured on SEA1 on 2026-08-08:
 
 ```
-sum by (cluster) (rate(hubble_lost_events_total[30m]))  ->  sea1-k8s = 0.6/sec
-hubble-event-buffer-capacity                            ->  unset (chart default 4095)
+hubble_flows_processed_total                              282,226,791
+hubble_lost_events_total{source="hubble_ring_buffer"}         248,611   = 0.088%
+hubble_lost_events_total{source="observer_events_queue"}            0
+hubble_lost_events_total{source="perf_event_ring_buffer"}           0
+hubble-event-buffer-capacity                              unset (chart default 4095)
 ```
 
-SEA1 is dropping Hubble events *right now*, at the default per-node buffer. Any
-traffic graph collected today is silently missing flows, and policies written from
-it will be missing rules — which fails open during Stage 4 and closed at Stage 5,
-long after the cause is forgotten. This is the worst possible failure shape: it
-looks like success until enforcement.
+The loss is specifically the **Hubble ring buffer** — the BPF perf ring and the
+observer queue are both clean, so `hubble.eventBufferCapacity` is the right knob
+and the only one that needs touching.
 
-*Mitigation, and a hard gate on Stage 1:* raise `hubble.eventBufferCapacity` on
-**both** clusters (FMT2 has the same default and simply has no metrics yet to
-prove it), then confirm `hubble_lost_events_total` is flat for a full day before
-trusting any collected graph.
+**0.088% is low, and it would be dishonest to call this an outage-grade problem.**
+Bulk traffic is comprehensively covered. It matters for a narrower reason:
+policy authoring does not care about the 99.9% of events that are the same
+handful of chatty paths repeated. It cares about the *rare* flow — the nightly
+cron that opens one connection, the failover path used twice a month. A single
+lost event can erase a distinct `(src → dst:port)` tuple from the graph entirely,
+and that tuple becomes a missing rule that fails open in Stage 4 and closed in
+Stage 5.
+
+The loss is also skewed and bursty rather than uniform — one SEA1 node accounts
+for 170k of the 249k — which is consistent with bursts overrunning the ring, and
+bursts are precisely when a rare flow is most likely to be the thing dropped.
+
+*Mitigation:* raise `hubble.eventBufferCapacity` on both clusters before Stage 1
+collection. This is a quality gate, not a blocker — worth doing first because it
+is cheap and cannot be retrofitted onto a graph already collected.
 
 **R5 — cross-cluster traffic is real and easy to miss.** These clusters are not
 independent: FMT2 runs a `vmselect-sea1-egress`, a tailnet-exposed
