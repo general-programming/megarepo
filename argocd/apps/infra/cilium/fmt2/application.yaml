@@ -97,7 +97,7 @@ spec:
         # 8 pods but they are all hostNetwork, where CNP does not apply. Both
         # victoriametrics policies select 0 pods -- their labels match nothing.
         policyEnforcementMode: default
-        policyAuditMode: false
+        policyAuditMode: true
 
         # MANDATORY even though fmt2 has no Multus today: the chart default
         # moves foreign CNI configs aside, and flannel's conflist must be

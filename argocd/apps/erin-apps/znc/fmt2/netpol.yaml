@@ -1,0 +1,47 @@
+---
+# The internet-only shape sea1 uses for deluge and ipfs, rather than an
+# enumeration of ports. znc dials IRC networks, and the set of servers and ports
+# it will use is open-ended -- the sample only caught 6697, but plaintext 6667
+# and per-network oddities are entirely plausible. Pinning the observed ports
+# would break a network nobody connected to today.
+#
+# The value here is not the port list, it is the egressDeny: znc may reach the
+# internet and may not reach the house. That holds regardless of which IRC server
+# it dials tomorrow.
+#
+# Ingress is left unrestricted on purpose. znc is a bouncer reached over
+# LoadBalancer VIPs on 6667/6697 and 16969; those are long-lived client sessions
+# that generate no new connection-initiating flows, so the sample shows zero
+# ingress and proves nothing about it.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: znc-internet-only
+  namespace: znc
+  labels:
+    fmt2.policy/tier: untrusted
+spec:
+  endpointSelector:
+    matchLabels:
+      app: znc
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - world
+  egressDeny:
+    - toCIDRSet:
+        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: fmt2-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
+    - toEntities:
+        - host
+        - remote-node
+        - kube-apiserver

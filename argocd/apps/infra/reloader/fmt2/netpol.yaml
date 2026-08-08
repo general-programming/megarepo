@@ -1,0 +1,32 @@
+---
+# Egress only. Ingress is deliberately left unrestricted: reloader's inbound
+# traffic is the kubelet probe and metrics scraping, and a two-hour flow sample
+# cannot prove which scrapers exist -- restricting ingress on that evidence would
+# silently drop monitoring. Egress is app-driven and continuous, so the sample is
+# trustworthy for it.
+#
+# Observed egress, whole sample: kube-apiserver:6443 and nothing else. DNS is
+# allowed anyway -- reloader reaches the API by service IP so it has not needed a
+# lookup, but denying DNS to save one rule is a bad trade.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: reloader-egress
+  namespace: reloader
+  labels:
+    fmt2.policy/tier: infra
+spec:
+  endpointSelector:
+    matchLabels:
+      app: reloader-reloader
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - kube-apiserver

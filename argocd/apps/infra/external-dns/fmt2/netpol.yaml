@@ -1,0 +1,42 @@
+---
+# Egress only, for the same reason as reloader: inbound is probes and scraping,
+# which a short sample cannot enumerate safely.
+#
+# Observed egress, whole sample: coredns:53, kube-apiserver:6443, and world:443
+# for the DNS provider API. The egressDeny is the part that earns this policy --
+# world:443 would otherwise include the house, so RFC1918, the MetalLB VIPs,
+# link-local metadata and bogons are denied explicitly.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: external-dns-egress
+  namespace: external-dns
+  labels:
+    fmt2.policy/tier: infra
+spec:
+  endpointSelector:
+    matchLabels:
+      app: external-dns
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "443"
+              protocol: TCP
+  egressDeny:
+    - toCIDRSet:
+        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: fmt2-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
