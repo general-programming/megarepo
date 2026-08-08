@@ -83,6 +83,13 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
+  - # DO NOT REMOVE. Cilium is the CNI (argocd/apps/infra/cilium/fmt2);
+    # dropping this reinstalls flannel under a running Cilium cluster.
+    |-
+    cluster:
+      network:
+        cni:
+          name: none
   # ── Deliberately NOT carried over: machine.registries.config ────────────────
   # The live config holds credentials for registry.generalprogramming.org. They
   # are dropped on the next apply, on purpose. Verified 2026-08-08: zero running
