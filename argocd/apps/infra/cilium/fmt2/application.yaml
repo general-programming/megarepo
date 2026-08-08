@@ -69,9 +69,18 @@ spec:
         # and the root cause is still open there.
         enableIPv4Masquerade: true
 
-        # Phase 2 of the landing plan. KubePrism is already enabled cluster-wide
-        # so the flip only needs this value plus k8sServiceHost/Port.
-        kubeProxyReplacement: false
+        # k8sServiceHost/Port are localhost:7445, i.e. Talos KubePrism, NOT a
+        # control-plane address: with kube-proxy gone the agent cannot resolve
+        # the kubernetes Service to reach the API server, so it needs a
+        # node-local endpoint. KubePrism was enabled cluster-wide in the Talos
+        # update and verified healthy on all 8 nodes.
+        #
+        # kube-proxy is still deployed at this point. Cilium takes over service
+        # handling first, and only then is kube-proxy removed, so services are
+        # never left unhandled by both.
+        kubeProxyReplacement: true
+        k8sServiceHost: localhost
+        k8sServicePort: 7445
 
         # Phase 3. fmt2 carries 11 NetworkPolicies that flannel never enforced;
         # enforcing at cutover risks breaking ArgoCD, which is what would fix it.
