@@ -12,7 +12,7 @@ resources:
   # during the Cilium migration, so in base/ these scrapes matched nothing there
   # and stuck three ScrapePoolHasNoTargets alerts on permanently. fmt2 still runs
   # the controller plus seven frr-k8s daemons, and this is where BGP session
-  # state lives -- see scrape-cilium.yaml in the sea1 overlay for its counterpart.
+  # state lives. Cilium's own scrape is in base/ now that both clusters run it.
   - agent_scrape_metallb.yaml
   - cluster.yaml
   - vmagent.yaml
