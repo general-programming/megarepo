@@ -6,7 +6,7 @@
 # below is load-bearing twice over: the upstream router's ARP entry for the /32
 # depends on it, and the guest pins its NIC name from it (see below).
 #
-# ── THE LUKS ROOT WILL NOT AUTO-UNLOCK ON FIRST BOOT ─────────────────────────
+# THE LUKS ROOT WILL NOT AUTO-UNLOCK ON FIRST BOOT:
 # /dev/sda2 is LUKS2 with a systemd-tpm2 token sealed to PCR 7 (sha256, no
 # PIN). PCR 7 measures SecureBoot state plus PK/KEK/db/dbx, and the sealed blob
 # is additionally bound to the old vTPM's SRK. Neither survives the move:

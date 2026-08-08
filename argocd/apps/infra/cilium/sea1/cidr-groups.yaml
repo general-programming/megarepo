@@ -1,40 +1,8 @@
 ---
-# CiliumCIDRGroups are named lists of *external* CIDRs, referenced from
-# CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy so an address list is
-# written once instead of copied into every policy that needs it.
-#
-# Adding these on their own is a NO-OP: a CIDRGroup is inert until a policy
-# references it. Nothing in this file changes a single packet. That is the point
-# of landing it first -- the address lists can be reviewed and corrected on their
-# own, before any policy depends on them being right.
-#
-# TWO THINGS TO KNOW BEFORE USING THEM
-#
-# 1. They are CLUSTER-SCOPED (`kubectl api-resources` -> NAMESPACED=false), so
-#    there is no namespace to put them in and they are visible to policies in
-#    every namespace automatically.
-#
-# 2. Only CiliumNetworkPolicy and CiliumClusterwideNetworkPolicy can reference
-#    them. Native networking.k8s.io/v1 NetworkPolicy has no equivalent -- its
-#    only address construct is `ipBlock.cidr`. A native policy that needs one of
-#    these lists has to be converted to a CNP first.
-#
-# Referenced as:
-#   toCIDRSet:
-#     - cidrGroupRef: sea1-rfc1918
-# or by label, which lets a policy pick up new groups without being edited:
-#   toCIDRSet:
-#     - cidrGroupSelector:
-#         matchLabels:
-#           sea1.cidr/class: private
-#
-# WHAT A CIDR SELECTOR DOES NOT MATCH, which is the thing that makes these
-# subtle: Cilium is identity-based, so a CIDR only matches a peer that carries a
-# CIDR identity. Pods (10.244.0.0/16, fd40:10:244::/56) each have their own
-# identity; ClusterIPs (10.96.0.0/12, d40:10:96::/108) are DNAT'd before policy
-# is evaluated; and the three nodes carry host/remote-node identity. None of
-# those are matched by anything in this file. For in-cluster peers use
-# toEndpoints; for nodes use `toEntities: [host, remote-node]`.
+# Named external-CIDR lists for CNP/CCNP toCIDRSet references. Inert until a
+# policy references them. Semantics, reference syntax, and the identity caveats
+# (CIDR selectors never match pods, ClusterIPs, or nodes): see
+# docs/netpol-phase3-sea1-fmt2.md, "CiliumCIDRGroups".
 ---
 # The whole RFC1918 space. This is the group that does the real work: it is what
 # separates "may reach the internet" from "may reach the house". Everything in

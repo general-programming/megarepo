@@ -87,6 +87,11 @@ resource "random_password" "baserow_jwt_signing_key" {
   special = false
 }
 
+resource "random_password" "baserow_redis" {
+  length  = 40
+  special = false
+}
+
 resource "vault_kv_secret_v2" "baserow" {
   mount = "secret"
   name  = "app/baserow"
@@ -95,6 +100,7 @@ resource "vault_kv_secret_v2" "baserow" {
     DATABASE_PASSWORD       = random_password.baserow_database.result
     SECRET_KEY              = random_password.baserow_secret_key.result
     BASEROW_JWT_SIGNING_KEY = random_password.baserow_jwt_signing_key.result
+    REDIS_PASSWORD          = random_password.baserow_redis.result
 
     # R2's S3 credentials are derived from the API token, not separate secrets:
     # the access key id is the token id and the secret is the SHA-256 of the

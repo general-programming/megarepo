@@ -290,3 +290,42 @@ Every stage is a single value:
 Nothing here requires a node reboot, a pod recycle, or a CNI change. That is the
 one genuinely comfortable property of this phase, and it is worth preserving by
 never bundling a policy change with anything that does.
+
+## CiliumCIDRGroups
+
+Named lists of *external* CIDRs (argocd/apps/infra/cilium/sea1/cidr-groups.yaml),
+referenced from CiliumNetworkPolicy / CiliumClusterwideNetworkPolicy so an
+address list is written once instead of copied into every policy. Adding a
+group on its own is a no-op — a CIDRGroup is inert until a policy references
+it, which is why the lists can land and be reviewed before any policy depends
+on them.
+
+Two things to know before using them:
+
+1. They are **cluster-scoped** (`kubectl api-resources` → NAMESPACED=false), so
+   there is no namespace to put them in and they are visible to policies in
+   every namespace automatically.
+2. Only CNP and CCNP can reference them. Native networking.k8s.io/v1
+   NetworkPolicy has no equivalent — its only address construct is
+   `ipBlock.cidr`. A native policy that needs one of these lists has to be
+   converted to a CNP first.
+
+Referenced as:
+
+```yaml
+toCIDRSet:
+  - cidrGroupRef: sea1-rfc1918
+# or by label, which lets a policy pick up new groups without being edited:
+toCIDRSet:
+  - cidrGroupSelector:
+      matchLabels:
+        sea1.cidr/class: private
+```
+
+**What a CIDR selector does NOT match** — the thing that makes these subtle:
+Cilium is identity-based, so a CIDR only matches a peer that carries a CIDR
+identity. Pods (10.244.0.0/16, fd40:10:244::/56) each have their own identity;
+ClusterIPs (10.96.0.0/12, fd40:10:96::/108) are DNAT'd before policy is
+evaluated; and the nodes carry host/remote-node identity. None of those are
+matched by a CIDRGroup. For in-cluster peers use `toEndpoints`; for nodes use
+`toEntities: [host, remote-node]`.

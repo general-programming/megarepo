@@ -279,3 +279,50 @@ none of it proves the deploy works, only that it is not wrong on its face:
    `argocd/apps/erin-apps/akvorado/fmt2`, which does not exist. This is the same
    state librenms is already in — noted so it is not mistaken for a regression
    introduced here.
+
+## Vault secret keys (secret/app/akvorado)
+
+Three keys, all written before the app merges — a missing one leaves the
+consuming pod in CreateContainerConfigError on the secretKeyRef.
+
+- **`snmp-credentials.yaml`** — YAML fragment `!include`'d into
+  `outlet.metadata.providers[0].credentials`:
+
+  ```yaml
+  ::/0:
+    communities: <global_meta.snmp_public from projects/barf/network.yml>
+  ```
+
+  A fragment rather than a bare string because credentials are keyed by
+  exporter subnet, and env-var overrides cannot express a map key like `::/0`.
+
+- **`clickhouse-password`** — the ClickHouse `default` user password. A bare
+  string, consumed twice: the operator writes it into users.xml
+  (`ClickHouseCluster.spec.settings.defaultUserPassword`, base/clickhouse.yaml)
+  and akvorado authenticates with it via
+  `AKVORADO_CFG_ORCHESTRATOR_CLICKHOUSEDB_PASSWORD` (base/orchestrator.yaml).
+
+- **`valkey-password`** — the console's query-cache password. Also consumed
+  twice: akvorado-valkey sets it as `--requirepass` (readiness probe reads it
+  as `REDISCLI_AUTH`, base/valkey.yaml) and the console authenticates via
+  `AKVORADO_CFG_ORCHESTRATOR_CONSOLE_HTTP_CACHE_PASSWORD` on the orchestrator.
+
+Generate the passwords in Vault so nobody handles a value:
+
+```sh
+vault kv patch secret/app/akvorado \
+  clickhouse-password="$(vault write -field=random_bytes sys/tools/random/32 format=hex)"
+vault kv patch secret/app/akvorado \
+  valkey-password="$(vault write -field=random_bytes sys/tools/random/32 format=hex)"
+```
+
+`kv patch`, NOT `kv put` — put replaces the whole secret and would delete
+snmp-credentials.yaml, silently breaking SNMP metadata resolution on the
+outlet. `format=hex` so the value needs no quoting in rendered users.xml or
+env vars.
+
+Why the write is manual: every Vault Secrets Operator CRD reads Vault→k8s
+only; the k8s→Vault primitive is ESO's PushSecret, and running a second
+secrets operator for one key is a bad trade. The ClickHouse operator
+self-generates its own management passwords but `defaultUserPassword` is
+reference-only.

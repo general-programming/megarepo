@@ -11,7 +11,7 @@
 # public resolvers (1.1.1.1 / 1.0.0.1), so nothing in a node's boot path
 # resolves through here. Do not reintroduce sea1-core as a node resolver.
 #
-# ── THE NIC RENAME, ALREADY DEFUSED ──────────────────────────────────────────
+# THE NIC RENAME, ALREADY DEFUSED:
 # Its systemd-networkd unit used to match `Name=enp6s18`, which was never the
 # interface's real name (`ens18`) -- it only bound because the kernel exposes
 # enp6s18 as a PCI-path altname (bus 6, slot 18) and networkd matches altnames.

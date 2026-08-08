@@ -29,12 +29,14 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: cnpg-system
-    # Streaming replication + instance manager between instances. Unported on
-    # purpose: 5432 and 8000 both matter.
+    # Streaming replication + instance manager between instances, plus CNPG
+    # join/initdb job pods (labeled cnpg.io/jobRole, not podRole -- they must
+    # reach the primary on 5432 for pg_basebackup). Unported on purpose.
     - from:
         - podSelector:
-            matchLabels:
-              cnpg.io/podRole: instance
+            matchExpressions:
+              - key: cnpg.io/cluster
+                operator: Exists
     # The application itself.
     - from:
         - podSelector:

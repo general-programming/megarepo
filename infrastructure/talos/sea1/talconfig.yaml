@@ -11,10 +11,10 @@ nodes:
   # Split per-node for static IPs; DHCPv6 leases churn (Talos remints its DUID each boot).
   # Do NOT re-add ignoreHostname: with DHCP off there is no other hostname source and Talos
   # invents one, which re-registers the node in k8s and leaves a duplicate behind.
-  # ── METAL (hv-0 converted 2026-08-06). The LAST Proxmox host. Replaced the
-  # ── sea1-k8s-0 VM entry AND absorbed sea1-k8s-cp-0's control-plane role, so
-  # ── every node in this cluster is now bare metal and no VM control planes
-  # ── remain. The vm-tpm-luks patch went with them: it was VM-only.
+  # METAL (hv-0 converted 2026-08-06). The LAST Proxmox host. Replaced the
+  # sea1-k8s-0 VM entry AND absorbed sea1-k8s-cp-0's control-plane role, so
+  # every node in this cluster is now bare metal and no VM control planes
+  # remain. The vm-tpm-luks patch went with them: it was VM-only.
   - hostname: sea1-k8s-0
     ipAddress: "10.3.2.10"
     controlPlane: true
@@ -158,8 +158,8 @@ nodes:
           udev:
             rules:
               - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
-  # ── METAL (hv-1 converted 2026-08-05). Replaced the VM entry of the same
-  # ── name AND absorbed sea1-k8s-cp-1's control-plane role.
+  # METAL (hv-1 converted 2026-08-05). Replaced the VM entry of the same
+  # name AND absorbed sea1-k8s-cp-1's control-plane role.
   - hostname: sea1-k8s-1
     ipAddress: "10.3.2.11"
     controlPlane: true
@@ -367,8 +367,8 @@ nodes:
           udev:
             rules:
               - ACTION=="add|change", SUBSYSTEM=="block", KERNEL=="nvme*", ATTRS{model}=="HUSMR7676BDP3Y1*", ATTR{queue/discard_max_bytes}="0"
-  # ── METAL (hv-2 converted 2026-08-03). Replaced the VM entry of the same
-  # ── name; identity reuse keeps labels, affinities, NADs and ceph intact.
+  # METAL (hv-2 converted 2026-08-03). Replaced the VM entry of the same
+  # name; identity reuse keeps labels, affinities, NADs and ceph intact.
   - hostname: sea1-k8s-2
     ipAddress: "10.3.2.12"
     controlPlane: true
@@ -713,7 +713,7 @@ patches:
           - 10.96.0.0/12
           - d40:10:96::/108
 
-  # ── Ingress firewall ────────────────────────────────────────────────────
+  # Ingress firewall:
   # These nodes carry globally routable GUAs (2602:fa6d:10:ffff::110/111/112)
   # and nothing filters upstream, so every host service was reachable from the
   # public internet -- including ceph-mgr :9283, ceph-exporter :9926, cilium

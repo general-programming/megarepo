@@ -299,9 +299,9 @@ elasticsearch:
     # from extraIngress. Anchored here and aliased by `data` below; the two must
     # stay identical or transport breaks asymmetrically.
     #
-    # NOTE this narrows *reachability* only. ES still runs with xpack security
-    # disabled, so any client that does get through is an unauthenticated
-    # superuser. Do not read this policy as making ES safe to expose.
+    # NOTE this narrows *reachability* only; authentication (xpack security,
+    # enabled above) is the other half. Keep both -- neither alone makes ES
+    # safe to expose.
     networkPolicy: &esNetworkPolicy
       enabled: true
       allowExternal: false
@@ -322,10 +322,10 @@ elasticsearch:
             - podSelector: {}
         # cerebro is the ES admin UI. Its image ships an empty host list, so
         # operators type the cluster URL at runtime — without this rule that
-        # workflow silently breaks. It sits behind Cloudflare Access at the edge,
-        # but be clear-eyed: while ES has no authentication this is an
-        # unauthenticated admin path. Drop this rule and use port-forward if you
-        # would rather not keep it.
+        # workflow silently breaks. It sits behind Cloudflare Access at the
+        # edge, and since xpack security went on, connecting also requires ES
+        # credentials. Drop this rule and use port-forward if you would rather
+        # not keep it.
         - ports:
             - port: 9200
               protocol: TCP

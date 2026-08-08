@@ -46,9 +46,13 @@ caddy:
 redis:
   enabled: true
   architecture: standalone
+  # Password from Vault like every other credential here -- never a literal in
+  # git. The chart's rendered REDIS_PASSWORD copy is patched out in
+  # kustomization.yaml; the backends read it from baserow-secrets instead.
   auth:
     enabled: true
-    password: baserow
+    existingSecret: baserow-secrets
+    existingSecretPasswordKey: REDIS_PASSWORD
   master:
     persistence:
       storageClass: ceph-rbd-xfs

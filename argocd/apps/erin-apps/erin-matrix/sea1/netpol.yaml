@@ -33,11 +33,12 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: cnpg-system
+    # cnpg.io/cluster alone, so join/initdb job pods (labeled cnpg.io/jobRole,
+    # not podRole) can reach the primary for pg_basebackup.
     - from:
         - podSelector:
             matchLabels:
               cnpg.io/cluster: matrix-db
-              cnpg.io/podRole: instance
     - from:
         - podSelector:
             matchLabels:
@@ -72,11 +73,12 @@ spec:
         - namespaceSelector:
             matchLabels:
               kubernetes.io/metadata.name: cnpg-system
+    # cnpg.io/cluster alone, so join/initdb job pods (labeled cnpg.io/jobRole,
+    # not podRole) can reach the primary for pg_basebackup.
     - from:
         - podSelector:
             matchLabels:
               cnpg.io/cluster: matrix-mas-db
-              cnpg.io/podRole: instance
     - from:
         - podSelector:
             matchLabels:

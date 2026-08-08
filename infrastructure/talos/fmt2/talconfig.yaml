@@ -93,7 +93,7 @@ patches:
           name: none
       proxy:
         disabled: true
-  # ── Deliberately NOT carried over: machine.registries.config ────────────────
+  # Deliberately NOT carried over: machine.registries.config:
   # The live config holds credentials for registry.generalprogramming.org. They
   # are dropped on the next apply, on purpose. Verified 2026-08-08: zero running
   # pods and zero workload specs reference that registry, there are no
@@ -114,7 +114,7 @@ patches:
           keys:
             - slot: 0
               nodeID: {}
-  # ── IPv6 / dual-stack — STAGED, NOT ACTIVE ──────────────────────────────────
+  # IPv6 / dual-stack — STAGED, NOT ACTIVE:
   # Activated in phase D of docs/fmt2-talos-k8s-update.md. Deliberately inert
   # until then so the sizing below is reviewed on its own terms.
   #
@@ -147,9 +147,9 @@ patches:
     # kube-proxy the agent cannot resolve the kubernetes Service to reach the
     # API server. Absent from this cluster until now; sea1 already had it.
     #
-    # hostDNS.forwardKubeDNSToHost is pinned false to match sea1. The generated
-    # default is true, and Talos hostDNS is the prime suspect in the port-53
-    # breakage that forced sea1 to revert bpf.masquerade (aeff6eb0 / 7e420b62).
+    # hostDNS.forwardKubeDNSToHost stays true (the default), matching what sea1
+    # actually runs. With the stock Corefile forwarding '.' to the node
+    # resolver, pinning this false would break all external DNS on the cluster.
     |-
     machine:
       features:
@@ -166,7 +166,7 @@ patches:
           port: 7445
         hostDNS:
           enabled: true
-          forwardKubeDNSToHost: false
+          forwardKubeDNSToHost: true
   - # Disable NIC tx checksum offload — works around the flannel VXLAN bad-UDP-checksum
     # bug (virtio_net + kernel offload corrupts inner checksums on encapsulated traffic,
     # silently dropping cross-node UDP/DNS). ref: flannel-io/flannel#1279, siderolabs/talos#8873

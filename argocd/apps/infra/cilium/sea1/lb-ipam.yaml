@@ -17,8 +17,9 @@ spec:
     matchLabels:
       generalprogramming.org/lb-pool: sea1-lan
 ---
-# The v6 ingress pool traefik draws from. Auto-assigns, matching the MetalLB
-# pool-external it replaces.
+# Globally routable v6 pool. Label-gated like sea1-lan: on a dual-stack
+# cluster an ungated pool would hand a public VIP to any Service that asks
+# for IPv6, so drawing from it must be an explicit opt-in.
 apiVersion: cilium.io/v2alpha1
 kind: CiliumLoadBalancerIPPool
 metadata:
@@ -26,6 +27,9 @@ metadata:
 spec:
   blocks:
     - cidr: "2602:fa6d:10:ffff::e00/120"
+  serviceSelector:
+    matchLabels:
+      generalprogramming.org/lb-pool: sea1-external-v6
 ---
 # Replaces MetalLB's L2Advertisement -- ARP for v4, NDP for v6.
 #
@@ -38,6 +42,12 @@ kind: CiliumL2AnnouncementPolicy
 metadata:
   name: sea1-lan
 spec:
+  # Announce only Services that opted into a pool -- keeps NDP/ARP for the
+  # public v6 range behind the same label gate as the pools themselves.
+  serviceSelector:
+    matchExpressions:
+      - key: generalprogramming.org/lb-pool
+        operator: Exists
   nodeSelector:
     matchLabels:
       generalprogramming.org/lan-bridge: "true"

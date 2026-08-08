@@ -57,3 +57,8 @@ patches:
         path: /metadata/annotations/helm.sh~1hook
       - op: remove
         path: /metadata/annotations/helm.sh~1hook-weight
+      # With auth.existingSecret set, the chart renders this key from a cluster
+      # `lookup` that falls back to a random value per render. Drop it; the
+      # backends get REDIS_PASSWORD from baserow-secrets (Vault).
+      - op: remove
+        path: /data/REDIS_PASSWORD
