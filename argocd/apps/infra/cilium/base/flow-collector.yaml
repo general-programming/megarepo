@@ -44,10 +44,14 @@ data:
     echo "collector up on ${NODE_NAME:-?}; ${
       }$(wc -l < "$OUT" 2>/dev/null || echo 0) tuples already recorded"
     while true; do
+      # jq needs --unbuffered: writing into a pipe it buffers ~4-8KB, so a quiet
+      # node emits nothing for minutes. fmt2's control planes see ~18 flows/s and
+      # produced zero tuples for five minutes while the busy workers looked fine.
+      #
       # awk holds the dedup set in memory and reloads it from disk on start, so
       # a restart neither loses the set nor re-emits what is already recorded.
       hubble observe --follow --verdict FORWARDED -o jsonpb 2>/dev/null \
-        | jq -r -f /etc/collector/tuple.jq 2>/dev/null \
+        | jq -r --unbuffered -f /etc/collector/tuple.jq 2>/dev/null \
         | awk -v out="$OUT" '
             BEGIN { while ((getline l < out) > 0) seen[l]=1; close(out) }
             length($0) > 0 && !($0 in seen) {
