@@ -5,6 +5,7 @@ resources:
   - postgres.yaml
   - postgres-timescaledb.yaml
   - secrets.yaml
+  - netpol.yaml
 helmCharts:
   - name: meilisearch
     releaseName: meilisearch

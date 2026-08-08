@@ -5,3 +5,4 @@ namespace: erin-scraper-projects
 resources:
   - namespace.yaml
   - postgres.yaml
+  - netpol.yaml
