@@ -1,0 +1,56 @@
+---
+# authentik-db (3 instances) accepted connections from any pod in any namespace.
+#
+# WHO ACTUALLY USES IT, verified 2026-08-08 rather than inferred:
+#   - pg_stat_activity:  authentik-server, authentik-worker, streaming_replica
+#   - cluster-wide scan: no pod spec outside this namespace references
+#     authentik-db
+#   - no tailscale.com/expose on any Service here, so there are no tailnet
+#     clients arriving via the operator's proxy pods
+#
+# Port 8000 is the CNPG instance-manager status port. It is not listed for the
+# kubelet: Cilium's allow-localhost defaults to `auto`, which lets a node reach
+# its own pods regardless of policy, and probes are always local-node. The
+# instance-to-instance rule is deliberately unported so 8000 works between
+# replicas as well as 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authentik-db-allowed-clients
+  namespace: authentik
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    # Operator: switchover, backup, instance coordination.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    # Streaming replication + instance manager between instances of the cluster.
+    # Unported on purpose: 5432 and 8000 both matter.
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/podRole: instance
+    # The application itself.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: authentik
+      ports:
+        - protocol: TCP
+          port: 5432
+    # vmagent scrapes the instance-manager metrics endpoint (VMPodScrape "cnpg").
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - protocol: TCP
+          port: 9187

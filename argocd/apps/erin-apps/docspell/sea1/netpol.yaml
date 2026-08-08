@@ -1,0 +1,55 @@
+---
+# docspell-db accepted connections from any pod in any namespace.
+#
+# WHO ACTUALLY USES IT, verified 2026-08-08:
+#   - pg_stat_activity:  docspell-restserver, docspell-joex, streaming_replica
+#   - cluster-wide scan: no pod spec outside this namespace references
+#     docspell-db
+#   - no tailscale.com/expose on any Service here
+#
+# solr-0 also runs in this namespace but never connects to postgres, so it is
+# not allowed. The instance-to-instance rule is unported so 8000 works between
+# replicas as well as 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: docspell-db-allowed-clients
+  namespace: docspell
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    # Operator: switchover, backup, instance coordination.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    # Streaming replication + instance manager between instances. Unported on
+    # purpose: 5432 and 8000 both matter.
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/podRole: instance
+    # The application itself.
+    - from:
+        - podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [docspell-restserver, docspell-joex]
+      ports:
+        - protocol: TCP
+          port: 5432
+    # vmagent scrapes the instance-manager metrics endpoint (VMPodScrape "cnpg").
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - protocol: TCP
+          port: 9187
