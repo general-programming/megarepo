@@ -126,6 +126,16 @@ spec:
             enabled: true
 
         hubble:
+          # cronJob, not the chart default of helm. With method=helm the certs
+          # are minted at render time, so whenever ArgoCD's render cache misses
+          # it produces fresh ones and the three secrets sit permanently
+          # OutOfSync -- which is what fmt2 was doing, and why selfHeal could not
+          # be turned on without rotating Hubble's mTLS on every reconcile.
+          # cronJob generates them in-cluster instead, so renders are stable.
+          tls:
+            auto:
+              enabled: true
+              method: cronJob
           relay:
             enabled: true
           # Flow-derived metrics on :9965. httpV2 carries the label context the
@@ -149,10 +159,14 @@ spec:
                 tailscale.com/expose: "true"
                 tailscale.com/hostname: "hubble-fmt2"
 
-  # Sync is deliberately MANUAL for the migration -- no automated block -- so
-  # selfHeal cannot reconcile against a cluster that is half flannel and half
-  # Cilium. Restored once every node is on Cilium (landing plan step 1.5).
+  # Automated sync restored now that all 8 nodes are on Cilium (landing plan
+  # step 1.5). It was manual for the cutover so selfHeal could not reconcile
+  # against a cluster that was half flannel and half Cilium.
   syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+      allowEmpty: true
     syncOptions:
       - allowEmpty=true
       - ServerSideApply=true
