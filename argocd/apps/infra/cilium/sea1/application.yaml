@@ -60,19 +60,36 @@ spec:
         # What actually happened on the k8s-0 canary: port 53 broke, and only
         # port 53. From a pod on that node, TCP to 1.1.1.1:443 was fine while
         # BOTH udp/53 and tcp/53 to 1.1.1.1 and 8.8.8.8 timed out -- so this is
-        # not "UDP egress is broken", it is something intercepting :53. Prime
-        # suspect is Talos hostDNS: `enabled: true` still redirects :53 to
-        # 169.254.116.108 even with forwardKubeDNSToHost false, and that redirect
-        # does not survive the switch to BPF host routing.
+        # not "UDP egress is broken", it is something intercepting :53.
         #
-        # Both documented prerequisites were already in place and verified when
-        # this failed, so they are NOT the missing piece:
-        #   - coredns forwards to explicit upstreams, not /etc/resolv.conf
-        #     (be3e9133, kept -- it is correct regardless)
-        #   - machine.features.hostDNS.forwardKubeDNSToHost: false
+        # CORRECTION 2026-08-08. The claim below this line used to be that both
+        # prerequisites were verified in place. One of them was not:
+        # `forwardKubeDNSToHost` is **true** on all three nodes, not false. It is
+        # a talhelper/Talos default and was never overridden -- there is no
+        # hostDNS block in infrastructure/talos/sea1/talconfig.yaml, and all
+        # three rendered configs under clusterconfig/ carry:
         #
-        # Next thing to try is hostDNS.enabled: false outright, on one node,
-        # with a pod on that node testing dig @1.1.1.1 before anything else.
+        #     hostDNS:
+        #       enabled: true
+        #       forwardKubeDNSToHost: true
+        #
+        # Confirmed live: the host nftables `table inet talos` ingress chain is
+        # policy drop, with explicit accepts for pod CIDR -> 169.254.116.108:53
+        # (udp handle 1397, tcp handle 1404) -- those rules exist only because
+        # forwardKubeDNSToHost is on. 169.254.116.108:53 answers from a pod
+        # today, and Talos init holds the listener.
+        #
+        # So the canary was run with a documented prerequisite unmet, and the
+        # "even with forwardKubeDNSToHost false" theory rests on a false premise.
+        # Ruled out while confirming this: there is no DNAT/redirect for :53 in
+        # any table, and cilium's DNS proxy is not the interceptor -- the TPROXY
+        # rules are mark-gated and sit at 0 packets, with zero toFQDNs policies
+        # cluster-wide.
+        #
+        # Next attempt: set forwardKubeDNSToHost: false FIRST (the actual
+        # prerequisite), confirm pod DNS still resolves, and only then try
+        # bpf.masquerade on one node. Do not jump to hostDNS.enabled: false --
+        # that is a bigger hammer than the evidence justifies.
         # Note bpf.masquerade also flips host routing Legacy -> BPF and makes
         # IPv6 masquerade (upstream BETA) load-bearing for all pod v6 egress.
         enableIPv4Masquerade: true
