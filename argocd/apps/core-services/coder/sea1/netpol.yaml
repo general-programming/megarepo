@@ -1,0 +1,55 @@
+---
+# coder-db accepted connections from any pod in any namespace.
+#
+# WHO ACTUALLY USES IT, verified 2026-08-08:
+#   - pg_stat_activity:  the coder pod (10.244.2.168), streaming_replica
+#   - cluster-wide scan: no pod spec outside this namespace references coder-db
+#   - no tailscale.com/expose on any Service here
+#
+# Note coder-workspaces is a SEPARATE namespace of untrusted user workloads and
+# is deliberately NOT allowed here -- it never connected, and it should not.
+#
+# The instance-to-instance rule is unported so the instance-manager status port
+# 8000 works between replicas as well as 5432. Kubelet probes are local-node and
+# covered by Cilium allow-localhost=auto.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: coder-db-allowed-clients
+  namespace: coder
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    # Operator: switchover, backup, instance coordination.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    # Streaming replication + instance manager between instances. Unported on
+    # purpose: 5432 and 8000 both matter.
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/podRole: instance
+    # The application itself.
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: coder
+      ports:
+        - protocol: TCP
+          port: 5432
+    # vmagent scrapes the instance-manager metrics endpoint (VMPodScrape "cnpg").
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - protocol: TCP
+          port: 9187

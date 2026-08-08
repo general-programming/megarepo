@@ -1,0 +1,105 @@
+---
+# shared-db holds two CNPG clusters (shared-db, shared-timescaledb) and
+# meilisearch. Before this, all three accepted connections from any pod in any of
+# the 55 namespaces.
+#
+# WHO ACTUALLY USES THESE, verified 2026-08-08 rather than inferred:
+#
+#   - shared-db databases:      shared, field2025
+#   - shared-timescaledb:       shared, gamescrape
+#   - login roles:              shared, gamescrape, streaming_replica,
+#                               cnpg_metrics_exporter, postgres
+#   - pg_stat_activity:         nothing but streaming_replica
+#   - no pod env or Secret in any other namespace references shared-db,
+#     shared-timescaledb, postgres-rw-hostport or meilisearch
+#
+# Every app that used to live here now runs its own CNPG cluster in its own
+# namespace (authentik-db, mastodon-db, matrix-db, matrix-mas-db, coder-db,
+# docspell-db, baserow-db, netbox-db, scraperdb). The in-cluster client list is
+# therefore empty, and the real consumers are off-cluster over Tailscale.
+#
+# THE TAILSCALE PROXIES ARE THE POINT. postgres-rw-hostport, timescale-rw-hostport
+# and meilisearch all carry tailscale.com/expose, so the operator runs proxy pods
+# (ts-postgres-rw-hostport-*, ts-timescale-rw-hostport-*, ts-meilisearch-*) in the
+# tailscale-operator namespace and every tailnet connection arrives from there.
+# Omit that allowance and svc-shared-postgres, svc-shared-timescale and
+# svc-meilisearch-sea1 all go dark for every tailnet client.
+#
+# Port 8000 is the CNPG instance-manager status port that kubelet probes. It is
+# not listed for the host: Cilium's allow-localhost defaults to `auto`, which
+# permits the local node to reach its own pods regardless of policy, and the
+# probes are always local-node. The instance-to-instance rule below carries no
+# ports precisely so 8000 works between replicas as well as 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allowed-clients
+  namespace: shared-db
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    # Operator drives switchover, backup and instance coordination.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    # Streaming replication and instance-manager traffic between instances of the
+    # same cluster. Deliberately unported: 5432 and 8000 both matter here.
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/podRole: instance
+    # Tailnet clients, via the operator's proxy pods.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale-operator
+      ports:
+        - port: 5432
+          protocol: TCP
+    # vmagent is the only scraper in this cluster (VMAgent selectAllByDefault,
+    # one replica in victoriametrics). 9187 is CNPG's exporter. Without this the
+    # postgres dashboards go blank hours later, with no other symptom.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 9187
+          protocol: TCP
+---
+# meilisearch-0 serves 7700 and is reached only over Tailscale
+# (svc-meilisearch-sea1, docs/shared_db/meilisearch.md). No in-cluster pod holds
+# its master key.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: meilisearch-allowed-clients
+  namespace: shared-db
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: meilisearch
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale-operator
+        # Metrics live on the same 7700 listener, so the scraper needs the same
+        # port rather than one of its own.
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 7700
+          protocol: TCP

@@ -1,0 +1,50 @@
+---
+# scraperdb (databases: scraper, upscraped) has no workload of its own in this
+# namespace -- the only pods here are the two CNPG instances. Its clients are
+# off-cluster, over the Tailscale proxy for the `postgres-rw` Service
+# (ts-postgres-rw-*), which is why tailscale-operator is allowed and no
+# application namespace is.
+#
+# Verified 2026-08-08: pg_stat_activity shows only streaming_replica, and no pod
+# env or Secret outside this namespace references scraperdb.
+#
+# Unported instance-to-instance rule so CNPG's 8000 status port works between
+# replicas as well as 5432. Kubelet probes on 8000 arrive from the node and are
+# permitted by Cilium's allow-localhost=auto.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allowed-clients
+  namespace: erin-scraper-projects
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    - from:
+        - podSelector:
+            matchLabels:
+              cnpg.io/podRole: instance
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: tailscale-operator
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Observed live: vmagent -> scraperdb-1:9187.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 9187
+          protocol: TCP

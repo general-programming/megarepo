@@ -1,0 +1,38 @@
+---
+# job-chewy-upgrade is the one workload that needs ES credentials and cannot get
+# them from mastodon.extraEnvVars: unlike deployment-web, deployment-sidekiq and
+# cronjob-elastic-search-index, its template never renders
+# `.Values.mastodon.extraEnvVars`. It only takes envFrom on mastodon-env and
+# mastodon-secrets, neither of which carries an ES credential.
+#
+# The result once ES security was enabled: ES_PASS is nil and the job dies with
+#
+#   TypeError: no implicit conversion of nil into String
+#     Chewy::ElasticClient.build_es_client
+#
+# It is a post-install hook with backoffLimit 6, so it retries, exhausts them and
+# sits Failed. Search itself is unaffected -- web and sidekiq do get ES_PASS --
+# but the app reads Degraded and the index-mapping upgrade never runs.
+#
+# Patched here rather than in the vendored chart so a renovate bump of
+# mastodon-13.0.4 does not silently drop it. mastodon-values.yaml notes the same
+# gap for job-deploy-search; that hook stays disabled, and if it is ever enabled
+# it needs the same treatment.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mastodon-chewy-upgrade
+spec:
+  template:
+    spec:
+      containers:
+        # Container is mastodon-chewy-setup, not -upgrade (that is the Job name).
+        # A strategic-merge patch keyed on the wrong name appends a second
+        # container instead of patching this one.
+        - name: mastodon-chewy-setup
+          env:
+            - name: ES_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: mastodon-elasticsearch
+                  key: password

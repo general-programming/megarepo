@@ -44,6 +44,14 @@ spec:
                 secretKeyRef:
                   name: akvorado-secrets
                   key: clickhouse-password
+            # Same trick for the console's valkey cache. The console holds no
+            # config of its own, so this has to be set here even though the
+            # orchestrator itself never talks to valkey.
+            - name: AKVORADO_CFG_ORCHESTRATOR_CONSOLE_HTTP_CACHE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: akvorado-secrets
+                  key: valkey-password
           ports:
             - containerPort: 8080
               name: http

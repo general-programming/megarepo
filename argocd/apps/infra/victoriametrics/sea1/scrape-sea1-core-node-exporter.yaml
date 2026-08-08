@@ -1,0 +1,37 @@
+---
+# STOPGAP. Remove when consul SD works again -- see the phase 4 precondition
+# list in infrastructure/consul/acl/README.md.
+#
+# sea1-core's node_exporter has not been in the consul catalog since the
+# Proxmox->Talos migration. Its agent registers the service locally and the
+# check passes, but anti-entropy cannot push it to the servers:
+#
+#   agent.client: RPC failed to server: method=Catalog.NodeServiceList
+#                 server=10.3.2.10:8300 error="rpc error making call: EOF"
+#   agent.anti_entropy: failed to sync remote state: error="rpc error making call: EOF"
+#
+# Cause is the hostPort reply-SNAT trap in .claude/skills/consul-sea1/SKILL.md,
+# whose fix is cilium bpf.masquerade -- tried and reverted 2026-08-06 because it
+# broke :53. So sea1_scrape.yaml's consul SD resolves to an empty target list and
+# node_exporter series for this host silently stopped.
+#
+# :9100 is reachable from the cluster directly, so scrape it statically until the
+# datapath fix lands. job/instance are set to match what the consul SD path
+# produces, so the series are continuous across the cutover.
+#
+# NOTE: delete this file in the same change that fixes consul SD. Leaving both
+# active double-scrapes the host.
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMStaticScrape
+metadata:
+  name: sea1-core-node-exporter
+  namespace: victoriametrics
+spec:
+  jobName: node_exporter
+  targetEndpoints:
+    - targets:
+        - 10.3.2.6:9100
+      labels:
+        job: node_exporter
+      path: /metrics
+      interval: 30s
