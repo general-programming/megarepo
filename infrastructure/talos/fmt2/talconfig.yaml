@@ -4,6 +4,11 @@ talosVersion: v1.12.2
 kubernetesVersion: v1.35.0
 additionalMachineCertSans:
   - kube.generalprogramming.org
+# DO NOT REMOVE. The live apiServer.certSANs carries this name; without it here
+# talhelper generates a config that drops it, and the API server stops being
+# valid for the endpoint every client uses.
+additionalApiServerCertSans:
+  - kube.generalprogramming.org
 nodes:
   - hostname: controlplane
     ipAddress: "10.65.67.44,10.65.67.45,10.65.67.46"
@@ -78,6 +83,13 @@ controlPlane:
         officialExtensions:
           - siderolabs/qemu-guest-agent
 patches:
+  # ── Deliberately NOT carried over: machine.registries.config ────────────────
+  # The live config holds credentials for registry.generalprogramming.org. They
+  # are dropped on the next apply, on purpose. Verified 2026-08-08: zero running
+  # pods and zero workload specs reference that registry, there are no
+  # dockerconfigjson secrets, the `registry` namespace is empty, and the endpoint
+  # does not respond. If it is ever revived, the credential belongs in
+  # talsecret.sops.yaml, not in plaintext here.
   - # Encrypt system disk with TPM
     |-
     machine:
@@ -92,21 +104,64 @@ patches:
           keys:
             - slot: 0
               nodeID: {}
-  - # IPv6 support
+  # ── IPv6 / dual-stack — STAGED, NOT ACTIVE ──────────────────────────────────
+  # Activated in phase D of docs/fmt2-talos-k8s-update.md. Deliberately inert
+  # until then so the sizing below is reviewed on its own terms.
+  #
+  # The previous values were fc00:cafe:cafe:1::/64 and fc00:cafe:cafe:2::/64.
+  # BOTH WERE UNUSABLE, which is why this never reached a control plane:
+  #   - a /64 service CIDR is REJECTED by kube-apiserver, which caps the IPv6
+  #     Service range at /108. Applying it to a control plane means the API
+  #     server does not come back.
+  #   - a /64 pod CIDR yields exactly ONE node allocation, because
+  #     --node-cidr-mask-size-ipv6 defaults to 64. Seven of eight nodes get none.
+  #   - fc00::/8 is the unassigned half of ULA; fd00::/8 is the half defined for
+  #     locally-generated prefixes. Renumbered while resizing.
+  # Sizes follow sea1 (fd40:10:244::/56 pod, /108 service).
+  #
+  # NOTE: the workers currently carry the old /64 pair and the control planes
+  # carry none -- a split-brain that is inert only because kube-controller-manager
+  # runs on the control planes. Phase D resolves it.
+  #
+  # - |-
+  #   cluster:
+  #     network:
+  #       podSubnets:
+  #           - 10.244.0.0/16
+  #           - fd00:cafe:cafe:1::/56
+  #       serviceSubnets:
+  #           - 10.96.0.0/12
+  #           - fd00:cafe:cafe:2::/108
+  - # KubePrism: a node-local load-balanced endpoint for the API server on
+    # localhost:7445. Required before Cilium can replace kube-proxy -- without
+    # kube-proxy the agent cannot resolve the kubernetes Service to reach the
+    # API server. Absent from this cluster until now; sea1 already had it.
+    #
+    # hostDNS.forwardKubeDNSToHost is pinned false to match sea1. The generated
+    # default is true, and Talos hostDNS is the prime suspect in the port-53
+    # breakage that forced sea1 to revert bpf.masquerade (aeff6eb0 / 7e420b62).
     |-
-    cluster:
-      network:
-        podSubnets:
-            - 10.244.0.0/16
-            - fc00:cafe:cafe:1::/64
-        # The service subnet CIDR.
-        serviceSubnets:
-            - 10.96.0.0/12
-            - fc00:cafe:cafe:2::/64
+    machine:
+      features:
+        # Pinned explicitly, not because the defaults differ, but because the
+        # generated config omits them and a silent rbac:false would be a
+        # security regression nobody would notice in a diff full of omissions.
+        # stableHostname is NOT set here: Talos moved it to its own
+        # HostnameConfig document (auto: stable), and setting both is a
+        # genconfig error.
+        rbac: true
+        apidCheckExtKeyUsage: true
+        kubePrism:
+          enabled: true
+          port: 7445
+        hostDNS:
+          enabled: true
+          forwardKubeDNSToHost: false
   - # Disable NIC tx checksum offload — works around the flannel VXLAN bad-UDP-checksum
     # bug (virtio_net + kernel offload corrupts inner checksums on encapsulated traffic,
     # silently dropping cross-node UDP/DNS). ref: flannel-io/flannel#1279, siderolabs/talos#8873
-    # NOTE: confirm the NIC name on fmt2 — `talosctl -n <node> get links` (assumed ens18).
+    # Confirmed 2026-08-08: ens18 is the only up ether device on all 8 nodes, and
+    # this patch has never actually been applied (no ethernetspecs on any node).
     |-
     apiVersion: v1alpha1
     kind: EthernetConfig
