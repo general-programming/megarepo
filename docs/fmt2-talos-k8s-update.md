@@ -257,12 +257,104 @@ That clears every prerequisite the Cilium plan was blocked on:
 - **Phase D:** removing the second family from `serviceSubnets` after Services
   have taken v6 addresses is messy. Land it only when you are content to keep it.
 
+## Execution log
+
+### Phase A — COMPLETE, 2026-08-08 (01:33–02:29 UTC)
+
+All 8 nodes rolled one at a time, workers first, canaried on `node-4`.
+
+Verified on every node afterwards: KubePrism healthy on `127.0.0.1:7445`,
+`EthernetSpec ens18` present (the tx-checksum patch applied for the first time
+ever), zero references to `registry.generalprogramming.org`, zero `fc00:cafe`
+subnets. Cluster: 8/8 Ready, ceph `HEALTH_OK`, etcd 3/3, every ArgoCD
+Application Healthy, MetalLB BGP sessions up on all nodes.
+
+Confirmed directly on cp-0 after its roll: the served API server certificate
+still carries `DNS:kube.generalprogramming.org`. That was the delta that would
+have broken every client, and it is neutralised.
+
+Notes worth keeping:
+
+- **The two `tempo-helm-*` PDBs were never a blocker.** They select
+  `instance=tempo-helm` and match zero pods — orphans of an older chart release.
+  A PDB matching no pods cannot block an eviction. Only `attic/attic-db-primary`
+  was real.
+- **`attic-db` needed a CNPG switchover**, not a scale-up. It is a healthy
+  2-instance cluster; `kubectl cnpg promote attic-db attic-db-2` moved the
+  primary onto already-rolled hardware in ~10s, after which node-2 drained
+  freely. `kubectl-cnpg` 1.30.0 matches the operator version and is in nixpkgs.
+- **`stableHostname` cannot be pinned in `machine.features`** on this Talos
+  version — it moved to its own `HostnameConfig` document and setting both is a
+  `genconfig` error. `rbac` and `apidCheckExtKeyUsage` are pinned; that one is
+  deliberately not.
+- The `eightyeightthirtyone` CrashLoopBackOff is **pre-existing** (50k+ restarts
+  in the pre-change baseline) and unrelated.
+- Baseline artifacts, including a 148 MB etcd snapshot taken before the first
+  node: `/home/erin/tmp/fmt2-upgrade-baseline/`.
+
+### Phase B — COMPLETE, 2026-08-08 (02:32–04:04 UTC)
+
+All 8 nodes upgraded to **Talos v1.13.7**, one at a time, canaried on `node-4`.
+Encrypted volumes unsealed on every node through the secureboot bootloader
+transition — the one step that had no cheap rollback. ~9.5 min per node.
+
+`attic-db` needed a second switchover mid-phase (its primary had landed back on
+`node-1`); the roll script handled it automatically in 22s.
+
+etcd was re-verified between every control plane using `etcd status` — three
+members, no learners, matching raft index — not just "three members listed".
+
+### Phase C — COMPLETE, 2026-08-08 (04:05 UTC)
+
+`talosctl upgrade-k8s --to 1.36.2`. No reboots. Server, all 8 kubelets, and the
+control-plane component images are on **v1.36.2**.
+
+Pre-checked first via `apiserver_requested_deprecated_apis`: the only deprecated
+APIs being requested were `endpoints/v1`, `hub.traefik.io/v1alpha1`, and
+`metallb.io/v1beta1` — all reporting `removed_release=""`, and two of them CRDs,
+which core removals do not touch. Nothing in this cluster called an API 1.36
+drops.
+
+Final state: 8/8 Ready, ceph `HEALTH_OK`, etcd 3/3 healthy, every ArgoCD
+Application Healthy, `attic-db` healthy. The only unhealthy pod is the
+pre-existing `eightyeightthirtyone` crashloop.
+
+### Phase D — BLOCKED on node IPv6 addressing
+
+**The fmt2 nodes have no routable IPv6.** Verified on 2026-08-08: `ens18` carries
+only `10.65.67.x/24` and a link-local `fe80::/64` on every node, and Talos's
+`NodeAddress` resources are IPv4-only.
+
+Dual-stack cannot be enabled in this state, regardless of how the CIDRs are
+sized:
+
+- kubelet has no v6 address to report, so nodes cannot get a v6 `InternalIP`.
+- flannel's v6 VXLAN backend needs v6 node endpoints to build the overlay.
+- pods would receive ULA v6 addresses with no v6 path off-node.
+
+There *is* an IPv6 default route on the LAN, via link-local gateway
+`fe80::381c:f2ff:fe37:7169` — so something is sending RAs — but no global or ULA
+prefix is being taken. So the prerequisite is a **network addressing decision**:
+either a real prefix for the fmt2 LAN configured statically per node the way sea1
+does it (see sea1 talconfig and commits `c72be08e`, `21b60f6a`, `be865880`), or
+SLAAC/DHCPv6 if the fabric will hand out a prefix.
+
+The corrected CIDRs (`fd00:cafe:cafe:1::/56`, `fd00:cafe:cafe:2::/108`) are
+already staged in `talconfig.yaml` as inert comments and are correct whenever
+this unblocks.
+
+**Recommendation unchanged, and now better supported:** land Phase D with the
+Cilium cutover rather than before it. Cilium takes `ipv6.enabled` and
+`ipv6NativeRoutingCIDR` with no encapsulation, so it avoids standing up a
+throwaway flannel v6 VXLAN — and the node-addressing work has to happen first
+either way.
+
 ## Sequencing summary
 
 | Phase | Change | Reboots | Gate |
 |---|---|---|---|
-| A | config reconciliation (SANs, KubePrism, hostDNS, registry) | 8, rolling | clean `diff-all`; PDBs fixed |
-| B | Talos 1.12.2 → 1.13.7 | 8, rolling | canary boots + unseals |
-| C | k8s 1.35.0 → 1.36.2 | none | no removed-API fallout |
-| D | dual-stack | 8, rolling | one CP first, API server returns |
+| A | config reconciliation (SANs, KubePrism, hostDNS, registry) | 8, rolling | **DONE 2026-08-08** |
+| B | Talos 1.12.2 → 1.13.7 | 8, rolling | **DONE 2026-08-08** |
+| C | k8s 1.35.0 → 1.36.2 | none | **DONE 2026-08-08** |
+| D | dual-stack | 8, rolling | **BLOCKED** — nodes have no routable IPv6 |
 | E | → Cilium thread | — | — |
