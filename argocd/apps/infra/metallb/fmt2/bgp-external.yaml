@@ -23,9 +23,21 @@ kind: BGPAdvertisement
 metadata:
   name: fmt2-advertisement-external
   namespace: metallb-system
+# The external pool had exactly one peer, so 79.110.170.65 stops being announced
+# the moment fmt2-bgp-external drops -- which it does on every node reboot, and it
+# takes ~4h to come back. Observed twice on 2026-08-08 (02:30-06:30 and from
+# 09:00), and Cloudflare returns 523 Origin Unreachable for the whole time.
+# fmt2-pool by contrast lists both leaves, which is why it survived leaf1 being
+# down. This gives the external pool the same treatment.
+#
+# The leaves are iBGP (same ASN). Whether they re-originate this /32 upstream
+# depends on their own config -- if they do not, this is a no-op and nothing
+# regresses, because the prefix is already originated locally either way.
 spec:
   aggregationLength: 32
   peers:
     - fmt2-bgp-external
+    - fmt2-bgp-leaf1
+    - fmt2-bgp-leaf2
   ipAddressPools:
     - fmt2-pool-external
