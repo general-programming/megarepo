@@ -1,0 +1,65 @@
+---
+# mariadb-librenms is a 3-node Galera cluster serving only LibreNMS. Observed
+# clients (Hubble, 2026-08-08): librenms, librenms-dispatcher, the other Galera
+# members, and mariadb-operator.
+#
+# The operator rule is unported deliberately: mariadb-operator talks to 3306 for
+# SQL, and to the agent sidecar on 5555/5566 for bootstrap and recovery. Pinning
+# ports there turns a mistake into "the cluster keeps serving but quietly stops
+# being manageable", which is worse than a clean failure.
+#
+# Galera's 4567/4568/4444 are covered by the same-namespace rule, since all three
+# members are in this namespace.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mariadb-allowed-clients
+  namespace: librenms
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: mariadb
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: mariadb-operator
+    # 5566 is the agent probe port. The traffic seen on it today is kubelet, not
+    # vmagent -- there is no VMServiceScrape for mariadb -- but the allowance is
+    # here so that adding one later does not silently return nothing.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 5566
+          protocol: TCP
+---
+# librenms-redis. The pod label is `app: librenms-redis`; the draft's
+# `app.kubernetes.io/name: redis` selector matched nothing on this cluster, so
+# that policy would have applied cleanly and enforced nothing.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-allowed-clients
+  namespace: librenms
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app: librenms-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 6379
+          protocol: TCP

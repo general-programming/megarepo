@@ -1,0 +1,61 @@
+---
+# netbox-db is a single-tenant CNPG cluster: netbox and netbox-worker are its only
+# clients and both live in this namespace. No Tailscale proxy fronts it (unlike
+# shared-db), so same-namespace plus the operator is the whole client list.
+#
+# Unported rules on purpose -- CNPG's instance manager uses 8000 alongside 5432,
+# and the observed traffic here is netbox-db-2 -> netbox-db-1 on both.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allowed-clients
+  namespace: netbox
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    # netbox, netbox-worker, and the other instance of the cluster.
+    - from:
+        - podSelector: {}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 9187
+          protocol: TCP
+---
+# netbox-redis is the queue and cache for netbox + netbox-worker. Selector is a
+# bare `app` label, which is what the pod actually carries (checked with
+# --show-labels 2026-08-08); this chart does not use app.kubernetes.io/name.
+#
+# No metrics port on this pod, so there is no scrape rule to add. If a redis
+# exporter is ever put next to it, it needs its own allowance here.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-allowed-clients
+  namespace: netbox
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app: netbox-redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 6379
+          protocol: TCP

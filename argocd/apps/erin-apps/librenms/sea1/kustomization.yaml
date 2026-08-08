@@ -4,3 +4,4 @@ resources:
   - ../base
   - ingress.yaml
   - secret.yaml
+  - netpol.yaml

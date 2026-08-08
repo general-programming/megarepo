@@ -1,0 +1,61 @@
+---
+# Kafka and valkey, the two akvorado datastores that clickhouse-netpol.yaml does
+# not already cover.
+#
+# CLICKHOUSE AND KEEPER ARE DELIBERATELY ABSENT. They are handled by
+# clickhouse-netpol.yaml (#536). The clickhouse pod carries BOTH
+# `clickhouse.com/role=clickhouse-server` and `app=akvorado-clickhouse`, so a
+# second policy selecting the `app` label would union with the first -- and
+# NetworkPolicies union permissively. The net effect would be to widen ClickHouse
+# ingress back out to every pod in the namespace while looking like a tightening.
+# Same for keeper via `app=akvorado-keeper`.
+#
+# akvorado-inlet is not hostNetwork (checked 2026-08-08), so the same-namespace
+# selector really does cover inlet -> kafka. If the inlet is ever moved to host
+# networking it will source from the `host` identity instead and this rule will
+# stop matching it.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: akvorado-kafka
+  namespace: akvorado
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app: akvorado-kafka
+  policyTypes:
+    - Ingress
+  ingress:
+    # inlet produces flows, outlet consumes them; 9093 is the KRaft controller
+    # listener, which only matters once there is more than one broker.
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 9092
+          protocol: TCP
+        - port: 9093
+          protocol: TCP
+---
+# valkey is the console's query cache. Observed: akvorado-console -> valkey:6379,
+# and nothing else. No metrics port, so no scrape allowance to add.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: akvorado-valkey
+  namespace: akvorado
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app: akvorado-valkey
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 6379
+          protocol: TCP
