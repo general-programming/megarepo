@@ -4,9 +4,16 @@ metadata:
   name: promtail
   labels:
     kubernetes.io/metadata.name: promtail
-    pod-security.kubernetes.io/enforce: restricted
+    # Alloy runs as a DaemonSet with mounts.varlog and mounts.dockercontainers
+    # enabled, which renders hostPath volumes for /var/log and
+    # /var/lib/docker/containers. hostPath fails baseline as well as
+    # restricted, so this cannot be tightened without dropping host log
+    # collection. The namespace is empty on both clusters today, so the
+    # admission dry-run had nothing to flag -- this level comes from reading
+    # the chart values, not from a live pod.
+    pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/enforce-version: latest
-    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn: baseline
     pod-security.kubernetes.io/warn-version: latest
-    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit: baseline
     pod-security.kubernetes.io/audit-version: latest
