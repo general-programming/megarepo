@@ -1,0 +1,158 @@
+---
+# Cilium replaces the Talos-default flannel CNI on fmt2.
+#
+# Rebuilding fmt2 from scratch needs Cilium installed by hand (helm or a Talos
+# inlineManifest) BEFORE ArgoCD starts -- ArgoCD cannot install its own CNI.
+#
+# Migration plan: docs/fmt2-cilium-landing-plan.md.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: cilium-helm
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-5"
+spec:
+  destination:
+    namespace: kube-system
+    server: https://kubernetes.default.svc
+  project: infra
+  source:
+    chart: cilium
+    repoURL: https://helm.cilium.io
+    # 1.20.0 supports k8s 1.33-1.36; this cluster is 1.36.2.
+    targetRevision: 1.20.0
+    helm:
+      valuesObject:
+        # Reuse the podCIDRs kube-controller-manager allocates, as flannel did,
+        # so pod addressing survives the migration and rollback stays cheap.
+        ipam:
+          mode: kubernetes
+        k8s:
+          requireIPv4PodCIDR: true
+
+        # Single-stack. fmt2 nodes have no routable IPv6 -- ens18 carries only
+        # 10.65.67.x/24 and a link-local fe80::. Dual-stack is blocked on node
+        # addressing, not on Cilium; see docs/fmt2-talos-k8s-update.md phase D.
+        ipv4:
+          enabled: true
+        ipv6:
+          enabled: false
+
+        # No encapsulation: all 8 nodes share one L2 (10.65.67.0/24) and reach
+        # each other on-link via ens18. Adding a node off that L2 breaks native
+        # routing -- revert to routingMode: tunnel if that happens.
+        routingMode: native
+        autoDirectNodeRoutes: true
+        ipv4NativeRoutingCIDR: 10.244.0.0/16
+
+        # Pin the MTU to what pods already have under flannel (9000 fabric minus
+        # VXLAN's 50). Native routing would auto-detect 9000, which is the egress
+        # black-hole sea1 still has open (341c652f) -- this keeps the CNI swap
+        # MTU-neutral and leaves jumbo-vs-1500 as its own project.
+        MTU: 8950
+
+        # ens18 is the only up ether device on all 8 nodes and carries the node
+        # IP. Every node also has bond0/dummy0/teql0 down, which is ambiguous
+        # enough that kubeProxyReplacement refuses to start without this.
+        #
+        # directRoutingDevice lives under nodePort -- the chart only reads
+        # .Values.nodePort.directRoutingDevice. A top-level directRoutingDevice
+        # is silently ignored (verified against the 1.20.0 chart; sea1's values
+        # have that bug and are only saved by their CiliumNodeConfig).
+        devices: "ens18"
+        nodePort:
+          directRoutingDevice: "ens18"
+
+        # iptables, NOT bpf.masquerade -- sea1 tried that and it broke port 53
+        # (aeff6eb0, reverted in 7e420b62); Talos hostDNS is the prime suspect
+        # and the root cause is still open there.
+        enableIPv4Masquerade: true
+
+        # Phase 2 of the landing plan. KubePrism is already enabled cluster-wide
+        # so the flip only needs this value plus k8sServiceHost/Port.
+        kubeProxyReplacement: false
+
+        # Phase 3. fmt2 carries 11 NetworkPolicies that flannel never enforced;
+        # enforcing at cutover risks breaking ArgoCD, which is what would fix it.
+        policyEnforcementMode: never
+
+        # MANDATORY even though fmt2 has no Multus today: the chart default
+        # moves foreign CNI configs aside, and flannel's conflist must be
+        # removed deliberately per node during the roll, not silently.
+        cni:
+          exclusive: false
+
+        # Talos cannot let Cilium mount cgroups itself.
+        cgroup:
+          autoMount:
+            enabled: false
+          hostRoot: /sys/fs/cgroup
+
+        # Per the SideroLabs guide, matching sea1. SYS_MODULE is useless on
+        # Talos; PERFMON/BPF would replace SYS_ADMIN rather than supplement it.
+        securityContext:
+          capabilities:
+            ciliumAgent:
+              - CHOWN
+              - KILL
+              - NET_ADMIN
+              - NET_RAW
+              - IPC_LOCK
+              - SYS_ADMIN
+              - SYS_RESOURCE
+              - DAC_OVERRIDE
+              - FOWNER
+              - SETGID
+              - SETUID
+            cleanCiliumState:
+              - NET_ADMIN
+              - SYS_ADMIN
+              - SYS_RESOURCE
+
+        # MetalLB stays on fmt2, unlike sea1. It runs BGP via frr-k8s against
+        # two leaves plus an external ASN, the VIP pool is off-L2, and
+        # 79.110.170.65 is shared by traefik and znc-external -- none of which
+        # ports to Cilium LB IPAM as a side effect of a CNI swap.
+        # Do NOT add l2announcements here.
+
+        # Metrics on :9962 (agent) and :9963 (operator). Scraped by VMPodScrape,
+        # not the chart's serviceMonitor -- this cluster runs the
+        # VictoriaMetrics operator, not prometheus-operator.
+        prometheus:
+          enabled: true
+        operator:
+          prometheus:
+            enabled: true
+
+        hubble:
+          relay:
+            enabled: true
+          # Flow-derived metrics on :9965. httpV2 carries the label context the
+          # upstream Grafana dashboards expect; without it their panels are empty.
+          metrics:
+            enableOpenMetrics: true
+            enabled:
+              - dns
+              - drop
+              - tcp
+              - flow
+              - port-distribution
+              - icmp
+              - "httpV2:exemplars=true;labelsContext=source_ip,source_namespace,source_workload,destination_ip,destination_namespace,destination_workload,traffic_direction"
+          ui:
+            enabled: true
+            # Hubble UI has NO authentication of its own. Anyone who reaches it
+            # sees every flow in the cluster. Tailnet ACLs are the only control.
+            service:
+              annotations:
+                tailscale.com/expose: "true"
+                tailscale.com/hostname: "hubble-fmt2"
+
+  # Sync is deliberately MANUAL for the migration -- no automated block -- so
+  # selfHeal cannot reconcile against a cluster that is half flannel and half
+  # Cilium. Restored once every node is on Cilium (landing plan step 1.5).
+  syncPolicy:
+    syncOptions:
+      - allowEmpty=true
+      - ServerSideApply=true
