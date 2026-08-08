@@ -11,6 +11,9 @@ data:
   REDIS_HOST: librenms-redis
   REDIS_PORT: "6379"
   REDIS_DB: "0"
+  # REDIS_PASSWORD in vault (secret/app/librenms-sea1). It reaches librenms and
+  # librenms-dispatcher through `envFrom: librenms-secrets`; Laravel's
+  # config/database.php reads it for both the default and cache connections.
   CACHE_DRIVER: "redis"
   RRDCACHED_SERVER: "rrdcached:42217"
   # DB in k8s

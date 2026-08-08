@@ -2,6 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: librenms-redis
+  annotations:
+    # Not `auto`: this pod takes one key out of librenms-secrets by secretKeyRef,
+    # and naming the secret is the form Reloader is known to honour here (#541).
+    secret.reloader.stakater.com/reload: "librenms-secrets"
 spec:
   selector:
     matchLabels:
@@ -15,6 +19,19 @@ spec:
       containers:
       - name: redis
         image: redis:alpine
+        # No command: the redis entrypoint prepends `redis-server` when the first
+        # argument starts with a dash.
+        args:
+          - --requirepass
+          - $(REDIS_PASSWORD)
+        env:
+          # secretKeyRef, not envFrom: envFrom would hand the redis pod LibreNMS's
+          # SMTP credentials as well.
+          - name: REDIS_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: librenms-secrets
+                key: REDIS_PASSWORD
 ---
 apiVersion: v1
 kind: Service

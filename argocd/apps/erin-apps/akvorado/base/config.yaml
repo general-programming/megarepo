@@ -151,6 +151,9 @@ data:
         cache:
           type: redis
           server: akvorado-valkey:6379
+          # Overridden at runtime by
+          # AKVORADO_CFG_ORCHESTRATOR_CONSOLE_HTTP_CACHE_PASSWORD
+          password: ""
       database:
         driver: sqlite
         dsn: /run/akvorado/console.sqlite
