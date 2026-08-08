@@ -14,3 +14,8 @@ helmCharts:
 images:
   - name: docker.io/bitnami/redis
     newName: docker.io/bitnamilegacy/redis
+patches:
+  - path: patch-chewy-upgrade-es-pass.yaml
+    target:
+      kind: Job
+      name: mastodon-chewy-upgrade
