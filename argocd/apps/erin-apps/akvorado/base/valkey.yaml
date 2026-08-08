@@ -25,6 +25,10 @@ spec:
     metadata:
       labels:
         app: akvorado-valkey
+      annotations:
+        # On the pod template, matching the orchestrator and console -- that is
+        # where Reloader reads it in this namespace (#541).
+        secret.reloader.stakater.com/reload: "akvorado-secrets"
     spec:
       containers:
         - name: valkey
@@ -36,6 +40,18 @@ spec:
             - 256mb
             - --maxmemory-policy
             - allkeys-lru
+            - --requirepass
+            - $(REDISCLI_AUTH)
+          env:
+            # Named REDISCLI_AUTH rather than something obvious because valkey-cli
+            # reads that variable: one env var both sets the server password and
+            # lets the readiness probe below authenticate. Without it the probe
+            # gets NOAUTH and the Deployment never becomes ready.
+            - name: REDISCLI_AUTH
+              valueFrom:
+                secretKeyRef:
+                  name: akvorado-secrets
+                  key: valkey-password
           ports:
             - containerPort: 6379
               name: valkey
