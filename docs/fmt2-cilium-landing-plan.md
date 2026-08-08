@@ -358,3 +358,75 @@ could be written at all is that `82fc9882`, `2bbe354e`, and `a2d97255` explain
 
 Windows 1 and 2 want a maintenance window each. Window 0 wants nobody rushing
 it — it is the only part where a mistake recreates every Service in the cluster.
+
+---
+
+## Execution log — cutover done 2026-08-08
+
+**Cilium is live on all 8 nodes, native routing, no encapsulation.**
+`cilium-dbg status`: `Routing: Network: Native`, cluster health **8/8
+reachable**, masquerading IPTables/IPv4, `KubeProxyReplacement: False` (phase 2
+still pending). Every node shows direct routes to each peer podCIDR via the
+peer's node IP on `ens18`, and **no tunnel device exists anywhere**. Pod MTU is
+**8950** as pinned. `flannel.1` and `cni0` are gone from all 8 nodes.
+
+Sequence actually run: deploy Cilium -> `cni.name: none` (strategic-merge patch,
+no reboot) -> delete `kube-flannel` DS -> remove `10-flannel.conflist` on every
+node -> reboot all 8, one at a time -> verify.
+
+### Correction: step 1.1 is NOT a passive install
+
+This plan said to verify "flannel still the active CNI" after adding the Cilium
+app. That was wrong. Cilium writes `05-cilium.conflist`, which sorts **before**
+`10-flannel.conflist`, so containerd hands every *new* pod sandbox to Cilium the
+moment the agents start. Existing pods keep flannel until their node reboots.
+
+The consequence is real and was observed: for the ~90 minutes between installing
+Cilium and finishing the roll, newly-created pods on un-rolled nodes had broken
+networking -- hubble-relay could not reach CoreDNS, and ArgoCD, cert-manager and
+CNPG pods entered CrashLoopBackOff as they were rescheduled. Unhealthy pods
+peaked around 60 and fell back to 1 (a pre-existing crashloop) as nodes rolled.
+
+**So step 1.1 starts the migration. Do not install Cilium and walk away.** Budget
+one continuous window from install through the last node.
+
+### PDBs cannot be satisfied mid-migration
+
+Once pods start failing, PDBs report `healthy=0` and graceful eviction is
+impossible -- `kubectl drain` blocks forever. The reboot is what repairs those
+pods, so the roll used `--disable-eviction --force`. Worth knowing in advance
+rather than discovering it at the first node.
+
+### `directRoutingDevice` must be nested under `nodePort`
+
+The chart only reads `.Values.nodePort.directRoutingDevice`. A top-level
+`directRoutingDevice` renders nothing at all. Verified by templating 1.20.0 both
+ways and diffing the generated `cilium-config`. **sea1 has the top-level form**
+and is only saved by its `CiliumNodeConfig` setting the raw key -- worth fixing
+there.
+
+### BGP: one peer was already dead, one is remote-side
+
+Checked against VictoriaMetrics history rather than guessed:
+
+| Peer | Before | After |
+|---|---|---|
+| `10.65.67.34` leaf1 | **0/8** | 0/8 |
+| `10.65.67.35` leaf2 | 8/8 | **8/8** |
+| `10.65.67.36` external | 8/8 | **0/8** |
+
+- **leaf1 was already down before any of this work** (>12h). From a node it is
+  `Host is unreachable` and does not ping. Pre-existing, unrelated, and worth
+  chasing separately.
+- **The external peer dropped on the node reboots.** From a node it pings fine
+  and routing is correct, but TCP/179 gives `Connection refused` -- its BGP
+  daemon is not accepting. The same thing happened during the Talos roll earlier
+  the same day (fell 8->0 at 02:30) and it **recovered on its own by 06:30**, so
+  it self-heals in roughly two to three hours.
+- Internal VIPs are unaffected and verified serving (`loki-gateway` on
+  `10.3.4.1` returns 200). The external pool `79.110.170.65` (traefik, znc) is
+  announced **only** via that external peer, so public ingress stays down until
+  it re-accepts.
+
+Next: phase 2 (kube-proxy replacement) and phase 3 (NetworkPolicy). KubePrism is
+already enabled, so phase 2 needs only the Helm values.
