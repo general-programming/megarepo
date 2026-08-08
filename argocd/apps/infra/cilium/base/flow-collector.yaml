@@ -18,17 +18,27 @@ data:
     # destination_port is the client's ephemeral port -- unbounded noise that
     # would bury the real service ports.
     select((.flow.is_reply // false) == false)
-    | def ep($e):
-        if (($e.namespace // "") != "") then
-          ($e.namespace + "/" +
-            ((($e.workloads // [])[0].name)
-             // (($e.pod_name // "?")
-                 | sub("-[a-f0-9]{6,10}-[a-z0-9]{5}$";"")
-                 | sub("-[a-z0-9]{5}$";"")
-                 | sub("-[0-9]+$";""))))
-        else
-          ((($e.labels // []) | map(select(startswith("reserved:"))) | .[0]) // "unknown")
-        end;
+    | def lbl($e; $k):
+        (($e.labels // []) | map(select(startswith($k))) | .[0] // "" | sub("^" + $k; ""));
+      # .namespace and .workloads are only populated when the local agent has full
+      # pod metadata. For a remote endpoint it often knows just the identity and
+      # its labels, so fall back to those rather than discarding the flow -- that
+      # gap accounted for 42% of the first sample.
+      def ep($e):
+        ($e.namespace // "") as $ns0
+        | (if $ns0 != "" then $ns0 else lbl($e; "k8s:io.kubernetes.pod.namespace=") end) as $ns
+        | if $ns != "" then
+            ($ns + "/" +
+              ((($e.workloads // [])[0].name)
+               // (lbl($e; "k8s:app.kubernetes.io/name=") | select(. != ""))
+               // (lbl($e; "k8s:app=") | select(. != ""))
+               // (($e.pod_name // "?")
+                   | sub("-[a-f0-9]{6,10}-[a-z0-9]{5}$";"")
+                   | sub("-[a-z0-9]{5}$";"")
+                   | sub("-[0-9]+$";""))))
+          else
+            ((($e.labels // []) | map(select(startswith("reserved:"))) | .[0]) // "unknown")
+          end;
       def proto: if .flow.l4.TCP then "TCP" elif .flow.l4.UDP then "UDP"
                  elif .flow.l4.ICMPv4 then "ICMPv4" elif .flow.l4.ICMPv6 then "ICMPv6"
                  elif .flow.l4.SCTP then "SCTP" else "OTHER" end;
