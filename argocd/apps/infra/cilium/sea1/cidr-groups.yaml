@@ -64,3 +64,22 @@ spec:
   externalCIDRs:
     - 10.3.3.0/28
     - 2602:fa6d:10:ffff::e00/120
+---
+# sea1's Ceph is converged Rook on the k8s nodes, so these addresses carry
+# host/remote-node identity and CIDR selectors do NOT match them today -- the
+# entity arm of deny-egress-storage-plane is what enforces here. This group is
+# belt-and-braces: it becomes load-bearing only if a Ceph host is ever not a
+# k8s node (an external mon, a standalone OSD box).
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: ceph-hosts
+  labels:
+    sea1.cidr/class: private
+    sea1.cidr/role: infrastructure
+spec:
+  externalCIDRs:
+    - 10.3.2.0/24
+    - 2602:fa6d:10:ffff::110/128
+    - 2602:fa6d:10:ffff::111/128
+    - 2602:fa6d:10:ffff::112/128

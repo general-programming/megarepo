@@ -17,6 +17,7 @@ resources:
   - ../base
   - cephfilesystems.yaml
   - rbdns_alyx.yaml
+  - netpol.yaml
 patches:
   - path: patch_storageclass.yaml
   - path: patch_cephcluster.yaml
