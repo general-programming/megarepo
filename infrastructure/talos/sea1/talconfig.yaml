@@ -684,6 +684,74 @@ controlPlane:
       systemExtensions:
         officialExtensions:
           - siderolabs/qemu-guest-agent
+  patches:
+    - # Audit policy. Talos ships `rules: [{level: Metadata}]` -- log
+      # everything, both stages -- which measured 7.3 GB/day across these three
+      # control planes, on the ephemeral partition, with the busiest node
+      # holding only six hours before rotation. Measured composition over
+      # 14000 events (see docs/k8s-security-review-2026-08.md):
+      #
+      #   RequestReceived duplicate of every request   47.8%
+      #   leases (leader election churn)               38.9% of what remains
+      #   argocd app-controller -> applications        10.9%
+      #   system:nodes + apiserver read-only           15.5%
+      #
+      # Dropping those leaves ~17% of the original volume, ~1.2 GB/day, and
+      # what survives is the part with security value: secret access, RBAC,
+      # exec, and every write by anything that is not a known reconcile loop.
+      #
+      # Rule order matters -- first match wins. The keep rules come first so a
+      # later blanket `None` cannot swallow them: system:nodes does watch
+      # secrets, and that must stay logged even though its other reads do not.
+      |-
+      cluster:
+        apiServer:
+          auditPolicy:
+            apiVersion: audit.k8s.io/v1
+            kind: Policy
+            # ResponseComplete carries everything these two do, plus the status
+            # code. Logging them triples the event count for no added signal.
+            omitStages:
+              - RequestReceived
+              - ResponseStarted
+            rules:
+              # -- keep: security-relevant, regardless of who does it --
+              - level: Metadata
+                resources:
+                  - group: ""
+                    resources: ["secrets", "serviceaccounts/token"]
+                  - group: "rbac.authorization.k8s.io"
+                  - group: "authentication.k8s.io"
+                  - group: "certificates.k8s.io"
+              - level: Metadata
+                resources:
+                  - group: ""
+                    resources: ["pods/exec", "pods/attach", "pods/portforward"]
+              # -- drop: high-volume, no security value --
+              # Leader election. Every controller renews every few seconds.
+              - level: None
+                resources:
+                  - group: "coordination.k8s.io"
+                    resources: ["leases"]
+              # ArgoCD writes reconcile state into the Application object
+              # itself, not a /status subresource, so this cannot be filtered
+              # by subresource. Scoped to that one SA: an Application changed
+              # by anyone else is still logged.
+              - level: None
+                users: ["system:serviceaccount:argocd:argocd-application-controller"]
+                verbs: ["update", "patch"]
+                resources:
+                  - group: "argoproj.io"
+                    resources: ["applications"]
+              # Kubelet and apiserver-internal reads. Their writes still log.
+              - level: None
+                userGroups: ["system:nodes"]
+                verbs: ["get", "list", "watch"]
+              - level: None
+                users: ["system:apiserver"]
+                verbs: ["get", "list", "watch"]
+              # -- everything else --
+              - level: Metadata
 patches:
   - # DO NOT REMOVE. Cilium is the CNI (argocd/apps/infra/cilium/sea1);
     # dropping this reinstalls flannel under a running Cilium cluster.
