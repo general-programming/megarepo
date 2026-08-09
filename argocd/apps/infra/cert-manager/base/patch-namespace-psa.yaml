@@ -1,0 +1,16 @@
+# The vendored upstream manifest declares the namespace with no PSA labels, so
+# it falls back to the cluster default (baseline). All three cert-manager pods
+# pass restricted on both clusters -- verified with `kubectl label
+# --dry-run=server`. Patched here rather than edited into upstream/, which is
+# clobbered on the next vendor bump.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: cert-manager
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest

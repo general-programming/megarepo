@@ -5,6 +5,10 @@ resources:
   - secrets.yaml
   - issuer.yaml
 patches:
+  - path: patch-namespace-psa.yaml
+    target:
+      kind: Namespace
+      name: cert-manager
   - path: patch-nameservers-00.yaml
     target:
       kind: Deployment

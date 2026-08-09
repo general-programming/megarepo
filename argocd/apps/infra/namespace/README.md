@@ -22,6 +22,38 @@ exemptions live in Talos `AdmissionConfiguration`, which means a node config
 change and a control-plane restart to grant one — a namespace label is the cheap
 lever, so it is the only one we use.
 
+## An unlabelled namespace is not unprotected
+
+Talos ships an `AdmissionConfiguration` that neither cluster overrides:
+
+```yaml
+defaults:   { enforce: baseline, warn: restricted, audit: restricted }
+exemptions: { namespaces: [kube-system] }
+```
+
+So a namespace with no labels is already enforced at **baseline**. Labelling it
+buys tightening to `restricted`, explicitness in review, and an enumerable list
+of `privileged` carve-outs — not "closing an open door". Read it off a node
+with:
+
+```sh
+talosctl read /system/config/kubernetes/kube-apiserver/admission-control-config.yaml
+```
+
+**`kube-system` is exempt**, so labelling it does nothing. Do not add a file for
+it — one that looks like coverage but is inert is worse than none.
+
+Namespaces Kubernetes creates itself (`default`, `kube-public`,
+`kube-node-lease`) live in `kube-builtins.yaml` and are adopted purely for their
+labels, with `argocd.argoproj.io/sync-options: Prune=false` so removing them
+from git can never delete the namespace.
+
+Where a namespace is declared by a *vendored* upstream manifest — `cert-manager`
+is the only one today — set the labels with a kustomize patch in that app
+(`cert-manager/base/patch-namespace-psa.yaml`), not with a second file here.
+Editing `upstream/` is lost on the next vendor bump, and two declarations of the
+same Namespace fight each other under `ServerSideApply`.
+
 ## Tiers
 
 Each namespace carries `enforce` plus `warn`/`audit` set **one tier tighter**.
