@@ -170,9 +170,7 @@ redis:
     enabled: true
 
   auth:
-    # Password comes from Vault via the mastodon-redis VaultStaticSecret.
-    existingSecret: mastodon-redis
-    existingSecretPasswordKey: password
+    password: "this_is_insecure_but_it_is_redis_so_who_cares"
 
   master:
     persistence:
