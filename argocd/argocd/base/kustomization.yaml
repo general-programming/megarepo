@@ -2,7 +2,8 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: argocd
 resources:
-- github.com/argoproj-labs/argocd-autopilot/manifests/ha?ref=v0.4.20
+# pinned to the commit behind tag v0.4.20; tags are mutable, SHAs are not
+- github.com/argoproj-labs/argocd-autopilot/manifests/ha?ref=a1d2d4c97c59d19127b1bfc1eca3149ca0984df9
 - argocd-lb.yaml
 patches:
   - path: rbac.yaml

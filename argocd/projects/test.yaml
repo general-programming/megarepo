@@ -7,18 +7,17 @@ metadata:
   name: test
   namespace: argocd
 spec:
-  clusterResourceWhitelist:
-  - group: '*'
-    kind: '*'
+  # no clusterResourceWhitelist: test apps may not create cluster-scoped resources.
+  # App dirs under argocd/apps/test/ must be named test-* to match destinations.
   description: test project
   destinations:
-  - namespace: '*'
+  - namespace: 'test-*'
     server: '*'
   namespaceResourceWhitelist:
   - group: '*'
     kind: '*'
   sourceRepos:
-  - '*'
+  - git@github.com:general-programming/megarepo.git
 
 ---
 apiVersion: argoproj.io/v1alpha1

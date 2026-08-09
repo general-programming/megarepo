@@ -7,16 +7,21 @@ metadata:
   name: default
   namespace: argocd
 spec:
+  # only the ArgoCD install itself lives here; it ships its own RBAC and CRDs
   clusterResourceWhitelist:
-  - group: '*'
-    kind: '*'
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
+  - group: apiextensions.k8s.io
+    kind: CustomResourceDefinition
   description: default project, do not delete
   destinations:
-  - namespace: '*'
+  - namespace: argocd
     server: '*'
   namespaceResourceWhitelist:
   - group: '*'
     kind: '*'
   sourceRepos:
-  - '*'
+  - git@github.com:general-programming/megarepo.git
 

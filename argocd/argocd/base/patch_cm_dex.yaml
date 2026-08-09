@@ -9,7 +9,7 @@ metadata:
 data:
   dex.config: |
     logger:
-      level: debug
+      level: info
     connectors:
     - type: oidc
       id: authentik
@@ -19,6 +19,8 @@ data:
         clientID: $argocd-oidc:oidc_id
         clientSecret: $argocd-oidc:oidc_secret
         insecureEnableGroups: true
+        # kept: authentik only sets email_verified via its email scope mapping,
+        # and dropping this locks everyone out if that claim is ever absent
         insecureSkipEmailVerified: true
         scopes:
           - openid

@@ -4,6 +4,8 @@ metadata:
   name: argo-no-tls
   namespace: argocd
 spec:
+  # accepted risk: in-cluster hop to argocd-server's self-signed cert;
+  # pinning the CA or running the server with --insecure is a bigger change
   insecureSkipVerify: true
 ---
 apiVersion: traefik.io/v1alpha1
