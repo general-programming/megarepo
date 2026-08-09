@@ -8,6 +8,9 @@ data:
   PGID: "1000"
   LIBRENMS_POLLER_INTERVAL: "3"
   LIBRENMS_BASE_URL: https://nms.generalprogramming.org
+  # Trust traefik's X-Forwarded-Proto, else Laravel's url() emits http:// and the
+  # browser blocks the device table's ajax call as mixed content.
+  APP_TRUSTED_PROXIES: "**"
   REDIS_HOST: librenms-redis
   REDIS_PORT: "6379"
   REDIS_DB: "0"
