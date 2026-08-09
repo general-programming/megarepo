@@ -1,0 +1,62 @@
+---
+# coder-workspaces pods run whatever a developer types into them. This keeps
+# them useful (internet, DNS, kubectl, talosctl) while removing lateral reach.
+# Shape follows deluge/sea1/netpol.yaml; see sea1-netpol/CIDR-SEMANTICS.md.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: coder-workspaces-egress
+  namespace: coder-workspaces
+  labels:
+    sea1.policy/tier: untrusted
+spec:
+  # Workspace pods are created dynamically by coder with template-defined
+  # labels, so select every pod in the namespace rather than trusting a label.
+  endpointSelector: {}
+  egressDeny:
+    # No blanket [host, remote-node] deny here, unlike deluge: deny beats allow
+    # and would kill the Talos apid allow below. Node reach is instead limited
+    # by the allow-list to TCP 50000/50001 only.
+    #
+    # bogons includes 100.64.0.0/10 (Tailscale's range) -- safe only while
+    # workspaces are not Tailscale-exposed.
+    - toCIDRSet:
+        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: sea1-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
+  egress:
+    # DNS. L4 rather than L7 rules.dns -- see the note in deluge/sea1/netpol.yaml.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    # Authenticated kubectl from workspaces is a supported workflow.
+    - toEntities:
+        - kube-apiserver
+    # Talos apid only (authenticated talosctl); everything else on the nodes
+    # (kubelet, etcd, Ceph mons) stays unreachable via default-deny.
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "50000"
+              protocol: TCP
+            - port: "50001"
+              protocol: TCP
+    # Same-namespace, so workspace-to-workspace and future sidecars keep working.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: coder-workspaces
+    # Coder control plane. Live agents phone home via the Cloudflare tunnel
+    # (world), but keep direct in-cluster dial working too.
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: coder
+    - toEntities:
+        - world
