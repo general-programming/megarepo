@@ -1,0 +1,40 @@
+---
+# Cluster-agnostic CIDR vocabulary, shared so sea1 and fmt2 cannot drift on what
+# "bogon" means (netpol-phase3 doc, Stage 2). Node/LB ranges stay per-cluster.
+#
+# Link-local and cloud metadata. Nothing in either cluster should ever reach
+# these; 169.254.169.254 is the standard SSRF/credential-theft target.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: link-local-metadata
+  labels:
+    policy.cidr/class: deny
+spec:
+  externalCIDRs:
+    - 169.254.0.0/16
+    - fe80::/10
+---
+# Non-routable / bogon space that has no legitimate destination from a workload.
+#
+# CAREFUL WITH 100.64.0.0/10: that is CGNAT space, and it is what Tailscale uses.
+# Referencing this group from a workload that is supposed to be reachable over
+# Tailscale (sea1 runs tailscale-operator proxies) will break it. Only reference
+# `bogons` from workloads that are not Tailscale-exposed, or split the CGNAT
+# entry into its own group first.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: bogons
+  labels:
+    policy.cidr/class: deny
+spec:
+  externalCIDRs:
+    - 0.0.0.0/8
+    - 100.64.0.0/10
+    - 127.0.0.0/8
+    - 192.0.2.0/24
+    - 198.18.0.0/15
+    - 198.51.100.0/24
+    - 203.0.113.0/24
+    - 240.0.0.0/4
