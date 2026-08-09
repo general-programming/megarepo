@@ -24,6 +24,8 @@
 # tailscale-operator namespace and every tailnet connection arrives from there.
 # Omit that allowance and svc-shared-postgres, svc-shared-timescale and
 # svc-meilisearch-sea1 all go dark for every tailnet client.
+# Re-verified 2026-08-09 via hubble: only CNPG replication and host probes hit
+# 5432/7700; no app-namespace consumers observed.
 #
 # Port 8000 is the CNPG instance-manager status port that kubelet probes. It is
 # not listed for the host: Cilium's allow-localhost defaults to `auto`, which
