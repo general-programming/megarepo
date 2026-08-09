@@ -31,11 +31,13 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
+    # One rule, pinned to 6443: Talos serves the apiserver on the nodes (the
+    # sea1 sample recorded the webhook's apiserver flows with host identity), so
+    # the kube-apiserver label rides the node identity and an unported
+    # kube-apiserver allow would open every port on the control-plane IPs
+    # (kubelet, etcd, apid).
     - toEntities:
         - kube-apiserver
-    # Talos runs the apiserver on the node itself; the sea1 sample recorded the
-    # webhook's apiserver flows with host identity. Pinned to 6443.
-    - toEntities:
         - host
         - remote-node
       toPorts:

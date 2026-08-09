@@ -44,9 +44,9 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
-          rules:
-            dns:
-              - matchPattern: "*"
+    # No L7 DNS visibility rule on purpose: with no toFQDNs consumer it only
+    # routes every workspace query through the agent's DNS proxy, whose REFUSED
+    # answers break musl resolvers -- and workspaces run arbitrary user images.
     # Workspace agent phones home to the coder server. This is an endpoint
     # selector, not a CIDR -- in-cluster peers are never matched by CIDR.
     - toEndpoints:
