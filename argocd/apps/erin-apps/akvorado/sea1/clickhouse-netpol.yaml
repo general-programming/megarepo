@@ -67,6 +67,12 @@ spec:
           protocol: TCP
         - port: 9000
           protocol: TCP
+        # 9001 is the container's named management port: the operator pings
+        # replicas and queries stale-replica state there, not over 9000.
+        # Missing it showed up as an i/o timeout in every reconcile -- CH kept
+        # serving while the operator could no longer manage it.
+        - port: 9001
+          protocol: TCP
     # Replica-to-replica. replicas=1 today so this currently selects nothing; it
     # is here so that scaling up does not fail on the interserver port.
     - from:
