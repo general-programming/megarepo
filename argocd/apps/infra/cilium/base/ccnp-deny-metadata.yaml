@@ -1,0 +1,17 @@
+---
+# Cluster-wide egress deny of link-local/metadata space for every pod. Deny-only:
+# enableDefaultDeny:false keeps unselected traffic on the namespace's existing mode.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-egress-link-local-metadata
+spec:
+  description: "Deny pod egress to 169.254.0.0/16 and fe80::/10; no known consumers, no exemptions."
+  endpointSelector: {}
+  enableDefaultDeny:
+    egress: false
+    ingress: false
+  egressDeny:
+    # References the per-cluster CIDRGroup; the name is unprefixed in both clusters.
+    - toCIDRSet:
+        - cidrGroupRef: link-local-metadata
