@@ -33,6 +33,15 @@ spec:
       requests:
         storage: 200Gi
   settings:
+    # The operator defaults this to true, which makes it force `default` onto the
+    # Replicated engine -- by DROPping it. On 2026-08-09 08:07 it logged
+    # "database `default` has tables, but its engine is not Replicated, data loss
+    # is possible" and ran `DROP DATABASE default SYNC`, destroying every flow
+    # table. It had been failing that step for days on a netpol that blocked port
+    # 9001; opening 9001 let the first successful reconcile through. This is a
+    # deliberate single-replica, non-cluster deployment, so database sync buys
+    # nothing.
+    enableDatabaseSync: false
     # The `default` user ships with `no_password` and `GRANT ALL ON *.*`. The
     # operator's own `operator` user is fine (sha256_password, managed via the
     # akvorado-clickhouse secret) -- it is `default`, the account akvorado

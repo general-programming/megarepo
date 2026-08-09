@@ -147,13 +147,14 @@ data:
           - ClassifyInternal()
 
     console:
-      http:
-        cache:
-          type: redis
-          server: akvorado-valkey:6379
-          # Overridden at runtime by
-          # AKVORADO_CFG_ORCHESTRATOR_CONSOLE_HTTP_CACHE_PASSWORD
-          password: ""
+      # Default in-memory cache. The redis backend never worked: akvorado
+      # ignores console.http.cache.server from this file and from
+      # AKVORADO_CFG_ORCHESTRATOR_CONSOLE_HTTP_CACHE_SERVER (silently, no
+      # warning), so it always dialled the 127.0.0.1:6379 default. Only the
+      # password override landed, which is why the console logged NOAUTH for
+      # 35h and then CrashLooped once it refetched config. One console replica
+      # does not need a shared cache.
+      http: {}
       database:
         driver: sqlite
         dsn: /run/akvorado/console.sqlite
