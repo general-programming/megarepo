@@ -8,6 +8,10 @@ spec:
   plugin:
     cloudflarewarp:
       disableDefault: false
+      # Accepted risk: this trusts the whole pod CIDR, so any pod reaching
+      # traefik:443 can spoof CF-Connecting-IP. The plugin only sees the TCP
+      # peer, which is a cloudflared pod at a churning IP -- there is no
+      # narrower selector until netpols gate who can reach traefik (phase 3).
       trustip: # Trust IPS not required if disableDefault is false - we will allocate Cloud Flare IPs automatically
         - 10.244.0.0/16
         - fd40:10:244::/56
