@@ -29,6 +29,10 @@ spec:
     matchExpressions:
       # Same opt-out contract as deny-egress-node-api: namespaces labeled
       # allow-storage-plane=true keep their reach. The ceph namespace carries it.
+      # Same caveat too: the label only lands in identities of pods created
+      # after it -- restart running workloads when adding it to a namespace
+      # (the fmt2 CSI ctrl-plugin lost the mons for ~2 minutes this way when
+      # this policy first synced).
       - key: k8s:io.cilium.k8s.namespace.labels.generalprogramming.org/allow-storage-plane
         operator: NotIn
         values: ["true"]

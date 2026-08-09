@@ -11,6 +11,12 @@ spec:
   endpointSelector:
     matchExpressions:
       # Opt-out contract: namespaces labeled allow-node-api=true keep node-API access.
+      #
+      # CAVEAT (learned 2026-08-09): Cilium does not re-stamp existing endpoint
+      # identities when a namespace label changes. Labeling a namespace exempts
+      # only pods created afterwards; running pods keep their old identity and
+      # get denied. Rollout-restart the namespace's pod-network workloads in the
+      # same change that adds the label.
       - key: k8s:io.cilium.k8s.namespace.labels.generalprogramming.org/allow-node-api
         operator: NotIn
         values: ["true"]
