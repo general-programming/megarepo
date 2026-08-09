@@ -8,9 +8,7 @@ spec:
     matchLabels:
       app: deluge
   serviceName: "deluge"
-  # Held at 0 for the RBD -> CephFS data cutover: the final delta rsync needs a
-  # quiesced writer. Restored to 1 in the follow-up commit.
-  replicas: 0
+  replicas: 1
   minReadySeconds: 10
   template:
     metadata:
