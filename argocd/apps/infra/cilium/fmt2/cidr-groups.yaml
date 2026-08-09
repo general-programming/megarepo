@@ -16,23 +16,6 @@
 # their own identities, ClusterIPs (10.96.0.0/12) are DNAT'd before policy is
 # evaluated, and the nodes carry host/remote-node identity. For in-cluster peers
 # use toEndpoints; for nodes use toEntities: [host, remote-node].
-#
-# Mirrors argocd/apps/infra/cilium/sea1/cidr-groups.yaml, kept per-cluster because
-# the node and load-balancer ranges differ and these are separate cluster-scoped
-# objects in separate clusters. Uses cilium.io/v2 -- sea1's file is still on
-# v2alpha1, which the API server now warns is deprecated, so that is worth
-# migrating there separately.
-apiVersion: cilium.io/v2
-kind: CiliumCIDRGroup
-metadata:
-  name: fmt2-rfc1918
-  labels:
-    fmt2.cidr/class: private
-spec:
-  externalCIDRs:
-    - 10.0.0.0/8
-    - 172.16.0.0/12
-    - 192.168.0.0/16
 ---
 # The node LAN. All eight nodes carry their node IP on ens18 in this /24, which
 # is also what makes native routing legal. No IPv6: fmt2's nodes have only

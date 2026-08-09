@@ -47,7 +47,7 @@ spec:
     # at ipfs.owo.me, and there is no ts-ipfs proxy). Do not copy this stanza to
     # a Tailscale-reachable workload.
     - toCIDRSet:
-        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: rfc1918
         - cidrGroupRef: sea1-loadbalancers
         - cidrGroupRef: link-local-metadata
         - cidrGroupRef: bogons

@@ -54,7 +54,7 @@ spec:
     # the tailscale-operator namespace). Do not copy this stanza to a workload
     # that is reachable over Tailscale.
     - toCIDRSet:
-        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: rfc1918
         - cidrGroupRef: sea1-loadbalancers
         - cidrGroupRef: link-local-metadata
         - cidrGroupRef: bogons

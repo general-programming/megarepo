@@ -45,7 +45,7 @@ spec:
               protocol: TCP
   egressDeny:
     - toCIDRSet:
-        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: rfc1918
         - cidrGroupRef: fmt2-loadbalancers
         - cidrGroupRef: link-local-metadata
         - cidrGroupRef: bogons

@@ -4,22 +4,6 @@
 # (CIDR selectors never match pods, ClusterIPs, or nodes): see
 # docs/netpol-phase3-sea1-fmt2.md, "CiliumCIDRGroups".
 ---
-# The whole RFC1918 space. This is the group that does the real work: it is what
-# separates "may reach the internet" from "may reach the house". Everything in
-# 10/8 that is not a cluster node or pod -- the LAN, the switches, the NAS, the
-# hypervisors, the bridged VMs on br0-lan -- is matched by this.
-apiVersion: cilium.io/v2
-kind: CiliumCIDRGroup
-metadata:
-  name: sea1-rfc1918
-  labels:
-    sea1.cidr/class: private
-spec:
-  externalCIDRs:
-    - 10.0.0.0/8
-    - 172.16.0.0/12
-    - 192.168.0.0/16
----
 # The SEA1 LAN segments the nodes sit on. The LAN is 10.3.2.0/23 (see
 # akvorado's `sea1-lan` network definition and the lb-ipam comment); this covers
 # the .2 half, where every static host lives, plus the v6 prefix.
@@ -66,7 +50,7 @@ spec:
 #
 # Deliberately NOT 10.3.3.0/24: the rest of that /24 is sea1-core's Kea DHCP
 # pool (starts at 10.3.3.128), which is ordinary LAN clients, not VIPs. Those are
-# already covered by sea1-rfc1918, so nothing is left unmatched -- but calling
+# already covered by rfc1918, so nothing is left unmatched -- but calling
 # them "loadbalancers" would make any policy referencing this group mean
 # something other than it says.
 apiVersion: cilium.io/v2

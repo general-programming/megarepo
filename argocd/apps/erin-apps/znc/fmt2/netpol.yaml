@@ -53,7 +53,7 @@ spec:
         - world
   egressDeny:
     - toCIDRSet:
-        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: rfc1918
           except:
             - 10.65.67.5/32
         - cidrGroupRef: fmt2-loadbalancers
