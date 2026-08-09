@@ -5,6 +5,9 @@ metadata:
   name: coder-workspaces
   labels:
     kubernetes.io/metadata.name: coder-workspaces
+    # Exempts this namespace from the clusterwide node-API deny CCNP; the
+    # namespace CNP limits node reach to Talos apid 50000/50001 instead.
+    generalprogramming.org/allow-node-api: "true"
     pod-security.kubernetes.io/enforce: baseline
     pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/warn: restricted

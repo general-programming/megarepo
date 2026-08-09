@@ -3,5 +3,6 @@ kind: Kustomization
 resources:
   - ../base
   - netpol.yaml
+  - workspaces-netpol.yaml
   - ingress.yaml
   - vault-secret.yaml
