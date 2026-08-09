@@ -1,0 +1,36 @@
+---
+# The mgr ClusterIP is a full admin surface (dashboard + restful API). Unlike
+# the mons it IS an ordinary in-cluster endpoint, so a normal ingress
+# allow-list is the right tool -- the clusterwide storage-plane deny does not
+# cover it because ClusterIPs are DNATed to the pod before policy runs.
+#
+# Allowed: the ceph namespace itself, and the two scrapers Hubble shows
+# reaching the mgr (vmagent for prometheus metrics, alloy for logs).
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: mgr-restricted
+  namespace: ceph
+  labels:
+    sea1.policy/tier: infra
+spec:
+  podSelector:
+    matchLabels:
+      app: rook-ceph-mgr
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vmagent
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: loki
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: alloy

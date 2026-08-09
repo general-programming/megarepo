@@ -1,0 +1,67 @@
+---
+# Cluster-wide egress deny of the Ceph storage plane: mon 3300/6789 and the
+# OSD/mgr range 6800-7300. After the August pool deletion this is the control
+# that most directly limits how bad a repeat can get -- today any pod that
+# obtains a keyring can open a socket to a mon.
+#
+# The storage plane sits in a different place on each cluster, so the deny has
+# two arms:
+#   - sea1: converged Rook, mons/OSDs are hostNetwork on the k8s nodes. Node
+#     IPs carry host/remote-node identity and are invisible to CIDR selectors
+#     (policy-cidr-match-mode unset), so the toEntities arm is what enforces.
+#   - fmt2: external Ceph on the hypervisors (10.65.67.100-102). Those carry
+#     CIDR identity, so the ceph-hosts cidrGroupRef arm is what enforces there.
+# Each overlay defines its own ceph-hosts group; on sea1 it lists the node
+# subnet and mon addresses as belt-and-braces, inert unless a Ceph host stops
+# being a k8s node.
+#
+# Legitimate pod-network clients, verified from the stage-1 flow graph on both
+# clusters: only the ceph namespace itself (CSI ctrl-plugins, rook operator).
+# Volume mounts happen from kubelet in the host namespace, which pod egress
+# policy never touches -- a workload losing this reach does not lose its PVCs.
+apiVersion: cilium.io/v2
+kind: CiliumClusterwideNetworkPolicy
+metadata:
+  name: deny-egress-storage-plane
+spec:
+  description: "Deny pod egress to Ceph mon 3300/6789 and OSD/mgr 6800-7300 on nodes and external ceph hosts."
+  endpointSelector:
+    matchExpressions:
+      # Same opt-out contract as deny-egress-node-api: namespaces labeled
+      # allow-storage-plane=true keep their reach. The ceph namespace carries it.
+      - key: k8s:io.cilium.k8s.namespace.labels.generalprogramming.org/allow-storage-plane
+        operator: NotIn
+        values: ["true"]
+      # kubevirt is exempt by name: the namespace is operator-created, not
+      # GitOps-managed, and virt-launcher disk paths are not flow-profiled yet
+      # (the deployment is days old). Tighten once profiled.
+      - key: k8s:io.kubernetes.pod.namespace
+        operator: NotIn
+        values: ["kube-system", "kubevirt"]
+  enableDefaultDeny:
+    egress: false
+    ingress: false
+  egressDeny:
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "3300"
+              protocol: TCP
+            - port: "6789"
+              protocol: TCP
+            - port: "6800"
+              endPort: 7300
+              protocol: TCP
+    - toCIDRSet:
+        - cidrGroupRef: ceph-hosts
+      toPorts:
+        - ports:
+            - port: "3300"
+              protocol: TCP
+            - port: "6789"
+              protocol: TCP
+            - port: "6800"
+              endPort: 7300
+              protocol: TCP

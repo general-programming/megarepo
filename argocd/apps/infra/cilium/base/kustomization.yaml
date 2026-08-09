@@ -5,3 +5,4 @@ resources:
   - flow-collector.yaml
   - ccnp-deny-metadata.yaml
   - ccnp-deny-node-api.yaml
+  - ccnp-deny-storage-plane.yaml

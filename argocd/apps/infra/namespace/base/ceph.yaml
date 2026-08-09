@@ -4,6 +4,10 @@ metadata:
   name: ceph
   labels:
     kubernetes.io/metadata.name: ceph
+    # Exempts this namespace from the clusterwide storage-plane deny CCNP: the
+    # CSI ctrl-plugins and the rook operator are the only legitimate
+    # pod-network mon clients on either cluster.
+    generalprogramming.org/allow-storage-plane: "true"
     pod-security.kubernetes.io/enforce: privileged
     pod-security.kubernetes.io/enforce-version: latest
     pod-security.kubernetes.io/warn: baseline
