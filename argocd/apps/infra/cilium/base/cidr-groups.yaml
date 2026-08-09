@@ -2,6 +2,21 @@
 # Cluster-agnostic CIDR vocabulary, shared so sea1 and fmt2 cannot drift on what
 # "bogon" means (netpol-phase3 doc, Stage 2). Node/LB ranges stay per-cluster.
 #
+# The whole RFC1918 space. This is the group that does the real work: it is what
+# separates "may reach the internet" from "may reach the house" -- the LAN, the
+# switches, the NAS, the hypervisors, everything in 10/8 that is not a node/pod.
+apiVersion: cilium.io/v2
+kind: CiliumCIDRGroup
+metadata:
+  name: rfc1918
+  labels:
+    policy.cidr/class: private
+spec:
+  externalCIDRs:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+---
 # Link-local and cloud metadata. Nothing in either cluster should ever reach
 # these; 169.254.169.254 is the standard SSRF/credential-theft target.
 apiVersion: cilium.io/v2

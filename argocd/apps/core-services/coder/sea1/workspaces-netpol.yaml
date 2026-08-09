@@ -21,7 +21,7 @@ spec:
     # bogons includes 100.64.0.0/10 (Tailscale's range) -- safe only while
     # workspaces are not Tailscale-exposed.
     - toCIDRSet:
-        - cidrGroupRef: sea1-rfc1918
+        - cidrGroupRef: rfc1918
         - cidrGroupRef: sea1-loadbalancers
         - cidrGroupRef: link-local-metadata
         - cidrGroupRef: bogons
