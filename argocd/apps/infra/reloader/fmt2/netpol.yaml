@@ -30,3 +30,9 @@ spec:
               protocol: ANY
     - toEntities:
         - kube-apiserver
+  egressDeny:
+    - toCIDRSet:
+        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: fmt2-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons
