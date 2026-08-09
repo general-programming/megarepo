@@ -6,3 +6,4 @@ resources:
   - workspaces-netpol.yaml
   - ingress.yaml
   - vault-secret.yaml
+  - netpol-workspaces.yaml

@@ -1,0 +1,50 @@
+---
+# Egress only; ingress is the apiserver calling the webhook, probes and
+# scraping.
+#
+# The selector app.kubernetes.io/instance=mariadb-operator-helm covers all three
+# deployments: operator, cert-controller, webhook. No MariaDB instances exist on
+# fmt2 yet; the 3306 rule is carried anyway so deploying one does not silently
+# strand the operator, matching the sea1 policy.
+#
+# If a Galera cluster is ever deployed, the operator additionally needs 5555 to
+# the agent -- extend the last rule then.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: mariadb-operator-egress
+  namespace: mariadb-operator
+  labels:
+    fmt2.policy/tier: infra
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/instance: mariadb-operator-helm
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            app.kubernetes.io/name: mariadb
+          matchExpressions:
+            - key: io.kubernetes.pod.namespace
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "3306"
+              protocol: TCP

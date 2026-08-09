@@ -1,0 +1,56 @@
+---
+# Egress only; ingress is the apiserver calling the webhook, probes and
+# scraping, none of which a flow sample can enumerate safely.
+#
+# cert-manager's egress is structural, not sampled: the controller watches the
+# apiserver, talks ACME and the Cloudflare API over 443, and checks DNS-01
+# propagation against the recursive nameservers pinned in
+# base/patch-nameservers-*.yaml (1.1.1.1, 8.8.8.8) -- which is why world:53 is
+# here. The only issuer is DNS-01 (letsencrypt-genprog), so there is no HTTP-01
+# self-check and nothing needs to reach back in through the LB VIPs.
+#
+# The selector app.kubernetes.io/instance=cert-manager covers all three
+# deployments: controller, cainjector, webhook.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cert-manager-egress
+  namespace: cert-manager
+  labels:
+    fmt2.policy/tier: infra
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/instance: cert-manager
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEntities:
+        - world
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+            - port: "443"
+              protocol: TCP
+  egressDeny:
+    - toCIDRSet:
+        - cidrGroupRef: fmt2-rfc1918
+        - cidrGroupRef: fmt2-loadbalancers
+        - cidrGroupRef: link-local-metadata
+        - cidrGroupRef: bogons

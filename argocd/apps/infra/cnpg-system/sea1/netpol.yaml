@@ -1,0 +1,56 @@
+---
+# Egress only; ingress is the apiserver calling the mutating webhook, probes
+# and scraping.
+#
+# The operator's egress is structural: it watches the apiserver and drives every
+# CNPG instance through the instance manager's status API on 8000. It never
+# speaks 5432 itself -- the stage-1 sample confirms 8000 to every postgresql
+# workload and nothing else. Join/initdb job pods also run the instance manager,
+# hence the jobRole clause.
+#
+# The namespace Exists expression is what makes toEndpoints match across all
+# namespaces instead of only cnpg-system.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: cnpg-operator-egress
+  namespace: cnpg-system
+  labels:
+    sea1.policy/tier: infra
+spec:
+  endpointSelector:
+    matchLabels:
+      app.kubernetes.io/name: cloudnative-pg
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            io.kubernetes.pod.namespace: kube-system
+            k8s-app: kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: ANY
+    - toEntities:
+        - kube-apiserver
+    - toEntities:
+        - host
+        - remote-node
+      toPorts:
+        - ports:
+            - port: "6443"
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            cnpg.io/podRole: instance
+          matchExpressions:
+            - key: io.kubernetes.pod.namespace
+              operator: Exists
+        - matchExpressions:
+            - key: cnpg.io/jobRole
+              operator: Exists
+            - key: io.kubernetes.pod.namespace
+              operator: Exists
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
