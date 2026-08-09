@@ -1,12 +1,20 @@
 ---
-apiVersion: v1
-kind: Secret
+# Dashboard basicAuth users, sourced from Vault instead of committed. Rotated
+# 2026-08-09 to fresh bcrypt hashes (the old nepeat entry was apr1/MD5).
+# secret/app/traefik/dashboard-auth holds the htpasswd `users` key.
+apiVersion: secrets.hashicorp.com/v1beta1
+kind: VaultStaticSecret
 metadata:
   name: traefik-dashboard-auth
   namespace: traefik
-data:
-  users: >-
-    b2J3OiQyeSQwOSQ3OC5MbEovazhnNmRBdy5CZWhRbTB1MkU0VTNEUmh2MVd6QzhYc1RuUlBQVnhZVXlxSC5ubQpnZW5wcm9nOiQyeSQwOSRZTWN6UEJnMmNCY2VRLkVqbElvQU91dThMcTZtWTg2ZGZFY2lhd2RuVlFtZ29aM0FNeHBLSwpuZXBlYXQ6JCRhcHIxJCQ5YzhzU3JTUCQkd3hJQThROFlyOWZZREh3QlhZLnM1Lw==
+spec:
+  type: kv-v2
+  mount: secret
+  path: app/traefik/dashboard-auth
+  destination:
+    name: traefik-dashboard-auth
+    create: true
+  refreshAfter: 1m
 ---
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
