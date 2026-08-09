@@ -1,0 +1,20 @@
+# Torrent data lives on CephFS rather than a volumeClaimTemplate on
+# ceph-rbd-xfs. The old 512Gi RBD volume hit 96% and XFS can grow but never
+# shrink, so every size bump was a one-way door. A CephFS claim is just a
+# subvolume quota, so 1Ti overprovisions at no real cost and can be revised
+# in either direction later.
+#
+# Declared here as a static PVC, not a volumeClaimTemplate, because
+# volumeClaimTemplates are immutable -- resizing one means orphan-deleting the
+# StatefulSet. The old deluge-data-deluge-0 claim is left behind deliberately
+# as the rollback copy; delete it only once this volume has proven itself.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: deluge-data
+spec:
+  storageClassName: cephfs
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 1Ti
