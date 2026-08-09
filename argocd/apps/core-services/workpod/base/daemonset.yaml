@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: workpod
-  namespace: kube-system
+  namespace: workpod
 spec:
   selector:
     matchLabels:
