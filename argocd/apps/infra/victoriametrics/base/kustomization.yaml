@@ -28,6 +28,17 @@ patches:
         name: vm
         labels:
           generalprogramming.org/allow-node-api: "true"
+          # PSA lives here, not in the namespace app: ArgoCD applies every app
+          # under one shared SSA field manager (argocd-controller), so two apps
+          # declaring this Namespace cannot co-own its labels -- the last apply
+          # strips the other's. vmstorage/vmselect/vminsert run as root, so
+          # baseline, verified against live pods on both clusters.
+          pod-security.kubernetes.io/enforce: baseline
+          pod-security.kubernetes.io/enforce-version: latest
+          pod-security.kubernetes.io/warn: restricted
+          pod-security.kubernetes.io/warn-version: latest
+          pod-security.kubernetes.io/audit: restricted
+          pod-security.kubernetes.io/audit-version: latest
   # Patch the Certificate to use correct DNS names for victoriametrics namespace
   - target:
       group: cert-manager.io

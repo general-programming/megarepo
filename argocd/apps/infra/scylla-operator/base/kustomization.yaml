@@ -3,3 +3,25 @@ kind: Kustomization
 namespace: scylla-operator
 resources:
   - https://raw.githubusercontent.com/scylladb/scylla-operator/refs/tags/v1.15.0/deploy/operator.yaml
+patches:
+  # PSA lives here, not in the namespace app: the upstream manifest declares
+  # this Namespace, and ArgoCD applies every app under one shared SSA field
+  # manager (argocd-controller), so two apps declaring it cannot co-own the
+  # labels -- the last apply strips the other's. baseline because the operator
+  # pods fail restricted; verified against live pods on both clusters.
+  - target:
+      version: v1
+      kind: Namespace
+      name: scylla-operator
+    patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: scylla-operator
+        labels:
+          pod-security.kubernetes.io/enforce: baseline
+          pod-security.kubernetes.io/enforce-version: latest
+          pod-security.kubernetes.io/warn: restricted
+          pod-security.kubernetes.io/warn-version: latest
+          pod-security.kubernetes.io/audit: restricted
+          pod-security.kubernetes.io/audit-version: latest
