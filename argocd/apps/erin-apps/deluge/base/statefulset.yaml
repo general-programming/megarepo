@@ -8,7 +8,9 @@ spec:
     matchLabels:
       app: deluge
   serviceName: "deluge"
-  replicas: 1
+  # Held at 0 for the RBD -> CephFS data cutover: the final delta rsync needs a
+  # quiesced writer. Restored to 1 in the follow-up commit.
+  replicas: 0
   minReadySeconds: 10
   template:
     metadata:
@@ -41,15 +43,15 @@ spec:
         - name: deluge-config
           mountPath: /config
       dnsPolicy: Default
+      volumes:
+        # Static claim from pvc-data.yaml rather than a volumeClaimTemplate:
+        # templates are immutable, so every resize would mean orphan-deleting
+        # this StatefulSet. The old 512Gi ceph-rbd-xfs claim
+        # (deluge-data-deluge-0) is left bound as the rollback copy.
+        - name: deluge-data
+          persistentVolumeClaim:
+            claimName: deluge-data
   volumeClaimTemplates:
-  - metadata:
-      name: deluge-data
-    spec:
-      storageClassName: ceph-rbd-xfs
-      accessModes: ["ReadWriteOnce"]
-      resources:
-        requests:
-          storage: 512Gi
   - metadata:
       name: deluge-config
     spec:
