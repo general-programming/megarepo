@@ -178,3 +178,125 @@ patches:
     name: ens18
     features:
       tx-checksum-ip-generic: false
+
+  # Ingress firewall — same shape as sea1's; semantics and rollout live in
+  # .claude/skills/talos-ingress-firewall. The nodes carry only private IPv4,
+  # but 79.110.170.65 routes public traffic onto them, and nothing filtered
+  # host services (apid, etcd, kubelet, consul serf) from the rest of 10/8.
+  #
+  # Talos auto-allows the pod/service subnets, lo, and established/related, so
+  # pod->node and node egress need no rules. Chain sits at -140, ahead of DNAT.
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: control-plane-apis
+    portSelector:
+      ports:
+        - 6443          # kube-apiserver
+        - 50000         # apid -- the talosctl path; losing it loses the cluster
+        - 50001         # trustd, node-to-node cert issuance
+        - 2379-2380     # etcd peer + client
+        - 10250         # kubelet
+      protocol: tcp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: cluster-services-tcp
+    portSelector:
+      ports:
+        - 179           # frr-k8s BGP; leaves .34/.35 and external peer .36 may re-open inbound
+        - 4240          # cilium health
+        - 4244          # hubble peer
+        - 8301-8302     # consul client serf
+        - 9100          # node-exporter
+        - 9962-9965     # cilium agent/operator/envoy metrics (unauthenticated)
+        - 6667          # znc on the internal MetalLB VIP; pre-DNAT dport, see PR notes
+        - 6697          # znc TLS, same VIP
+      protocol: tcp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: cluster-services-udp
+    portSelector:
+      ports:
+        - 8301-8302     # consul serf gossip
+      protocol: udp
+    ingress:
+      - subnet: 10.0.0.0/8
+      - subnet: 172.16.0.0/12
+      - subnet: 192.168.0.0/16
+      - subnet: 100.64.0.0/10
+      - subnet: fd00::/8
+  - # These nodes are DHCP clients (no static networkInterfaces above). A
+    # renewal OFFER/ACK from the server does not always match conntrack, so
+    # without this a lease expiry silently costs the node its address.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: dhcp-client
+    portSelector:
+      ports:
+        - 68
+      protocol: udp
+    ingress:
+      - subnet: 10.0.0.0/8
+  - # The public path: traefik + znc-external share 79.110.170.65, which lands
+    # on a node pre-DNAT. NodePorts go with it -- a rule never consulted is
+    # harmless, a missing one is an outage (see the sea1 rationale).
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: public-web-ingress
+    portSelector:
+      ports:
+        - 80
+        - 443
+        - 16969         # znc-external on the shared VIP
+        - 30000-32767
+      protocol: tcp
+    ingress:
+      - subnet: 0.0.0.0/0
+      - subnet: ::/0
+  - |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: public-web-ingress-udp
+    portSelector:
+      ports:
+        - 30000-32767
+      protocol: udp
+    ingress:
+      - subnet: 0.0.0.0/0
+      - subnet: ::/0
+  - # Lifts the hardcoded 5/s ICMPv6 cap for link-local NDP (and ULA, for the
+    # staged dual-stack). Full mechanism documented in sea1's talconfig.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkRuleConfig
+    name: icmpv6-ndp-pmtud
+    portSelector:
+      ports:
+        - 1-65535
+      protocol: icmpv6
+    ingress:
+      - subnet: fe80::/10
+      - subnet: fd00::/8
+  - # Enforcement. Keep LAST -- with it absent the rules above are inert, which
+    # is how a change to them is staged. Applied per-node with --mode=try first;
+    # rollout order in the PR / skill, never all eight at once.
+    |-
+    apiVersion: v1alpha1
+    kind: NetworkDefaultActionConfig
+    ingress: block
