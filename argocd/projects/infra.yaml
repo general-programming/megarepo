@@ -19,6 +19,10 @@ spec:
     kind: '*'
   sourceRepos:
   - git@github.com:general-programming/megarepo.git
+  # helm-source Applications (cilium-helm, consul-helm, traefik-helm) pull charts directly
+  - https://helm.cilium.io
+  - https://helm.releases.hashicorp.com
+  - https://traefik.github.io/charts
 
 ---
 apiVersion: argoproj.io/v1alpha1
