@@ -16,9 +16,10 @@ metadata:
   name: vms
   namespace: argocd
 spec:
+  # each VM app ships its own Namespace; all KubeVirt/Multus kinds are namespaced
   clusterResourceWhitelist:
-    - group: '*'
-      kind: '*'
+    - group: ''
+      kind: Namespace
   description: KubeVirt guests
   destinations:
     - namespace: '*'
@@ -27,7 +28,7 @@ spec:
     - group: '*'
       kind: '*'
   sourceRepos:
-    - '*'
+    - git@github.com:general-programming/megarepo.git
 
 ---
 apiVersion: argoproj.io/v1alpha1

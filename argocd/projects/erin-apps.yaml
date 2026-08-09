@@ -7,9 +7,10 @@ metadata:
   name: erin-apps
   namespace: argocd
 spec:
+  # Namespace only (scraper-projects ships one); everything else here is namespaced
   clusterResourceWhitelist:
-  - group: '*'
-    kind: '*'
+  - group: ''
+    kind: Namespace
   description: erin's shit
   destinations:
   - namespace: '*'
@@ -18,7 +19,7 @@ spec:
   - group: '*'
     kind: '*'
   sourceRepos:
-  - '*'
+  - git@github.com:general-programming/megarepo.git
 
 ---
 apiVersion: argoproj.io/v1alpha1

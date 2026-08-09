@@ -18,6 +18,6 @@ that already exist:
 - `kubectl -n kube-system exec -it ds/workpod -- bash` — the existing DaemonSet
 - a Coder workspace, for anything longer-lived
 
-If you add an app here, remember that the `test` AppProject is wildcarded
-(`clusterResourceWhitelist: '*'`, `destinations: '*/*'`), so anything in this
-directory can create cluster-scoped resources in any namespace on any cluster.
+If you add an app here, name the directory `test-*`: the `test` AppProject only
+allows destinations matching `test-*`, and it has no `clusterResourceWhitelist`,
+so test apps cannot create cluster-scoped resources.

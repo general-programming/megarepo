@@ -7,6 +7,9 @@ metadata:
   name: argocd-cm
   namespace: argocd
 data:
+  # Local admin is disabled; auth is OIDC via dex/authentik. To recover if OIDC
+  # breaks: kubectl edit this cm, set admin.enabled "true", use argocd-initial-admin-secret.
+  admin.enabled: "false"
   resource.customizations: |
     networking.k8s.io/Ingress:
       health.lua: |

@@ -7,9 +7,14 @@ metadata:
   name: core-services
   namespace: argocd
 spec:
+  # authentik and grafana ship ClusterRole(Binding)s; nothing else here is cluster-scoped
   clusterResourceWhitelist:
-  - group: '*'
-    kind: '*'
+  - group: ''
+    kind: Namespace
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRole
+  - group: rbac.authorization.k8s.io
+    kind: ClusterRoleBinding
   description: core services that are not low level
   destinations:
   - namespace: '*'
@@ -18,7 +23,7 @@ spec:
   - group: '*'
     kind: '*'
   sourceRepos:
-  - '*'
+  - git@github.com:general-programming/megarepo.git
 
 ---
 apiVersion: argoproj.io/v1alpha1
