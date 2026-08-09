@@ -1,7 +1,7 @@
 global:
   enabled: false
   tlsDisable: false
-  externalVaultAddr: 'http://10.65.67.27:8201'
+  externalVaultAddr: 'https://10.65.67.27:8200'
 
 csi:
   enabled: true
