@@ -22,9 +22,18 @@ spec:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
+      # Debug shell only; it never needs the kube API.
+      automountServiceAccountToken: false
       containers:
       - name: workpod
-        image: ubuntu:latest
+        image: ubuntu:24.04
         # Just spin & wait forever
         command: [ "/bin/bash", "-c", "--" ]
         args: [ "while true; do sleep 30; done;" ]
+        # Still root (it's a debug shell), but no ambient caps or escalation.
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
+          seccompProfile:
+            type: RuntimeDefault
