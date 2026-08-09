@@ -19,11 +19,13 @@ resources:
   - cnpg-system.yaml
   - mariadb-operator.yaml
   - clickhouse-operator.yaml
-  - scylla-operator.yaml
   - shared-db.yaml
   - nix-cache-builder.yaml
-  - victoriametrics.yaml
   - cilium-secrets.yaml
+
+  # scylla-operator and victoriametrics are absent on purpose -- their own apps
+  # declare those Namespaces, and a second declaration here cannot win. Their
+  # PSA labels are patched in those apps instead. See the README.
 
   # pre-existing kubernetes namespaces, adopted for their PSA labels only.
   # Prune=false so removing them from git never deletes the namespace.

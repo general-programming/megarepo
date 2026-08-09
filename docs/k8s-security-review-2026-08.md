@@ -298,8 +298,29 @@ the sweep for empty namespaces:
 `cert-manager`'s namespace is declared inside the *vendored* upstream manifest,
 so it is set by a kustomize patch (`patch-namespace-psa.yaml`) rather than
 duplicated into the namespace app — editing `upstream/` would be lost on the
-next vendor bump, and a second declaration would fight it under
-`ServerSideApply`. The three Kubernetes built-ins are adopted with
+next vendor bump.
+
+### Post-merge correction: one namespace, one app
+
+Five of the seven landed on both clusters on the first sync. **`scylla-operator`
+and `victoriametrics` did not**, and the reason is worth recording because it
+contradicts the assumption this change was written on.
+
+I expected `ServerSideApply` to let the namespace app co-own the PSA labels
+alongside whichever app declares the Namespace. It cannot. **ArgoCD applies
+every Application under one shared field manager, `argocd-controller`**, so two
+apps declaring the same object are the *same* manager applying twice — and an
+SSA apply removes fields absent from the config being applied. The app that
+syncs last silently strips the other's labels. Observed exactly that: the
+namespace app reported `Succeeded` and `OutOfSync` simultaneously, and
+`managedFields` showed a single manager owning only the four non-PSA labels.
+
+Fixed by moving both namespaces' labels into their owning apps
+(`victoriametrics/base/kustomization.yaml` extends its existing Namespace patch;
+`scylla-operator/base/kustomization.yaml` gains one) and deleting the duplicate
+files from the namespace app. The rule is now written into
+`argocd/apps/infra/namespace/README.md` with the `managedFields`/`tracking-id`
+commands to check ownership before adding a file there. The three Kubernetes built-ins are adopted with
 `argocd.argoproj.io/sync-options: Prune=false`, so removing them from git can
 never delete the namespace.
 

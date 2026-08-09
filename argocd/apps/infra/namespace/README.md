@@ -48,11 +48,31 @@ Namespaces Kubernetes creates itself (`default`, `kube-public`,
 labels, with `argocd.argoproj.io/sync-options: Prune=false` so removing them
 from git can never delete the namespace.
 
-Where a namespace is declared by a *vendored* upstream manifest — `cert-manager`
-is the only one today — set the labels with a kustomize patch in that app
-(`cert-manager/base/patch-namespace-psa.yaml`), not with a second file here.
-Editing `upstream/` is lost on the next vendor bump, and two declarations of the
-same Namespace fight each other under `ServerSideApply`.
+## One namespace, one app — this is not negotiable
+
+**If another app already declares a Namespace, its PSA labels must be patched in
+that app. A second declaration here cannot win.**
+
+ArgoCD applies every Application under a *single shared* server-side-apply field
+manager, `argocd-controller`. SSA co-ownership is per-manager, not per-app, so
+two apps declaring the same Namespace are the same manager applying twice — and
+an SSA apply removes fields absent from the config it applies. Whichever app
+syncs last silently strips the other's labels, and the loser sits `OutOfSync`
+forever while reporting `Succeeded`.
+
+Confirm ownership before adding a file here:
+
+```sh
+kubectl get ns <ns> -o json --show-managed-fields \
+  | jq -r '.metadata.managedFields[]|"\(.manager) \(.fieldsV1["f:metadata"]["f:labels"]|keys)"'
+kubectl get ns <ns> -o jsonpath='{.metadata.annotations.argocd\.argoproj\.io/tracking-id}'
+```
+
+A `tracking-id` naming another app means: patch it there, not here. Today that is
+`cert-manager` (vendored manifest → `cert-manager/base/patch-namespace-psa.yaml`),
+`victoriametrics` and `scylla-operator` (both patched in their own
+`base/kustomization.yaml`). Editing a vendored `upstream/` file directly is also
+wrong — it is lost on the next bump.
 
 ## Tiers
 
