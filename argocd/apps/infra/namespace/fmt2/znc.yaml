@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: znc
+  labels:
+    kubernetes.io/metadata.name: znc
+    # znc is fmt2-only (see erin-apps/znc/sea1 -- deliberately empty), so this
+    # lives in the fmt2 overlay rather than base/. The pod runs as root and
+    # sets no securityContext; restricted fails, baseline passes.
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest

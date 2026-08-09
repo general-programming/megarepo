@@ -2,3 +2,6 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../base
+  # fmt2-only namespaces. Anything here must NOT be in base/, or it lands on
+  # sea1 too. See the README.
+  - znc.yaml
