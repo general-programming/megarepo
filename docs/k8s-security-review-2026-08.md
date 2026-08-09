@@ -8,15 +8,27 @@ number was read off the live clusters on 2026-08-09.
 **The short version:** the preventive baseline is genuinely good — Talos gives
 you anonymous-auth off, etcd encryption at rest, LUKS2 system disks, audit
 policy, NodeRestriction, and `cluster-admin` bound to nothing but
-`system:masters`. The gaps are not in prevention, they are in **detection and
-recovery**: the API audit log is written and then thrown away, and the
-break-glass credential that recovers a node has been expired for eighteen
-months. Both are cheap to fix and both get *more* important as the netpol work
-tightens, because that work's failure mode is lockout.
+`system:masters`. The gap is not in prevention, it is in **detection**: the API
+audit log is written to an ephemeral partition and then thrown away, at
+~7.3 GB/day on SEA1, of which 96% is noise from one misbehaving client. That
+matters more as the netpol work tightens, because it is the only record of what
+a stolen credential did.
 
-After those two: PSA is unlabeled on 31 namespaces across the two clusters,
-which means the one admission control you already have is silently inert
-exactly where it would matter.
+Two findings in the first draft of this review were overstated, and the
+corrections are recorded in place rather than quietly dropped:
+
+- **The break-glass credential was not expired.** I tested a gitignored
+  leftover; the real one is valid to 2027-07-26. The genuine defect was stale
+  endpoints, now fixed (Finding 2).
+- **Unlabelled namespaces were not unprotected.** Talos already defaults every
+  namespace to `enforce: baseline`. Labelling them buys tightening to
+  `restricted` and reviewability, not door-closing (Finding 3).
+
+**Since this review was written**, PSA now carries an explicit level on every
+namespace on both clusters except `kube-system` (Talos-exempt), and 13 empty
+namespaces have been deleted. The live blocker is that sops cannot decrypt
+from the workstation, so Talos configs cannot be regenerated and FMT2 has no
+local break-glass at all.
 
 ---
 
@@ -214,7 +226,7 @@ expires in July 2027.
 
 ---
 
-## Finding 3 — PSA is unlabeled on 31 namespaces
+## Finding 3 — PSA was unlabeled on 31 namespaces (resolved)
 
 `pod-security.kubernetes.io/enforce` tally:
 
@@ -347,7 +359,7 @@ template, empty on both clusters ever since.
 
 ---
 
-## Finding 4 — FMT2 carries seven dead namespaces, some three years old
+## Finding 4 — dead namespaces, some three years old (resolved)
 
 | Namespace | Pods | Created |
 |---|---|---|
@@ -365,13 +377,45 @@ deliberate their continued existence is.
 
 Empty namespaces are not dangerous in themselves. They matter because they are
 unlabeled, un-netpol'd, and un-owned: they are where a `kubectl apply` lands
-when someone is in a hurry, and they inflate the denominator on every "how many
-namespaces still need policies" count in the netpol plan — which currently
-reads 13 uncovered on FMT2, and would read closer to 6 with these gone.
+when someone is in a hurry, and they inflate the namespace count the netpol
+plan reasons about (57 on FMT2 at the time that doc was written, of which 54
+uncovered).
 
-Check for leftover Secrets and PVCs before deleting (`registry` in particular
-may hold a pull credential), then delete. This is the cheapest item in the
-review.
+**One caveat, measured after the fact:** deleting them did *not* reduce the
+count of namespaces that still need a policy, which is 20 on SEA1 and 13 on
+FMT2 — that figure counts namespaces running pod-networked workloads, and
+these had none. What shrank is the total namespace count (FMT2 57 → 46) and
+the number of unowned places something can be scheduled. The policy-authoring
+workload in `docs/netpol-phase3-sea1-fmt2.md` is unchanged.
+
+### Done — 13 namespaces deleted
+
+Checked exhaustively before deleting: every namespaced API resource type from
+`kubectl api-resources --namespaced`, not just `kubectl get all`, which misses
+CRDs like `VMPodScrape`, `CiliumNetworkPolicy` and `VaultStaticSecret`. All
+thirteen contained nothing but the auto-created `kube-root-ca.crt` ConfigMap
+and `default` ServiceAccount. `registry` held no pull credential.
+
+Three more were deleted alongside the seven, having turned up during the PSA
+sweep as empty on **both** clusters:
+
+- **`metallb`** — vestigial. SEA1 retired MetalLB for Cilium L2 IPAM and its
+  overlay is a deliberately empty kustomization; FMT2 uses `metallb-system`.
+- **`csi-secrets-store`** — vestigial. The driver deploys into `kube-system`
+  (`csi-secrets-store/base/kustomization.yaml` sets `namespace: kube-system`).
+- **`namespace`** — a namespace literally called `namespace`, created
+  2024-02-11 from an unrendered template and empty ever since.
+
+Nothing recreates any of them. No finalizers hung; both clusters stayed
+healthy. SEA1 went 56 → 53 namespaces, FMT2 57 → 46.
+
+Also deleted the three `Completed` netshoot debug pods left in SEA1 `default`
+(`dnscheck0`, `netcheck`, `recheck`) from the 2026-08-06 control-plane
+replacement.
+
+**Both clusters now have an explicit PSA level on every namespace except
+`kube-system`**, which Talos exempts cluster-wide and where a label would be
+silently inert.
 
 ---
 
@@ -540,27 +584,26 @@ make the netpol work safe come before the netpol work.
 | # | Item | Finding | Effort | Status |
 |---|---|---|---|---|
 | 1 | Repoint SEA1 `talosconfig` at live nodes; drop the expired leftover | 2 | — | **done** |
-| 2 | PSA labels: 7 namespaces + the orphan registered | 3 | — | **done, unsynced** |
-| 3 | Unblock sops/Vault from the workstation; regenerate both `clusterconfig/` | 2 | ~1 h | **blocker** |
-| 4 | Audit policy drop rules for `system:node:*`, `system:apiserver`, Alloy `/version` | 1 | ~2 h | |
-| 5 | Fix Alloy's `/version` hot loop and pod-log reconnect storm | 1 | ~2 h | |
-| 6 | Ship kube audit logs to Loki + the 5 alert rules | 1 | ~1 d | |
-| 7 | Delete the 7 dead FMT2 namespaces + `metallb`, `csi-secrets-store`, `namespace` | 4 | ~30 m | |
-| 8 | Delete the 3 leftover netshoot pods in SEA1 `default` | 3 | ~1 m | |
-| 9 | Elasticsearch sysctls → Talos `machine.sysctls`, drop `sysctlImage` | 7 | ~1 h | |
-| 10 | Decide + document `znc-external`; add its CNP | 5 | ~1 h | |
-| 11 | Renovate digest pinning, base and first-party images first | 6 | ~half d | |
-| 12 | Confirm the Authentik enrolment path behind ArgoCD `readonly` | 9 | ~30 m | |
-| 13 | `automountServiceAccountToken: false` on app-namespace default SAs | 8 | incremental | |
-| 14 | Netpol phase 3 stages 4–5 (already planned) | 10 | per that doc | |
-| 15 | Policy engine — *after* 2 and 14, not before | 10 | later | |
+| 2 | PSA labels on every namespace but `kube-system`, both clusters | 3 | — | **done** (#585, #586, #588) |
+| 3 | Delete 13 empty namespaces + 3 leftover debug pods | 4 | — | **done** |
+| 4 | Unblock sops/Vault from the workstation; regenerate both `clusterconfig/` | 2 | ~1 h | **blocker** |
+| 5 | Audit policy drop rules for `system:node:*`, `system:apiserver`, Alloy `/version` | 1 | ~2 h | next |
+| 6 | Fix Alloy's `/version` hot loop and pod-log reconnect storm | 1 | ~2 h | next |
+| 7 | Ship kube audit logs to Loki + the 5 alert rules | 1 | ~1 d | |
+| 8 | Elasticsearch sysctls → Talos `machine.sysctls`, drop `sysctlImage` | 7 | ~1 h | |
+| 9 | Decide + document `znc-external`; add its CNP | 5 | ~1 h | |
+| 10 | Renovate digest pinning, base and first-party images first | 6 | ~half d | |
+| 11 | Confirm the Authentik enrolment path behind ArgoCD `readonly` | 9 | ~30 m | |
+| 12 | `automountServiceAccountToken: false` on app-namespace default SAs | 8 | incremental | |
+| 13 | Netpol phase 3 stages 4–5 (already planned) | 10 | per that doc | |
+| 14 | Policy engine — *after* 2 and 13, not before | 10 | later | |
 
-**Item 3 is the one to take seriously.** It is not itself a security hole, but
+**Item 4 is the one to take seriously.** It is not itself a security hole, but
 it means the Talos configs cannot be regenerated from this workstation, and
 FMT2 has no working break-glass here at all. Everything in the netpol plan
 whose failure mode is lockout should wait behind it.
 
-Items 4–6 are sequenced deliberately: **tune the audit policy before shipping
+Items 5–7 are sequenced deliberately: **tune the audit policy before shipping
 the log.** Done in that order the change is a net reduction in disk writes
 (~7.3 → under 2 GB/day on SEA1) and what reaches Loki is signal rather than
 Alloy healthchecks.
@@ -569,10 +612,9 @@ Alloy healthchecks.
 
 - `TALOSCONFIG=infrastructure/talos/sea1/clusterconfig/talosconfig talosctl version`
   answers from all three nodes **with no `-n`/`-e` flags**. (Done.) The same for
-  FMT2 once item 3 unblocks `talhelper genconfig`.
-- After the namespace app syncs, the only namespaces still lacking an `enforce`
-  label are `kube-system` (Talos-exempt, intentional) and the deletion
-  candidates in item 7:
+  FMT2 once item 4 unblocks `talhelper genconfig`.
+- The only namespace lacking an `enforce` label on either cluster is
+  `kube-system` (Talos-exempt, intentional) — **verified, both clusters**:
   `kubectl get ns -o json | jq -r '.items[]|select(.metadata.labels["pod-security.kubernetes.io/enforce"]==null)|.metadata.name'`
 - Audit volume drops below ~2 GB/day/cluster after the policy drop rules, measured
   the same way (file size delta over a fixed window), *before* Loki shipping is enabled.
