@@ -1,8 +1,11 @@
 # Namespaces and Pod Security Admission
 
-One file per namespace in `base/`. Both `sea1/` and `fmt2/` are bare
-`resources: [../base]` with no patches, so **every edit here lands on both
-clusters**. Verify against both before merging.
+One file per namespace in `base/`, and **everything in `base/` lands on both
+clusters** — verify against both before merging.
+
+A namespace that exists on only one cluster goes in that cluster's overlay
+instead (`fmt2/znc.yaml` is the only one today), and must *not* also be in
+`base/`, or it gets created empty on the other cluster.
 
 ## The carve-out, in one line
 
