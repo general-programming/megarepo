@@ -25,9 +25,12 @@ spec:
         - ports:
             - port: "53"
               protocol: ANY
+    # One rule, pinned to 6443: Talos serves the apiserver on the nodes, so the
+    # kube-apiserver label rides the node identity and an unported
+    # kube-apiserver allow would open every port on the control-plane IPs
+    # (kubelet, etcd, apid).
     - toEntities:
         - kube-apiserver
-    - toEntities:
         - host
         - remote-node
       toPorts:
