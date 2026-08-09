@@ -16,6 +16,20 @@ images:
   newName: victoriametrics/operator
   newTag: v0.74.1
 patches:
+  # vmagent scrapes kubelet :10250 (agent_scrape_kubelet.yaml); this label exempts
+  # the namespace from the deny-egress-node-api CCNP in apps/infra/cilium/base.
+  # Upstream names the Namespace "vm"; the namespace transformer renames it later.
+  - target:
+      version: v1
+      kind: Namespace
+      name: vm
+    patch: |-
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: vm
+        labels:
+          generalprogramming.org/allow-node-api: "true"
   # Patch the Certificate to use correct DNS names for victoriametrics namespace
   - target:
       group: cert-manager.io
