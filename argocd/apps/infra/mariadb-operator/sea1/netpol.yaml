@@ -42,7 +42,7 @@ spec:
         - matchLabels:
             app.kubernetes.io/name: mariadb
           matchExpressions:
-            - key: io.kubernetes.pod.namespace
+            - key: k8s:io.kubernetes.pod.namespace
               operator: Exists
       toPorts:
         - ports:

@@ -43,12 +43,12 @@ spec:
         - matchLabels:
             cnpg.io/podRole: instance
           matchExpressions:
-            - key: io.kubernetes.pod.namespace
+            - key: k8s:io.kubernetes.pod.namespace
               operator: Exists
         - matchExpressions:
             - key: cnpg.io/jobRole
               operator: Exists
-            - key: io.kubernetes.pod.namespace
+            - key: k8s:io.kubernetes.pod.namespace
               operator: Exists
       toPorts:
         - ports:
