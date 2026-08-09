@@ -10,11 +10,12 @@ you anonymous-auth off, etcd encryption at rest, LUKS2 system disks, audit
 policy, NodeRestriction, and `cluster-admin` bound to nothing but
 `system:masters`. The gap is not in prevention, it is in **detection**: the API
 audit log is written to an ephemeral partition and then thrown away, at
-~7.3 GB/day on SEA1, of which 96% is noise from one misbehaving client. That
-matters more as the netpol work tightens, because it is the only record of what
-a stolen credential did.
+~7.3 GB/day on SEA1 — of which ~83% is structural noise, nearly half of it a
+duplicate event Talos logs for every single request. That matters more as the
+netpol work tightens, because it is the only record of what a stolen
+credential did.
 
-Two findings in the first draft of this review were overstated, and the
+Three findings in the first draft of this review were overstated, and the
 corrections are recorded in place rather than quietly dropped:
 
 - **The break-glass credential was not expired.** I tested a gitignored
@@ -23,6 +24,10 @@ corrections are recorded in place rather than quietly dropped:
 - **Unlabelled namespaces were not unprotected.** Talos already defaults every
   namespace to `enforce: baseline`. Labelling them buys tightening to
   `restricted` and reviewability, not door-closing (Finding 3).
+- **Alloy was not causing 46% of the audit volume.** That came from one sample
+  on the *quietest* control plane. Measured across all three it is 0–2.5%, and
+  its `/version` calls are a normal ~7/min health check. The real driver is
+  structural, not one bad client (Finding 1).
 
 **Since this review was written**, PSA now carries an explicit level on every
 namespace on both clusters except `kube-system` (Talos-exempt), and 13 empty
@@ -110,32 +115,48 @@ what the SSDs are already absorbing to write the logs in the first place.
 
 ### It should be much quieter than it is
 
-Sampling 4000 consecutive events, **96% of the audit log is noise**:
+**Correction — an earlier draft blamed Alloy for 46% of this. That was wrong,
+and the way it was wrong is worth recording.** That figure came from a single
+4000-event window on `sea1-k8s-0`, the *quietest* of the three control planes
+at 15.6 MB/h. Sampling all three showed the composition varies completely by
+node and by time — each apiserver sees a different client mix, and the same
+node's top subject changed from Alloy to `argocd-application-controller`
+between two samples twenty minutes apart:
 
-| Subject | Share |
+| Node | Top subject in sample | Alloy's share |
+|---|---|---|
+| `sea1-k8s-0` (15.6 MB/h) | `argocd-application-controller` 43% | 1.4% |
+| `sea1-k8s-1` (123 MB/h) | `kubevirt-operator` 21.8% | 0% |
+| `sea1-k8s-2` (173 MB/h) | `kube-controller-manager` 10.8% | 2.5% |
+
+**Alloy needs no fix.** Its `/version` calls run at roughly 7/min, which is an
+ordinary periodic client health check, not a hot loop. Generalising from the
+lowest-volume node was the error; the busiest node — which produces 56% of the
+cluster's audit bytes — has no single dominant offender at all, just a long
+tail of CNPG database operators and controllers doing normal reconcile work.
+
+The real structure only appears when you stop looking at *who* and look at
+*what*. Over 14000 events sampled across all three control planes:
+
+| | Share of all events |
 |---|---|
-| `system:serviceaccount:loki:alloy` | **46%** |
-| `system:node:*` | 32% |
-| `system:apiserver` | 18% |
-| everything else | 4% |
+| `RequestReceived` — a duplicate of every single request | **47.8%** |
+| `leases` — leader-election renewals | 18.6% |
+| `system:nodes` + `system:apiserver` read-only | 7.3% |
+| `argocd-application-controller` → `applications` | 5.2% |
+| **everything else (the signal)** | **~21%** |
 
-Every event is `level: Metadata` — there are no request bodies inflating this.
-It is purely volume.
+Talos's shipped policy is literally `rules: [{level: Metadata}]` with no
+`omitStages`, so every request is logged twice — once when received, once when
+answered — and `ResponseComplete` already carries everything `RequestReceived`
+does plus the status code. **One line removes nearly half the volume.**
 
-Alloy's 46% is a genuine pathology, not normal operation: 502 of its sampled
-requests are `get /version` (a healthcheck hot loop), and most of the remainder
-are pod-log `follow=true` reconnects hammering two `nix-cache-builder` pods —
-the same pod re-opened dozens of times, i.e. a log tail reconnecting in a
-storm. That is worth fixing on its own merits; it is load on the API server as
-well as on the disk.
-
-**So the order matters: tune the audit policy first, then ship.** Adding drop
-rules for `system:node:*`, `system:apiserver`, and Alloy's `/version` probe
-cuts volume by roughly 75% **at the source** — taking SEA1 from ~7.3 GB/day to
-under 2 GB/day. That reduces SSD writes that are happening *right now*, before
-a single byte goes to Loki. Done in that order, adding audit shipping is a net
-**reduction** in disk pressure, and the log that lands in Loki is the 4% that
-actually carries security signal.
+**So the order matters: tune the audit policy first, then ship.** Simulating
+the replacement policy against those same 14000 events leaves 2349 — **16.8%,
+an 83% reduction, ~7.3 → ~1.2 GB/day on SEA1** — with zero events touching
+secrets, RBAC or exec/attach dropped. That reduces SSD writes happening *right
+now*, before a single byte goes to Loki, so adding audit shipping becomes a net
+**reduction** in disk pressure.
 
 The asymmetry is stark and worth naming: Hubble gives you flow-level
 observability with policy verdict correlation across 547 pods, and it is
@@ -156,11 +177,11 @@ DaemonSet on every node with `/var/log` hostPath mount support in the chart
 
 Two things to check while doing it:
 
-- **Talos's default audit policy is thin.** Confirm what
-  `/system/config/kubernetes/kube-apiserver/auditpolicy.yaml` actually records
-  before building alerts on it — if Secret reads land at `Metadata` level or
-  are dropped, shipping the file faithfully preserves a log that does not answer
-  the question. The policy is overridable via a Talos machine config patch.
+- **Talos's default audit policy is not thin — it is indiscriminate.** Read
+  live, it is `rules: [{level: Metadata}]` and nothing else: everything logged,
+  both stages, no exemptions. That is why the volume is what it is. The
+  replacement lands in `controlPlane.patches` in both `talconfig.yaml` files
+  (`cluster.apiServer.auditPolicy`) and is **not yet applied** — see below.
 - **Volume.** Set the Loki stream up with its own retention; audit is chatty and
   you do not want it competing with app logs.
 
@@ -587,8 +608,8 @@ make the netpol work safe come before the netpol work.
 | 2 | PSA labels on every namespace but `kube-system`, both clusters | 3 | — | **done** (#585, #586, #588) |
 | 3 | Delete 13 empty namespaces + 3 leftover debug pods | 4 | — | **done** |
 | 4 | Unblock sops/Vault from the workstation; regenerate both `clusterconfig/` | 2 | ~1 h | **blocker** |
-| 5 | Audit policy drop rules for `system:node:*`, `system:apiserver`, Alloy `/version` | 1 | ~2 h | next |
-| 6 | Fix Alloy's `/version` hot loop and pod-log reconnect storm | 1 | ~2 h | next |
+| 5 | Audit policy: omitStages + 4 drop rules, both clusters | 1 | written | **needs apply (blocked by 4)** |
+| 6 | ~~Fix Alloy~~ — measured across all 3 nodes, Alloy is 0–2.5%; no fix needed | 1 | — | **withdrawn** |
 | 7 | Ship kube audit logs to Loki + the 5 alert rules | 1 | ~1 d | |
 | 8 | Elasticsearch sysctls → Talos `machine.sysctls`, drop `sysctlImage` | 7 | ~1 h | |
 | 9 | Decide + document `znc-external`; add its CNP | 5 | ~1 h | |
