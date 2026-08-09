@@ -29,7 +29,7 @@ spec:
             app: cloudflared
       containers:
       - name: cloudflared
-        image: cloudflare/cloudflared:latest
+        image: cloudflare/cloudflared:2026.7.3
         args:
         - tunnel
         # Make cloudflared prefer IPv6
