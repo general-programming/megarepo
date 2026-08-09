@@ -20,7 +20,7 @@ spec:
             value: "2"
       initContainers:
       - name: librenms-init
-        image: nepeat/librenms:latest
+        image: ghcr.io/general-programming/megarepo/librenms:latest
         command: ["/bin/bash", "/scripts/setup-script.sh"]
         env:
           - name: DB_PASSWORD
@@ -40,7 +40,7 @@ spec:
           mountPath: /scripts
       containers:
       - name: librenms
-        image: nepeat/librenms:latest
+        image: ghcr.io/general-programming/megarepo/librenms:latest
         env:
           - name: DB_PASSWORD
             valueFrom:
@@ -85,7 +85,7 @@ spec:
             value: "2"
       containers:
       - name: librenms
-        image: nepeat/librenms:latest
+        image: ghcr.io/general-programming/megarepo/librenms:latest
         envFrom:
         - configMapRef:
             name: librenms-config
