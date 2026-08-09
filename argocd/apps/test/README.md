@@ -15,7 +15,7 @@ kubelet, etcd, and the Talos API. It was removed in favour of the dev-shell path
 that already exist:
 
 - `kubectl debug node/<node>` — preferred; nothing standing, scoped to one session
-- `kubectl -n kube-system exec -it ds/workpod -- bash` — the existing DaemonSet
+- `kubectl -n workpod exec -it ds/workpod -- bash` — the existing DaemonSet
 - a Coder workspace, for anything longer-lived
 
 If you add an app here, name the directory `test-*`: the `test` AppProject only

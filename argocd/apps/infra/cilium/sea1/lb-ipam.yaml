@@ -6,7 +6,7 @@
 # Services here are type=LoadBalancer only because they were written for FMT2
 # (znc, loki, tempo), and they should stay pending rather than silently
 # consuming a VIP. Opt in with the label below.
-apiVersion: cilium.io/v2alpha1
+apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
   name: sea1-lan
@@ -20,7 +20,7 @@ spec:
 # Globally routable v6 pool. Label-gated like sea1-lan: on a dual-stack
 # cluster an ungated pool would hand a public VIP to any Service that asks
 # for IPv6, so drawing from it must be an explicit opt-in.
-apiVersion: cilium.io/v2alpha1
+apiVersion: cilium.io/v2
 kind: CiliumLoadBalancerIPPool
 metadata:
   name: sea1-external-v6
