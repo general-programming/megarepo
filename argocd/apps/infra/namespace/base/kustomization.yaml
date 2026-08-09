@@ -19,8 +19,15 @@ resources:
   - cnpg-system.yaml
   - mariadb-operator.yaml
   - clickhouse-operator.yaml
+  - scylla-operator.yaml
   - shared-db.yaml
   - nix-cache-builder.yaml
+  - victoriametrics.yaml
+  - cilium-secrets.yaml
+
+  # pre-existing kubernetes namespaces, adopted for their PSA labels only.
+  # Prune=false so removing them from git never deletes the namespace.
+  - kube-builtins.yaml
 
   # apps
   - akvorado.yaml

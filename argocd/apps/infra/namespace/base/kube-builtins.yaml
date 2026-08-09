@@ -1,0 +1,52 @@
+# Namespaces kubernetes creates itself. We adopt them only to set PSA labels;
+# Prune=false means dropping this file never deletes the namespace.
+#
+# kube-system is deliberately absent: Talos exempts it in the cluster-wide
+# AdmissionConfiguration, so a label here would be ignored anyway.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: default
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    kubernetes.io/metadata.name: default
+    # Nothing should run here. Ad-hoc debug pods belong in `workpod`.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-public
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    kubernetes.io/metadata.name: kube-public
+    # Holds the cluster-info ConfigMap and nothing else. Never runs pods.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-node-lease
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+  labels:
+    kubernetes.io/metadata.name: kube-node-lease
+    # Lease objects only. Never runs pods.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
