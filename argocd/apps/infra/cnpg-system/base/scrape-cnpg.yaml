@@ -13,7 +13,6 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: cnpg
-  namespace: victoriametrics
 spec:
   podMetricsEndpoints:
     - port: metrics

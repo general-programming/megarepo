@@ -3,22 +3,19 @@
 # flow-derived metrics. Both live on the same DaemonSet pod.
 #
 # VM-native VMPodScrape rather than the chart's prometheus.serviceMonitor,
-# which emits a prometheus-operator ServiceMonitor -- this cluster runs the
-# VictoriaMetrics operator. Same reasoning as agent_scrape_cnpg.yaml.
+# which emits a prometheus-operator ServiceMonitor -- these clusters run the
+# VictoriaMetrics operator. Same reasoning as cnpg-system's scrape-cnpg.yaml.
 apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: cilium-agent
-  namespace: victoriametrics
+  namespace: kube-system
 spec:
   podMetricsEndpoints:
     - port: prometheus
       path: /metrics
     - port: hubble-metrics
       path: /metrics
-  namespaceSelector:
-    matchNames:
-      - kube-system
   selector:
     matchLabels:
       k8s-app: cilium
@@ -28,14 +25,11 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: cilium-operator
-  namespace: victoriametrics
+  namespace: kube-system
 spec:
   podMetricsEndpoints:
     - port: prometheus
       path: /metrics
-  namespaceSelector:
-    matchNames:
-      - kube-system
   selector:
     matchLabels:
       io.cilium/app: operator

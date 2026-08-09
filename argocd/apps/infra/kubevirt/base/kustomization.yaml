@@ -3,3 +3,4 @@ kind: Kustomization
 resources:
   - upstream/kubevirt-operator.yaml
   - kubevirt.yaml
+  - scrape-kubevirt.yaml

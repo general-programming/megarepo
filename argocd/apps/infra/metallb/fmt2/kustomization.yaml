@@ -4,3 +4,8 @@ resources:
   - ../base
   - bgp-internal.yaml
   - bgp-external.yaml
+  # In the fmt2 overlay, not base: sea1 retired MetalLB for Cilium L2/LB-IPAM,
+  # so in base these scrapes would match nothing there and stick three
+  # ScrapePoolHasNoTargets alerts on permanently. This is where BGP session
+  # state lives -- see cilium/base/scrape-cilium.yaml for its counterpart.
+  - scrape-metallb.yaml

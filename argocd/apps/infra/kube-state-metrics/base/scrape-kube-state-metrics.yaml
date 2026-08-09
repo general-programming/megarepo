@@ -2,7 +2,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: kube-state-metrics
-  namespace: victoriametrics
+  namespace: kube-system
   labels:
     app.kubernetes.io/name: kube-state-metrics
 spec:
@@ -10,9 +10,6 @@ spec:
   - honorLabels: true
     port: http-metrics
   jobLabel: app.kubernetes.io/name
-  namespaceSelector:
-    matchNames:
-    - kube-system
   selector:
     matchLabels:
       app.kubernetes.io/name: kube-state-metrics

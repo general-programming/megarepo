@@ -2,14 +2,11 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: kubevirt
-  namespace: victoriametrics
+  namespace: kubevirt
 spec:
   # virt-operator publishes one headless Service fronting every component that
   # carries prometheus.kubevirt.io=true -- virt-api, virt-controller,
   # virt-handler and virt-operator all land here.
-  namespaceSelector:
-    matchNames:
-      - kubevirt
   selector:
     matchLabels:
       prometheus.kubevirt.io: "true"

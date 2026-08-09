@@ -10,5 +10,4 @@ resources:
   - sea1_scrape.yaml
   - scrape-sea1-core-node-exporter.yaml
   - consul-sd-secret.yaml
-  - scrape-kubevirt.yaml
   - alerts-kubevirt.yaml

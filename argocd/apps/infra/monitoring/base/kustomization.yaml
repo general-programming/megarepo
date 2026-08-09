@@ -12,6 +12,8 @@ resources:
 
 # scraping jobs
 - scrape_cadvisor.yaml
+- scrape_kubelet.yaml
+- scrape_node_exporter.yaml
 
 # alertmanager
 - vmalertmanager.yaml

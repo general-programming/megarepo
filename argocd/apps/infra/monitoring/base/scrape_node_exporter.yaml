@@ -2,7 +2,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: node-exporter
-  namespace: victoriametrics
+  namespace: monitoring
   labels:
     app.kubernetes.io/name: node-exporter
 spec:
@@ -26,6 +26,3 @@ spec:
       app.kubernetes.io/component: exporter
       app.kubernetes.io/name: node-exporter
       app.kubernetes.io/part-of: kube-prometheus
-  namespaceSelector:
-    matchNames:
-    - monitoring
