@@ -12,6 +12,16 @@ spec:
     # starts running daemons in it. Everything above/below is what makes that
     # safe; see .claude/skills/ceph-cephadm-brake for the brakes.
     enable: false
+  # Pins the live auth posture (verified 2026-08-09) so it cannot drift: cephx
+  # required everywhere, and CVE-2021-20288 insecure global_id reclaim off.
+  # Rook applies these via `ceph config set`; values already match live == no-op.
+  cephConfig:
+    global:
+      auth_cluster_required: cephx
+      auth_service_required: cephx
+      auth_client_required: cephx
+    mon:
+      auth_allow_insecure_global_id_reclaim: "false"
   mgr:
     # Two Rook mgrs alongside cephadm's three. mgrs are active/standby, so extra
     # ones are harmless standbys -- no quorum maths, unlike the mons.
