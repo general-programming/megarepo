@@ -55,6 +55,8 @@ spec:
       spec:
         accessModes: [ "ReadWriteOnce" ]
         resources:
+          # ~238 MiB per monitored device (186 RRDs @ 1.31 MiB). 16Gi ran out
+          # at 69 devices and starved 13 more; 48Gi covers ~2x the fleet.
           requests:
-            storage: 16Gi
+            storage: 48Gi
         storageClassName: cephfs

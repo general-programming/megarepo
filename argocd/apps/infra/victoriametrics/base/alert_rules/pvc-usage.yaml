@@ -11,8 +11,17 @@ spec:
         # underlying node disk's capacity here instead of the declared PVC
         # size — those series will look artificially under-utilized and
         # effectively never fire. That's expected, not a bug.
+        #
+        # The volumemode="Filesystem" join drops raw Block PVCs (the KubeVirt
+        # VM roots). For those, ceph-csi reports *allocated* RBD blocks, not
+        # guest usage, and RBD never de-allocates without discard reaching the
+        # pool — so a guest that is 9% full reads as 96% here. Resizing on that
+        # signal buys nothing.
         - alert: PVCNearFull
-          expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.8
+          expr: |
+            (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.8)
+            and on(cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_info{volumemode="Filesystem"}
           for: 10m
           labels:
             severity: warning
@@ -21,7 +30,10 @@ spec:
             description: "PVC {{ $labels.namespace }}/{{ $labels.persistentvolumeclaim }} on {{ $labels.node }} is {{ $value | humanizePercentage }} full."
 
         - alert: PVCCriticalFull
-          expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+          expr: |
+            (kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9)
+            and on(cluster, namespace, persistentvolumeclaim)
+            kube_persistentvolumeclaim_info{volumemode="Filesystem"}
           for: 5m
           labels:
             severity: critical
