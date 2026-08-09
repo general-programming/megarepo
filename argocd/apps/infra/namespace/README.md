@@ -60,7 +60,7 @@ Two limits of that method, worth knowing before you trust it:
    what `warn`/`audit` are for.
 3. **An empty namespace passes every level trivially.** Zero pods means zero
    violations, which reads as "restricted is fine" when it means "no evidence".
-   `bsky-pds`, `kube-state-metrics` and `promtail` are empty on both clusters and
+   `bsky-pds` (since removed), `kube-state-metrics` and `promtail` were empty on both clusters and
    were initially mislabelled `restricted` on exactly that false signal — the
    real answers, read out of their manifests, are `baseline`, `restricted` and
    `privileged` respectively. **For an empty namespace, read the workload spec;

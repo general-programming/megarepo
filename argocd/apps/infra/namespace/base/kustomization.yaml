@@ -30,7 +30,6 @@ resources:
   - grafana.yaml
   - librenms.yaml
   - docspell.yaml
-  - bsky-pds.yaml
   - cerebro.yaml
   - coder.yaml
   - coder-workspaces.yaml
