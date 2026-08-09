@@ -82,6 +82,60 @@ controlPlane:
       systemExtensions:
         officialExtensions:
           - siderolabs/qemu-guest-agent
+  patches:
+    - # Audit policy -- identical to sea1's on purpose; keep them in step.
+      # Talos ships `rules: [{level: Metadata}]`, i.e. log everything at every
+      # stage, onto the ephemeral partition with nothing collecting it.
+      # Measured on sea1 over 14000 events: the RequestReceived duplicate is
+      # 47.8% of all events, and of what remains, leases are 38.9%, the argocd
+      # app-controller 10.9%, and system:nodes/apiserver reads 15.5%. Dropping
+      # those leaves ~17% of the volume and keeps the security signal.
+      # See docs/k8s-security-review-2026-08.md.
+      #
+      # Rule order matters -- first match wins. Keep rules come first so a
+      # later blanket `None` cannot swallow them: system:nodes does watch
+      # secrets, and that must stay logged even though its other reads do not.
+      |-
+      cluster:
+        apiServer:
+          auditPolicy:
+            apiVersion: audit.k8s.io/v1
+            kind: Policy
+            omitStages:
+              - RequestReceived
+              - ResponseStarted
+            rules:
+              # -- keep: security-relevant, regardless of who does it --
+              - level: Metadata
+                resources:
+                  - group: ""
+                    resources: ["secrets", "serviceaccounts/token"]
+                  - group: "rbac.authorization.k8s.io"
+                  - group: "authentication.k8s.io"
+                  - group: "certificates.k8s.io"
+              - level: Metadata
+                resources:
+                  - group: ""
+                    resources: ["pods/exec", "pods/attach", "pods/portforward"]
+              # -- drop: high-volume, no security value --
+              - level: None
+                resources:
+                  - group: "coordination.k8s.io"
+                    resources: ["leases"]
+              - level: None
+                users: ["system:serviceaccount:argocd:argocd-application-controller"]
+                verbs: ["update", "patch"]
+                resources:
+                  - group: "argoproj.io"
+                    resources: ["applications"]
+              - level: None
+                userGroups: ["system:nodes"]
+                verbs: ["get", "list", "watch"]
+              - level: None
+                users: ["system:apiserver"]
+                verbs: ["get", "list", "watch"]
+              # -- everything else --
+              - level: Metadata
 patches:
   - # DO NOT REMOVE. Cilium is the CNI (argocd/apps/infra/cilium/fmt2);
     # dropping this reinstalls flannel under a running Cilium cluster.
