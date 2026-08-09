@@ -3,3 +3,12 @@ apiVersion: v1
 kind: Namespace
 metadata:
   name: erin-scraper-projects
+  labels:
+    kubernetes.io/metadata.name: erin-scraper-projects
+    # Only CNPG instances live here; the restricted dry-run passed 2026-08-09.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/warn: restricted
+    pod-security.kubernetes.io/warn-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/audit-version: latest
