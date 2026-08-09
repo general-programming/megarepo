@@ -10,8 +10,8 @@ patches:
   # is a no-op), so every one of these targets fails with "client sent an HTTP
   # request to an HTTPS server" -- a 400 to vmagent and a TLS handshake error
   # logged by every speaker every 30s. Opt out here and let the dedicated
-  # VMPodScrape in victoriametrics/base/agent_scrape_metallb.yaml do it
-  # properly over TLS.
+  # VMPodScrape in the fmt2 overlay's scrape-metallb.yaml do it properly
+  # over TLS.
   - target:
       group: apps
       version: v1

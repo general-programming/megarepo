@@ -2,6 +2,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMNodeScrape
 metadata:
   name: kubelet
+  namespace: monitoring
 spec:
   bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
   tlsConfig:

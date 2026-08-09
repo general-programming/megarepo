@@ -6,3 +6,4 @@ resources:
   - upstream/deployment.yaml
   - upstream/service-account.yaml
   - upstream/service.yaml
+  - scrape-kube-state-metrics.yaml

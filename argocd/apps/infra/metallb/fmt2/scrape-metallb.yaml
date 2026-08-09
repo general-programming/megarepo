@@ -18,7 +18,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMPodScrape
 metadata:
   name: metallb
-  namespace: victoriametrics
+  namespace: metallb-system
 spec:
   podMetricsEndpoints:
     - port: metricshttps
@@ -34,9 +34,6 @@ spec:
           regex: (.+)
           replacement: metallb-$1
           action: replace
-  namespaceSelector:
-    matchNames:
-      - metallb-system
   selector:
     matchLabels:
       app: metallb
@@ -54,7 +51,7 @@ apiVersion: operator.victoriametrics.com/v1beta1
 kind: VMServiceScrape
 metadata:
   name: frr-k8s
-  namespace: victoriametrics
+  namespace: metallb-system
 spec:
   endpoints:
     # frr-k8s controller: reconciliation, cert watcher, controller-runtime.
@@ -89,9 +86,6 @@ spec:
           targetLabel: instance
           regex: (.+)
           action: replace
-  namespaceSelector:
-    matchNames:
-      - metallb-system
   selector:
     matchLabels:
       control-plane: frr-k8s

@@ -3,20 +3,18 @@ kind: Kustomization
 namespace: victoriametrics
 resources:
   - github.com/VictoriaMetrics/operator/config/base-with-webhook?ref=v0.74.1
+  # Only the annotation-driven catch-alls live here; workload-specific scrapes
+  # sit in their workload's app folder (vmagent has selectAllByDefault, so the
+  # operator picks up VM* scrape objects from any namespace).
   - agent_scrape_pod.yaml
   - agent_scrape_service.yaml
-  - agent_scrape_state_metrics.yaml
-  - agent_scrape_kubelet.yaml
-  - agent_scrape_node_exporter.yaml
-  - agent_scrape_cnpg.yaml
-  - agent_scrape_cilium.yaml
   - alert_rules/
 images:
 - name: manager
   newName: victoriametrics/operator
   newTag: v0.74.1
 patches:
-  # vmagent scrapes kubelet :10250 (agent_scrape_kubelet.yaml); this label exempts
+  # vmagent scrapes kubelet :10250 (monitoring/base/scrape_kubelet.yaml); this label exempts
   # the namespace from the deny-egress-node-api CCNP in apps/infra/cilium/base.
   # Upstream names the Namespace "vm"; the namespace transformer renames it later.
   - target:
