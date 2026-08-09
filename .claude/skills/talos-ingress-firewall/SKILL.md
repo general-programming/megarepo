@@ -78,7 +78,7 @@ Never all three at once. Order: a VM-free node, then a VM node, then the
 VIP-announcing node.
 
 ```bash
-export TALOSCONFIG=infrastructure/talos/sea1/talosconfig
+export TALOSCONFIG=infrastructure/talos/sea1/clusterconfig/talosconfig
 talosctl -n 10.3.2.10 patch machineconfig --mode=try --timeout=5m -p @fw.yaml
 ```
 
