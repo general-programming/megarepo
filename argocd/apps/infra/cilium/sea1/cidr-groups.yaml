@@ -21,9 +21,8 @@
 # in these prefixes, but NOT the six node addresses above. To reach the nodes in
 # a policy, use `toEntities: [host, remote-node]`.
 #
-# Note the v6 prefix also contains the sea1-external-v6 LoadBalancer pool, which
-# is called out separately in sea1-loadbalancers below -- the two overlap by
-# design, so a deny on this group also denies the v6 VIPs.
+# The v6 prefix also contains 2602:fa6d:10:ffff::e00/120, kept reserved in
+# sea1-loadbalancers below even though its LB pool is retired -- see there.
 apiVersion: cilium.io/v2
 kind: CiliumCIDRGroup
 metadata:
@@ -40,10 +39,10 @@ spec:
 # instead of its ClusterIP is a common way to accidentally route around policy,
 # which is what this group is for.
 #
-# These are the exact blocks from apps/infra/cilium/sea1/lb-ipam.yaml, confirmed
-# against the live CiliumLoadBalancerIPPools:
-#   sea1-lan          10.3.3.0/28
-#   sea1-external-v6  2602:fa6d:10:ffff::e00/120   <- traefik's ingress VIP
+# sea1-lan (10.3.3.0/28) is the exact block from apps/infra/cilium/sea1/
+# lb-ipam.yaml. 2602:fa6d:10:ffff::e00/120 was the retired sea1-external-v6
+# pool (traefik is ClusterIP behind cloudflared); it stays denied so a future
+# pool in this range is covered from day one.
 #
 # KEEP IN SYNC WITH lb-ipam.yaml. Adding a pool block there without adding it
 # here silently widens what can be reached via a VIP.

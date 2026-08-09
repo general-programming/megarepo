@@ -17,20 +17,6 @@ spec:
     matchLabels:
       generalprogramming.org/lb-pool: sea1-lan
 ---
-# Globally routable v6 pool. Label-gated like sea1-lan: on a dual-stack
-# cluster an ungated pool would hand a public VIP to any Service that asks
-# for IPv6, so drawing from it must be an explicit opt-in.
-apiVersion: cilium.io/v2
-kind: CiliumLoadBalancerIPPool
-metadata:
-  name: sea1-external-v6
-spec:
-  blocks:
-    - cidr: "2602:fa6d:10:ffff::e00/120"
-  serviceSelector:
-    matchLabels:
-      generalprogramming.org/lb-pool: sea1-external-v6
----
 # Replaces MetalLB's L2Advertisement -- ARP for v4, NDP for v6.
 #
 # Announce only from the bridged nodes. Their node address lives on br0, which
