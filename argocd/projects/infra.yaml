@@ -63,6 +63,8 @@ spec:
         syncOptions:
           - allowEmpty=true
           - ServerSideApply=true
+          # without this, sync still applies ignored fields and stomps controller-owned values
+          - RespectIgnoreDifferences=true
       ignoreDifferences:
       - group: argoproj.io
         jsonPointers:
@@ -83,6 +85,12 @@ spec:
         kind: "*"
         managedFieldsManagers:
         - rook
+      # tailscale-operator rewrites egress ExternalName Services to its ts-* proxy FQDN
+      - kind: Service
+        name: svc-vmselect-sea1
+        namespace: victoriametrics
+        jsonPointers:
+        - /spec/externalName
       # for vault
       - group: "admissionregistration.k8s.io"
         kind: MutatingWebhookConfiguration
