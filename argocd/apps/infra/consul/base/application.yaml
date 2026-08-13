@@ -56,7 +56,7 @@ spec:
           extraEnvironmentVars:
             GOMAXPROCS: "2"
     repoURL: https://helm.releases.hashicorp.com
-    targetRevision: 2.0.2
+    targetRevision: 2.0.3
   syncPolicy:
     automated:
       prune: true
