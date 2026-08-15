@@ -35,7 +35,7 @@ spec:
             remote-write server data blocks. Check the logs to find the reason for rejects."
 
       - alert: TooManyScrapeErrors
-        expr: increase(vm_promscrape_scrapes_failed_total[5m]) > 0
+        expr: increase(vm_promscrape_scrapes_failed_total{job!~"frr.*|metallb-speaker"}[5m]) > 10
         for: 15m
         labels:
           severity: warning
@@ -45,7 +45,7 @@ spec:
           description: "Job \"{{ $labels.job }}\" on instance {{ $labels.instance }} fails to scrape targets for last 15m"
 
       - alert: ScrapePoolHasNoTargets
-        expr: sum(vm_promscrape_scrape_pool_targets) without (status, instance, pod) == 0
+        expr: sum(vm_promscrape_scrape_pool_targets{scrape_job!~"scrapeConfig/victoriametrics/mongodb"}) without (status, instance, pod) == 0
         for: 30m
         labels:
           severity: warning

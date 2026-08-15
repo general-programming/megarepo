@@ -24,6 +24,8 @@ spec:
     - port: metricshttps
       scheme: https
       path: /metrics
+      interval: 60s
+      scrapeTimeout: 30s
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
       tlsConfig:
         insecureSkipVerify: true
@@ -56,6 +58,8 @@ spec:
   endpoints:
     # frr-k8s controller: reconciliation, cert watcher, controller-runtime.
     - port: metricshttps
+      interval: 60s
+      scrapeTimeout: 30s
       scheme: https
       path: /metrics
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
@@ -72,6 +76,8 @@ spec:
           action: replace
     # FRR itself: frrk8s_bgp_session_up, announced prefixes, neighbour state.
     - port: frrmetricshttps
+      interval: 60s
+      scrapeTimeout: 30s
       scheme: https
       path: /metrics
       bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token

@@ -73,14 +73,14 @@ spec:
             the service could work unreliably with delays in processing.
 
       - alert: TooManyLogs
-        expr: sum(increase(vm_log_messages_total{level!="info"}[5m])) without (app_version, location, is_printed) > 0
+        expr: sum(increase(vm_log_messages_total{level="error"}[5m])) without (app_version, location, is_printed) > 10
         for: 15m
         labels:
           severity: warning
         annotations:
           summary: "Too many logs are generated for job \"{{ $labels.job }}\" ({{ $labels.instance }})"
           description: >
-            The job \"{{ $labels.job }}\" ({{ $labels.instance }}) generated {{ $value }} log messages with the level higher than info for the last 5 minutes.
+            The job \"{{ $labels.job }}\" ({{ $labels.instance }}) generated {{ $value }} error log messages for the last 5 minutes.
             Check the logs for the given target. Check also the \"location\" label at the vm_log_messages_total metric if -loggerLevel command-line flag is set to value other than INFO.
             This label contains code locations responsible for generating log messages suppressed by -loggerLevel.
 

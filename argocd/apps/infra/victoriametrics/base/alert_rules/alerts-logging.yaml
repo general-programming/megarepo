@@ -40,9 +40,10 @@ spec:
             description: "Zero entries delivered for 30m. Sustained zero means the write path is broken, not idle."
 
         # A restart legitimately discards a burst of old container logs, so only
-        # alert when drops persist well past that.
+        # alert when drops persist well past that. Single-digit drops are normal
+        # cross-site backfill aging past older_than during retries.
         - alert: AlloyDroppingTooOldLines
-          expr: increase(loki_process_dropped_lines_total{reason="too old"}[30m]) > 0
+          expr: increase(loki_process_dropped_lines_total{reason="too old"}[30m]) > 100
           for: 2h
           labels:
             severity: warning
