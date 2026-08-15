@@ -30,8 +30,8 @@ spec:
 
         - alert: ArgoCDApplicationHealthDegraded
           expr: |
-            argocd_app_info{health_status!~"Healthy|Unknown"} == 1
-          for: 10m
+            argocd_app_info{health_status!~"Healthy|Unknown|Progressing"} == 1
+          for: 20m
           labels:
             severity: warning
           annotations:
