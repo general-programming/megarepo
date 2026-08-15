@@ -553,6 +553,13 @@ hosts:
       - 2606:4700:4700::1001
     networks:
       - 10.3.2.0/23
+    flow_export:
+      collectors:
+        - address: 10.3.3.1
+          port: 2055
+          version: 9
+      sampling_rate: 1
+      disable_imt: true
     # Masquerade is required for the VRRP promotion below, not optional
     # alongside it: winning 10.3.2.1 without translating 10.3.2.0/23 hands the
     # LAN a default gateway that black-holes every outbound v4 packet, which

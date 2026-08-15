@@ -2,6 +2,7 @@ package model
 
 import (
 	"fmt"
+	"net/netip"
 	"os"
 	"sort"
 
@@ -32,7 +33,7 @@ var hostKeys = map[string]bool{
 	"nameservers": true, "networks": true, "extra_config": true,
 	"cloud_init": true, "eapi_vrf": true, "location": true, "nat": true,
 	"ospf": true, "static_routes": true, "bird": true, "bgp": true,
-	"firewall": true,
+	"firewall": true, "flow_export": true,
 }
 
 // Load parses a network.yml file, reproducing barf.util.network.load_network:
@@ -99,6 +100,11 @@ func parseGlobalMeta(node *yaml.Node) (GlobalMeta, error) {
 		return meta, fmt.Errorf("global_meta: sites are defined but community_asn is" +
 			" missing; site-origin large communities need a fabric-wide Global" +
 			" Administrator value")
+	}
+	if flow, err := parseFlowExport(lookup(entries, "flow_export")); err != nil {
+		return meta, fmt.Errorf("global_meta.flow_export: %w", err)
+	} else if flow != nil {
+		meta.FlowExport = flow
 	}
 	return meta, nil
 }
@@ -199,6 +205,9 @@ func parseHost(hostname string, node *yaml.Node, global GlobalMeta) (*Host, erro
 	host.Bird = parseBird(lookup(entries, "bird"))
 	host.BGP = parseBGP(lookup(entries, "bgp"))
 	host.Firewall = parseFirewall(lookup(entries, "firewall"))
+	if host.FlowExport, err = parseFlowExport(lookup(entries, "flow_export")); err != nil {
+		return nil, fmt.Errorf("hosts: %s: flow_export: %w", hostname, err)
+	}
 
 	for _, e := range entries {
 		if !hostKeys[e.key] {
@@ -438,6 +447,74 @@ func parseFirewall(node *yaml.Node) FirewallGroups {
 		out.Interface = append(out.Interface, group)
 	}
 	return out
+}
+
+func parseFlowExport(node *yaml.Node) (*FlowExport, error) {
+	if node == nil {
+		return nil, nil
+	}
+	fields := mapEntries(node)
+	out := &FlowExport{}
+	hasAny := false
+
+	for _, item := range seqEntries(lookup(fields, "collectors")) {
+		hasAny = true
+		collectorFields := mapEntries(item)
+		addr := nodeString(lookup(collectorFields, "address"))
+		if addr == "" {
+			addr = nodeString(item)
+		}
+		if addr == "" {
+			return nil, fmt.Errorf("collector needs an address")
+		}
+		if _, err := netip.ParseAddr(addr); err != nil {
+			return nil, fmt.Errorf("collector address %q: %w", addr, err)
+		}
+		port, _ := nodeInt(lookup(collectorFields, "port"))
+		if port == 0 {
+			port = 2055
+		}
+		if port < 1 || port > 65535 {
+			return nil, fmt.Errorf("collector %q: port %d out of range", addr, port)
+		}
+		version, hasVersion := nodeInt(lookup(collectorFields, "version"))
+		if !hasVersion {
+			version = 9
+		}
+		if version != 5 && version != 9 && version != 10 {
+			return nil, fmt.Errorf("collector %q: version %d must be 5, 9, or 10", addr, version)
+		}
+		out.Collectors = append(out.Collectors, FlowCollector{Address: addr, Port: port, Version: version})
+	}
+
+	// Scalar shorthand: `collectors: 10.3.3.1` treated above via addr fallback.
+	// Bare string collectors would have been parsed as scalar seq entries; the
+	// loop already handles nodeString(item) for that shape.
+
+	if sr, ok := nodeInt(lookup(fields, "sampling_rate")); ok {
+		hasAny = true
+		if sr < 1 {
+			return nil, fmt.Errorf("sampling_rate %d must be >= 1", sr)
+		}
+		out.SamplingRate = &sr
+	}
+	if ifaces := nodeStrings(lookup(fields, "interfaces")); ifaces != nil {
+		hasAny = true
+		out.Interfaces = ifaces
+	}
+	if img := lookup(fields, "disable_imt"); img != nil {
+		hasAny = true
+		b := nodeBool(img)
+		out.DisableIMT = &b
+	}
+
+	if !hasAny && len(out.Collectors) == 0 {
+		return nil, nil
+	}
+	if len(out.Collectors) == 0 {
+		return nil, fmt.Errorf("flow_export needs at least one collector")
+	}
+	return out, nil
 }
 
 // parseLinks expands the nested links: {uplink_host: {peer_host: spec}} map.

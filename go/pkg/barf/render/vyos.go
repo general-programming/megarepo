@@ -92,6 +92,7 @@ func (VyOS) Render(h *model.Host, n *model.Network, s SecretSource) (string, err
 		vyosSiteWeighting,
 		vyosFabricWireGuard,
 		vyosFabricBGP,
+		vyosFlowAccounting,
 		vyosExtraConfig,
 	}
 
@@ -721,4 +722,102 @@ func vyosFabricBGP(c *renderCtx) ([]string, error) {
 		"set protocols bgp timers keepalive 10",
 		"set protocols bgp timers holdtime 30",
 	), nil
+}
+
+// vyosFlowAccounting renders `system flow-accounting` — the netflow exporter
+// for akvorado (10.3.3.1:2055). Only VyOS hosts use it; others ignore it.
+func vyosFlowAccounting(c *renderCtx) ([]string, error) {
+	flow := c.network.EffectiveFlow(c.host)
+	if flow == nil || len(flow.Collectors) == 0 {
+		// Nothing to export — must not add blank separator or every golden
+		// drifts by one blank line. Empty slice means no output at all.
+		return nil, nil
+	}
+	// Disable IMT by default (docs warn it crushes CPU). Explicit false
+	// re-enables it, though you shouldn't.
+	disableIMT := true
+	if flow.DisableIMT != nil {
+		disableIMT = *flow.DisableIMT
+	}
+
+	var lines []string
+	if disableIMT {
+		lines = append(lines, "set system flow-accounting disable-imt")
+	}
+
+	// Interfaces that carry customer / LAN traffic. Default to eth1 when a
+	// host has one, otherwise every non-dummy, non-wireguard interface.
+	ifaces := flow.Interfaces
+	if len(ifaces) == 0 {
+		seen := map[string]bool{}
+		for i := range c.host.Interfaces {
+			iface := &c.host.Interfaces[i]
+			if iface.Management || iface.IsWireguard() {
+				continue
+			}
+			// dum0 and bridge members are management / fabric internals.
+			if iface.Name == "dum0" || iface.IsBridge() {
+				continue
+			}
+			if iface.Name == "" || seen[iface.Name] {
+				continue
+			}
+			seen[iface.Name] = true
+			ifaces = append(ifaces, iface.Name)
+		}
+		// Fallback: if the heuristic found nothing (e.g. fmt2 leaves with
+		// only vlan subifs), at least pin eth1 if it exists in name.
+		if len(ifaces) == 0 {
+			for i := range c.host.Interfaces {
+				if c.host.Interfaces[i].Name == "eth1" {
+					ifaces = []string{"eth1"}
+					break
+				}
+			}
+		}
+	}
+	for _, iface := range ifaces {
+		lines = append(lines, fmt.Sprintf("set system flow-accounting interface %s", iface))
+	}
+
+	// NetFlow collectors. Each address gets its own server line; version is
+	// per-collector so a mix (v9 + v10) is expressible, default 9.
+	for _, collector := range flow.Collectors {
+		version := collector.Version
+		if version == 0 {
+			version = 9
+		}
+		lines = append(lines,
+			fmt.Sprintf("set system flow-accounting netflow version %d", version),
+			fmt.Sprintf("set system flow-accounting netflow server %s port %d", collector.Address, collector.Port),
+		)
+		// Dedupe: same version on every collector would emit the same line
+		// twice consecutively; harmless but noisy. The check below keeps only
+		// the first version line — VyOS keeps one global version knob.
+		if version == flow.Collectors[0].Version {
+			// strip duplicate version lines if collectors share a version
+		}
+	}
+	// Rewrite to dedupe version lines: keep one.
+	seen := map[int]bool{}
+	var deduped []string
+	for _, line := range lines {
+		if strings.HasPrefix(line, "set system flow-accounting netflow version") {
+			var v int
+			if _, err := fmt.Sscanf(line, "set system flow-accounting netflow version %d", &v); err == nil {
+				if seen[v] {
+					continue
+				}
+				seen[v] = true
+			}
+		}
+		deduped = append(deduped, line)
+	}
+	lines = deduped
+
+	if flow.SamplingRate != nil {
+		lines = append(lines, fmt.Sprintf("set system flow-accounting netflow sampling-rate %d", *flow.SamplingRate))
+	}
+
+	return append(lines, ""), nil
 }

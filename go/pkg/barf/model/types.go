@@ -18,6 +18,55 @@ type Site struct {
 	Coords [2]float64
 }
 
+// FlowCollector is one NetFlow/IPFIX collector.
+type FlowCollector struct {
+	Address string
+	Port    int
+	Version int // 5 | 9 | 10
+}
+
+// FlowExport is the network.yml `flow_export` / `global_meta.flow_export` block.
+type FlowExport struct {
+	Collectors   []FlowCollector
+	SamplingRate *int
+	Interfaces   []string
+	DisableIMT   *bool
+}
+
+// EffectiveFlow returns the flow export config for host: per-host overrides
+// global; nil when neither is set. Collectors from the host replace the
+// global list when the host defines any.
+func (n *Network) EffectiveFlow(host *Host) *FlowExport {
+	var base *FlowExport
+	if n.Global.FlowExport != nil {
+		cp := *n.Global.FlowExport
+		base = &cp
+	}
+	if host.FlowExport == nil {
+		return base
+	}
+	if base == nil {
+		cp := *host.FlowExport
+		return &cp
+	}
+	out := *base
+	if len(host.FlowExport.Collectors) > 0 {
+		out.Collectors = append([]FlowCollector(nil), host.FlowExport.Collectors...)
+	}
+	if host.FlowExport.SamplingRate != nil {
+		v := *host.FlowExport.SamplingRate
+		out.SamplingRate = &v
+	}
+	if len(host.FlowExport.Interfaces) > 0 {
+		out.Interfaces = append([]string(nil), host.FlowExport.Interfaces...)
+	}
+	if host.FlowExport.DisableIMT != nil {
+		v := *host.FlowExport.DisableIMT
+		out.DisableIMT = &v
+	}
+	return &out
+}
+
 // GlobalMeta is network.yml's global_meta block.
 type GlobalMeta struct {
 	SearchDomain string
@@ -28,6 +77,7 @@ type GlobalMeta struct {
 	SNMPLocation string
 	CommunityASN int
 	Sites        map[string]Site
+	FlowExport   *FlowExport
 }
 
 // Address is an IP address with its prefix length.
@@ -312,6 +362,7 @@ type Host struct {
 	Bird            BirdConfig
 	BGP             BGPConfig
 	Firewall        FirewallGroups
+	FlowExport      *FlowExport
 
 	// Raw keeps untranslated yaml so a partial port never drops configuration.
 	Raw map[string]any
