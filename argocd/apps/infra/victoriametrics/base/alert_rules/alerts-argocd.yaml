@@ -21,12 +21,12 @@ spec:
         - alert: ArgoCDApplicationOutOfSync
           expr: |
             argocd_app_info{sync_status!~"Synced|Unknown"} == 1
-          for: 15m
+          for: 20m
           labels:
             severity: warning
           annotations:
             summary: "ArgoCD application out of sync ({{ $labels.name }})"
-            description: "Application {{ $labels.name }} in {{ $labels.namespace }} has been out of sync for more than 15 minutes. Current sync status: {{ $labels.sync_status }}"
+            description: "Application {{ $labels.name }} in {{ $labels.namespace }} has been out of sync for more than 20 minutes. Current sync status: {{ $labels.sync_status }}"
 
         - alert: ArgoCDApplicationHealthDegraded
           expr: |
