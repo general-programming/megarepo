@@ -267,8 +267,11 @@ patches:
         - 179           # frr-k8s BGP; leaves .34/.35 and external peer .36 may re-open inbound
         - 4240          # cilium health
         - 4244          # hubble peer
+        - 7946          # metallb memberlist gossip
         - 8301-8302     # consul client serf
         - 9100          # node-exporter
+        - 9120          # metallb speaker metrics (hostNetwork, vmagent scrape)
+        - 9140-9141     # frr-k8s metrics (hostNetwork, vmagent scrape)
         - 9962-9965     # cilium agent/operator/envoy metrics (unauthenticated)
         - 6667          # znc on the internal MetalLB VIP; pre-DNAT dport, see PR notes
         - 6697          # znc TLS, same VIP
