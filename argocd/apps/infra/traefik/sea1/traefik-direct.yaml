@@ -36,8 +36,11 @@ spec:
       hostNetwork: true
       dnsPolicy: ClusterFirstWithHostNet
       # Reuses the chart's SA: the clusterrole already grants the ingress/CRD
-      # reads this instance needs, and they live in the same namespace.
+      # reads this instance needs, and they live in the same namespace. The
+      # chart sets automountServiceAccountToken: false on the SA, so the pod
+      # must ask for the token itself or the provider cannot start.
       serviceAccountName: traefik-helm
+      automountServiceAccountToken: true
       containers:
         - name: traefik
           image: docker.io/traefik:v3.7.10
