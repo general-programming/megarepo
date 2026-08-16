@@ -1,7 +1,15 @@
 provider "vault" {
 }
 
+# durable UI-minted "terraform-infra" token, read from Vault instead of env vars
+data "vault_kv_secret_v2" "authentik" {
+  mount = "secret"
+  name  = "infra/authentik"
+}
+
 provider "authentik" {
+  url   = "https://auth.generalprogramming.org"
+  token = data.vault_kv_secret_v2.authentik.data["token"]
 }
 
 terraform {

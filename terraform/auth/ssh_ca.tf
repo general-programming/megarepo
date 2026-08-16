@@ -45,7 +45,9 @@ resource "vault_ssh_secret_backend_role" "administrator" {
 
   # Short enough that a leaked certificate expires before it is useful, long
   # enough to finish a maintenance session. vssh re-signs automatically.
-  ttl = "30m0s"
+  # Written in seconds: Vault normalizes durations and the provider reads back
+  # the canonical form, so "30m0s" would never settle.
+  ttl = "1800"
 
   # No agent or port forwarding — an interactive shell is all vssh needs.
   allowed_extensions = ""
