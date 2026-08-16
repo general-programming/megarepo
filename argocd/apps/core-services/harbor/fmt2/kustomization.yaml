@@ -1,0 +1,5 @@
+# Intentionally empty: harbor is sea1-only, but the clusters x apps
+# ApplicationSet needs the path to resolve or fmt2 sits in Unknown forever.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []

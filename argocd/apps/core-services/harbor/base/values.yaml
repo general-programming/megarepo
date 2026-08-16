@@ -1,0 +1,90 @@
+# Every chart-generated secret is pinned to an existing one. The chart's secret
+# templates fall back to randAlphaNum when their `lookup` misses, and kustomize
+# renders without cluster access -- so unpinned means new crypto every sync.
+
+expose:
+  # Ingress is hand-rolled in ../sea1; traefik terminates TLS.
+  type: clusterIP
+  tls:
+    enabled: false
+
+externalURL: https://hub.generalprogramming.org
+
+persistence:
+  enabled: true
+  resourcePolicy: keep
+  persistentVolumeClaim:
+    trivy:
+      storageClass: ceph-rbd-xfs
+      size: 5Gi
+  imageChartStorage:
+    type: s3
+    # Redirects would send clients a presigned URL on an in-cluster Service
+    # name they cannot resolve. The registry streams the bytes instead.
+    disableredirect: true
+    s3:
+      # Keys REGISTRY_STORAGE_S3_ACCESSKEY / _SECRETKEY; bucket and user come
+      # from the OBC in obc.yaml, credentials via Vault (see README).
+      existingSecret: harbor-secrets
+      region: us-east-1
+      bucket: harbor
+      regionendpoint: http://rook-ceph-rgw-shared.ceph.svc
+      secure: false
+      v4auth: true
+
+existingSecretAdminPassword: harbor-secrets
+existingSecretAdminPasswordKey: HARBOR_ADMIN_PASSWORD
+existingSecretSecretKey: harbor-secrets
+
+core:
+  existingSecret: harbor-secrets
+  existingXsrfSecret: harbor-secrets
+  # Unset, the chart mints a new token signing CA on every render, invalidating
+  # every docker auth token. Keys must be tls.key / tls.crt.
+  secretName: harbor-token
+  # Harbor's auth config lives in its database and has no values.yaml key.
+  # Terraform composes this blob so provider and consumer cannot drift.
+  # Side effect: all user-scope settings become read-only in the UI and API.
+  extraEnvVars:
+    - name: CONFIG_OVERWRITE_JSON
+      valueFrom:
+        secretKeyRef:
+          name: harbor-oidc
+          key: CONFIG_OVERWRITE_JSON
+  podAnnotations:
+    reloader.stakater.com/auto: "true"
+
+jobservice:
+  existingSecret: harbor-secrets
+  # stdout so logs reach Loki, and so no jobLog PVC is provisioned.
+  jobLoggers:
+    - stdout
+
+registry:
+  existingSecret: harbor-secrets
+  credentials:
+    # REGISTRY_PASSWD + REGISTRY_HTPASSWD. Sourcing both avoids the chart's
+    # htpasswd helper, which re-salts every render and never reaches Synced.
+    existingSecret: harbor-secrets
+
+database:
+  type: external
+  external:
+    host: harbor-db-rw
+    port: "5432"
+    username: harbor
+    coreDatabase: harbor
+    # CNPG's generated secret; its "password" key is what the chart expects.
+    existingSecret: harbor-db-app
+    sslmode: require
+
+redis:
+  type: external
+  external:
+    addr: harbor-valkey:6379
+    # No password possible: the chart resolves it with Helm `lookup`, which is
+    # empty under Argo's render, so every component would send an empty one.
+    # ../sea1/netpol.yaml is the access control instead.
+
+trivy:
+  enabled: true
