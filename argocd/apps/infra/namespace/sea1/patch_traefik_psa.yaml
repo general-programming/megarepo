@@ -1,0 +1,10 @@
+# privileged, not baseline: the publicsecure entrypoint is a hostPort 443 on
+# the traefik DaemonSet (direct web ingress), and the PSA baseline profile
+# forbids hostPort outright -- the DS silently stops creating pods
+# (FailedCreate events, old pods keep serving). sea1-only; fmt2 stays baseline.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: traefik
+  labels:
+    pod-security.kubernetes.io/enforce: privileged
