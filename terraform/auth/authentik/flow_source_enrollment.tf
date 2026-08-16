@@ -47,7 +47,7 @@ resource "authentik_stage_user_login" "default_source_enrollment_login" {
 # ── Expression Policies ───────────────────────────────────────────────────────
 
 resource "authentik_policy_expression" "default_source_enrollment_if_sso" {
-  name = "default-source-enrollment-if-sso"
+  name       = "default-source-enrollment-if-sso"
   expression = <<-EOF
     # This policy ensures that this flow can only be used when the user
     # is in a SSO Flow (meaning they come from an external IdP)
@@ -56,7 +56,7 @@ resource "authentik_policy_expression" "default_source_enrollment_if_sso" {
 }
 
 resource "authentik_policy_expression" "default_source_enrollment_if_username" {
-  name = "default-source-enrollment-if-username"
+  name       = "default-source-enrollment-if-username"
   expression = <<-EOF
     # Check if we've not been given a username by the external IdP
     # and trigger the enrollment flow

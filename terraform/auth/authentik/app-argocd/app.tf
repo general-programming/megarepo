@@ -3,14 +3,14 @@ resource "authentik_application" "argocd" {
   slug              = var.slug
   meta_launch_url   = var.domain
   protocol_provider = authentik_provider_oauth2.argocd.id
-  meta_icon = "https://raw.githubusercontent.com/argoproj/argo-cd/master/ui/src/assets/images/argo.png"
+  meta_icon         = "https://raw.githubusercontent.com/argoproj/argo-cd/master/ui/src/assets/images/argo.png"
 }
 
 resource "random_uuid" "grafana_oauth2_client_secret_random" {
 }
 
 resource "vault_generic_secret" "oidc_secret" {
-  path      = "secret/app/argocd/${var.cluster}/oidc"
+  path = "secret/app/argocd/${var.cluster}/oidc"
   data_json = jsonencode({
     oidc_issuer = "https://auth.generalprogramming.org/application/o/${var.slug}/"
     oidc_id     = var.slug
@@ -28,12 +28,14 @@ resource "authentik_provider_oauth2" "argocd" {
   property_mappings  = data.authentik_property_mapping_provider_scope.default_scopes.ids
   allowed_redirect_uris = [
     {
-      matching_mode = "strict",
-      url           = "${var.domain}/auth/callback"
+      matching_mode     = "strict",
+      redirect_uri_type = "authorization",
+      url               = "${var.domain}/auth/callback"
     },
     {
-      matching_mode = "strict",
-      url           = "${var.domain}/api/dex/callback"
+      matching_mode     = "strict",
+      redirect_uri_type = "authorization",
+      url               = "${var.domain}/api/dex/callback"
     },
   ]
 }

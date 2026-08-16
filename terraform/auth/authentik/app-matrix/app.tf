@@ -9,7 +9,7 @@ resource "random_uuid" "grafana_oauth2_client_secret_random" {
 }
 
 resource "vault_generic_secret" "oidc_secret" {
-  path      = "secret/app/matrix/oidc-secret"
+  path = "secret/app/matrix/oidc-secret"
   data_json = jsonencode({
     oidc_id     = "matrix_owo"
     oidc_secret = random_uuid.grafana_oauth2_client_secret_random.result
@@ -26,8 +26,9 @@ resource "authentik_provider_oauth2" "matrix" {
   property_mappings  = data.authentik_property_mapping_provider_scope.default_scopes.ids
   allowed_redirect_uris = [
     {
-      matching_mode = "strict",
-      url           = "https://matrix-auth.owo.me/upstream/callback/01JCSXTW4RZVHV7H7YB2G3YWNE"
+      matching_mode     = "strict",
+      redirect_uri_type = "authorization",
+      url               = "https://matrix-auth.owo.me/upstream/callback/01JCSXTW4RZVHV7H7YB2G3YWNE"
     }
   ]
 }

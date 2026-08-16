@@ -24,10 +24,10 @@ resource "vault_generic_secret" "harbor_oidc" {
       oidc_client_id     = local.harbor_client_id
       oidc_client_secret = random_uuid.harbor_oauth2_client_secret.result
       # offline_access is required; OIDC login fails without a refresh token.
-      oidc_scope         = "openid,offline_access,email,profile"
-      oidc_verify_cert   = true
-      oidc_auto_onboard  = true
-      oidc_user_claim    = "preferred_username"
+      oidc_scope        = "openid,offline_access,email,profile"
+      oidc_verify_cert  = true
+      oidc_auto_onboard = true
+      oidc_user_claim   = "preferred_username"
     })
   })
 }
@@ -53,8 +53,9 @@ resource "authentik_provider_oauth2" "harbor" {
   property_mappings  = data.authentik_property_mapping_provider_scope.default_scopes.ids
   allowed_redirect_uris = [
     {
-      matching_mode = "strict",
-      url           = "${var.domain}/c/oidc/callback"
+      matching_mode     = "strict",
+      redirect_uri_type = "authorization",
+      url               = "${var.domain}/c/oidc/callback"
     }
   ]
 }

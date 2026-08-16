@@ -13,7 +13,7 @@ data "vault_kv_secret_v2" "github_oauth" {
 }
 
 resource "authentik_policy_expression" "github_org_check" {
-  name       = "Github Org Check"
+  name = "Github Org Check"
 
   expression = <<-EOF
     from authentik.sources.oauth.models import OAuthSource
@@ -73,5 +73,5 @@ resource "authentik_source_oauth" "github" {
 resource "authentik_policy_binding" "github_org_check" {
   target = authentik_source_oauth.github.uuid
   policy = authentik_policy_expression.github_org_check.id
-  order = 0
+  order  = 0
 }

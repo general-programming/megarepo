@@ -1,7 +1,7 @@
 variable "group_uuids" {
   type = object({
-    users               = string
-    admins              = string
+    users  = string
+    admins = string
   })
 }
 

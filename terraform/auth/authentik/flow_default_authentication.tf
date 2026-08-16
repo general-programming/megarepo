@@ -24,7 +24,7 @@ resource "authentik_stage_identification" "default_authentication_identification
   pretend_user_exists       = true
   show_matched_user         = true
   show_source_labels        = false
-  sources                   = [
+  sources = [
     resource.authentik_source_oauth.github.uuid
   ]
 }
@@ -52,7 +52,7 @@ resource "authentik_stage_authenticator_validate" "default_authentication_mfa_va
 # ── Expression Policies ───────────────────────────────────────────────────────
 
 resource "authentik_policy_expression" "default_authentication_flow_password_stage" {
-  name = "default-authentication-flow-password-stage"
+  name       = "default-authentication-flow-password-stage"
   expression = <<-EOF
     flow_plan = request.context.get("flow_plan")
     if not flow_plan:
@@ -64,7 +64,7 @@ resource "authentik_policy_expression" "default_authentication_flow_password_sta
 }
 
 resource "authentik_policy_expression" "default_authentication_flow_authenticator_validate_stage" {
-  name = "default-authentication-flow-authenticator-validate-stage"
+  name       = "default-authentication-flow-authenticator-validate-stage"
   expression = <<-EOF
     flow_plan = request.context.get("flow_plan")
     if not flow_plan:
