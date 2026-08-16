@@ -28,7 +28,9 @@ persistence:
       existingSecret: harbor-secrets
       region: us-east-1
       bucket: harbor
-      regionendpoint: http://rook-ceph-rgw-shared.ceph.svc
+      # :7480 is load-bearing -- without it the client dials 80 and blob
+      # uploads hang two minutes before 500. Matches the OBC's BUCKET_PORT.
+      regionendpoint: http://rook-ceph-rgw-shared.ceph.svc:7480
       secure: false
       v4auth: true
 
