@@ -49,6 +49,11 @@ module "authentik_app_netbox" {
   group_uuids = module.authentik.group_uuids
 }
 
+module "authentik_app_harbor" {
+  source      = "./authentik/app-harbor"
+  group_uuids = module.authentik.group_uuids
+}
+
 module "authentik_app_argocd_sea1" {
   source      = "./authentik/app-argocd"
   group_uuids = module.authentik.group_uuids
