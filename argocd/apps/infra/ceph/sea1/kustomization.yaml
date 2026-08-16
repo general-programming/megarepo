@@ -16,6 +16,9 @@ commonAnnotations:
 resources:
   - ../base
   - cephfilesystems.yaml
+  - cephobjectstore.yaml
+  - bucket_storageclass.yaml
+  - rgw-ingress.yaml
   - rbdns_alyx.yaml
   - netpol.yaml
 patches:

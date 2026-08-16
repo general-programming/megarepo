@@ -1,0 +1,66 @@
+# Shared radosgw for sea1. Apps get buckets via ObjectBucketClaim against the
+# ceph-bucket StorageClass, not their own object store.
+---
+apiVersion: ceph.rook.io/v1
+kind: CephObjectStore
+metadata:
+  name: shared
+  namespace: ceph
+spec:
+  metadataPool:
+    failureDomain: host
+    deviceClass: ssd
+    replicated:
+      size: 3
+      requireSafeReplicaSize: true
+  # Replicated, not EC: with three hosts the only profile that fits is 2+1, and
+  # a single host reboot would then stop writes.
+  dataPool:
+    failureDomain: host
+    deviceClass: ssd
+    replicated:
+      size: 3
+      requireSafeReplicaSize: true
+  preservePoolsOnDelete: true
+  gateway:
+    # hostNetwork makes this a cluster-wide port reservation, so 7480 (ceph's
+    # default) rather than the far more contended 8080. Talos must allow it.
+    port: 7480
+    hostNetwork: true
+    instances: 2
+    dashboardEnabled: true
+    placement:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+            - matchExpressions:
+                - key: generalprogramming.org/lan-bridge
+                  operator: In
+                  values:
+                    - "true"
+      # Two gateways on one node would collide on 7480.
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                    - rook-ceph-rgw
+            topologyKey: kubernetes.io/hostname
+    resources:
+      requests:
+        cpu: "500m"
+        memory: 1Gi
+      limits:
+        memory: 4Gi
+  hosting:
+    # An rgw rejects any Host header not listed here once the list is non-empty.
+    dnsNames:
+      - s3-sea1.generalprogramming.org
+      - rgw-sea1.generalprogramming.org
+  healthCheck:
+    startupProbe:
+      disabled: false
+    readinessProbe:
+      disabled: false

@@ -833,6 +833,7 @@ patches:
         - 3300          # ceph-mon v2
         - 6789          # ceph-mon v1
         - 6800-6900     # ceph osd/mds/mgr; ports shift as daemons restart
+        - 7480          # ceph rgw; plain HTTP, public S3 goes via traefik
         - 9283          # ceph-mgr metrics (unauthenticated)
         - 9926          # ceph-exporter metrics (unauthenticated)
         - 8300-8302     # consul server RPC + serf LAN/WAN
