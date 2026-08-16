@@ -3,7 +3,6 @@ kind: Kustomization
 resources:
   - ../base
   - secret.yaml
-  - service-public.yaml
   - cloudflared.yaml
   - ingress_argo.yaml
   - ingress_dashboard.yaml

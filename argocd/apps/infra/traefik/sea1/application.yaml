@@ -18,9 +18,17 @@ spec:
             asDefault: true
           websecure:
             asDefault: true
-          # The direct-ingress entrypoint: reached via the traefik-public VIP
-          # (service-public.yaml), fed by the vpn-leaf DNATs for v4 and native
-          # routing for v6. Routers must name it explicitly to be served here.
+          # The direct-ingress entrypoint: hostPort 443 on every node, reached
+          # by the vpn-leaf DNATs for v4 and the node GUAs for v6. Routers must
+          # name it explicitly to be served here.
+          #
+          # hostPort, NOT a LoadBalancer VIP, after both VIP datapaths failed
+          # in practice on cilium 1.20: etp=Local replies leave un-rev-DNATed
+          # as nodeIP:9443 (then leaf-masqueraded, so clients see .162:9443),
+          # and L2 announcements never answer NDP for a v6 VIP -- the agent
+          # does not join the solicited-node group (cilium#44311). hostPort is
+          # node-local and symmetric by construction, the same shape as the
+          # torrent forward that has worked for years.
           #
           # No cloudflare-realip middleware on purpose: clients here are direct,
           # and trusting CF-Connecting-IP from them would let anyone spoof
@@ -28,6 +36,7 @@ spec:
           publicsecure:
             # 9443, not 8443 -- websecure already owns 8443 in-container.
             port: 9443
+            hostPort: 443
             expose:
               default: false
             # No tls block: the chart's schema only allows it on the named

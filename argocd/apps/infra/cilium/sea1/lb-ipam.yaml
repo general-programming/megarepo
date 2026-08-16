@@ -17,27 +17,11 @@ spec:
     matchLabels:
       generalprogramming.org/lb-pool: sea1-lan
 ---
-# Revival of the retired sea1-external-v6 pool, for traefik-public. The block
-# is already reserved in cidr-groups.yaml (sea1-loadbalancers), which the old
-# pool's retirement deliberately kept "so a future pool is covered from day
-# one" -- this is that pool, so the KEEP IN SYNC contract is already met.
-#
-# CAVEAT: sea1-core's Kea DHCPv6 pool spans ::200-::eff, which contains this
-# /120. VIPs here can collide with a lease; ::e00 itself is safe by history
-# (it was the live traefik VIP for years). Shrinking the Kea pool to ::dff is
-# the proper fix and belongs with sea1-core's nix config.
-apiVersion: cilium.io/v2
-kind: CiliumLoadBalancerIPPool
-metadata:
-  name: sea1-external-v6
-spec:
-  blocks:
-    - cidr: "2602:fa6d:10:ffff::e00/120"
-  serviceSelector:
-    matchLabels:
-      generalprogramming.org/lb-pool: sea1-lan
----
 # Replaces MetalLB's L2Advertisement -- ARP for v4, NDP for v6.
+# NB: "NDP for v6" is aspirational on cilium 1.20 -- the agent answers unicast
+# NS but never joins the solicited-node multicast group (cilium#44311), so
+# on-link discovery of a v6 VIP fails. Do not put a v6 pool here expecting it
+# to be reachable; the direct web ingress uses hostPort on the nodes instead.
 #
 # Announce only from the bridged nodes. Their node address lives on br0, which
 # is the LAN-facing device; announcing from a node whose LAN path differs would
