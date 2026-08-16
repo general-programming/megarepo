@@ -96,8 +96,12 @@ must exist before core first starts or Harbor comes up in `db_auth` mode.
   ones — rejects updates from the UI and the API with "current config is init by
   env variable". Change them in `terraform/auth/authentik/app-harbor` and
   restart core.
-- **The ingress is deliberately not Cloudflare-proxied.** CF caps request bodies
-  at 100MB and image layers routinely exceed it; proxying returns 413 on push.
+- **The ingress must be Cloudflare-proxied.** `sea1-traefik-k8s` is a proxied
+  record in front of a cloudflared tunnel, so an unproxied CNAME to it resolves
+  to an unroutable ULA and nothing connects. The cost is CF's 100MB request body
+  cap: pushing a layer larger than that returns 413. If that starts to bite, the
+  fix is a second hostname pointed straight at the node GUAs (the Talos
+  `public-web-ingress` rule already allows 80/443), not unproxying this one.
 - **Registry redirects are disabled** (`disableredirect: true`). Otherwise the
   registry answers layer GETs with a 307 to a presigned URL on an in-cluster
   Service name that no external docker client can resolve.
