@@ -1,0 +1,76 @@
+# The direct web ingress: a second, tiny traefik that listens on host :443 via
+# hostNetwork. It exists because every cilium-translated path (LB VIP, NodePort,
+# hostPort) mangles replies to non-cluster clients on this cluster -- the
+# iptables masquerade path SNATs the reply source (docs/bpf-masquerade-sea1.md,
+# reverted canary). A host socket has no translation to break; the rgw proves
+# the pattern.
+#
+# Isolation from the main traefik is the ingressClass: this instance only sees
+# ingresses with ingressClassName traefik-direct, so nothing leaks here by
+# default. Routers on it are TLS by default (entrypoint http.tls) -- certs come
+# from each ingress's spec.tls secret.
+#
+# Reached by: the vpn-leaf DNATs (199.255.18.162/.163:443 -> node :443) for
+# v4, and the node GUAs directly for v6. Talos already admits 443 publicly.
+---
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik-direct
+spec:
+  controller: traefik.io/ingress-controller
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: traefik-direct
+spec:
+  selector:
+    matchLabels:
+      app: traefik-direct
+  template:
+    metadata:
+      labels:
+        app: traefik-direct
+    spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
+      # Reuses the chart's SA: the clusterrole already grants the ingress/CRD
+      # reads this instance needs, and they live in the same namespace.
+      serviceAccountName: traefik-helm
+      containers:
+        - name: traefik
+          image: docker.io/traefik:v3.7.10
+          args:
+            - "--entrypoints.publicsecure.address=:443"
+            - "--entrypoints.publicsecure.http.tls=true"
+            # Monolithic uploads of multi-GB layers are the point of this path.
+            - "--entrypoints.publicsecure.transport.respondingTimeouts.readTimeout=30m"
+            - "--providers.kubernetesingress.ingressclass=traefik-direct"
+            - "--ping=true"
+            # Ping/API port; host-scoped, not in any Talos allow rule, so it is
+            # unreachable from off-node.
+            - "--entrypoints.traefik.address=:9444"
+            - "--accesslog=true"
+            - "--accesslog.format=json"
+          securityContext:
+            capabilities:
+              add: ["NET_BIND_SERVICE"]
+              drop: ["ALL"]
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: 9444
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: 9444
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              memory: 512Mi

@@ -10,41 +10,14 @@ spec:
         service:
           type: ClusterIP
         ports:
-          # asDefault on the two existing entrypoints is what keeps publicsecure
-          # opt-in: once any entrypoint is marked default, a router with no
-          # explicit entryPoints binds only to the defaults. Without this, every
-          # unpinned Ingress in the cluster would leak onto the public path.
+          # asDefault declared so any future non-default entrypoint is opt-in:
+          # with defaults present, a router with no entryPoints binds only to
+          # them. The direct web ingress is NOT an entrypoint here -- it is its
+          # own hostNetwork instance (traefik-direct.yaml); cilium mangles
+          # replies to non-cluster clients on every translated path
+          # (docs/bpf-masquerade-sea1.md), so it cannot live behind a Service.
           web:
             asDefault: true
           websecure:
             asDefault: true
-          # The direct-ingress entrypoint: hostPort 443 on every node, reached
-          # by the vpn-leaf DNATs for v4 and the node GUAs for v6. Routers must
-          # name it explicitly to be served here.
-          #
-          # hostPort, NOT a LoadBalancer VIP, after both VIP datapaths failed
-          # in practice on cilium 1.20: etp=Local replies leave un-rev-DNATed
-          # as nodeIP:9443 (then leaf-masqueraded, so clients see .162:9443),
-          # and L2 announcements never answer NDP for a v6 VIP -- the agent
-          # does not join the solicited-node group (cilium#44311). hostPort is
-          # node-local and symmetric by construction, the same shape as the
-          # torrent forward that has worked for years.
-          #
-          # No cloudflare-realip middleware on purpose: clients here are direct,
-          # and trusting CF-Connecting-IP from them would let anyone spoof
-          # their source address.
-          publicsecure:
-            # 9443, not 8443 -- websecure already owns 8443 in-container.
-            port: 9443
-            hostPort: 443
-            expose:
-              default: false
-            # No tls block: the chart's schema only allows it on the named
-            # ports. TLS is done per-router instead -- every route on this
-            # entrypoint MUST carry router.tls: "true" or it serves plaintext.
-            transport:
-              respondingTimeouts:
-                # Generous: monolithic uploads of multi-GB image layers are the
-                # reason this path exists.
-                readTimeout: "30m"
 ---

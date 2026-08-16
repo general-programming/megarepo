@@ -1,23 +1,15 @@
-# hub is served on BOTH entrypoints: publicsecure is the real path (direct via
-# the vpn-leaf DNATs + native v6, no CF 100MB body cap), websecure keeps the
-# cloudflared path alive as a fallback that needs only a DNS re-point.
-# TLS is a real LE cert -- CF origin trust does not apply on the direct path.
+# The cloudflared fallback path. DNS ownership lives on ingress-public.yaml
+# (the direct path); re-pointing hub at sea1-traefik-k8s + proxied is the
+# manual rollback if the direct path is ever down.
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: harbor-ingress
   annotations:
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure,publicsecure
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
-    cert-manager.io/cluster-issuer: letsencrypt-genprog
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
-    external-dns.alpha.kubernetes.io/target: "sea1-traefik-k8s.generalprogramming.org"
 spec:
-  tls:
-    - hosts:
-        - hub.generalprogramming.org
-      secretName: hub-generalprogramming-org-tls
   rules:
     - host: hub.generalprogramming.org
       http:

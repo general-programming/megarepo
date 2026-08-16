@@ -1,0 +1,32 @@
+# The real hub path: the traefik-direct hostNetwork instance, no Cloudflare in
+# front, so no 100MB body cap on layer pushes. This ingress owns hub's DNS:
+# A -> the two vpn-leaf public addresses (each DNATs :443 to a different node),
+# AAAA -> the three node GUAs. Not proxied -- the whole point is direct.
+#
+# LE cert via cert-manager: CF origin trust does not apply on a direct path.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: harbor-ingress-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-genprog
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/target: "199.255.18.162,199.255.18.163,2602:fa6d:10:ffff::110,2602:fa6d:10:ffff::111,2602:fa6d:10:ffff::112"
+spec:
+  ingressClassName: traefik-direct
+  tls:
+    - hosts:
+        - hub.generalprogramming.org
+      secretName: hub-generalprogramming-org-tls
+  rules:
+    - host: hub.generalprogramming.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: harbor
+                port:
+                  number: 80
