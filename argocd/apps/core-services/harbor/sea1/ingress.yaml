@@ -1,4 +1,6 @@
-# Not CF-proxied: the 100MB body cap returns 413 on image push.
+# Proxied is mandatory, not a preference: sea1-traefik-k8s is itself a proxied
+# record fronting a cloudflared tunnel, so an unproxied CNAME to it resolves to
+# an unroutable ULA. Cost: CF's 100MB body cap fails pushes of layers above it.
 # Portal, OIDC callback and the registry API all hang off this one host.
 ---
 apiVersion: networking.k8s.io/v1
@@ -8,7 +10,7 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: websecure
     traefik.ingress.kubernetes.io/router.tls: "true"
-    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "true"
     external-dns.alpha.kubernetes.io/target: "sea1-traefik-k8s.generalprogramming.org"
 spec:
   rules:
