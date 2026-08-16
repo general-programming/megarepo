@@ -40,7 +40,10 @@ must exist before core first starts or Harbor comes up in `db_auth` mode.
    exactly 32, or core fails at runtime.
 
    ```sh
-   openssl genrsa -out token.key 4096
+   # -traditional is required: Harbor only parses PKCS#1 ("BEGIN RSA PRIVATE
+   # KEY"), and OpenSSL 3 writes PKCS#8 by default. Without it every docker
+   # login fails with a 500 and core logs "unable to get PrivateKey from PEM".
+   openssl genrsa -traditional -out token.key 4096
    openssl req -new -x509 -key token.key -out token.crt -days 3650 \
      -subj "/CN=harbor-token-ca"
    bao kv put secret/app/harbor/token tls.key=@token.key tls.crt=@token.crt
