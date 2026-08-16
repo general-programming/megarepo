@@ -493,6 +493,14 @@ hosts:
           port: 30888
           protocols: [udp, tcp]
           to: 10.3.2.10
+        # hub.generalprogramming.org direct ingress: DNAT to the traefik-public
+        # VIP. Return path is symmetric without SNAT because this leaf is the
+        # VRRP master -- replies route back through 10.3.2.1, which is here.
+        - name: WebIngress
+          interface: eth0
+          port: 443
+          protocols: [tcp]
+          to: 10.3.3.2
     extra_config:
       # Priority is explicit now that sea1-vpn-leaf-2 shares vrid 10. Both
       # defaulted to 100, so mastership was decided by the higher interface
@@ -574,6 +582,21 @@ hosts:
       masquerade:
         - interface: eth0
           source: 10.3.2.0/23
+        # SNAT pin for the WebIngress forward below. Unlike the Torrent
+        # comment above, a second permanently-live entry point IS wanted here
+        # (both public IPs are in hub's DNS), but it only works with this:
+        # a flow DNATed on this leaf would otherwise reply via the VRRP
+        # gateway -- leaf-1 -- which holds no conntrack for it. Masquerading
+        # to this leaf's eth1 address pins the return path here. Cost: traefik
+        # sees 10.3.2.2 instead of the client address for .163 flows.
+        - interface: eth1
+          destination: 10.3.3.2
+      port_forwards:
+        - name: WebIngress
+          interface: eth0
+          port: 443
+          protocols: [tcp]
+          to: 10.3.3.2
     extra_config:
       # Backup for the LAN gateway. Priority 100 against leaf-1's 200, so
       # leaf-1 holds 10.3.2.1 whenever it is alive and reclaims it on return

@@ -9,4 +9,32 @@ spec:
       valuesObject:
         service:
           type: ClusterIP
+        ports:
+          # asDefault on the two existing entrypoints is what keeps publicsecure
+          # opt-in: once any entrypoint is marked default, a router with no
+          # explicit entryPoints binds only to the defaults. Without this, every
+          # unpinned Ingress in the cluster would leak onto the public path.
+          web:
+            asDefault: true
+          websecure:
+            asDefault: true
+          # The direct-ingress entrypoint: reached via the traefik-public VIP
+          # (service-public.yaml), fed by the vpn-leaf DNATs for v4 and native
+          # routing for v6. Routers must name it explicitly to be served here.
+          #
+          # No cloudflare-realip middleware on purpose: clients here are direct,
+          # and trusting CF-Connecting-IP from them would let anyone spoof
+          # their source address.
+          publicsecure:
+            # 9443, not 8443 -- websecure already owns 8443 in-container.
+            port: 9443
+            expose:
+              default: false
+            tls:
+              enabled: true
+            transport:
+              respondingTimeouts:
+                # Generous: monolithic uploads of multi-GB image layers are the
+                # reason this path exists.
+                readTimeout: "30m"
 ---
