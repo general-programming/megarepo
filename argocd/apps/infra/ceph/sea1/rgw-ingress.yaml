@@ -1,0 +1,36 @@
+# Off-cluster S3 endpoint; in-cluster clients use rook-ceph-rgw-shared.ceph.svc.
+# Not CF-proxied: the 100MB body cap breaks large object PUTs.
+# Both hosts must also appear in the CephObjectStore's hosting.dnsNames.
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: rgw-shared
+  namespace: ceph
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    external-dns.alpha.kubernetes.io/cloudflare-proxied: "false"
+    external-dns.alpha.kubernetes.io/target: "sea1-traefik-k8s.generalprogramming.org"
+spec:
+  rules:
+    - host: s3-sea1.generalprogramming.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rook-ceph-rgw-shared
+                port:
+                  name: http
+    - host: rgw-sea1.generalprogramming.org
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: rook-ceph-rgw-shared
+                port:
+                  name: http

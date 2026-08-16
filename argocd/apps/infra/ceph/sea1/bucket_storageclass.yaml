@@ -1,0 +1,13 @@
+# sea1-only: fmt2's CephCluster is still external and runs no rgw.
+---
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: ceph-bucket
+# Prefixed with the operator's namespace, same as the csi driver names in
+# ../base. Wrong here fails silently -- OBCs just sit Pending with no event.
+provisioner: ceph.ceph.rook.io/bucket
+parameters:
+  objectStoreName: shared
+  objectStoreNamespace: ceph
+reclaimPolicy: Retain
