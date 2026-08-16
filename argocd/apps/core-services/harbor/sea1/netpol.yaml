@@ -1,0 +1,54 @@
+---
+# Unported like netbox's: CNPG's instance manager uses 8000 alongside 5432.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: postgres-allowed-clients
+  namespace: harbor
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/podRole: instance
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cnpg-system
+    - from:
+        - podSelector: {}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: victoriametrics
+      ports:
+        - port: 9187
+          protocol: TCP
+---
+# The only thing guarding valkey -- it runs without a password (see
+# ../base/values.yaml). Deleting this exposes an open redis cluster-wide.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-allowed-clients
+  namespace: harbor
+  labels:
+    sea1.policy/tier: datastore
+spec:
+  podSelector:
+    matchLabels:
+      app: harbor-valkey
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector: {}
+      ports:
+        - port: 6379
+          protocol: TCP
+# No rgw policy here: the gateway is hostNetwork, where CiliumNetworkPolicy does
+# not apply. Port 7480 in the Talos ingress firewall is the control. Registry
+# egress needs no exemption -- deny-egress-storage-plane stops at 7300.

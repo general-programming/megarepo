@@ -37,6 +37,7 @@ resources:
   - authentik.yaml
   - baserow.yaml
   - grafana.yaml
+  - harbor.yaml
   - librenms.yaml
   - docspell.yaml
   - cerebro.yaml

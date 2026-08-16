@@ -1,0 +1,30 @@
+# Single-tenant CNPG cluster. Metadata only -- blobs live in the rgw bucket.
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: harbor-db
+spec:
+  imageCatalogRef:
+    apiGroup: postgresql.cnpg.io
+    kind: ClusterImageCatalog
+    name: postgresql-standard-trixie
+    major: 18
+  instances: 2
+  primaryUpdateStrategy: unsupervised
+  affinity:
+    enablePodAntiAffinity: true
+    podAntiAffinityType: required
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+          - matchExpressions:
+              - key: generalprogramming.org/no-database
+                operator: DoesNotExist
+  storage:
+    storageClass: ceph-rbd-xfs
+    size: 10Gi
+  bootstrap:
+    initdb:
+      database: harbor
+      owner: harbor

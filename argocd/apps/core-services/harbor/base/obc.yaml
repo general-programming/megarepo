@@ -1,0 +1,11 @@
+# Rook names the ConfigMap and Secret it emits after the claim, so NOT
+# harbor-registry -- the chart already ships both under that name.
+---
+apiVersion: objectbucket.io/v1alpha1
+kind: ObjectBucketClaim
+metadata:
+  name: harbor-bucket
+spec:
+  # Pinned, not generated: the name is baked into values.yaml.
+  bucketName: harbor
+  storageClassName: ceph-bucket

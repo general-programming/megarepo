@@ -1,0 +1,59 @@
+# Harbor's job queue and cache; it owns four databases here (core 0,
+# jobservice 1, registry 2, trivy 5).
+# No --requirepass: see the redis note in values.yaml.
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: harbor-valkey-data
+spec:
+  storageClassName: ceph-rbd-xfs
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 4Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: harbor-valkey
+spec:
+  selector:
+    matchLabels:
+      app: harbor-valkey
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: harbor-valkey
+    spec:
+      containers:
+        - name: valkey
+          image: valkey/valkey:9.0-alpine
+          command:
+            - valkey-server
+            - --appendonly
+            - "yes"
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: harbor-valkey-data
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: harbor-valkey
+spec:
+  ports:
+    - port: 6379
+      targetPort: 6379
+      name: valkey
+  selector:
+    app: harbor-valkey
+  type: ClusterIP
