@@ -30,8 +30,9 @@ spec:
             port: 9443
             expose:
               default: false
-            tls:
-              enabled: true
+            # No tls block: the chart's schema only allows it on the named
+            # ports. TLS is done per-router instead -- every route on this
+            # entrypoint MUST carry router.tls: "true" or it serves plaintext.
             transport:
               respondingTimeouts:
                 # Generous: monolithic uploads of multi-GB image layers are the
