@@ -41,7 +41,10 @@ resource "authentik_application" "harbor" {
 }
 
 resource "authentik_provider_oauth2" "harbor" {
-  name               = "harbor"
+  name = "harbor"
+  # Explicit: leaving this to the provider's default is what shipped an empty
+  # list. Harbor needs exactly these two.
+  grant_types        = ["authorization_code", "refresh_token"]
   client_id          = local.harbor_client_id
   client_secret      = vault_generic_secret.harbor_oidc.data.oidc_client_secret
   authorization_flow = data.authentik_flow.authorization_implicit_flow.id

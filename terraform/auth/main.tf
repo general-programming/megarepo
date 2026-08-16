@@ -18,6 +18,10 @@ terraform {
   required_providers {
     authentik = {
       source = "goauthentik/authentik"
+      # >= 2026.5: older providers lack `grant_types`, and a provider created
+      # through them gets an EMPTY grant list on a 2026.5 server -- every
+      # login then fails with "Invalid grant_type for provider".
+      version = ">= 2026.5.1"
     }
     cloudflare = {
       source  = "cloudflare/cloudflare"
