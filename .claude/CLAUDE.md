@@ -49,6 +49,10 @@ Keep them slim. A skill is a working reference, not a changelog:
 
 - Use inline type annotations on function signatures. Do not put types in
   docstrings; docstring `Args:`/`Returns:` sections describe meaning only.
+- Keep comments to 1-2 lines. No essays, no banner headers, no restating the
+  code. Write one only where it is necessary — a trap, a non-obvious constraint,
+  or why one of two plausible options was chosen. This applies to YAML and
+  Terraform as much as to code.
 
 ## Testing
 
