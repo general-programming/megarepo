@@ -19,7 +19,7 @@ spec:
     chart: cilium
     repoURL: https://helm.cilium.io
     # 1.20.0 supports k8s 1.33-1.36; this cluster is 1.36.2.
-    targetRevision: 1.20.0
+    targetRevision: 1.20.1
     helm:
       valuesObject:
         # Reuse the podCIDRs kube-controller-manager allocates, as flannel did,
