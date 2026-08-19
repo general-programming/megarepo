@@ -6,7 +6,7 @@ replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v
 
 require (
 	charm.land/bubbles/v2 v2.1.1
-	charm.land/bubbletea/v2 v2.0.8
+	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/log/v2 v2.0.0
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5
