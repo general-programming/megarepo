@@ -13,4 +13,14 @@ else
 fi
 
 nix-store --dump-db >/mnt/nix/.image-db.dump
+
+# Root every image path. The store is otherwise entirely unrooted -- build
+# outputs go to attic, not a profile -- so nix.conf's min-free GC is free to
+# trim it, and without these roots it would happily delete the bash/git/curl
+# this pod is about to run.
+install -d /mnt/nix/var/nix/gcroots/image
+for p in /nix/store/*; do
+  ln -sfn "$p" "/mnt/nix/var/nix/gcroots/image/${p##*/}"
+done
+
 echo "==> seed complete"

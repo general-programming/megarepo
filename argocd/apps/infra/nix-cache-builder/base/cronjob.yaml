@@ -16,7 +16,10 @@ spec:
       # No retries: the next tick is the retry, and a failed build re-running
       # six times in a row would just pin 48 cores.
       backoffLimit: 0
-      activeDeadlineSeconds: 14400
+      # nix.conf's max-silent-time is what catches a wedged build now, and it
+      # cleans up after itself; this is only the outer backstop, so it can be
+      # generous enough for a cold store that has to compile lix from source.
+      activeDeadlineSeconds: 28800
       template:
         metadata:
           labels:
