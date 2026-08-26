@@ -16,10 +16,11 @@ spec:
       # No retries: the next tick is the retry, and a failed build re-running
       # six times in a row would just pin 48 cores.
       backoffLimit: 0
-      # nix.conf's max-silent-time is what catches a wedged build now, and it
-      # cleans up after itself; this is only the outer backstop, so it can be
-      # generous enough for a cold store that has to compile lix from source.
-      activeDeadlineSeconds: 28800
+      # Still the only limit that always fires -- nix.conf's max-silent-time did
+      # not catch the wedged lix job -- so keep it tight enough that a hang does
+      # not block the next tick all day. Four hours has always cleared a cold
+      # store, and lix no longer runs its test suite (nix/modules/lix-nocheck.nix).
+      activeDeadlineSeconds: 14400
       template:
         metadata:
           labels:
