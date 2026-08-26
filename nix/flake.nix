@@ -45,7 +45,6 @@
         "sea1-core" = self.lib.nixosSystem "sea1-core";
         "fmt2-core" = self.lib.nixosSystem "fmt2-core";
         "sea420-core" = self.lib.nixosSystem "sea420-core";
-        "sea420-desktop" = self.lib.nixosSystem "sea420-desktop";
         "fmt2-vault-0" = self.lib.nixosSystem "fmt2-vault-0";
         "fmt2-vault-1" = self.lib.nixosSystem "fmt2-vault-1";
         "fmt2-vault-2" = self.lib.nixosSystem "fmt2-vault-2";
@@ -124,6 +123,7 @@
               self.nixosModules.base
               machineModule
               lix-module.nixosModules.default
+              (self.lib.nixosModule "lix-nocheck")
               inputs.nix-index-database.nixosModules.nix-index
             ];
             specialArgs = {
