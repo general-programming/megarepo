@@ -14,6 +14,13 @@ export HOME="$STATE_DIR/home"
 export TMPDIR="$STATE_DIR/tmp"
 install -d "$STATE_DIR" "$HOME" "$TMPDIR"
 
+# A build killed mid-flight (activeDeadlineSeconds, OOM, node drain) never runs
+# nix's own cleanup, so its build dir stays on the PVC -- ~3.5G per leak, which
+# filled all 300G in three weeks and then failed every run for lack of space.
+# concurrencyPolicy: Forbid means nothing else is building, so anything left
+# here is garbage.
+rm -rf /nix/var/nix/builds/* "${TMPDIR:?}"/*
+
 # The repo is public, so the checkout needs no credentials. Keep the clone on
 # the PVC: fetching a delta beats re-cloning every five minutes.
 if [ -d "$SRC/.git" ]; then
