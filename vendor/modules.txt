@@ -10,7 +10,7 @@ charm.land/bubbletea/v2
 ## explicit; go 1.25.0
 charm.land/lipgloss/v2
 charm.land/lipgloss/v2/table
-# charm.land/log/v2 v2.0.0
+# charm.land/log/v2 v2.0.1
 ## explicit; go 1.25.8
 charm.land/log/v2
 # github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5
@@ -211,8 +211,6 @@ github.com/spf13/cobra
 # github.com/spf13/pflag v1.0.9
 ## explicit; go 1.12
 github.com/spf13/pflag
-# github.com/stretchr/testify v1.11.1
-## explicit; go 1.17
 # github.com/twitchyliquid64/golang-asm v0.15.1
 ## explicit; go 1.13
 github.com/twitchyliquid64/golang-asm/asm/arch
