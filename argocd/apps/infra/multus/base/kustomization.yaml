@@ -9,4 +9,4 @@ images:
   # roll this DaemonSet forward on every node restart. Pin it to the release
   # the vendored manifest came from.
   - name: ghcr.io/k8snetworkplumbingwg/multus-cni
-    newTag: v4.3.0-thick
+    newTag: v4.3.1-thick
