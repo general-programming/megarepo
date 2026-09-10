@@ -30,7 +30,7 @@ jobs:
       # renovate: datasource=pypi depName=ruff
       RUFF_VERSION: 0.16.6
       # renovate: datasource=pypi depName=ty
-      TY_VERSION: 0.0.78
+      TY_VERSION: 0.0.80
     steps:
       - uses: actions/checkout@v7
 
