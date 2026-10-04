@@ -2,7 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 namespace: victoriametrics
 resources:
-  - github.com/VictoriaMetrics/operator/config/base-with-webhook?ref=v0.74.1
+  - github.com/VictoriaMetrics/operator/config/base-with-webhook?ref=v0.75.0
   # Only the annotation-driven catch-alls live here; workload-specific scrapes
   # sit in their workload's app folder (vmagent has selectAllByDefault, so the
   # operator picks up VM* scrape objects from any namespace).
@@ -12,7 +12,7 @@ resources:
 images:
 - name: manager
   newName: victoriametrics/operator
-  newTag: v0.74.1
+  newTag: v0.75.0
 patches:
   # vmagent scrapes kubelet :10250 (monitoring/base/scrape_kubelet.yaml); this label exempts
   # the namespace from the deny-egress-node-api CCNP in apps/infra/cilium/base.
