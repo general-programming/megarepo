@@ -9,7 +9,7 @@ helmCharts:
     releaseName: baserow
     namespace: baserow
     repo: https://baserow.github.io/baserow-chart
-    version: 1.0.56
+    version: 1.1.0
     valuesFile: values.yaml
 patches:
   # The chart stamps a random `rollme` annotation on every render, which reads
