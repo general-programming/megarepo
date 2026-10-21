@@ -63,3 +63,24 @@ spec:
       ports:
         - port: 6379
           protocol: TCP
+---
+# Temporary PHP quarantine: block the web backend while polling continues.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: librenms-php-web-quarantine
+  namespace: librenms
+spec:
+  endpointSelector:
+    matchLabels:
+      app: librenms
+  enableDefaultDeny:
+    ingress: false
+    egress: false
+  ingressDeny:
+    - fromEntities:
+        - all
+      toPorts:
+        - ports:
+            - port: "8000"
+              protocol: TCP
