@@ -4,7 +4,7 @@
   "devDependencies": {
     "@cloudflare/puppeteer": "^1.0.6",
     "@cloudflare/workers-types": "^5.0.0",
-    "postal-mime": "^3.0.0",
+    "postal-mime": "^4.0.8",
     "typescript": "^7.0.0",
     "wrangler": "^4.65.0"
   },
