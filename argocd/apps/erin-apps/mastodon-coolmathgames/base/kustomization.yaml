@@ -19,3 +19,13 @@ patches:
     target:
       kind: Job
       name: mastodon-chewy-upgrade
+  # A persistent exporter must participate in normal Argo updates and health.
+  # Helm hook annotations otherwise leave it unchanged even when values change.
+  - target:
+      kind: Deployment
+      name: mastodon-elasticsearch-metrics
+    patch: |-
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook
+      - op: remove
+        path: /metadata/annotations/helm.sh~1hook-weight
