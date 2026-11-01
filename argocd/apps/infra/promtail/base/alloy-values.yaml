@@ -1,4 +1,7 @@
 alloy:
+  # Alloy 1.21 gates loki.write's configured durable WAL behind this flag.
+  extraArgs:
+    - --stability.level=experimental
   envFrom:
     - configMapRef:
         name: alloy-env-local
