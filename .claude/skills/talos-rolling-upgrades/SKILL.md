@@ -20,8 +20,9 @@ talosctl --talosconfig "$tc" -e 127.0.0.1:15000 -n <node-ip> version
 ```
 
 The endpoint can proxy to other nodes. Switch its anchor before rebooting that
-host. Tailscale connector eviction can reset API connections and kill the port
-forward; re-establish it and inspect state before retrying a mutation.
+host **or restarting its kubelet**: exec/port-forward streams use the kubelet
+even when the hostNetwork container stays running. Tailscale connector eviction
+can also reset these connections; reconnect and inspect state before retrying.
 
 Save an etcd snapshot, live machine configs, extensions, nodes, PDBs, PVs and VMI
 identities outside git. MachineConfig `spec` is a secret-bearing YAML **string**,
