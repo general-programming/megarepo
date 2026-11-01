@@ -252,6 +252,9 @@ elasticsearch:
 
   metrics:
     enabled: true
+    # The exporter collects cluster metrics on /metrics; one second flaps under load.
+    readinessProbe:
+      timeoutSeconds: 5
     image:
       registry: docker.io
       repository: bitnamilegacy/elasticsearch-exporter
