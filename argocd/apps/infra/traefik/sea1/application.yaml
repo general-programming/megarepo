@@ -8,7 +8,9 @@ spec:
     helm:
       valuesObject:
         service:
-          type: ClusterIP
+          # Chart 41 puts ServiceSpec fields under spec; service.type is ignored.
+          spec:
+            type: ClusterIP
         ports:
           # asDefault declared so any future non-default entrypoint is opt-in:
           # with defaults present, a router with no entryPoints binds only to
