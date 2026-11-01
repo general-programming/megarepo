@@ -81,5 +81,11 @@ kubelet version and healthy workloads, then uncordon. VM continuity needs both
 LAN and desktop service probes plus unchanged guest boot IDs/uptimes; desktop
 Tailscale failover can fail private-address probes while LAN services stay up.
 
+A Helm-hook Deployment can report no sync status while the Application is
+Synced and ignore desired updates. Check `.status.resources[].hook` and live
+annotations when a committed probe/config change does not land. Persistent
+exporters should be ordinary resources: remove Helm hook metadata in Kustomize
+and adopt the live object with the same committed metadata before verifying it.
+
 Do not gate the next host solely on pod phase. Require full storage recovery,
 VM services and router BGP peer states, prefix counts and session uptimes.
