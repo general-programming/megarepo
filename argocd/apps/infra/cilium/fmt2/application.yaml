@@ -24,6 +24,11 @@ spec:
     targetRevision: 1.20.4
     helm:
       valuesObject:
+        # The namespace app owns cilium-secrets and its PSA labels. A second
+        # SSA declaration strips those labels and leaves namespace OutOfSync.
+        tls:
+          secretsNamespace:
+            create: false
         # Reuse the podCIDRs kube-controller-manager allocates, as flannel did,
         # so pod addressing survives the migration and rollback stays cheap.
         ipam:
