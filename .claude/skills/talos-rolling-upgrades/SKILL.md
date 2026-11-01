@@ -67,8 +67,19 @@ Never put the key in command arguments or print it.
 
 ## Kubernetes roll
 
-Run `talosctl upgrade-k8s --dry-run --to <version>` and review it before applying.
-For sea1, use `--upgrade-kubelet=false` for control-plane components, then handle
-kubelets one host at a time after migrating guests off that host. Check live
-configuration and readiness after each change. VM continuity needs service
-probes and unchanged guest identity/uptime, not just a Running phase.
+Review `talosctl upgrade-k8s --dry-run --to <version>`, including bootstrap
+manifest diffs. sea1's CoreDNS ConfigMap is managed by Argo and has explicit
+upstreams, internal/reverse zones and `.consul` forwarding. The automatic
+upgrader replaces it with Talos defaults, breaking those lookups. Until
+bootstrap ownership is separated, use the documented manual image patches for
+API server, controller manager and scheduler, one component/node at a time;
+verify each mirror pod's image and Ready state. Keep the Corefile unchanged.
+
+Handle sea1 kubelets one host at a time after explicitly migrating its guests
+off. Patch only `machine.kubelet.image` with `--mode=no-reboot`, verify the new
+kubelet version and healthy workloads, then uncordon. VM continuity needs both
+LAN and desktop service probes plus unchanged guest boot IDs/uptimes; desktop
+Tailscale failover can fail private-address probes while LAN services stay up.
+
+Do not gate the next host solely on pod phase. Require full storage recovery,
+VM services and router BGP peer states, prefix counts and session uptimes.

@@ -8,8 +8,8 @@
 # mtu 9000 raises the ceiling to match br0; the bridge plugin builds the pod
 # interface at 1500 otherwise and KubeVirt sizes the tap from it. The guest
 # keeps whatever MTU it configures, so this changes nothing for a 1500 guest --
-# it just stops the tap from silently capping one that wants jumbo. Takes
-# effect on VMI restart.
+# it just stops the tap from silently capping one that wants jumbo. Applies
+# whenever a launcher pod is created, including a migration target.
 # Keep the target quiet until KubeVirt configures it; early MAC announcements
 # redirect LAN traffic before handover (kubevirt/kubevirt#17195).
 apiVersion: k8s.cni.cncf.io/v1
