@@ -38,24 +38,25 @@ spec:
     - matrix:
         generators:
           - clusters: {}
+          # Only generate apps for overlays that exist on this cluster.
           - git:
               repoURL: git@github.com:general-programming/megarepo.git
               revision: HEAD
               directories:
-              - path: argocd/apps/core-services/*
+              - path: argocd/apps/core-services/*/{{name}}
   syncPolicy: {}
   template:
     metadata:
-      name: '{{path.basename}}'
+      name: '{{path[3]}}'
     spec:
       project: "core-services"
       source:
         repoURL: git@github.com:general-programming/megarepo.git
         targetRevision: HEAD
-        path: '{{path}}/{{name}}'
+        path: '{{path}}'
       destination:
         server: '{{server}}'
-        namespace: '{{path.basename}}'
+        namespace: '{{path[3]}}'
       syncPolicy:
         automated:
           prune: true

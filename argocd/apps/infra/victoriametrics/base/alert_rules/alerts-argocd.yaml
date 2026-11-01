@@ -20,7 +20,7 @@ spec:
 
         - alert: ArgoCDApplicationOutOfSync
           expr: |
-            argocd_app_info{sync_status!~"Synced|Unknown"} == 1
+            argocd_app_info{sync_status!="Synced"} == 1
           for: 20m
           labels:
             severity: warning

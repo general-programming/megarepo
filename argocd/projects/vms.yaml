@@ -43,24 +43,27 @@ spec:
     - matrix:
         generators:
           - clusters: {}
+          # Only generate apps for overlays that exist on this cluster.
           - git:
               repoURL: git@github.com:general-programming/megarepo.git
               revision: HEAD
               directories:
-                - path: argocd/apps/vms/*
-  syncPolicy: {}
+                - path: argocd/apps/vms/*/{{name}}
+  syncPolicy:
+    # An app disappearing must also leave the VM and its PVCs intact.
+    preserveResourcesOnDeletion: true
   template:
     metadata:
-      name: '{{path.basename}}'
+      name: '{{path[3]}}'
     spec:
       project: "vms"
       source:
         repoURL: git@github.com:general-programming/megarepo.git
         targetRevision: HEAD
-        path: '{{path}}/{{name}}'
+        path: '{{path}}'
       destination:
         server: '{{server}}'
-        namespace: '{{path.basename}}'
+        namespace: '{{path[3]}}'
       syncPolicy:
         automated:
           # Never prune. Unlike a stateless workload, a pruned VM takes its
