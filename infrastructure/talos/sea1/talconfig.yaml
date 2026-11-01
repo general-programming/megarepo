@@ -3,8 +3,8 @@ clusterName: sea1
 # tainted NoSchedule and nothing lands on them.
 allowSchedulingOnControlPlanes: true
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.13.7
-kubernetesVersion: v1.36.2
+talosVersion: v1.14.5
+kubernetesVersion: v1.37.2
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
 nodes:
@@ -392,7 +392,7 @@ nodes:
     # talhelper still emitted metal-installer-secureboot because the controlPlane
     # block's `secureboot: true` wins (false is indistinguishable from unset).
     # Pinning the image URL explicitly is the only reliable override. talhelper
-    # appends `:v1.13.7` from talosVersion.
+    # appends the version tag from talosVersion.
     talosImageURL: factory.talos.dev/metal-installer/7e1f6386358eb4d68cf5a947ce712411b656380140d20539357e4a9a627b76a5
 
     schematic:
