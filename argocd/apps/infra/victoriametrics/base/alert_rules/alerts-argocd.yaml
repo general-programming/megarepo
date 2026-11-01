@@ -40,7 +40,7 @@ spec:
 
         - alert: ArgoCDApplicationReconciliationSlowdown
           expr: |
-            histogram_quantile(0.95, rate(argocd_app_reconcile_seconds_bucket[5m])) > 30
+            histogram_quantile(0.95, rate(argocd_app_reconcile_bucket[5m])) > 30
           for: 10m
           labels:
             severity: warning
@@ -95,7 +95,7 @@ spec:
 
         - alert: ArgoCDApplicationSetReconciliationSlowdown
           expr: |
-            histogram_quantile(0.95, rate(argocd_appset_reconcile_seconds_bucket[5m])) > 60
+            histogram_quantile(0.95, rate(argocd_appset_reconcile_bucket[5m])) > 60
           for: 10m
           labels:
             severity: warning

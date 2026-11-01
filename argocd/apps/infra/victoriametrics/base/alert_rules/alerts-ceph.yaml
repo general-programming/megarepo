@@ -8,13 +8,16 @@ spec:
     - name: ceph
       rules:
         - alert: CephMgrScrapeDown
-          expr: up{job="ceph"} == 0
+          # fmt2 receives cephadm's job; sea1 scrapes Rook mgr pods directly.
+          expr: |
+            up{job="ceph"} == 0
+            or up{namespace="ceph", container="mgr", pod=~"rook-ceph-mgr-.*"} == 0
           for: 10m
           labels:
             severity: critical
           annotations:
             summary: "Ceph mgr metrics endpoint down ({{ $labels.instance }})"
-            description: "Prometheus cannot scrape the ceph-mgr prometheus module at {{ $labels.instance }}. Either the active mgr is down/crashlooping or the module is disabled. While this fires, all ceph_* metrics and alerts are blind."
+            description: "Cannot scrape the Ceph mgr Prometheus endpoint at {{ $labels.instance }}. Check mgr health, the prometheus module and network policy. If all mgr endpoints fail, Ceph health alerts are blind."
 
         - alert: CephHealthError
           expr: ceph_health_status == 2

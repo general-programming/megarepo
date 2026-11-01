@@ -1,0 +1,19 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: ceph-deadman
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: ceph-deadman
+      rules:
+        # Rook's active mgr exports health; a standby can remain scrapeable
+        # without exporting health. Check the health metric itself too.
+        - alert: CephMetricsAbsent
+          expr: absent(ceph_health_status{dc="sea1"})
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "No Ceph health metrics arriving from sea1"
+            description: "ceph_health_status from sea1 is absent. Check the active Rook mgr, its prometheus module and vmagent discovery. Ceph health alerts are blind."
