@@ -23,6 +23,8 @@ spec:
             - --provider=cloudflare
             - --cloudflare-dns-records-per-page=5000 # (optional) configure how many DNS records to fetch per request
             - --policy=upsert-only
+            # v0.22 changed the default; existing resources use this prefix.
+            - --annotation-prefix=external-dns.alpha.kubernetes.io/
           env:
           - name: CF_API_TOKEN
             valueFrom:
