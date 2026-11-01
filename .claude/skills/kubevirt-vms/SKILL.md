@@ -15,7 +15,6 @@ under the `vms` AppProject. Never `kubectl apply` a guest.
 ```
 argocd/projects/vms.yaml              AppProject + ApplicationSet (prune: false)
 argocd/apps/vms/<name>/sea1/          namespace.yaml, nad-br0-lan.yaml, vm-<name>.yaml
-argocd/apps/vms/<name>/fmt2/          empty kustomization (see "one overlay per cluster")
 ```
 
 One Application per VM, and because every ApplicationSet here sets
@@ -32,10 +31,9 @@ from it, so a 9000-MTU guest is silently capped — it still pings, and only
 oversized frames disappear. Confirm with `ping -M do -s 8972 <guest>` from the
 hypervisor both before and after. `br0`/`bond0` on `sea1-k8s-{1,2}` are 9000.
 
-**One overlay per cluster, always.** The infra/vms ApplicationSets are a
-matrix of clusters × directories, so a missing `fmt2/` yields an Application
-pointing at a path that does not exist, stuck in `Unknown/ComparisonError`
-forever. Ship an empty `kustomization.yaml` with `resources: []`.
+**Create only real cluster overlays.** The infra/vms ApplicationSets discover
+`apps/<project>/*/<cluster>/kustomization.yaml` per cluster. A sea1-only guest
+needs no empty `fmt2/` overlay; adding one creates a redundant Application.
 
 ## Cluster prerequisites (already in place)
 
@@ -303,6 +301,13 @@ Needs both, or it silently will not happen:
 **A cordon does nothing.** It only blocks new scheduling; running guests are
 untouched. Only a *drain* evicts. (No PodDisruptionBudget appears in KubeVirt
 1.8 — protection is via the eviction path, not a PDB.)
+
+Before host maintenance, cordon the source, migrate each VMI explicitly, and
+wait for every migration to succeed. Verify the VMI UID and creation time are
+unchanged, Ready and guest-agent conditions recover, and guest services still
+respond. For the VPN guests, compare BGP peer states and prefix counts using
+barf read-only show commands. Only then drain and reboot. Protect Ceph with
+`noout` and restore full storage health before touching another host.
 
 Trigger one by hand — a migration is a transient operation, like a Job, so it
 is imperative by nature and does not belong in git. A failed migration is
