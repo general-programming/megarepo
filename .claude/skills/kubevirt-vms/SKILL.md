@@ -35,6 +35,13 @@ hypervisor both before and after. `br0`/`bond0` on `sea1-k8s-{1,2}` are 9000.
 `apps/<project>/*/<cluster>/kustomization.yaml` per cluster. A sea1-only guest
 needs no empty `fmt2/` overlay; adding one creates a redundant Application.
 
+**Set `disableContainerInterface: true` on every L2 bridge NAD.** With an
+explicit guest MAC and IPv6-enabled hosts, bringing the target pod veth up
+during CNI setup advertises the guest MAC before migration handover. The
+physical switch moves traffic to the idle target, creating a multi-second
+gap. KubeVirt enables the interface when it configures the target; this flag
+does not disable the running guest NIC. See [kubevirt#17195](https://github.com/kubevirt/kubevirt/issues/17195).
+
 ## Cluster prerequisites (already in place)
 
 - KubeVirt v1.8.4 — `argocd/apps/infra/kubevirt/`

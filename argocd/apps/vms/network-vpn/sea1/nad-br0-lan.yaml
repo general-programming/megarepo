@@ -20,10 +20,12 @@
 # Takes effect only when the VMI restarts. The MSS clamp in barf stays either
 # way -- it is belt-and-braces, and it covers TCP during the window before the
 # leaves are restarted.
+# Keep the target quiet until KubeVirt configures it; early MAC announcements
+# redirect LAN traffic before handover (kubevirt/kubevirt#17195).
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: br0-lan
   namespace: network-vpn
 spec:
-  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"disableContainerInterface":true,"ipam":{}}'

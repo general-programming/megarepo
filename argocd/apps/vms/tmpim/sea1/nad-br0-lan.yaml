@@ -9,10 +9,12 @@
 # `mtu 9000`; without this the frames are silently capped. br0/bond0 on
 # sea1-k8s-{1,2} are already 9000.
 
+# Keep the target quiet until KubeVirt configures it; early MAC announcements
+# redirect LAN traffic before handover (kubevirt/kubevirt#17195).
 apiVersion: k8s.cni.cncf.io/v1
 kind: NetworkAttachmentDefinition
 metadata:
   name: br0-lan
   namespace: tmpim
 spec:
-  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"ipam":{}}'
+  config: '{"cniVersion":"0.3.1","name":"br0-lan","type":"bridge","bridge":"br0","mtu":9000,"disableContainerInterface":true,"ipam":{}}'
