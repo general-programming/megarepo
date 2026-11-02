@@ -18,7 +18,7 @@ spec:
   source:
     chart: cilium
     repoURL: https://helm.cilium.io
-    # 1.20.0 supports k8s 1.33-1.36; this cluster is 1.36.2.
+    # Stable 1.20 is tested through k8s 1.36; 1.37 uses forward compatibility.
     targetRevision: 1.20.4
     helm:
       valuesObject:
@@ -57,14 +57,13 @@ spec:
 
         # Pods are on ULA fd40:10:244::/56, so v6 egress still needs masquerade.
         #
-        # iptables, NOT bpf.masquerade -- tried and reverted 2026-08-06 (aeff6eb0
-        # / 7e420b62): the k8s-0 canary broke port 53 (and only :53) because it
-        # ran with forwardKubeDNSToHost still true, an unmet prerequisite.
-        # Next attempt: set forwardKubeDNSToHost: false first, confirm pod DNS,
-        # then canary bpf.masquerade on one node. Details in
-        # docs/bpf-masquerade-sea1.md.
+        # Requires hostDNS pod forwarding and bridge netfilter disabled in
+        # talconfig. The iptables path corrupts LAN-to-hostPort RPC replies.
         enableIPv4Masquerade: true
         enableIPv6Masquerade: true
+        bpf:
+          masquerade: true
+          hostLegacyRouting: false
 
         # Replaces kube-proxy. k8sServiceHost/Port are KubePrism, not a
         # control-plane address: without kube-proxy the agent cannot resolve the
