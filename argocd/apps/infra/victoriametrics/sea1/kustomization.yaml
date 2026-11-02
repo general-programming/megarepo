@@ -8,7 +8,6 @@ resources:
   - vmalert.yaml
   - ingress-vmalert.yaml
   - sea1_scrape.yaml
-  - scrape-sea1-core-node-exporter.yaml
   - consul-sd-secret.yaml
   - alerts-kubevirt.yaml
   - alerts-ceph-deadman.yaml

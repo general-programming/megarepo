@@ -14,6 +14,7 @@ sea1 uses BPF masquerading with Talos pod hostDNS forwarding and bridge
 netfilter disabled. Consul RPC succeeds from sea1-core, `.consul` DNS resolves,
 and the catalog contains the passing `node_exporter` registration. See
 `docs/bpf-masquerade-sea1.md` and `.claude/skills/consul-sea1/SKILL.md`.
+The temporary static exporter scrape is removed; Consul SD owns that target.
 
 **Phase 4 preconditions, all of which must hold:**
 
