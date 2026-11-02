@@ -21,6 +21,11 @@ service_prefix "" {
   policy = "read"
 }
 
+# The agent also registers this local service from its configuration file.
+service "node_exporter" {
+  policy = "write"
+}
+
 # sea1-core runs with enable_local_script_checks = true.
 # Script checks execute locally and register their results against the node
 # above, so they need no extra grant -- but it does mean a stolen agent token

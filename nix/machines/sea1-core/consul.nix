@@ -7,7 +7,9 @@
 {
     services.consul = {
         enable = true;
+        extraConfigFiles = [ "/run/credentials/consul.service/acl.json" ];
         extraConfig = {
+            acl.enabled = true;
             server = false;
             ui = false;
             enable_local_script_checks = true;
@@ -54,6 +56,22 @@
                 }
             ];
         };
+    };
+
+    vaultAgent.templates.consul-acl = {
+        contents = ''
+            {{- with secret "secret/data/infra/consul-sea1/token-agent-sea1-core" }}
+            {"acl":{"tokens":{"agent":{{ .Data.data.secret_id | toJSON }},"config_file_service_registration":{{ .Data.data.secret_id | toJSON }}}}}
+            {{- end }}
+        '';
+        destination = "/run/vault-agent/consul-acl.json";
+        command = "${pkgs.systemd}/bin/systemctl --no-block restart consul.service";
+    };
+
+    systemd.services.consul = {
+        wants = [ "vault-agent-node.service" ];
+        after = [ "vault-agent-node.service" ];
+        serviceConfig.LoadCredential = [ "acl.json:/run/vault-agent/consul-acl.json" ];
     };
 
     # NixOS defaults to deny and nothing opened these, so the servers could not
