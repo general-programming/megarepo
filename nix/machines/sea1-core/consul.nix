@@ -71,7 +71,10 @@
     systemd.services.consul = {
         wants = [ "vault-agent-node.service" ];
         after = [ "vault-agent-node.service" ];
+        # The template callback starts Consul once its boot-time secret exists.
+        unitConfig.ConditionPathExists = "/run/vault-agent/consul-acl.json";
         serviceConfig.LoadCredential = [ "acl.json:/run/vault-agent/consul-acl.json" ];
+        serviceConfig.RestartSec = "5s";
     };
 
     # NixOS defaults to deny and nothing opened these, so the servers could not
