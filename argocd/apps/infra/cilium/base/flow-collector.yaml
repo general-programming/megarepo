@@ -91,7 +91,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
         - name: collector
-          image: quay.io/cilium/cilium:v1.20.0
+          image: quay.io/cilium/cilium:v1.20.4
           command: ["/usr/bin/bash", "/etc/collector/collect.sh"]
           env:
             - name: HUBBLE_SERVER
