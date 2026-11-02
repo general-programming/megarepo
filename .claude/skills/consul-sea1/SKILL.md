@@ -1,6 +1,9 @@
 ---
 name: consul-sea1
-description: Operate the sea1 consul cluster — where the servers live after the Proxmox→Talos migration, why the gossip pool is IPv4, the hostPort reply-SNAT trap that breaks every LAN agent, and the GitOps loop that makes "just enable servers" fail. Use when sea1 consul agents log "No known Consul servers" or "rpc error making call: EOF", the consul StatefulSet is not Ready, vmagent's consul SD returns no node_exporter targets, or a consul topology or ACL change is being planned for sea1.
+description: >-
+  Operate sea1 Consul, diagnose LAN-to-hostPort RPC and DNS failures, maintain
+  the BPF masquerade prerequisites, and deliver scoped agent tokens securely.
+  Use for Consul membership, raft, service discovery, ACL or topology changes.
 ---
 
 # sea1 consul
@@ -26,9 +29,9 @@ fmt2 is unchanged and unrelated: servers still on its hypervisors,
 `10.65.67.100-104`, and it is a separate unfederated DC
 (`consul catalog datacenters` on a sea1 server returns only `sea1`).
 
-## The blocker: hostPort replies get re-SNAT'd, so LAN agents cannot RPC
+## LAN-to-hostPort RPC requires the BPF path
 
-**Known broken. sea1-core gossips but every RPC fails.** Symptom on the agent:
+The iptables masquerade failure looks like this on the agent:
 
 ```
 [ERROR] agent: yamux: keepalive failed: i/o deadline reached
@@ -58,11 +61,12 @@ The first rule is why nobody noticed: cluster **nodes** are exempted, so
 node→hostPort and pod→hostPort both work. Only a LAN peer that is not a k8s
 node — sea1-core, and any VM or salt host — hits it.
 
-Fix is `bpf.masquerade: true` in `argocd/apps/infra/cilium/sea1/application.yaml`.
-It is deliberately off there and the comment states the prerequisite: it also
-needs CoreDNS `forwardKubeDNSToHost=false` or DNS breaks on Talos. That is a
-cluster-wide datapath change — get sign-off, do not fold it into a consul
-change.
+sea1 now uses `bpf.masquerade: true` and `bpf.hostLegacyRouting: false` in
+`argocd/apps/infra/cilium/sea1/application.yaml`. Talos must disable pod
+hostDNS forwarding **and both bridge-netfilter sysctls**. Otherwise the BPF
+path breaks direct DNS and subnet routing even with legacy host routing.
+See `docs/bpf-masquerade-sea1.md` for the canary and runtime checks. Change
+this datapath deliberately, one agent at a time, with guest service probes.
 
 Do not chase this as an MTU problem. Everything is 9000 end to end and
 `ping -M do -s 8972` succeeds in both directions.
@@ -113,8 +117,10 @@ assume the delete failed.
 three hypervisors. They are gone, so **a healthy server cluster still yields an
 empty `/v1/health/service/node_exporter`** until something registers it.
 sea1-core does that via a `services` block in its `consul.nix`; base.nix already
-runs the exporter on `:9100` and opens the port. That registration is currently
-blocked by the RPC trap above, so the catalog is empty.
+runs the exporter on `:9100` and opens the port. The agent and config-file
+registration tokens come from Vault Agent through systemd credentials, with `node_exporter` write permission in the agent policy.
+Both tokens are needed: `acl.tokens.agent` alone does not authorize file-based
+service registrations. The catalog should contain a passing `node_exporter`.
 
 vmagent's consul SD (`argocd/apps/infra/victoriametrics/sea1/sea1_scrape.yaml`,
 the `VMScrapeConfig` misleadingly named `mongodb`) discovers an empty target
@@ -143,10 +149,16 @@ the `argocd` namespace.
 
 ## ACLs
 
-**Enabled, permissive.** `acl.enabled = true`, `default_policy = "allow"`, set
-via `server.extraConfig` in the sea1 overlay. Every request still succeeds with
-or without a token — that is the window for proving each consumer presents its
-own. Gossip encryption is still off; ACLs govern the API, not the serf pool.
+**Enabled, permissive default.** `acl.enabled = true`, `default_policy = "allow"`,
+set via `server.extraConfig` in the sea1 overlay. Explicit anonymous read rules
+still deny node/service writes, so the agent token is required already.
+Gossip encryption is still off; ACLs govern the API, not the serf pool.
+
+sea1-core renders `secret/infra/consul-sea1/token-agent-sea1-core` into
+`/run/vault-agent/consul-acl.json` (0600), then `LoadCredential` exposes it only
+to the Consul service. `ConditionPathExists` skips startup until the first
+render; the template callback starts/restarts Consul. Without that gate, rapid
+missing-credential failures can exhaust systemd's start limit before rendering.
 
 Bootstrapped. Tokens live in Vault under `secret/infra/consul-sea1/`, and the
 `consul-bootstrap-acl-token` Secret in the `consul` namespace is staged for

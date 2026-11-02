@@ -1,22 +1,19 @@
 # sea1 Consul ACLs
 
-**Status: phases 1-3 applied, except sea1-core's agent token. Phase 4 not
-started and gated on human sign-off.**
+**Status: phases 1-3 applied and verified. Phase 4 not started and gated on
+human sign-off.**
 
 | phase | state |
 |---|---|
 | 1 — permissive | done. `acl.enabled = true`, `default_policy = "allow"`, in the sea1 overlay's `server.extraConfig`. Verified: 3 raft voters, agent banner reads `ACL Enabled: true` / `Default Policy: allow`. |
 | 2 — bootstrap | done. SecretID in Vault at `secret/infra/consul-sea1/bootstrap-token`, and in the `consul-bootstrap-acl-token` Secret in the `consul` namespace for phase 4. |
-| 3 — policies and tokens | policies `anonymous`, `metrics-discovery`, `agent-sea1-core` created; `anonymous` attached to the built-in anonymous token; both tokens minted and in Vault under `secret/infra/consul-sea1/`. vmagent is wired and verified. **sea1-core is not wired** — see below. |
+| 3 — policies and tokens | policies `anonymous`, `metrics-discovery`, `agent-sea1-core` created; `anonymous` attached to the built-in anonymous token; both tokens minted and in Vault under `secret/infra/consul-sea1/`. vmagent and sea1-core are wired and verified; `node_exporter` is registered with passing checks. |
 | 4 — flip to deny | **not started. Do not start it.** |
 
-`bpf.masquerade` blocks the rest. sea1-core's consul agent can gossip but every
-RPC fails, because a hostPort reply from a server pod is re-SNAT'd to an
-ephemeral source port — see `.claude/skills/consul-sea1/SKILL.md`. Until that is
-fixed, sea1-core cannot register `node_exporter`, the catalog is empty, and
-there is no way to confirm sea1-core presents an agent token. Wiring its token
-blind would mean discovering at the phase 4 flip whether it works, which is
-exactly what the permissive window exists to avoid.
+sea1 uses BPF masquerading with Talos pod hostDNS forwarding and bridge
+netfilter disabled. Consul RPC succeeds from sea1-core, `.consul` DNS resolves,
+and the catalog contains the passing `node_exporter` registration. See
+`docs/bpf-masquerade-sea1.md` and `.claude/skills/consul-sea1/SKILL.md`.
 
 **Phase 4 preconditions, all of which must hold:**
 
@@ -98,7 +95,7 @@ index — recoverable, but only with server filesystem access. It is stored twic
 The Secret is deliberately **not** in git and not ArgoCD-managed; it is
 annotated with its Vault source.
 
-## Phase 3 — policies and tokens, still permissive — vmagent DONE, sea1-core NOT
+## Phase 3 — policies and tokens, still permissive — DONE
 
 ```sh
 consul acl policy create -name anonymous         -rules @policies/anonymous.hcl
@@ -129,18 +126,18 @@ Then wire the two consumers, both of which are repo changes:
   Verified: vmagent's generated config carries the minted SecretID as
   `bearer_token`, and `consul acl token read -self` with it returns the
   `metrics-discovery` policy.
-- **sea1-core** — NOT DONE, and deliberately so. It would go in
-  `acl.tokens.agent`; the token is a secret so it does not belong in
-  `consul.nix` directly — render it through `nix/modules/vault-agent.nix`,
-  which sea1-core already runs. The token is minted and in Vault. It is not
-  wired because sea1-core's agent cannot currently complete any RPC (the
-  `bpf.masquerade` blocker at the top), so there is no way to observe it using
-  the token. Wiring it now would defer that discovery to the phase 4 flip.
+- **sea1-core** — DONE. Vault Agent renders the existing scoped token into
+  `/run/vault-agent/consul-acl.json` with mode 0600. systemd `LoadCredential`
+  passes it to Consul for `acl.tokens.agent` and
+  `acl.tokens.config_file_service_registration`. The agent policy grants
+  `node_exporter` write permission as well as its own node write. The default
+  token remains anonymous, so local reads do not inherit registration writes.
+  `ConditionPathExists` defers startup until the first template render; its
+  callback starts Consul. Verify the live credential path and service health.
 
-Because the default is still `allow`, both keep working with or without the
-token. That is the entire point of the permissive window: it is the only chance
-to confirm each consumer is *using* its token rather than coasting on the
-permissive default.
+An explicit read policy overrides the permissive default for writes. The
+anonymous node/service read rules therefore already reject registration:
+`default_policy = "allow"` does not make a missing agent token harmless.
 
 ## Phase 4 — flip to deny — NOT STARTED, needs sign-off
 
