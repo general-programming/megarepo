@@ -8,6 +8,6 @@ spec:
     matchLabels:
       kubernetes.io/hostname: sea1-k8s-2
   defaults:
-    enable-bpf-masquerade: "true"
+    enable-bpf-masquerade: "false"
     # Preserve the host stack and Talos firewall while changing SNAT only.
     enable-host-legacy-routing: "true"
