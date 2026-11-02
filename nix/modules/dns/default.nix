@@ -62,6 +62,8 @@ in
                 enable = true;
                 alwaysKeepRunning = true;
                 settings = {
+                    # Local NixOS loopback aliases must not shadow NetBox records.
+                    no-hosts = true;
                     server = [
                         "/ipa.generalprogramming.org/10.3.0.4"
                         "/ipa.generalprogramming.org/10.65.67.14"
