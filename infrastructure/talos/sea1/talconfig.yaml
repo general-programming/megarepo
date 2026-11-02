@@ -770,6 +770,12 @@ patches:
         hostDNS:
           enabled: true
           forwardKubeDNSToHost: false
+  - # Bridge netfilter breaks BPF SNAT replies on br0; keep guest L2 transparent.
+    |-
+    machine:
+      sysctls:
+        net.bridge.bridge-nf-call-iptables: "0"
+        net.bridge.bridge-nf-call-ip6tables: "0"
   - # Raise kubelet max pods from the Talos default of 110. 200 absorbs a whole
     # node's workload during a drain. Each node gets one /24, so ~250 is the ceiling.
     |-

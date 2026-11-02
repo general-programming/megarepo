@@ -145,6 +145,8 @@ in
   boot.loader.grub = {
     enable = true;
     efiSupport = true;
+    # Both ESPs are 512 MiB; old kernels have blocked unattended switches.
+    configurationLimit = 3;
 
     mirroredBoots = [
       { path = "/boot"; devices = [ "nodev" ]; }
