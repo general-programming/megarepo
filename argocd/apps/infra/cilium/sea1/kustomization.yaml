@@ -4,5 +4,6 @@ resources:
   - ../base
   - application.yaml
   - nodeconfig-lan-bridge.yaml
+  - nodeconfig-bpf-masquerade.yaml
   - lb-ipam.yaml
   - cidr-groups.yaml
