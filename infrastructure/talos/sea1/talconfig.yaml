@@ -763,6 +763,13 @@ patches:
           name: none
       proxy:
         disabled: true
+  - # CoreDNS uses explicit upstreams; BPF masquerading must bypass hostDNS.
+    |-
+    machine:
+      features:
+        hostDNS:
+          enabled: true
+          forwardKubeDNSToHost: false
   - # Raise kubelet max pods from the Talos default of 110. 200 absorbs a whole
     # node's workload during a drain. Each node gets one /24, so ~250 is the ceiling.
     |-
