@@ -1,6 +1,6 @@
 # Guest security upgrades — 2026-11-02
 
-Last reconciled: 2026-11-02T18:54-08:00 (America/Los_Angeles).
+Last reconciled: 2026-11-02T23:28-08:00 (America/Los_Angeles).
 
 13 guests completed an OS/package upgrade and/or a required reboot; 10 additional guests were already current. Physical hosts were excluded from package and boot changes. This is not a claim that every non-metal inventory record is remediated.
 
@@ -32,7 +32,7 @@ The [full current status and OS inventory](fleet-upgrade-status-2026-11-02.csv) 
 
 ## Remaining blockers and exceptions
 
-- **Access:** Vault 00/01/02 are Ubuntu 24.04.4, not the NixOS configurations present in the repository. Their live SSH host keys were verified against temporary read-only guest-disk snapshots; all three reject the available certificate as root and ubuntu. The forwarded SSH agent is unresponsive. Routing VMs also reject the certificate, while several other guests have missing/unreachable management paths or unverified fingerprints. The CSV records every target and the required next action.
+- **Access:** Vault 00/01/02 root access was successfully retried with the reconnected administrator agent, verifying Ubuntu 24.04.4 and running kernel 6.8.0-111. The agent then stopped responding and its socket disappeared. Their upgrade is now also blocked by unhealthy transit auto-unseal and invalid snapshots; see the retry record below. VPN guests are explicitly deferred to the user. Other guests retain their recorded access/inventory blockers.
 - **Stopped guests:** 11 discovered Proxmox guests remain stopped. Retention and duplicate-service risks are unresolved; do not blindly boot old migrated DNS/DHCP or tenant machines. They must be patched before activation.
 - **FreePBX:** 16 upgrades are kept back under vendor holds: Node 18 runtime, supporting libraries/modules and `sangoma-pbx17`. The installer holds the Node packages and PBX metapackage; related libraries are kept back by their dependencies. The exact same-major transaction was simulated, but not forced through the vendor hold; this is an explicit package-remediation exception. See the [vendor installer hold list](https://github.com/FreePBX/sng_freepbx_debian_install/blob/master/sng_freepbx_debian_install.sh).
 - **Consul:** wob-app-cream retains 1.22.7 under `/etc/apt/preferences.d/fleet-consul-maintenance`; sea1-core retains server-compatible 2.0.4. A coordinated server-first migration remains required. Consul 1.22 reached EOL October 31; it is not fully remediated. See the [release notes](https://developer.hashicorp.com/consul/docs/release-notes/consul/v2_0_x) and [upgrade order](https://developer.hashicorp.com/consul/docs/upgrade).
@@ -53,3 +53,18 @@ wob-app-cream's HashiCorp signing key was replaced after checking the vendor's p
 Pre-existing SSSD socket failures remain on gameservers and wob-app-cream. Other completed guests passed their recorded service checks. The GP NetBox API responds after maintenance (4.5.4, two RQ workers). Service and listener checks do not establish end-to-end phone calls or every application workflow.
 
 The temporary Vault public-key audit used read-only snapshot mappings and read-only debugfs access to public OS/SSH files. Its mappings and snapshots were removed; no guest disk writes or Vault service changes were made. Other snapshot backups described above are intentionally retained.
+
+## Vault retry — 2026-11-03 UTC / November 2 Pacific
+
+Root SSH succeeded on all three `fmt2-vault-00/01/02` guests using the existing administrator agent key, with strict host verification. All run Ubuntu 24.04.4, Linux 6.8.0-111-generic and Vault 2.0.1. Linux 6.8.0-147-generic is already installed. All three are healthy Raft voters; .26 is leader. No VPN guests were changed.
+
+Preparation created root-only `/etc` archives (including the Vault configuration), package/hold inventories and APT metadata logs under `/var/backups/fleet-upgrade-20261102` on each guest. APT refresh failed strict signature verification for the rotated HashiCorp key; signature checks were not bypassed. No packages were installed, and no Vault service was restarted or VM rebooted.
+
+The maintenance preconditions uncovered existing recovery failures:
+
+- `/sys/seal-backend-status` reports transit unhealthy since **2026-10-08 20:09 UTC**, with `fully_wrapped=false`. This is separate from the currently unsealed, healthy Raft state. The configured external seal target is `oci-app-arm64-1.tail285d8f.ts.net:8200`. A credential-free TLS probe also fails hostname validation at that target; whether that explains the server-side seal failure is unverified without guest diagnostics.
+- Two completed HTTP 200 snapshot downloads produced the same **27,516,573-byte truncated gzip stream**; archive and gzip checks failed. These files are **not valid recovery backups**. No restore was attempted.
+- The Vault API listener leaf certificate observed on .26 expired **2026-10-23 11:40 UTC**. Its internal intermediate CA remains valid through June 2027. The trusted proxy frontend continues to serve requests. The existing PKI role permits renewing the leaf with IP SANs; deployment/reload still needs working guest access.
+- After successful initial SSH/preparation, the forwarded agent stopped responding and its socket disappeared. An agent reconnect was requested.
+
+Do not restart/reboot a Vault member until the external transit encrypt/decrypt path and a complete native snapshot are verified. Restore administrator SSH access, diagnose/fix the existing seal dependency, renew API certificates and the verified HashiCorp package key, then resume follower-first rolling maintenance with healthy membership checks between nodes. HashiCorp documents [seal-backend status](https://developer.hashicorp.com/vault/api-docs/system/seal-backend-status), [manual HA upgrades](https://developer.hashicorp.com/vault/docs/upgrade/vault-ha-upgrade), [TLS reload through SIGHUP](https://support.hashicorp.com/hc/en-us/articles/5767318985107-Vault-SIGHUP-Behavior) and the [current package-key fingerprint](https://www.hashicorp.com/en/trust/security).
