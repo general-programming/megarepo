@@ -3,7 +3,7 @@
 charm.land/bubbles/v2/key
 charm.land/bubbles/v2/spinner
 charm.land/bubbles/v2/viewport
-# charm.land/bubbletea/v2 v2.0.10
+# charm.land/bubbletea/v2 v2.1.1
 ## explicit; go 1.26.0
 charm.land/bubbletea/v2
 # charm.land/lipgloss/v2 v2.0.6
@@ -70,10 +70,10 @@ github.com/cespare/xxhash/v2
 # github.com/charmbracelet/colorprofile v0.4.3
 ## explicit; go 1.25.0
 github.com/charmbracelet/colorprofile
-# github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886
-## explicit; go 1.25.0
+# github.com/charmbracelet/ultraviolet v0.0.0-20261008173134-6b8d4baf91b4
+## explicit; go 1.26.0
 github.com/charmbracelet/ultraviolet
-# github.com/charmbracelet/x/ansi v0.11.8
+# github.com/charmbracelet/x/ansi v0.11.9
 ## explicit; go 1.24.2
 github.com/charmbracelet/x/ansi
 github.com/charmbracelet/x/ansi/kitty
@@ -169,7 +169,7 @@ github.com/klauspost/cpuid/v2
 # github.com/lucasb-eyer/go-colorful v1.4.1
 ## explicit; go 1.12
 github.com/lucasb-eyer/go-colorful
-# github.com/mattn/go-runewidth v0.0.27
+# github.com/mattn/go-runewidth v0.0.30
 ## explicit; go 1.23
 github.com/mattn/go-runewidth
 # github.com/mitchellh/go-homedir v1.1.0
@@ -231,7 +231,7 @@ github.com/twitchyliquid64/golang-asm/objabi
 github.com/twitchyliquid64/golang-asm/src
 github.com/twitchyliquid64/golang-asm/sys
 github.com/twitchyliquid64/golang-asm/unsafeheader
-# github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e
+# github.com/xo/terminfo v1.0.0
 ## explicit; go 1.19
 github.com/xo/terminfo
 # go.uber.org/atomic v1.11.0
