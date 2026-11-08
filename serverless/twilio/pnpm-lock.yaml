@@ -22,7 +22,7 @@ importers:
         version: 4.0.6
       twilio:
         specifier: ^6.0.2
-        version: 6.2.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
+        version: 6.3.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
     devDependencies:
       twilio-run:
         specifier: ^5.0.1
@@ -1488,8 +1488,8 @@ packages:
     resolution: {integrity: sha512-LdNBQfOe0dY2oJH2sAsrxazpgfFQo5yXGxe96QA8UWB5uu+433PrUbkv8gQ5RmrRCqUTPQ0aOrIyAdBr1aB03Q==}
     engines: {node: '>=14.0'}
 
-  twilio@6.2.0:
-    resolution: {integrity: sha512-zuwVhRa8gGIvaTjXIkRNcf7cPPQCeghMukMcG9WnhWmm7SLnregVpdIoYOSrOvlqMUYf6xP9A2ivsJNf6URoSg==}
+  twilio@6.3.0:
+    resolution: {integrity: sha512-F7/jJQ3dh060ByUV1sWPhVJLxIaezuIXydksdZkmPbMI/jnRxX256CL+knxGcFBuu908qbH22JLK/sK1L+1SMg==}
     engines: {node: '>=20.0.0'}
 
   type-fest@0.13.1:
@@ -3219,7 +3219,7 @@ snapshots:
       - debug
       - supports-color
 
-  twilio@6.2.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0):
+  twilio@6.3.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0):
     dependencies:
       axios: 1.21.0(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
       dayjs: 1.11.23
