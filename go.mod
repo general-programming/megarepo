@@ -1,13 +1,13 @@
 module github.com/general-programming/megarepo
 
-go 1.26.0
+go 1.26.7
 
 replace github.com/googollee/go-socket.io => github.com/googollee/go-socket.io v0.9.1
 
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.1
-	charm.land/lipgloss/v2 v2.0.6
+	charm.land/lipgloss/v2 v2.1.0
 	charm.land/log/v2 v2.0.1
 	github.com/GehirnInc/crypt v0.0.0-20230320061759-8cc1b52080c5
 	github.com/bytedance/sonic v1.15.5
