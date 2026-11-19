@@ -19,7 +19,7 @@ spec:
     chart: cilium
     repoURL: https://helm.cilium.io
     # Stable 1.20 is tested through k8s 1.36; 1.37 uses forward compatibility.
-    targetRevision: 1.20.4
+    targetRevision: 1.20.5
     helm:
       valuesObject:
         # The namespace app owns cilium-secrets and its PSA labels. A second
