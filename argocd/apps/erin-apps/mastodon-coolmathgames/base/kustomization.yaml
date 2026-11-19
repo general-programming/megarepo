@@ -8,7 +8,7 @@ helmCharts:
   - name: mastodon
     releaseName: mastodon
     repo: https://codeberg.org/api/packages/open-engineering/helm
-    version: 14.2.4
+    version: 15.0.1
     valuesFile: mastodon-values.yaml
     namespace: mastodon-coolmathgames
 images:
