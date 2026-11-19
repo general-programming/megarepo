@@ -25,8 +25,8 @@ importers:
         version: 6.3.1(debug@4.4.3(supports-color@7.2.0))(supports-color@7.2.0)
     devDependencies:
       twilio-run:
-        specifier: ^5.0.1
-        version: 5.0.1(@types/node@26.6.5)(supports-color@7.2.0)
+        specifier: ^6.0.0
+        version: 6.0.0(@types/node@26.6.5)(supports-color@7.2.0)
 
 packages:
 
@@ -150,8 +150,8 @@ packages:
   '@tokenizer/token@0.3.0':
     resolution: {integrity: sha512-OvjF+z51L3ov0OyAU0duzsYuvO01PH7x4t6DJx+guahgTnBHkhJdG7soQeTSFLWN3efnHyibZ4Z8l2EuWwJN3A==}
 
-  '@twilio-labs/serverless-api@5.7.0':
-    resolution: {integrity: sha512-15pzy+cngbVarY9dSuzwqiLkY5tVll0EO6cLJzIsKoXjHnJYHDRWuu2sX9AP8IsnY2GpWLsgF+ECkfwcd2apPg==}
+  '@twilio-labs/serverless-api@5.8.0':
+    resolution: {integrity: sha512-8o67eZDkns0U4JtCDAs8q19tA7OG4aKGh+jkscBaIFlqoarmpv1LFQIakf4Oy8x1wiZvYHFns8qQlMJcYxQj7w==}
 
   '@twilio-labs/serverless-runtime-types@4.0.1':
     resolution: {integrity: sha512-JepyB0ggxmAKISKHfxZa8UyLPdKsFaoD4Tk/8TY4qxMusJVnSEZZQ8ecMgVhmlXINVb5m2Ybw8N+iXL10DticQ==}
@@ -1479,9 +1479,9 @@ packages:
   tslib@2.8.1:
     resolution: {integrity: sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==}
 
-  twilio-run@5.0.1:
-    resolution: {integrity: sha512-huE/3uTKTnyO5nnFf0W7jtMw2wjYAzjzYEU5dcIHdGkingX7oLuAJj0g1pA3X3+xGJx4QHLcCRuOJfZ4dVxRbg==}
-    engines: {node: ^20.x || ^22.x}
+  twilio-run@6.0.0:
+    resolution: {integrity: sha512-h546UECEw+krQ0yT3kpkt7KxdmgKZsK0EkeFUsBr3Avt1NmtofM5u8bXkbx5ywicZ8dVlHV1JzbGsijK6kLeNw==}
+    engines: {node: ^22.x || ^24.x}
     hasBin: true
 
   twilio@4.23.0:
@@ -1689,7 +1689,7 @@ snapshots:
 
   '@tokenizer/token@0.3.0': {}
 
-  '@twilio-labs/serverless-api@5.7.0(supports-color@7.2.0)':
+  '@twilio-labs/serverless-api@5.8.0(supports-color@7.2.0)':
     dependencies:
       '@types/mime-types': 2.1.4
       '@types/node': 18.19.130
@@ -3149,9 +3149,9 @@ snapshots:
 
   tslib@2.8.1: {}
 
-  twilio-run@5.0.1(@types/node@26.6.5)(supports-color@7.2.0):
+  twilio-run@6.0.0(@types/node@26.6.5)(supports-color@7.2.0):
     dependencies:
-      '@twilio-labs/serverless-api': 5.7.0(supports-color@7.2.0)
+      '@twilio-labs/serverless-api': 5.8.0(supports-color@7.2.0)
       '@twilio-labs/serverless-runtime-types': 4.0.1(debug@3.2.7(supports-color@7.2.0))(supports-color@7.2.0)
       '@types/express': 4.17.21
       '@types/inquirer': 6.5.0
