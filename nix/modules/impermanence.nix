@@ -103,7 +103,6 @@
         ) impermanenceDirs
       );
 
-      boot.initrd.systemd.enable = true;
       boot.initrd.systemd.services.zfs-rollback = {
         enable = true;
         after = [
