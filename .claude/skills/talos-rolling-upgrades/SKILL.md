@@ -60,6 +60,11 @@ network fields before. Upgrade one node at a time with a matching talosctl.
   `kubectl cnpg promote` (not in the devenv: `nix build nixpkgs#kubectl-cnpg`), then wait for the cluster's full replica count.
 - On sea1, explicitly live-migrate all guests off the source and verify their
   original UIDs, service health and BGP state; see `../kubevirt-vms/SKILL.md`.
+  Cordon every not-yet-upgraded node first so guests land on an upgraded one
+  and move once. `barf status <vpn guests>` (uptime continuous, config
+  consistent) works without the ssh agent that `barf device ssh` needs.
+- `kubectl drain` refuses bare pods; save the manifest and delete them first.
+  CNPG switches primaries off a cordoned node by itself within a minute.
 - Set and verify Ceph `noout` before draining an OSD host. Do not bypass PDBs.
   Singleton ClickHouse/Keeper budgets can prohibit all voluntary disruption;
   resolve that maintenance policy deliberately rather than forcing the drain.

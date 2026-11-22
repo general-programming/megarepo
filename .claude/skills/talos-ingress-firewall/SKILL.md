@@ -63,6 +63,12 @@ outside the cluster.
   expected — the try config is already live and identical. It persists past the
   window anyway. Verify with `talosctl get nftableschains`, not by trusting the
   message.
+- **A hostNetwork admission webhook needs its port open or its resources go
+  missing silently.** fmt2's frr-k8s webhook listens on node port 19443; with it
+  dropped, metallb could not recreate FRRConfigurations after reboots and every
+  LoadBalancer VIP was withdrawn while all pods stayed Running.
+- **A `portSelector.ports` patch replaces the list, it does not append.**
+  Patch with the full list and confirm the dry-run diff adds only your line.
 - **A "blocked" port may just have no listener.** `:9283` is closed on any node
   not currently running ceph-mgr. Check `talosctl netstat --listening` before
   concluding the firewall did it.
