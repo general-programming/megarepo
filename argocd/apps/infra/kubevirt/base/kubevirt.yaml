@@ -16,6 +16,11 @@ spec:
     # must be Filesystem mode, and RWX or a guest with a persistent vTPM cannot
     # live-migrate. cephfs is the only class that satisfies both.
     vmStateStorageClass: cephfs
+    # One migration at a time: the guests share three hosts and a LAN bridge,
+    # and the router and both VPN spines must never move together.
+    migrations:
+      parallelMigrationsPerCluster: 1
+      parallelOutboundMigrationsPerNode: 1
     developerConfiguration:
       featureGates:
         # Persists vTPM and EFI NVRAM across restarts in a per-VM backend PVC.
@@ -58,6 +63,10 @@ spec:
   # imagePullPolicy/imageTag intentionally unset: virt-operator then pins every
   # component to its own version, so bumping the vendored operator manifest is
   # the single source of truth for the KubeVirt version.
+  # After an operator bump, launchers update by live migration, one guest per
+  # interval (default is 10 per minute).
   workloadUpdateStrategy:
     workloadUpdateMethods:
       - LiveMigrate
+    batchEvictionSize: 1
+    batchEvictionInterval: 5m
