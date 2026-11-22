@@ -13,12 +13,14 @@ spec:
         # OOM source. Its recommended figures instead.
         - name: kube-multus
           resources:
+            # Thick mode runs every CNI ADD inside this cgroup. A drain's pod
+            # storm at 300m/150Mi OOMs it and hangs the node's CRI (NotReady).
             requests:
               cpu: 200m
-              memory: 100Mi
+              memory: 256Mi
             limits:
-              cpu: 300m
-              memory: 150Mi
+              cpu: "4"
+              memory: 1Gi
       volumes:
         # Talos wants the netns bind at /var/run/netns, not upstream's
         # /run/netns. On Talos 1.13.7 the two resolve to the same directory,
