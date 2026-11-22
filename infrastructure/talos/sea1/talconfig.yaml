@@ -3,7 +3,7 @@ clusterName: sea1
 # tainted NoSchedule and nothing lands on them.
 allowSchedulingOnControlPlanes: true
 endpoint: https://kube.sea1.generalprogramming.org:6443
-talosVersion: v1.14.5
+talosVersion: v1.14.6
 kubernetesVersion: v1.37.2
 additionalMachineCertSans:
   - kube.sea1.generalprogramming.org
