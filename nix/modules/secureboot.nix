@@ -21,10 +21,8 @@ in
     # bootspec is always generated now; the enable option was removed.
     loader.systemd-boot.enable = lib.mkForce false;
     initrd = {
-      systemd = {
-        enable = true;
-        tpm2.enable = true;
-      };
+      # systemd stage 1 is the only initrd now; setting .enable fails an assertion.
+      systemd.tpm2.enable = true;
     };
     lanzaboote = {
       enable = true;
