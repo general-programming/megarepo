@@ -19,6 +19,18 @@ kubectl --kubeconfig "$kc" -n kube-system port-forward pod/<cilium-on-safe-contr
 talosctl --talosconfig "$tc" -e 127.0.0.1:15000 -n <node-ip> version
 ```
 
+With no valid kubeconfig, relay apid through a PVE host instead. The vssh CA
+role forbids ssh forwarding, so relay per connection, then mint a kubeconfig
+with `talosctl kubeconfig`:
+
+```sh
+socat TCP-LISTEN:15044,bind=127.0.0.1,fork,reuseaddr \
+  EXEC:"vssh localadmin@10.65.67.100 -o BatchMode=yes nc 10.65.67.44 50000"
+```
+
+fmt2-hv-14-07-52-100 is 10.65.67.100; its DNS record (10.65.57.100) is wrong.
+That host reaches both fmt2 and sea1 apid.
+
 The endpoint can proxy to other nodes. Switch its anchor before rebooting that
 host **or restarting its kubelet**: exec/port-forward streams use the kubelet
 even when the hostNetwork container stays running. Tailscale connector eviction
@@ -38,22 +50,37 @@ ISO added `talos.config=metal-iso`; compare customizations before replacing it.
 Pre-pull the chosen installer to every node.
 
 Patch only `machine.install.image` with `--mode=no-reboot`, dry-run first, and
+use a strategic merge patch file (`-p @patch.yaml`): JSON6902 patches are
+rejected on multi-document configs, and the error is easy to grep away. Then
 compare parsed live configuration against the backup allowing only that field.
 Do not regenerate and apply full configs with an older talhelper: it has dropped
 network fields before. Upgrade one node at a time with a matching talosctl.
 
 - Cordon the node. Move CNPG primaries to Ready replicas on other hosts with
-  `kubectl cnpg promote`, then wait for the cluster's full replica count.
+  `kubectl cnpg promote` (not in the devenv: `nix build nixpkgs#kubectl-cnpg`), then wait for the cluster's full replica count.
 - On sea1, explicitly live-migrate all guests off the source and verify their
   original UIDs, service health and BGP state; see `../kubevirt-vms/SKILL.md`.
 - Set and verify Ceph `noout` before draining an OSD host. Do not bypass PDBs.
   Singleton ClickHouse/Keeper budgets can prohibit all voluntary disruption;
   resolve that maintenance policy deliberately rather than forcing the drain.
+- Before draining the node that holds the argocd redis-ha master, run
+  `redis-cli -p 26379 sentinel failover argocd` in a sentinel container.
+  Evicting the master leaves sentinel at NOGOODSLAVE with replicas pointing at
+  a dead address; the only recovery is deleting all three server pods at once.
 - Drain normally, run `talosctl upgrade`, and verify the expected OS, Ready and
   schedulable state. Wait for every Deployment, StatefulSet and DaemonSet.
+  Match `node/<name> drained` exactly; a failed drain also prints "drained".
+- `talosctl upgrade` can exit 0 after a reboot that installed nothing (seen
+  when the event stream dropped). Trust `talosctl version`, not the exit code,
+  and rerun the upgrade if the tag did not change.
+- On sea1, draining one node lands ~100 pods on the other two at once. Watch
+  those nodes: if multus is OOM-killed, CNI ADDs hang, the kubelet reports
+  "container runtime is down" and NoExecute eviction starts 5 minutes later.
+  Recover by deleting the Pending pods on that node and restarting its
+  kube-multus container with `talosctl restart --namespace cri <id>`.
 - Require etcd quorum and Ceph recovery before the next node. sea1 has 21 OSDs,
   three mons and 314 PGs at this writing. Remove `noout` after all PGs are
-  active+clean and require HEALTH_OK; leave maintenance stopped if recovery fails.
+  active+clean (scrubbing variants count) and require HEALTH_OK; leave maintenance stopped if recovery fails.
 
 ## Ceph CLI inside Rook mgr
 
