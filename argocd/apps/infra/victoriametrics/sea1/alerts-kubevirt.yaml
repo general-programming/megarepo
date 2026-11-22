@@ -116,7 +116,7 @@ spec:
             severity: warning
           annotations:
             summary: "{{ $value }} VMI(s) still running an outdated virt-launcher"
-            description: "workloadUpdateStrategy is LiveMigrate, so these should have drained themselves within a day. A VMI that cannot live-migrate (non-migratable disk or a bridged interface) will stay outdated until it is restarted by hand."
+            description: "Automatic launcher updates are off (workloadUpdateMethods: []), so after a KubeVirt upgrade each guest must be live-migrated by hand; see the kubevirt-vms skill. A non-migratable VMI needs a restart instead."
 
         - alert: KubeVirtVMINonEvictable
           expr: |
