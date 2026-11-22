@@ -44,7 +44,7 @@ does not disable the running guest NIC. See [kubevirt#17195](https://github.com/
 
 ## Cluster prerequisites (already in place)
 
-- KubeVirt v1.8.4 — `argocd/apps/infra/kubevirt/`
+- KubeVirt v1.9.1 — `argocd/apps/infra/kubevirt/`
 - Multus v4.3.0, confined to nodes labelled
   `generalprogramming.org/lan-bridge=true` — `argocd/apps/infra/multus/`
 - `br0` bridge on `sea1-k8s-{0,1,2}` (talconfig `BridgeConfig`), giving guests
