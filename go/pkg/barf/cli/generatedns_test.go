@@ -576,3 +576,78 @@ func TestPythonJSONMatchesJSONDumps(t *testing.T) {
 		})
 	}
 }
+
+func TestKeaSubnetHosts4KeepsOneMACPerSubnet(t *testing.T) {
+	subnets, err := parseKeaSubnets("1=79.110.170.0/24,2=10.65.67.0/24")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// One NIC carrying three VLANs: the global form kept only the first.
+	mac := "3A:1C:F2:37:71:69"
+	global, per := keaSubnetHosts4([]netbox.Interface{
+		iface(mac, []string{"79.110.170.8/24"}, "external", "fmt2-vpn-leaf-1", ""),
+		iface(mac, []string{"10.65.67.34/24"}, "internal", "fmt2-vpn-leaf-1", ""),
+		iface(mac, []string{"10.65.67.99/24"}, "dup", "fmt2-vpn-leaf-1", ""),
+		iface(mac, []string{"10.255.1.3/24"}, "mgmt", "fmt2-vpn-leaf-1", ""),
+	}, subnets, nil)
+
+	if len(per[1]) != 1 || per[1][0].IPAddress != "79.110.170.8" {
+		t.Errorf("subnet 1 = %+v", per[1])
+	}
+	if len(per[2]) != 1 || per[2][0].IPAddress != "10.65.67.34" || per[2][0].Hostname != "fmt2-vpn-leaf-1-internal" {
+		t.Errorf("subnet 2 = %+v, want only the first 10.65.67.0/24 interface", per[2])
+	}
+	if len(global) != 1 || global[0].IPAddress != "10.255.1.3" {
+		t.Errorf("global = %+v, want the address outside every subnet", global)
+	}
+}
+
+func TestParseKeaSubnetsRejectsMalformed(t *testing.T) {
+	for _, s := range []string{"10.0.0.0/8", "x=10.0.0.0/8", "1=2602::/64", "1=bogus"} {
+		if _, err := parseKeaSubnets(s); err == nil {
+			t.Errorf("parseKeaSubnets(%q) accepted", s)
+		}
+	}
+}
+
+func TestGenerateDHCPKeaSubnetFiles(t *testing.T) {
+	h := newHarness(t)
+	dns, dhcp := sampleData()
+	useFakeNetbox(t, fakeNetboxServer(t, dns, dhcp))
+
+	dir := t.TempDir()
+	p4 := filepath.Join(dir, "hosts4.json")
+	if err := h.run(t, "generate", "dhcp", "--format", "kea", "--output4", p4,
+		"--output6", filepath.Join(dir, "hosts6.json"),
+		"--subnets4", "7=10.3.2.0/23,8=192.0.2.0/24", "--output4-dir", dir); err != nil {
+		t.Fatal(err)
+	}
+	read := func(name string) []keaHost4 {
+		body, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []keaHost4
+		if err := json.Unmarshal(body, &out); err != nil {
+			t.Fatalf("%s not JSON: %v", name, err)
+		}
+		return out
+	}
+	if got := read("hosts4-7.json"); len(got) != 1 || got[0].IPAddress != "10.3.2.10" {
+		t.Errorf("hosts4-7 = %+v", got)
+	}
+	if got := read("hosts4-8.json"); len(got) != 0 {
+		t.Errorf("hosts4-8 = %+v, want an empty array", got)
+	}
+	if got := read("hosts4.json"); len(got) != 0 {
+		t.Errorf("global hosts4 = %+v, want empty once every address has a subnet", got)
+	}
+}
+
+func TestGenerateDHCPSubnetFlagsNeedEachOther(t *testing.T) {
+	h := newHarness(t)
+	err := h.run(t, "generate", "dhcp", "--format", "kea", "--subnets4", "1=10.0.0.0/8")
+	if err == nil || !strings.Contains(err.Error(), "go together") {
+		t.Fatalf("err = %v", err)
+	}
+}

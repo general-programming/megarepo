@@ -6,7 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/netip"
 	"os"
+	"path/filepath"
+	"sort"
+	"strconv"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -182,6 +186,12 @@ func (r reservation) DnsmasqLine() string {
 // MAC — dnsmasq and Kea both reject duplicates — keeping the first interface
 // carrying a usable address. A MAC with no addresses is not consumed.
 func reservations(interfaces []netbox.Interface, warn func(hostname, reason string)) []reservation {
+	return reservationsKeyed(interfaces, warn, func(mac, _ string) string { return strings.ToLower(mac) })
+}
+
+// reservationsKeyed is reservations with a caller-chosen uniqueness key, so
+// Kea's per-subnet output can keep one reservation per MAC per subnet.
+func reservationsKeyed(interfaces []netbox.Interface, warn func(hostname, reason string), key func(mac, ipv4 string) string) []reservation {
 	seen := map[string]bool{}
 	var out []reservation
 
@@ -194,10 +204,6 @@ func reservations(interfaces []netbox.Interface, warn func(hostname, reason stri
 		if owner == nil || strings.TrimSpace(owner.Name) == "" {
 			continue
 		}
-		if seen[strings.ToLower(mac)] {
-			continue
-		}
-
 		var ipv4, ipv6 string
 		for i := range iface.IPAddresses {
 			ip := iface.IPAddresses[i].IP()
@@ -216,6 +222,10 @@ func reservations(interfaces []netbox.Interface, warn func(hostname, reason stri
 		if ipv4 == "" && ipv6 == "" {
 			continue
 		}
+		k := key(mac, ipv4)
+		if seen[k] {
+			continue
+		}
 		primaryIP := owner.PrimaryIP4.IP()
 		isPrimary := primaryIP != "" && ipv4 == primaryIP
 		// A null secondary name would render a trailing "-". Only secondaries
@@ -225,7 +235,7 @@ func reservations(interfaces []netbox.Interface, warn func(hostname, reason stri
 			warnSkip(warn, owner.Name, "secondary interface has no name in NetBox")
 			continue
 		}
-		seen[strings.ToLower(mac)] = true
+		seen[k] = true
 
 		out = append(out, reservation{
 			MAC:      mac,
@@ -471,6 +481,8 @@ func newGenerateDHCPCmd(o *Options) *cobra.Command {
 		output  string
 		output4 string
 		output6 string
+		subnets string
+		outDir  string
 		jsonOut bool
 	)
 
@@ -486,7 +498,14 @@ func newGenerateDHCPCmd(o *Options) *cobra.Command {
 			if jsonOut {
 				format = "json"
 			}
-			return runGenerateDHCP(cmd.Context(), o, format, output, output4, output6)
+			sub, err := parseKeaSubnets(subnets)
+			if err != nil {
+				return err
+			}
+			if (len(sub) > 0) != (outDir != "") || (len(sub) > 0 && format != "kea") {
+				return fmt.Errorf("--subnets4 and --output4-dir go together, with --format kea")
+			}
+			return runGenerateDHCP(cmd.Context(), o, format, output, output4, output6, sub, outDir)
 		},
 	}
 	f := cmd.Flags()
@@ -494,11 +513,80 @@ func newGenerateDHCPCmd(o *Options) *cobra.Command {
 	f.StringVarP(&output, "output", "o", "-", "file to write; '-' for stdout")
 	f.StringVar(&output4, "output4", "", "kea only: write the Dhcp4 array here instead of stdout")
 	f.StringVar(&output6, "output6", "", "kea only: write the Dhcp6 array here instead of stdout")
+	f.StringVar(&subnets, "subnets4", "", "kea only: id=cidr,... ; IPv4 reservations go in their subnet, one per MAC per subnet")
+	f.StringVar(&outDir, "output4-dir", "", "kea only, with --subnets4: write hosts4-<id>.json per subnet here")
 	f.BoolVar(&jsonOut, "json", false, "shorthand for --format json")
 	return cmd
 }
 
-func runGenerateDHCP(ctx context.Context, o *Options, format, output, output4, output6 string) error {
+// keaSubnet is one --subnets4 entry: a Kea subnet4 id and its prefix.
+type keaSubnet struct {
+	ID     int
+	Prefix netip.Prefix
+}
+
+func parseKeaSubnets(s string) ([]keaSubnet, error) {
+	var out []keaSubnet
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		idStr, cidr, ok := strings.Cut(part, "=")
+		id, err := strconv.Atoi(idStr)
+		if !ok || err != nil {
+			return nil, fmt.Errorf("--subnets4 entry %q: want id=cidr", part)
+		}
+		p, err := netip.ParsePrefix(cidr)
+		if err != nil || !p.Addr().Is4() {
+			return nil, fmt.Errorf("--subnets4 entry %q: not an IPv4 prefix", part)
+		}
+		out = append(out, keaSubnet{ID: id, Prefix: p.Masked()})
+	}
+	return out, nil
+}
+
+// subnetFor returns the id of the subnet holding ip, or 0 for none.
+func subnetFor(subnets []keaSubnet, ip string) int {
+	a, err := netip.ParseAddr(ip)
+	if err != nil {
+		return 0
+	}
+	for _, s := range subnets {
+		if s.Prefix.Contains(a) {
+			return s.ID
+		}
+	}
+	return 0
+}
+
+// keaSubnetHosts4 splits IPv4 reservations by subnet. Global reservations
+// allow one per MAC, so a single-NIC device with addresses on several VLANs
+// kept only its first; per-subnet ones allow one per MAC per subnet.
+func keaSubnetHosts4(interfaces []netbox.Interface, subnets []keaSubnet, warn func(hostname, reason string)) ([]keaHost4, map[int][]keaHost4) {
+	res := reservationsKeyed(interfaces, warn, func(mac, ipv4 string) string {
+		return strings.ToLower(mac) + "|" + strconv.Itoa(subnetFor(subnets, ipv4))
+	})
+	global := []keaHost4{}
+	per := map[int][]keaHost4{}
+	for _, s := range subnets {
+		per[s.ID] = []keaHost4{}
+	}
+	for _, r := range res {
+		if r.IPv4 == "" {
+			continue
+		}
+		h := keaHost4{HWAddress: r.MAC, IPAddress: r.IPv4, Hostname: r.Hostname}
+		if id := subnetFor(subnets, r.IPv4); id != 0 {
+			per[id] = append(per[id], h)
+		} else {
+			global = append(global, h)
+		}
+	}
+	return global, per
+}
+
+func runGenerateDHCP(ctx context.Context, o *Options, format, output, output4, output6 string, subnets []keaSubnet, outDir string) error {
 	switch format {
 	case "dnsmasq", "kea", "json":
 	default:
@@ -529,6 +617,21 @@ func runGenerateDHCP(ctx context.Context, o *Options, format, output, output4, o
 
 	case "kea":
 		hosts4, hosts6 := keaReservations(res)
+		if len(subnets) > 0 {
+			var per map[int][]keaHost4
+			hosts4, per = keaSubnetHosts4(dhcp.AllInterfaces(), subnets, nil)
+			ids := make([]int, 0, len(per))
+			for id := range per {
+				ids = append(ids, id)
+			}
+			sort.Ints(ids)
+			for _, id := range ids {
+				path := filepath.Join(outDir, fmt.Sprintf("hosts4-%d.json", id))
+				if err := o.writeJSONNoNewline(path, per[id], " "); err != nil {
+					return err
+				}
+			}
+		}
 		// refresh_kea.py writes the arrays as separate files, indent=1.
 		if output4 != "" || output6 != "" {
 			if output4 != "" {

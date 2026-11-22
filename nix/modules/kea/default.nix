@@ -43,7 +43,16 @@ let
   withInclude = json: placeholder: path:
     builtins.replaceStrings [ "\"${placeholder}\"" ] [ "<?include \"${path}\"?>" ] json;
 
+  # Per-subnet v4 reservations: global ones allow one per MAC, which drops
+  # every VLAN but the first on a single-NIC device (fmt2-vpn-leaf-1).
+  subnets4 = cfg.dhcp4.subnets ++ lib.concatMap (n: n.subnet4 or [ ]) cfg.dhcp4.sharedNetworks;
+  subnetHosts4 = id: "${hostsDir}/hosts4-${toString id}.json";
+  subnetPlaceholder = id: "@NETBOX_HOSTS4_${toString id}@";
+  withSubnetHosts = s: s // { reservations = subnetPlaceholder s.id; };
+  subnetsArg = lib.concatMapStringsSep "," (s: "${toString s.id}=${s.subnet}") subnets4;
+
   dhcp4Config = pkgs.writeText "kea-dhcp4.conf" (
+    lib.foldl' (acc: s: withInclude acc (subnetPlaceholder s.id) (subnetHosts4 s.id)) (
     withInclude (builtins.toJSON {
       Dhcp4 = {
         interfaces-config.interfaces = cfg.interfaces;
@@ -54,15 +63,18 @@ let
           name = "/var/lib/kea/dhcp4.leases";
         };
         reservations-global = true;
-        reservations-in-subnet = false;
+        reservations-in-subnet = true;
         option-data = cfg.dhcp4.optionData;
         client-classes = cfg.dhcp4.clientClasses;
-        subnet4 = cfg.dhcp4.subnets;
-        shared-networks = cfg.dhcp4.sharedNetworks;
+        subnet4 = map withSubnetHosts cfg.dhcp4.subnets;
+        shared-networks = map (
+          n: n // lib.optionalAttrs (n ? subnet4) { subnet4 = map withSubnetHosts n.subnet4; }
+        ) cfg.dhcp4.sharedNetworks;
         reservations = "@NETBOX_HOSTS4@";
         hooks-libraries = hooksLibraries;
       };
     }) "@NETBOX_HOSTS4@" hosts4
+    ) subnets4
   );
 
   dhcp6Config = pkgs.writeText "kea-dhcp6.conf" (
@@ -97,9 +109,10 @@ let
   seedScript = pkgs.writeShellScript "kea-seed-netbox-hosts" ''
     mkdir -p ${hostsDir}
     chmod 0755 ${hostsDir}
-    [ -s ${hosts4} ] || echo "[]" > ${hosts4}
-    [ -s ${hosts6} ] || echo "[]" > ${hosts6}
-    chmod 0644 ${hosts4} ${hosts6}
+    for f in ${hosts4} ${hosts6} ${lib.concatMapStringsSep " " (s: subnetHosts4 s.id) subnets4}; do
+      [ -s "$f" ] || echo "[]" > "$f"
+      chmod 0644 "$f"
+    done
   '';
 in
 {
@@ -250,17 +263,19 @@ in
       path = [ pkgs.diffutils ];
       script = ''
         mkdir -p ${hostsDir}
+        new=$(mktemp -d ${hostsDir}/.new.XXXXXX)
+        trap 'rm -rf "$new"' EXIT
         ${lib.getExe barf} generate dhcp --format kea \
-          --output4 ${hosts4}.new --output6 ${hosts6}.new
+          --output4 "$new/hosts4.json" --output6 "$new/hosts6.json" \
+          ${lib.optionalString (subnets4 != [ ]) "--subnets4 ${subnetsArg} --output4-dir \"$new\""}
 
         changed=0
-        for f in ${hosts4} ${hosts6}; do
-          if ! cmp -s "$f.new" "$f"; then
-            chmod 0644 "$f.new"
-            mv "$f.new" "$f"
+        for n in "$new"/*.json; do
+          f=${hostsDir}/$(basename "$n")
+          if ! cmp -s "$n" "$f"; then
+            chmod 0644 "$n"
+            mv "$n" "$f"
             changed=1
-          else
-            rm -f "$f.new"
           fi
         done
         chmod 0755 ${hostsDir}
