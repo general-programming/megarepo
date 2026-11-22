@@ -78,6 +78,10 @@ network fields before. Upgrade one node at a time with a matching talosctl.
   "container runtime is down" and NoExecute eviction starts 5 minutes later.
   Recover by deleting the Pending pods on that node and restarting its
   kube-multus container with `talosctl restart --namespace cri <id>`.
+- On fmt2, a reboot makes metallb recreate its FRRConfigurations through the
+  hostNetwork frr-k8s webhook (TCP 19443). After each node check
+  `kubectl -n metallb-system get frrconfigurations` lists every node and that
+  https://79.110.170.65 answers; an empty list means every VIP is withdrawn.
 - Require etcd quorum and Ceph recovery before the next node. sea1 has 21 OSDs,
   three mons and 314 PGs at this writing. Remove `noout` after all PGs are
   active+clean (scrubbing variants count) and require HEALTH_OK; leave maintenance stopped if recovery fails.

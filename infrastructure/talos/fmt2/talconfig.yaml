@@ -272,6 +272,7 @@ patches:
         - 9100          # node-exporter
         - 9120          # metallb speaker metrics (hostNetwork, vmagent scrape)
         - 9140-9141     # frr-k8s metrics (hostNetwork, vmagent scrape)
+        - 19443         # frr-k8s webhook (hostNetwork); blocked = no FRRConfigurations, every VIP dark
         - 9962-9965     # cilium agent/operator/envoy metrics (unauthenticated)
         - 6667          # znc on the internal MetalLB VIP; pre-DNAT dport, see PR notes
         - 6697          # znc TLS, same VIP
