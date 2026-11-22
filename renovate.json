@@ -37,6 +37,18 @@
       "matchStrings": [
         "tag:\\s*\"?(?<currentValue>[^\\s\"]+)\"?\\s*#\\s*renovate:\\s*datasource=(?<datasource>[a-z-]+)\\s+depName=(?<depName>[^\\s]+)(?:\\s+versioning=(?<versioning>[^\\s]+))?"
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "Update GitHub raw and release-download URLs pinned to a version tag in argocd kustomizations",
+      "managerFilePatterns": [
+        "/^argocd/.+/kustomization\\.ya?ml$/"
+      ],
+      "matchStrings": [
+        "https://raw\\.githubusercontent\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/(?:refs/tags/)?(?<currentValue>v\\d+\\.\\d+\\.\\d+)/",
+        "https://github\\.com/(?<depName>[^/\\s]+/[^/\\s]+)/releases/download/(?<currentValue>v\\d+\\.\\d+\\.\\d+)/"
+      ],
+      "datasourceTemplate": "github-releases"
     }
   ],
   "packageRules": [
