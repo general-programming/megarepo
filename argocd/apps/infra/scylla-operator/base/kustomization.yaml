@@ -3,6 +3,7 @@ kind: Kustomization
 namespace: scylla-operator
 resources:
   - https://raw.githubusercontent.com/scylladb/scylla-operator/refs/tags/v1.23.0/deploy/operator.yaml
+  - prometheus-operator-crds.yaml
 patches:
   # PSA lives here, not in the namespace app: the upstream manifest declares
   # this Namespace, and ArgoCD applies every app under one shared SSA field
