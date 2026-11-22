@@ -63,10 +63,8 @@ spec:
   # imagePullPolicy/imageTag intentionally unset: virt-operator then pins every
   # component to its own version, so bumping the vendored operator manifest is
   # the single source of truth for the KubeVirt version.
-  # After an operator bump, launchers update by live migration, one guest per
-  # interval (default is 10 per minute).
+  # No automatic launcher updates: after an operator bump, migrate each guest by
+  # hand and verify it before the next. The batchEviction* knobs only pace the
+  # Evict method; LiveMigrate queues every outdated VMI at once.
   workloadUpdateStrategy:
-    workloadUpdateMethods:
-      - LiveMigrate
-    batchEvictionSize: 1
-    batchEvictionInterval: 5m
+    workloadUpdateMethods: []
