@@ -1,0 +1,23 @@
+apiVersion: operator.victoriametrics.com/v1beta1
+kind: VMRule
+metadata:
+  name: cronjob-alerts
+  namespace: victoriametrics
+spec:
+  groups:
+    - name: cronjob
+      interval: 1m
+      rules:
+        # Schedule-agnostic: compares the latest run against the latest success, so
+        # a weekly job and a 5-minute job both fire once their newest run fails.
+        - alert: KubeCronJobLastRunNotSuccessful
+          expr: |
+            (kube_cronjob_status_last_schedule_time - kube_cronjob_status_last_successful_time) > 3600
+              and on(cluster, namespace, cronjob)
+            kube_cronjob_spec_suspend == 0
+          for: 1h
+          labels:
+            severity: warning
+          annotations:
+            summary: "CronJob {{ $labels.namespace }}/{{ $labels.cronjob }} has not succeeded since its last runs"
+            description: "The newest scheduled run of {{ $labels.cronjob }} started {{ $value | humanizeDuration }} after its last success. Check `kubectl -n {{ $labels.namespace }} get jobs` and the failed pod logs."
