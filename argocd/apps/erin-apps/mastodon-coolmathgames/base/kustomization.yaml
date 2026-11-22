@@ -8,7 +8,10 @@ helmCharts:
   - name: mastodon
     releaseName: mastodon
     repo: https://codeberg.org/api/packages/open-engineering/helm
-    version: 15.0.1
+    # Back on 13.x, the version still running. 14 swapped Redis for Valkey and
+    # these values still configure redis (nil redis.sidekiq); 15.0.1 also ships
+    # valkey.dataStorage, which its own subchart rejects. Upgrade = data-store move.
+    version: 13.0.6
     valuesFile: mastodon-values.yaml
     namespace: mastodon-coolmathgames
 images:
