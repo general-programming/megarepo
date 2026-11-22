@@ -45,7 +45,7 @@ does not disable the running guest NIC. See [kubevirt#17195](https://github.com/
 ## Cluster prerequisites (already in place)
 
 - KubeVirt v1.10.0 — `argocd/apps/infra/kubevirt/`
-- Multus v4.3.0, confined to nodes labelled
+- Multus v4.3.2, confined to nodes labelled
   `generalprogramming.org/lan-bridge=true` — `argocd/apps/infra/multus/`
 - `br0` bridge on `sea1-k8s-{0,1,2}` (talconfig `BridgeConfig`), giving guests
   real L2 on the sea1 LAN
@@ -330,6 +330,29 @@ spec: {vmiName: <vm>}
 kubectl -n <ns> get vmim <vm>-migrate -o jsonpath='{.status.phase}'
 kubectl -n <ns> get vmi <vm> -o jsonpath='{.status.nodeName}'
 ```
+
+## Upgrading KubeVirt
+
+`workloadUpdateMethods: []` is deliberate. `batchEvictionSize/Interval` only
+pace the Evict method; with LiveMigrate the updater queues every outdated VMI
+at once and `parallelMigrationsPerCluster: 1` merely runs them back to back.
+
+1. Step one minor at a time: replace `base/upstream/kubevirt-operator.yaml`
+   with the release's `kubevirt-operator.yaml` and push. The operator takes
+   ~5 minutes; wait for `observedKubeVirtVersion` and all three virt-handlers.
+2. Confirm every node still labels the guests' machine type
+   (`machine-type.node.kubevirt.io/pc-q35-rhel9.8.0`); 1.10 moved launchers to
+   CentOS Stream 10.
+3. Migrate one guest at a time and verify each: same VMI UID, Ready, ping,
+   `barf status` for the VPN guests, the router's boot ID, and no
+   `KVM internal error` in the new launcher's compute log. Canary first;
+   `sea1-core` last.
+
+**A cross-version migration can crash the guest.** freeipa (1.8.4 to 1.9.1)
+hit `VQ 0 ... Guest index inconsistent with Host index` then
+`KVM internal error` on the target and cold-booted with a new UID; eight
+other guests on the same hop were fine. Give a guest that cannot take an
+unclean stop a `virtctl restart` instead of a migration.
 
 ## Migrating the guest the cluster depends on
 
