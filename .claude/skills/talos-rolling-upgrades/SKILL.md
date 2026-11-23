@@ -105,12 +105,17 @@ Never put the key in command arguments or print it.
 ## Kubernetes roll
 
 Review `talosctl upgrade-k8s --dry-run --to <version>`, including bootstrap
-manifest diffs. sea1's CoreDNS ConfigMap is managed by Argo and has explicit
-upstreams, internal/reverse zones and `.consul` forwarding. The automatic
-upgrader replaces it with Talos defaults, breaking those lookups. Until
-bootstrap ownership is separated, use the documented manual image patches for
-API server, controller manager and scheduler, one component/node at a time;
-verify each mirror pod's image and Ready state. Keep the Corefile unchanged.
+manifest diffs. Run it with `--upgrade-kubelet=false --with-docs=false
+--with-examples=false` (kubelets go per host, below; the docs flags rewrite
+every machine config). It is also the way to bump CoreDNS and prune flannel
+and kube-proxy leftovers.
+
+sea1's CoreDNS ConfigMap is Argo-managed (explicit upstreams, internal and
+reverse zones, `.consul`). The dry-run shows the stock Corefile replacing it,
+but on Talos 1.14.6 the real run left the Argo-owned `data` untouched. Still
+guard it: snapshot the live Corefile, re-patch it within a second of any
+change while upgrade-k8s runs, and probe external, internal and `.consul`
+names from a pod throughout.
 
 Handle sea1 kubelets one host at a time after explicitly migrating its guests
 off. Patch only `machine.kubelet.image` with `--mode=no-reboot`, verify the new

@@ -59,6 +59,17 @@ comin suspend | comin resume   # pause/unpause build+deploy (fetch still runs)
 
 ## Troubleshooting
 
+- **`comin.service` "bad-setting: no ExecStart"** means the running
+  generation predates a working comin unit and the host is frozen there.
+  Build the closure elsewhere (`nix build
+  .#nixosConfigurations.<host>.config.system.build.toplevel`), `nix copy
+  --no-check-sigs --to ssh-ng://root@<host>` with `NIX_SSHOPTS` pointing at
+  vssh's cached key and cert, then `nix-env -p /nix/var/nix/profiles/system
+  --set <path>` and `systemd-run <path>/bin/switch-to-configuration switch`.
+- **Never `nixos-rebuild` on sea1-core.** Evaluating the flake there froze the
+  8 GiB guest until it reset, taking sea1 DNS and DHCP down for ~10 minutes.
+  comin's own evaluation fits; a cold `nixos-rebuild` from GitHub does not.
+
 - **NEVER run CLI git write operations inside `/var/lib/comin/repository`.**
   comin uses go-git; a CLI `git fetch` in its mirror desyncs go-git's ref
   bookkeeping and every later comin pull fails with
