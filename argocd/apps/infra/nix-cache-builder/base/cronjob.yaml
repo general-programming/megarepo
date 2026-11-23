@@ -75,6 +75,10 @@ spec:
                 # alternative is sandbox = false, which is strictly worse.
                 privileged: true
               env:
+                # nom decodes .drv files with the locale; unset, any non-ASCII
+                # drv logs a DerivationReadError. C.UTF-8 is built into glibc.
+                - name: LANG
+                  value: C.UTF-8
                 - name: ATTIC_TOKEN
                   valueFrom:
                     secretKeyRef:
