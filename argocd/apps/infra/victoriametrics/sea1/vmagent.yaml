@@ -20,6 +20,10 @@ spec:
       annotations:
         tailscale.com/expose: "true"
         tailscale.com/hostname: "svc-vmagent-sea1"
+  # The operator's 1GiB default per URL lasts ~2h of a sea1->fmt2 outage at
+  # ~150KB/s; 8GiB buys most of a day. The queue is an emptyDir on 1.7TB nodes.
+  remoteWriteSettings:
+    maxDiskUsagePerURL: "8GiB"
   remoteWrite:
     - url: "http://vminsert-sea1-victoriametrics.victoriametrics.svc.cluster.local:8480/insert/0/prometheus/api/v1/write"
     - url: "http://vminsert.fmt2.generalprogramming.org:8480/insert/0/prometheus/api/v1/write"
