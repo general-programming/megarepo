@@ -347,6 +347,10 @@ at once and `parallelMigrationsPerCluster: 1` merely runs them back to back.
    `barf status` for the VPN guests, the router's boot ID, and no
    `KVM internal error` in the new launcher's compute log. Canary first;
    `sea1-core` last.
+4. The leader's `kubevirt_vmi_number_of_outdated` gauge can stick above 0
+   after every guest is current. Trust `.status.launcherContainerImageVersion`
+   on each VMI; if all match, delete the lease holder
+   (`kubectl -n kubevirt get lease virt-controller`) so the new leader recounts.
 
 **A cross-version migration can crash the guest.** freeipa (1.8.4 to 1.9.1)
 hit `VQ 0 ... Guest index inconsistent with Host index` then
