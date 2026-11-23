@@ -14,6 +14,12 @@ helmCharts:
     version: 13.0.6
     valuesFile: mastodon-values.yaml
     namespace: mastodon-coolmathgames
+  - name: valkey
+    repo: oci://ghcr.io/valkey-io/valkey-helm
+    releaseName: mastodon-valkey
+    version: 1.0.0
+    valuesFile: valkey-values.yaml
+    namespace: mastodon-coolmathgames
 images:
   - name: docker.io/bitnami/redis
     newName: docker.io/bitnamilegacy/redis

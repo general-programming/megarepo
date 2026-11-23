@@ -1,0 +1,41 @@
+# Mastodon's Redis, run outside the mastodon chart: 15.0.1's bundled Valkey cannot
+# render (its parent passes valkey.dataStorage, which the subchart rejects).
+fullnameOverride: mastodon-valkey
+
+auth:
+  enabled: true
+  usersExistingSecret: mastodon-valkey
+  aclUsers:
+    default:
+      permissions: "~* &* +@all"
+      passwordKey: password
+
+# Sidekiq keeps its queues, retries and schedule here; the old Redis had no
+# persistence, so a restart dropped them.
+persistence:
+  enabled: true
+  size: 2Gi
+  storageClass: ceph-rbd-xfs
+
+# Never evict: an evicted Sidekiq key is a lost job.
+extraConfig: |
+  maxmemory-policy noeviction
+  appendonly yes
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 1Gi
+
+# Namespace-wide, like ES: the hourly search Jobs carry no app label to select on.
+networkPolicy:
+  enabled: true
+  allowExternal: false
+  extraIngress:
+    - ports:
+        - port: 6379
+          protocol: TCP
+      from:
+        - podSelector: {}
