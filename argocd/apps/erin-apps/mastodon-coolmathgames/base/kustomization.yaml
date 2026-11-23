@@ -24,6 +24,18 @@ patches:
       name: mastodon-chewy-upgrade
   # A persistent exporter must participate in normal Argo updates and health.
   # Helm hook annotations otherwise leave it unchanged even when values change.
+  # The chart's command omits --only-mapping, so each hourly run re-imported every
+  # index (~100 min, overlapping). Sidekiq already indexes writes as they happen.
+  - target:
+      kind: CronJob
+      name: mastodon-update-search-index-mappings
+    patch: |-
+      - op: add
+        path: /spec/concurrencyPolicy
+        value: Forbid
+      - op: add
+        path: /spec/jobTemplate/spec/template/spec/containers/0/command/3
+        value: --only-mapping
   - target:
       kind: Deployment
       name: mastodon-elasticsearch-metrics
