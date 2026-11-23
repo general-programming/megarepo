@@ -162,24 +162,31 @@ ingress:
   streaming:
     tls: null
 
+# Valkey runs as its own release (valkey-values.yaml); the bundled subchart
+# cannot render in 15.0.1.
+valkey:
+  enabled: false
+
+externalValkey:
+  hostname: mastodon-valkey
+  port: "6379"
+  existingSecret: mastodon-valkey
+  existingSecretKey: password
+
+# 15.0.1 still dereferences .Values.redis.{sidekiq,cache} although it no longer
+# ships Redis; without these stubs every pod template fails to render.
 redis:
-  default:
-    storageClass: ceph-rbd-xfs
+  sidekiq:
+    enabled: false
+  cache:
+    enabled: false
 
-  volumePermissions:
-    enabled: true
-
+# Defaults to true and would stand up a second Postgres; ours is database.yaml.
+# auth.existingSecret stops _secrets.tpl inventing a random DB password.
+cnpg:
+  enabled: false
   auth:
-    password: "this_is_insecure_but_it_is_redis_so_who_cares"
-
-  master:
-    persistence:
-      enabled: false
-
-  replica:
-    persistence:
-      enabled: false
-    replicaCount: 3
+    existingSecret: mastodon-db-app
 
 elasticsearch:
   default:
@@ -249,6 +256,10 @@ elasticsearch:
   # proven stable.
   user: elastic
   existingSecret: mastodon-elasticsearch
+  # Not an ES setting: 15.0.1's mastodon.postgres.host reads
+  # elasticsearch.hostname instead of externalDatabase.hostname. With the ES
+  # subchart enabled nothing else reads it, so it only lands in DB_HOST.
+  hostname: mastodon-db-rw
 
   metrics:
     enabled: true
